@@ -1,0 +1,49 @@
+# Local development database. Not a production topology.
+#
+#   docker compose -f infra/docker-compose.yml up -d
+#   docker compose -f infra/docker-compose.yml logs -f postgres
+#   docker compose -f infra/docker-compose.yml down          # keeps data
+#   docker compose -f infra/docker-compose.yml down -v       # destroys data
+#
+# Copy infra/.env.example to infra/.env before first run.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: spacemmo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spacemmo}
+      POSTGRES_USER: ${POSTGRES_USER:-spacemmo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devonly}
+      # Deterministic collation, so ORDER BY on names is identical on every
+      # machine and in CI. Locale drift between environments produces test
+      # failures that are miserable to diagnose.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      # Bound to localhost only. Never expose a dev database on 0.0.0.0.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # EF Core migrations on startup will fail against a not-yet-ready
+      # Postgres, so the healthcheck is load-bearing rather than decorative.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spacemmo} -d ${POSTGRES_DB:-spacemmo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    command:
+      # The ledger is append-only and write-heavy; these are modest dev-box
+      # settings, not tuned production values.
+      - "postgres"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "log_min_duration_statement=200ms"
+
+volumes:
+  postgres-data:
+    name: spacemmo-postgres-data

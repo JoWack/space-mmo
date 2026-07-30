@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>SpaceMMO.Domain.Tests</RootNamespace>
+    <AssemblyName>SpaceMMO.Domain.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!--
+      CA1707 forbids underscores in member names. That rule is correct for library
+      APIs and wrong for tests: Method_Scenario_Expectation is the conventional xUnit
+      naming style and it makes a failing test name self-describing in CI output.
+      Suppressed here only — the production projects keep the rule.
+    -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SpaceMMO.Domain\SpaceMMO.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

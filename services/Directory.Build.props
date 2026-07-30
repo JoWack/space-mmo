@@ -1,0 +1,40 @@
+<Project>
+
+  <!--
+    Shared build settings for every project in the solution.
+
+    TargetFramework lives here so that moving to a different .NET version is a
+    one-line change rather than an edit to every .csproj.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      Warnings are errors. In a codebase that handles player wealth, a nullability
+      warning is a future NullReferenceException in a market transaction.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+
+    <!--
+      Deterministic builds: the same source must produce the same binary. Also
+      required for reproducible golden-vector generation (ADR-0002).
+    -->
+    <Deterministic>true</Deterministic>
+
+    <!--
+      Overflow checking on by default. Credits are int64 minor units (ADR-0005);
+      a silent wraparound in a fee calculation would be a currency exploit, so
+      it should throw instead.
+    -->
+    <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
+
+    <Company>SpaceMMO</Company>
+    <Product>SpaceMMO</Product>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pure game rules. This project has NO package references and NO project
+    references, and that is a deliberate architectural constraint (ADR-0003):
+
+      * no database  * no HTTP  * no file I/O  * no clock, no randomness
+
+    Everything here is a pure function over plain types. That is what lets
+    EconSim simulate tens of thousands of days in seconds, and what keeps the
+    test suite fast enough to run on every save.
+
+    Before adding a PackageReference here, add it to SpaceMMO.Data or
+    SpaceMMO.Api instead. If a rule seems to need I/O, the I/O belongs in the
+    caller and the rule should take the result as a parameter.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>SpaceMMO.Domain</RootNamespace>
+    <AssemblyName>SpaceMMO.Domain</AssemblyName>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,53 @@
+# ─── Unreal Engine ────────────────────────────────────────────────────────────
+# Generated per-machine or per-build. Never commit these; they are large and
+# cause constant spurious conflicts.
+client/Binaries/
+client/Build/
+client/DerivedDataCache/
+client/Intermediate/
+client/Saved/
+client/.vs/
+client/*.sln
+client/*.VC.db
+client/*.VC.opendb
+client/*.opensdf
+client/*.sdf
+client/*.suo
+
+# UE plugin build output (plugins themselves are committed; their build output is not)
+client/Plugins/**/Binaries/
+client/Plugins/**/Intermediate/
+
+# ─── .NET ─────────────────────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+.vs/
+TestResults/
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml
+
+# ─── Local configuration and secrets ─────────────────────────────────────────
+# .env.example IS committed; the real .env never is.
+.env
+*.local.json
+appsettings.Development.json
+appsettings.Local.json
+secrets.json
+
+# ─── Tooling / OS ─────────────────────────────────────────────────────────────
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# ─── EconSim output ───────────────────────────────────────────────────────────
+# Simulation runs emit large CSVs. Keep the analysis, not the raw output.
+tools/SpaceMMO.EconSim/out/
+*.econsim.csv

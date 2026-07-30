@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SpaceMMO.Domain", "SpaceMMO.Domain\SpaceMMO.Domain.csproj", "{EA6FB06F-A9EF-496F-A5D4-4EEA98049985}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SpaceMMO.Domain.Tests", "SpaceMMO.Domain.Tests\SpaceMMO.Domain.Tests.csproj", "{C128BCA8-3782-4B28-9EF3-6F303D9ED7AC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EA6FB06F-A9EF-496F-A5D4-4EEA98049985}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA6FB06F-A9EF-496F-A5D4-4EEA98049985}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA6FB06F-A9EF-496F-A5D4-4EEA98049985}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA6FB06F-A9EF-496F-A5D4-4EEA98049985}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C128BCA8-3782-4B28-9EF3-6F303D9ED7AC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C128BCA8-3782-4B28-9EF3-6F303D9ED7AC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C128BCA8-3782-4B28-9EF3-6F303D9ED7AC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C128BCA8-3782-4B28-9EF3-6F303D9ED7AC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {298C9C7A-18EF-4AB0-AAFF-02ADBB5670C2}
+	EndGlobalSection
+EndGlobal
