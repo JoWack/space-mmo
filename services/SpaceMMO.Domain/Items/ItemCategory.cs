@@ -5,8 +5,10 @@ namespace SpaceMMO.Domain.Items;
 /// resolution.
 /// </summary>
 /// <remarks>
-/// These values are persisted, so the names are part of the schema. Adding a member is
-/// safe; renaming or reordering one is not.
+/// Persisted as a string, not an integer, so the database is readable during the many hours
+/// of hand-querying a project this size involves. That makes reordering members safe and
+/// <em>renaming</em> one a data migration — the opposite of the tradeoff integer storage
+/// would give. Adding a member is always safe.
 /// </remarks>
 public enum ItemCategory
 {

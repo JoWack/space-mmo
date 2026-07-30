@@ -1,0 +1,182 @@
+using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Items;
+
+namespace SpaceMMO.Data.Entities;
+
+/// <summary>
+/// An item definition. The fixed catalog loaded from <c>data/items/</c>.
+/// </summary>
+/// <remarks>
+/// Per the locked scope decision, designs are fixed and players own the entire supply. So
+/// rows here are content, never player-created.
+/// </remarks>
+public class ItemDef
+{
+    public int Id { get; set; }
+
+    /// <summary>Stable key, e.g. <c>ferrite_ore</c>.</summary>
+    public required string Key { get; set; }
+
+    public required string Name { get; set; }
+
+    public ItemCategory Category { get; set; }
+
+    /// <summary>
+    /// Volume per unit. Cargo capacity is volumetric, not slot-based — which is what makes
+    /// bulk hauling a real profession.
+    /// </summary>
+    public double VolumeM3 { get; set; }
+
+    /// <summary>
+    /// Not stored: derived from <see cref="Category"/> via
+    /// <see cref="ItemCategoryExtensions.IsStackable"/>. A stored flag could contradict the
+    /// category, and a <c>Hull</c> marked stackable would be a duplication exploit.
+    /// </summary>
+    public bool IsStackable => Category.IsStackable();
+}
+
+/// <summary>A crafting recipe, loaded from <c>data/recipes/</c>.</summary>
+public class Recipe
+{
+    public int Id { get; set; }
+
+    public required string Key { get; set; }
+
+    public int OutputItemDefId { get; set; }
+
+    public ItemDef? OutputItemDef { get; set; }
+
+    public int OutputQuantity { get; set; }
+
+    public int SkillId { get; set; }
+
+    public Skill? Skill { get; set; }
+
+    /// <summary>Minimum skill level required, 1–99.</summary>
+    public int RequiredLevel { get; set; }
+
+    /// <summary>Job duration in seconds. Enforced against the server clock, never the client's.</summary>
+    public int JobSeconds { get; set; }
+
+    /// <summary>
+    /// A tool that must be held to run this recipe, or null if none is needed. This is how
+    /// the onboarding chain gates ore mining behind crafting a mining laser first.
+    /// </summary>
+    public int? RequiredToolItemDefId { get; set; }
+
+    public ItemDef? RequiredToolItemDef { get; set; }
+
+    public ICollection<RecipeInput> Inputs { get; } = [];
+}
+
+/// <summary>One material requirement of a recipe.</summary>
+public class RecipeInput
+{
+    public int RecipeId { get; set; }
+
+    public Recipe? Recipe { get; set; }
+
+    public int ItemDefId { get; set; }
+
+    public ItemDef? ItemDef { get; set; }
+
+    public int Quantity { get; set; }
+}
+
+/// <summary>
+/// A container of items: carried, in a ship hold, or rented at a station.
+/// </summary>
+public class Inventory
+{
+    public long Id { get; set; }
+
+    public int CharacterId { get; set; }
+
+    public Character? Character { get; set; }
+
+    public InventoryKind Kind { get; set; }
+
+    /// <summary>Set for <see cref="InventoryKind.StationHangar"/>; null otherwise.</summary>
+    public int? StationId { get; set; }
+
+    public Station? Station { get; set; }
+
+    /// <summary>
+    /// The ship this hold belongs to, for <see cref="InventoryKind.ShipHold"/>. Null otherwise.
+    /// </summary>
+    public long? ShipItemInstanceId { get; set; }
+
+    public ItemInstance? ShipItemInstance { get; set; }
+
+    /// <summary>Volumetric capacity. Zero means unlimited, used for station hangars.</summary>
+    public double CapacityM3 { get; set; }
+
+    public ICollection<InventoryItem> StackedItems { get; } = [];
+
+    public ICollection<ItemInstance> Instances { get; } = [];
+}
+
+/// <summary>
+/// A quantity of a stackable item in an inventory.
+/// </summary>
+/// <remarks>
+/// Only for categories where <see cref="ItemCategoryExtensions.IsStackable"/> holds. Items
+/// that track condition live in <see cref="ItemInstance"/> instead, because a stack has
+/// nowhere to record wear (ADR-0006).
+/// </remarks>
+public class InventoryItem
+{
+    public long InventoryId { get; set; }
+
+    public Inventory? Inventory { get; set; }
+
+    public int ItemDefId { get; set; }
+
+    public ItemDef? ItemDef { get; set; }
+
+    public int Quantity { get; set; }
+}
+
+/// <summary>
+/// An individually tracked, non-stackable item: a tool, module, weapon, armor piece, or hull.
+/// </summary>
+public class ItemInstance
+{
+    public long Id { get; set; }
+
+    public int ItemDefId { get; set; }
+
+    public ItemDef? ItemDef { get; set; }
+
+    /// <summary>Null once the instance has been destroyed.</summary>
+    public long? InventoryId { get; set; }
+
+    public Inventory? Inventory { get; set; }
+
+    /// <summary>
+    /// Condition from 0 to 100. Below a threshold the item is unusable until repaired.
+    /// </summary>
+    /// <remarks>
+    /// Present from the first migration even though the repair loop is deferred past M3.
+    /// Adding a column to a table full of live player items is far worse than carrying an
+    /// unused one (ADR-0006).
+    /// </remarks>
+    public int Condition { get; set; }
+
+    /// <summary>
+    /// What this instance actually cost — input material value if crafted, price paid if
+    /// bought.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Insurance payouts are pegged to this and never to a market reference price.</strong>
+    /// That single choice is what closes the insurance fraud vector (ADR-0006), so every
+    /// creation path must set it correctly. It is non-nullable for exactly that reason: a path
+    /// that forgets is an exploit.
+    /// </remarks>
+    public Credits AcquisitionValue { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>Set when death resolution or salvage destroys the instance.</summary>
+    public DateTimeOffset? DestroyedAt { get; set; }
+}

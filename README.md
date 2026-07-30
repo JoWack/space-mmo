@@ -4,22 +4,28 @@ A space MMO in Unreal Engine 5: procedurally generated galaxy, seamless planet
 landing, four playable races across two factions, RuneScape-style 1–99 skills, and a
 player-driven economy in which every tradeable good was manufactured by a player.
 
-**Status: M0 complete, M1 in progress — 176 tests passing.** The backend economy core is
+**Status: M0 complete, M1 in progress — 208 tests passing.** The backend economy core is
 being built first, because it can be fully validated without Unreal, art, or players.
 
-Implemented so far in `SpaceMMO.Domain`: the RuneScape XP curve, the `Credits` value
-type, the credit-faucet daily cap, tiered ship insurance, and cause-based death and loot
-resolution. Still to come in M1: the Postgres schema, the order-book matching engine, the
-quest engine, and EconSim.
+Implemented in `SpaceMMO.Domain`: the RuneScape XP curve, the `Credits` value type, the
+credit-faucet daily cap, tiered ship insurance, cause-based death and loot resolution, and
+ledger-reason classification.
+
+Implemented in `SpaceMMO.Data`: the full 25-table Postgres schema via EF Core migrations —
+79 indexes, 31 check constraints, 40 foreign keys, all applied and functionally verified
+against Postgres 17.
+
+Still to come in M1: the order-book matching engine, the quest engine, content JSON in
+`data/`, and EconSim.
 
 ## Start here
 
 | Document | What it covers |
 |---|---|
-| [docs/setup.md](docs/setup.md) | Toolchain install. **Read this first** — the .NET SDK is not yet installed, so nothing builds until it is. |
+| [docs/setup.md](docs/setup.md) | Toolchain install. Everything M1 needs is installed; Unreal and Visual Studio are still pending for M2. |
 | [docs/design-bible.md](docs/design-bible.md) | Races, factions, skills, item taxonomy, and the onboarding questline. Content spec; becomes `data/*.json`. |
 | [docs/economy-design.md](docs/economy-design.md) | Faucets, sinks, market mechanics, and the invariants EconSim asserts. |
-| [docs/adr/](docs/adr/README.md) | The five decisions that are expensive to reverse, and why. |
+| [docs/adr/](docs/adr/README.md) | The six decisions that are expensive to reverse, and why. |
 
 ## Layout
 
@@ -28,6 +34,7 @@ docs/          design bible, economy design, ADRs
 services/      .NET backend (SpaceMMO.Server.sln)
   SpaceMMO.Domain/        pure game rules — no I/O, no dependencies
   SpaceMMO.Domain.Tests/  xUnit
+  SpaceMMO.Data/          EF Core entities, DbContext, migrations
 tools/         EconSim — headless economy simulator
 client/        UE5 project (M2)
 data/          item, recipe, and quest definitions as JSON
