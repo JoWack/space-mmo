@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Headless economy simulator.
+
+    References SpaceMMO.Domain only — no database, no HTTP. That is the whole point:
+    the economic rules are pure functions, so thousands of simulated days run in
+    seconds and the numbers in the design bible can be checked before anyone plays.
+
+    If this ever needs SpaceMMO.Data, something has leaked out of Domain that
+    belonged in it.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SpaceMMO.EconSim</RootNamespace>
+    <AssemblyName>SpaceMMO.EconSim</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\services\SpaceMMO.Domain\SpaceMMO.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

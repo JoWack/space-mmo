@@ -422,6 +422,73 @@ the price-history source for market UI, so it's never pruned.
 
 ---
 
+## 5a. What EconSim actually found
+
+First real run: 68 bots, 10 simulated years, ~3 seconds. All conservation invariants held
+every simulated day. Three findings, in order of how much they matter.
+
+### The material sink gap is severe, and now quantified
+
+| | Created | Destroyed | Held |
+|---|---|---|---|
+| `ferrite_ore` | 1,397,568,000 | 56,240 | 1,397,511,760 |
+
+**Ore price collapsed to 0 cr.** Gathering throughput outruns industry consumption by roughly
+four orders of magnitude, and with no ship destruction there is nothing to consume the
+surplus. This is §3's warning — "without a material sink of comparable scale to the material
+faucet, every crafted good accumulates forever" — as a number rather than a prediction.
+
+The binding constraint is the deposit ceiling: `capacity × nodes × 86400 / respawn`, which is
+432,000 ore/day at the current content values. Forty maxed miners can extract 383,000 of it.
+**Node respawn time is the material faucet's throttle**, and it is currently set far too
+generously relative to any sink that exists.
+
+### The steady-state faucet equilibrium is ~50 cr/day, not 5,000
+
+Sweeping `DailyQuestCredits` over a 5-year run:
+
+| cr/day/character | Money supply vs bootstrap |
+|---|---|
+| 0 | 6.4% — the deflationary spiral |
+| 25 | 52.2% |
+| **50** | **98.3% — equilibrium** |
+| 100 | 206.3% |
+| 250 | 1,616.2% |
+
+At zero the supply drains to 6% of what was ever created and the market seizes, exactly as
+§2b predicted. Equilibrium `F ≈ S` lands near **50 credits per character per day**.
+
+The first-draft daily cap of 5,000 is therefore about **100× above equilibrium**. A cap that
+high would never bind on normal play and offers essentially no protection — it is a ceiling
+placed above the roof. Either the cap comes down toward the same order of magnitude as
+equilibrium, or it should be understood as an anti-abuse backstop only, with the real control
+being the per-quest reward values.
+
+### Broker fees are 97% of all credit destruction
+
+| Sink | Share |
+|---|---|
+| Broker fee | 811,798 cr (97%) |
+| Industry fee | 16,465 cr |
+| Sales tax | 7,683 cr |
+
+Sales tax was designed as "the main volumetric sink" (§3) and is doing almost nothing, because
+it only applies to *filled* orders while the broker fee applies to every *placed* one. In a
+market where much of what is listed never sells, that makes participation itself the tax.
+
+Worth treating as provisional: bot order-placement behaviour drives this directly, and real
+players place fewer, better-judged orders. But the structural point stands — a fee on placement
+and a fee on execution have very different incidences, and the current rates put nearly all the
+weight on the wrong one.
+
+### Caveats
+
+These numbers assume no ship destruction, no station rent, and no fuel, because none of those
+exist yet. All three are credit *and* material sinks, so equilibrium `F` will rise as they land.
+The tool is in the repository so the sweep can simply be re-run.
+
+---
+
 ## 6. First-draft price targets
 
 Anchored to the 13,000-credit bootstrap so early prices are sane relative to the only

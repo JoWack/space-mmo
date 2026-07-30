@@ -30,7 +30,19 @@ Skills, items, recipes, and the onboarding questline live in `data/` as JSON, va
 they touch the database and upserted by key so startup is idempotent. **The shipped content is
 part of the test suite** — a typo in a recipe fails the build rather than the server.
 
-Still to come in M1: EconSim.
+**EconSim** runs the whole economy headless against `SpaceMMO.Domain` — no database, no HTTP —
+simulating a decade in about three seconds. It has already found three things worth knowing;
+see [economy-design.md](docs/economy-design.md) §5a.
+
+```bash
+dotnet run --project tools/SpaceMMO.EconSim -- 3650
+```
+
+```bash
+dotnet run --project tools/SpaceMMO.EconSim -- --sweep
+```
+
+M1 is functionally complete. Next is M2: the Unreal client.
 
 ## Start here
 
