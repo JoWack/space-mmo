@@ -4,19 +4,20 @@ A space MMO in Unreal Engine 5: procedurally generated galaxy, seamless planet
 landing, four playable races across two factions, RuneScape-style 1–99 skills, and a
 player-driven economy in which every tradeable good was manufactured by a player.
 
-**Status: M0 complete, M1 in progress — 208 tests passing.** The backend economy core is
-being built first, because it can be fully validated without Unreal, art, or players.
+**Status: M0 complete, M1 in progress — 267 tests passing** (255 unit, 12 integration). The
+backend economy core is being built first, because it can be fully validated without Unreal,
+art, or players.
 
 Implemented in `SpaceMMO.Domain`: the RuneScape XP curve, the `Credits` value type, the
-credit-faucet daily cap, tiered ship insurance, cause-based death and loot resolution, and
-ledger-reason classification.
+credit-faucet daily cap, tiered ship insurance, cause-based death and loot resolution,
+ledger-reason classification, order matching, and market fees.
 
 Implemented in `SpaceMMO.Data`: the full 25-table Postgres schema via EF Core migrations —
-79 indexes, 31 check constraints, 40 foreign keys, all applied and functionally verified
-against Postgres 17.
+79 indexes, 31 check constraints, 40 foreign keys — plus `MarketService`, which makes order
+placement atomic under `SELECT … FOR UPDATE`.
 
-Still to come in M1: the order-book matching engine, the quest engine, content JSON in
-`data/`, and EconSim.
+Still to come in M1: trade settlement (moving credits and items), the quest engine, content
+JSON in `data/`, and EconSim.
 
 ## Start here
 
@@ -34,7 +35,8 @@ docs/          design bible, economy design, ADRs
 services/      .NET backend (SpaceMMO.Server.sln)
   SpaceMMO.Domain/        pure game rules — no I/O, no dependencies
   SpaceMMO.Domain.Tests/  xUnit
-  SpaceMMO.Data/          EF Core entities, DbContext, migrations
+  SpaceMMO.Data/          EF Core entities, DbContext, migrations, services
+  SpaceMMO.Data.Tests/    integration tests — need the Postgres container running
 tools/         EconSim — headless economy simulator
 client/        UE5 project (M2)
 data/          item, recipe, and quest definitions as JSON
@@ -44,11 +46,19 @@ infra/         docker-compose for local Postgres
 ## Build and test
 
 ```bash
-dotnet test services/SpaceMMO.Server.sln
+docker compose -f infra/docker-compose.yml up -d
 ```
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d
+dotnet test services/SpaceMMO.Server.sln
+```
+
+Start Postgres first — `SpaceMMO.Data.Tests` needs it and fails loudly without it, since a
+skipped test that reports success is worse than an obvious failure. For the fast unit-only
+loop:
+
+```bash
+dotnet test services/SpaceMMO.Domain.Tests
 ```
 
 ## The three constraints worth knowing before you touch anything

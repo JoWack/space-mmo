@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Integration tests. These require the Postgres container from
+    infra/docker-compose.yml to be running.
+
+    They live in their own project so that `dotnet test SpaceMMO.Domain.Tests` stays a
+    fast, dependency-free unit run. Anything that can be tested without a database
+    belongs there instead — the only tests that justify being here are ones that need
+    real transactions and real row locks, which is precisely where the money-duplicating
+    bugs live.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>SpaceMMO.Data.Tests</RootNamespace>
+    <AssemblyName>SpaceMMO.Data.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- See SpaceMMO.Domain.Tests for why CA1707 is suppressed in test projects. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SpaceMMO.Data\SpaceMMO.Data.csproj" />
+  </ItemGroup>
+
+</Project>
