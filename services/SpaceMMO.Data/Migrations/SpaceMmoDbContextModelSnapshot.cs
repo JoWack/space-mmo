@@ -192,6 +192,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("home_body_id");
 
+                    b.Property<DateTimeOffset?>("LastGatheredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_gathered_at");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1119,13 +1123,27 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("quantity_max");
 
-                    b.Property<int>("QuantityRemaining")
+                    b.Property<int>("RequiredLevel")
                         .HasColumnType("integer")
-                        .HasColumnName("quantity_remaining");
+                        .HasColumnName("required_level");
 
-                    b.Property<DateTimeOffset?>("RespawnAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("respawn_at");
+                    b.Property<int?>("RequiredToolItemDefId")
+                        .HasColumnType("integer")
+                        .HasColumnName("required_tool_item_def_id");
+
+                    b.Property<int>("RespawnSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("respawn_seconds");
+
+                    b.Property<string>("SharingModel")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("sharing_model");
+
+                    b.Property<int>("SkillId")
+                        .HasColumnType("integer")
+                        .HasColumnName("skill_id");
 
                     b.Property<int>("StarSystemId")
                         .HasColumnType("integer")
@@ -1137,8 +1155,11 @@ namespace SpaceMMO.Data.Migrations
                     b.HasIndex("ItemDefId")
                         .HasDatabaseName("ix_resource_nodes_item_def_id");
 
-                    b.HasIndex("RespawnAt")
-                        .HasDatabaseName("ix_resource_nodes_respawn_at");
+                    b.HasIndex("RequiredToolItemDefId")
+                        .HasDatabaseName("ix_resource_nodes_required_tool_item_def_id");
+
+                    b.HasIndex("SkillId")
+                        .HasDatabaseName("ix_resource_nodes_skill_id");
 
                     b.HasIndex("StarSystemId")
                         .HasDatabaseName("ix_resource_nodes_star_system_id");
@@ -1148,9 +1169,62 @@ namespace SpaceMMO.Data.Migrations
 
                     b.ToTable("resource_nodes", null, t =>
                         {
+                            t.HasCheckConstraint("ck_resource_nodes_level_in_range", "required_level BETWEEN 1 AND 99");
+
                             t.HasCheckConstraint("ck_resource_nodes_max_positive", "quantity_max > 0");
 
-                            t.HasCheckConstraint("ck_resource_nodes_remaining_in_range", "quantity_remaining >= 0 AND quantity_remaining <= quantity_max");
+                            t.HasCheckConstraint("ck_resource_nodes_respawn_positive", "respawn_seconds > 0");
+                        });
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.ResourceNodeState", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("CharacterId")
+                        .HasColumnType("integer")
+                        .HasColumnName("character_id");
+
+                    b.Property<int>("QuantityRemaining")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity_remaining");
+
+                    b.Property<long>("ResourceNodeId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("resource_node_id");
+
+                    b.Property<DateTimeOffset?>("RespawnAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("respawn_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_resource_node_states");
+
+                    b.HasIndex("CharacterId")
+                        .HasDatabaseName("ix_resource_node_states_character_id");
+
+                    b.HasIndex("ResourceNodeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_resource_node_states_shared_pool")
+                        .HasFilter("character_id IS NULL");
+
+                    b.HasIndex("RespawnAt")
+                        .HasDatabaseName("ix_resource_node_states_respawn_at")
+                        .HasFilter("respawn_at IS NOT NULL");
+
+                    b.HasIndex("ResourceNodeId", "CharacterId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_resource_node_states_per_character")
+                        .HasFilter("character_id IS NOT NULL");
+
+                    b.ToTable("resource_node_states", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_resource_node_states_remaining_non_negative", "quantity_remaining >= 0");
                         });
                 });
 
@@ -1765,6 +1839,19 @@ namespace SpaceMMO.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_resource_nodes_item_defs_item_def_id");
 
+                    b.HasOne("SpaceMMO.Data.Entities.ItemDef", "RequiredToolItemDef")
+                        .WithMany()
+                        .HasForeignKey("RequiredToolItemDefId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_resource_nodes_item_defs_required_tool_item_def_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.Skill", "Skill")
+                        .WithMany()
+                        .HasForeignKey("SkillId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_resource_nodes_skills_skill_id");
+
                     b.HasOne("SpaceMMO.Data.Entities.StarSystem", "StarSystem")
                         .WithMany()
                         .HasForeignKey("StarSystemId")
@@ -1776,7 +1863,31 @@ namespace SpaceMMO.Data.Migrations
 
                     b.Navigation("ItemDef");
 
+                    b.Navigation("RequiredToolItemDef");
+
+                    b.Navigation("Skill");
+
                     b.Navigation("StarSystem");
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.ResourceNodeState", b =>
+                {
+                    b.HasOne("SpaceMMO.Data.Entities.Character", "Character")
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_resource_node_states_characters_character_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.ResourceNode", "ResourceNode")
+                        .WithMany("States")
+                        .HasForeignKey("ResourceNodeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_resource_node_states_resource_nodes_resource_node_id");
+
+                    b.Navigation("Character");
+
+                    b.Navigation("ResourceNode");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.Station", b =>
@@ -1848,6 +1959,11 @@ namespace SpaceMMO.Data.Migrations
             modelBuilder.Entity("SpaceMMO.Data.Entities.Recipe", b =>
                 {
                     b.Navigation("Inputs");
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.ResourceNode", b =>
+                {
+                    b.Navigation("States");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.StarSystem", b =>

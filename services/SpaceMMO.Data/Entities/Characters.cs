@@ -56,6 +56,17 @@ public class Character
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>
+    /// When this character last extracted from a resource node. Null if they never have.
+    /// </summary>
+    /// <remarks>
+    /// The server's rate limit on gathering. Entitlement is computed from elapsed wall-clock time
+    /// since this moment, so a client asking a hundred times a second extracts exactly as much as
+    /// one asking at the tick interval. A single column rather than one per node, because a
+    /// character can only work one deposit at a time.
+    /// </remarks>
+    public DateTimeOffset? LastGatheredAt { get; set; }
+
     public ICollection<CharacterSkill> Skills { get; } = [];
 
     public ICollection<Inventory> Inventories { get; } = [];

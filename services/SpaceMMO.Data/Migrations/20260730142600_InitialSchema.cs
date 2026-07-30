@@ -276,7 +276,8 @@ namespace SpaceMMO.Data.Migrations
                     race = table.Column<string>(type: "character varying(48)", maxLength: 48, nullable: false),
                     home_body_id = table.Column<int>(type: "integer", nullable: false),
                     balance = table.Column<long>(type: "bigint", nullable: false),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    last_gathered_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -304,15 +305,19 @@ namespace SpaceMMO.Data.Migrations
                     star_system_id = table.Column<int>(type: "integer", nullable: false),
                     body_id = table.Column<int>(type: "integer", nullable: false),
                     item_def_id = table.Column<int>(type: "integer", nullable: false),
-                    quantity_remaining = table.Column<int>(type: "integer", nullable: false),
                     quantity_max = table.Column<int>(type: "integer", nullable: false),
-                    respawn_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    respawn_seconds = table.Column<int>(type: "integer", nullable: false),
+                    skill_id = table.Column<int>(type: "integer", nullable: false),
+                    required_level = table.Column<int>(type: "integer", nullable: false),
+                    required_tool_item_def_id = table.Column<int>(type: "integer", nullable: true),
+                    sharing_model = table.Column<string>(type: "character varying(48)", maxLength: 48, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_resource_nodes", x => x.id);
+                    table.CheckConstraint("ck_resource_nodes_level_in_range", "required_level BETWEEN 1 AND 99");
                     table.CheckConstraint("ck_resource_nodes_max_positive", "quantity_max > 0");
-                    table.CheckConstraint("ck_resource_nodes_remaining_in_range", "quantity_remaining >= 0 AND quantity_remaining <= quantity_max");
+                    table.CheckConstraint("ck_resource_nodes_respawn_positive", "respawn_seconds > 0");
                     table.ForeignKey(
                         name: "fk_resource_nodes_bodies_body_id",
                         column: x => x.body_id,
@@ -323,6 +328,18 @@ namespace SpaceMMO.Data.Migrations
                         name: "fk_resource_nodes_item_defs_item_def_id",
                         column: x => x.item_def_id,
                         principalTable: "item_defs",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_resource_nodes_item_defs_required_tool_item_def_id",
+                        column: x => x.required_tool_item_def_id,
+                        principalTable: "item_defs",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_resource_nodes_skills_skill_id",
+                        column: x => x.skill_id,
+                        principalTable: "skills",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
@@ -510,6 +527,35 @@ namespace SpaceMMO.Data.Migrations
                         name: "fk_ledger_entries_characters_character_id",
                         column: x => x.character_id,
                         principalTable: "characters",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "resource_node_states",
+                columns: table => new
+                {
+                    id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    resource_node_id = table.Column<long>(type: "bigint", nullable: false),
+                    character_id = table.Column<int>(type: "integer", nullable: true),
+                    quantity_remaining = table.Column<int>(type: "integer", nullable: false),
+                    respawn_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_resource_node_states", x => x.id);
+                    table.CheckConstraint("ck_resource_node_states_remaining_non_negative", "quantity_remaining >= 0");
+                    table.ForeignKey(
+                        name: "fk_resource_node_states_characters_character_id",
+                        column: x => x.character_id,
+                        principalTable: "characters",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_resource_node_states_resource_nodes_resource_node_id",
+                        column: x => x.resource_node_id,
+                        principalTable: "resource_nodes",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -986,6 +1032,31 @@ namespace SpaceMMO.Data.Migrations
                 column: "skill_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_resource_node_states_character_id",
+                table: "resource_node_states",
+                column: "character_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_resource_node_states_per_character",
+                table: "resource_node_states",
+                columns: new[] { "resource_node_id", "character_id" },
+                unique: true,
+                filter: "character_id IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_resource_node_states_respawn_at",
+                table: "resource_node_states",
+                column: "respawn_at",
+                filter: "respawn_at IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_resource_node_states_shared_pool",
+                table: "resource_node_states",
+                column: "resource_node_id",
+                unique: true,
+                filter: "character_id IS NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_resource_nodes_body_id_item_def_id",
                 table: "resource_nodes",
                 columns: new[] { "body_id", "item_def_id" });
@@ -996,9 +1067,14 @@ namespace SpaceMMO.Data.Migrations
                 column: "item_def_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_resource_nodes_respawn_at",
+                name: "ix_resource_nodes_required_tool_item_def_id",
                 table: "resource_nodes",
-                column: "respawn_at");
+                column: "required_tool_item_def_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_resource_nodes_skill_id",
+                table: "resource_nodes",
+                column: "skill_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_resource_nodes_star_system_id",
@@ -1133,7 +1209,7 @@ namespace SpaceMMO.Data.Migrations
                 name: "recipe_inputs");
 
             migrationBuilder.DropTable(
-                name: "resource_nodes");
+                name: "resource_node_states");
 
             migrationBuilder.DropTable(
                 name: "trades");
@@ -1143,6 +1219,9 @@ namespace SpaceMMO.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "quest_defs");
+
+            migrationBuilder.DropTable(
+                name: "resource_nodes");
 
             migrationBuilder.DropTable(
                 name: "recipes");

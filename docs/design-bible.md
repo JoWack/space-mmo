@@ -280,7 +280,53 @@ which reads as a bug however it is documented.
 
 ---
 
-## 7. Perspective and controls
+## 7. Gathering
+
+Resource deposits are the **only place material enters the economy**. Everything downstream —
+every price, every crafted good — rests on this supply curve.
+
+Gathering is server-authoritative in a specific way: the client asks to gather, and the server
+decides how much wall-clock time has elapsed since that character last did. A client calling in
+a tight loop extracts exactly as much as one calling at the tick interval.
+
+| Rate | Value |
+|---|---|
+| Tick interval | 3 seconds |
+| Units per tick | 1 at level 1, rising to 4 at level 75+ |
+| Banked ticks | 20 maximum |
+| XP | 5 per unit extracted |
+
+Yield is **deterministic**, not a per-tick success roll. A roll would be more RuneScape-authentic,
+but deterministic output makes EconSim's material-flow measurements depend on the rates being
+tested rather than on variance — which matters far more while the economy is being balanced.
+
+XP is per **unit**, not per tick, so levelling does not accelerate itself.
+
+Banked ticks are capped at 20 because gathering is an active verb, unlike industry jobs, which
+are deliberately designed to run while logged off. The cap absorbs latency and brief
+interruptions without letting an idle client return to claim an hour of extraction it never
+performed.
+
+Depleted nodes refill **lazily**, when someone next tries to work them. Nothing observes a node
+except a player gathering from it, so a background sweeper would be pure cost.
+
+### Shared versus per-character deposits
+
+**Deposits are shared by default**: one pool everyone draws down, so depleting it denies it to
+everyone until it respawns. That is what makes a rich deposit worth reaching first and worth
+defending.
+
+The model is stored **per node**, not as one global setting, and both models use the same
+depletion table — a shared node has a single row owned by nobody, a per-character node has one
+row per gatherer. Switching a node between them is an `UPDATE` on one column, never a migration.
+
+The granularity is the point. If shared deposits turn out to make the starting planets miserable
+for new players, those specific nodes can be switched to per-character without giving up
+contention in deep space, where competition over good deposits is exactly the intent.
+
+---
+
+## 8. Perspective and controls
 
 Third person by default, with a first-person toggle, both on foot and in ship. The
 camera is a client concern only — it must never affect server-side validation, which
@@ -288,7 +334,7 @@ is why interaction range is checked against the pawn, never the camera.
 
 ---
 
-## 8. Quest kinds
+## 9. Quest kinds
 
 | Kind | Repeatable | Pays credits | Notes |
 |---|---|---|---|
@@ -308,7 +354,7 @@ future credit source must route through them.
 
 ---
 
-## 9. Open design questions
+## 10. Open design questions
 
 1. **Faction warfare rules** — deliberately deferred; see §1.
 2. **`constitution` / `stamina` XP sources** — see §2.

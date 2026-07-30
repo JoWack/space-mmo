@@ -63,6 +63,8 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
     public DbSet<ResourceNode> ResourceNodes => Set<ResourceNode>();
 
+    public DbSet<ResourceNodeState> ResourceNodeStates => Set<ResourceNodeState>();
+
     public DbSet<MarketOrder> MarketOrders => Set<MarketOrder>();
 
     public DbSet<Trade> Trades => Set<Trade>();
@@ -210,15 +212,51 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
         {
             // The gathering hot path: "what can I mine on this body?"
             entity.HasIndex(e => new { e.BodyId, e.ItemDefId });
-            entity.HasIndex(e => e.RespawnAt);
+
+            entity.HasOne(e => e.Skill).WithMany().HasForeignKey(e => e.SkillId);
+
+            entity.HasOne(e => e.RequiredToolItemDef)
+                .WithMany()
+                .HasForeignKey(e => e.RequiredToolItemDefId);
 
             entity.ToTable(t =>
             {
-                t.HasCheckConstraint(
-                    "ck_resource_nodes_remaining_in_range",
-                    "quantity_remaining >= 0 AND quantity_remaining <= quantity_max");
                 t.HasCheckConstraint("ck_resource_nodes_max_positive", "quantity_max > 0");
+                t.HasCheckConstraint(
+                    "ck_resource_nodes_respawn_positive", "respawn_seconds > 0");
+                t.HasCheckConstraint(
+                    "ck_resource_nodes_level_in_range", "required_level BETWEEN 1 AND 99");
             });
+        });
+
+        modelBuilder.Entity<ResourceNodeState>(entity =>
+        {
+            entity.HasOne(e => e.ResourceNode)
+                .WithMany(n => n.States)
+                .HasForeignKey(e => e.ResourceNodeId);
+
+            entity.HasOne(e => e.Character).WithMany().HasForeignKey(e => e.CharacterId);
+
+            // Two partial unique indexes rather than one over a nullable column, because Postgres
+            // treats NULLs as distinct and would happily allow several shared pools for one node.
+            // The first guarantees a shared node has exactly one; the second gives a
+            // per-character node exactly one row per gatherer.
+            entity.HasIndex(e => e.ResourceNodeId)
+                .IsUnique()
+                .HasFilter("character_id IS NULL")
+                .HasDatabaseName("ix_resource_node_states_shared_pool");
+
+            entity.HasIndex(e => new { e.ResourceNodeId, e.CharacterId })
+                .IsUnique()
+                .HasFilter("character_id IS NOT NULL")
+                .HasDatabaseName("ix_resource_node_states_per_character");
+
+            // Drives nothing on the hot path, but makes "what is currently depleted?" cheap for
+            // operational queries and for EconSim.
+            entity.HasIndex(e => e.RespawnAt).HasFilter("respawn_at IS NOT NULL");
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_resource_node_states_remaining_non_negative", "quantity_remaining >= 0"));
         });
     }
 
