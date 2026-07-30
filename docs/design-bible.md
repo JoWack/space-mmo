@@ -201,7 +201,86 @@ advantage at creation. Regional scarcity begins outside the starting system.
 
 ---
 
-## 6. Perspective and controls
+## 6. Industry jobs
+
+Every recipe in §5 is produced by an **industry job**: materials are committed, the server
+starts a clock, and the player returns later to collect. Not an instant craft.
+
+```
+Running  ──▶  Claimed      inputs consumed at start, outputs created at claim
+   │
+   └──────▶  Cancelled     progress-scaled refund
+```
+
+Inputs are consumed **at start**, so one pile of ore cannot seed five jobs. Outputs are
+created **at claim**, so nobody gets goods before paying the time cost. Both halves are
+required; either alone is exploitable.
+
+**XP is awarded at claim, never at start.** Awarding it at start would make start-and-cancel
+an XP farm costing only the job fee. This is a constraint rather than a choice.
+
+`CompletesAt` is computed server-side; the client's clock is never consulted.
+
+### Jobs run while logged off
+
+Completion is measured against the server clock, so a 900-second assembly finishes whether or
+not the player is connected. This is what makes a RuneScape-depth grind compatible with
+having a job, and it is why job durations can be long without being hostile.
+
+### Slots
+
+Concurrent jobs are limited **per skill**, not globally — a refining job consumes a refining
+slot.
+
+| Skill level | Slots |
+|---|---|
+| 1–24 | 1 |
+| 25–49 | 2 |
+| 50–74 | 3 |
+| 75–98 | 4 |
+| 99 | 5 |
+
+Per-skill rather than global is what makes specialisation a real choice: a master refiner runs
+five refining lines while still limited to one shipcrafting line. Thresholds are spaced by
+grind rather than by level number — level 50 is only about 0.8% of the XP needed for 99, so
+evenly spaced levels would front-load nearly every reward into the first few hours.
+
+Slots also give cancellation a cost beyond materials: a blocked slot is lost throughput.
+
+### Batch duration is linear
+
+Running a recipe *n* times takes *n* × the recipe duration. There is no batch discount —
+batching saves clicks, not time. An economy of scale would favour established industrialists
+over new players and add a second number to balance on every recipe.
+
+### Cancelling a job
+
+The refund is proportional to the time **remaining**:
+
+| Cancelled at | Inputs returned |
+|---|---|
+| 0% | 100% |
+| 25% | 75% |
+| 50% | 50% |
+| 95% | 5% |
+| complete | nothing — claim it instead |
+
+One rule covers both cases worth caring about. A misclick caught immediately is forgiven
+without needing a special grace period, and a job cannot serve as a free option on the output
+price, because backing out late costs nearly the full inputs.
+
+**The job fee is never refunded**, on the same reasoning as the market broker fee: churn has
+to cost something.
+
+Rounding is half **up**, which is the opposite of the money rule ([ADR-0005](adr/0005-money-representation.md))
+and safe for a different reason — the refund is capped by what was consumed, so it can return
+material but never create it. Rounding down instead would make single-unit inputs
+all-or-nothing: a hull section cancelled at 5% progress would floor to zero and simply vanish,
+which reads as a bug however it is documented.
+
+---
+
+## 7. Perspective and controls
 
 Third person by default, with a first-person toggle, both on foot and in ship. The
 camera is a client concern only — it must never affect server-side validation, which
@@ -209,7 +288,7 @@ is why interaction range is checked against the pawn, never the camera.
 
 ---
 
-## 7. Quest kinds
+## 8. Quest kinds
 
 | Kind | Repeatable | Pays credits | Notes |
 |---|---|---|---|
@@ -229,7 +308,7 @@ future credit source must route through them.
 
 ---
 
-## 8. Open design questions
+## 9. Open design questions
 
 1. **Faction warfare rules** — deliberately deferred; see §1.
 2. **`constitution` / `stamina` XP sources** — see §2.
@@ -248,3 +327,5 @@ future credit source must route through them.
 - ~~Ship destruction and loss~~ → optional tiered insurance paying a percentage of
   recorded acquisition value, plus cause-dependent loot destruction.
   [economy-design.md](economy-design.md) §3a–3b, [ADR-0006](adr/0006-death-and-insurance.md).
+- ~~Industry job cancellation~~ → progress-scaled refund, per-skill job slots unlocked at
+  levels 25/50/75/99, and linear batch duration. See §6.
