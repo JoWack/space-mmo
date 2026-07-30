@@ -41,6 +41,16 @@ and only the first is currently designed.
 The `main_story` onboarding chain pays **13,000 credits, once per character**
 (itemized in [design-bible.md](design-bible.md) §4).
 
+These are recorded as `StoryReward` and are **exempt from the daily cap**. A 5,000-credit
+daily budget against a 13,000-credit tutorial would stall a new player's onboarding
+across three days, and the game would look broken at the worst possible moment. The
+exemption is safe because the faucet is bounded by construction rather than by a budget
+— each quest completes once per character.
+
+Keeping it a separate ledger reason from `QuestReward` also lets EconSim measure the
+bootstrap and steady-state faucets independently, which are genuinely different things:
+one scales with signups, the other with active play.
+
 Total bootstrap supply is therefore exactly:
 
 ```

@@ -21,10 +21,32 @@ public enum LedgerReason
     // ── Faucets: these create credits ────────────────────────────────────────
 
     /// <summary>
-    /// A quest reward. The one-shot main story chain plus rate-limited repeatables — the
-    /// only capped faucet, per economy-design §2b.
+    /// A repeatable sidequest reward — the steady-state faucet, and the only one subject to the
+    /// daily cap (economy-design §2b).
     /// </summary>
     QuestReward = 0,
+
+    /// <summary>
+    /// A one-shot story or career reward — the bootstrap faucet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Deliberately <em>not</em> capped. The onboarding chain pays 13,000 credits, so a 5,000
+    /// daily cap would throttle a new player's tutorial across three days and make the game look
+    /// broken at the worst possible moment.
+    /// </para>
+    /// <para>
+    /// Safe to leave uncapped because it is bounded by construction: each quest completes once per
+    /// character, so the total is fixed no matter how much anyone plays. Alt-account farming is
+    /// the only attack and it pays terribly per hour.
+    /// </para>
+    /// <para>
+    /// Separating it from <see cref="QuestReward"/> also lets EconSim measure the bootstrap and
+    /// steady-state faucets independently, which are genuinely different things — one scales with
+    /// signups, the other with active play.
+    /// </para>
+    /// </remarks>
+    StoryReward = 3,
 
     /// <summary>
     /// An insurance payout. Deliberately exempt from the daily faucet cap, and bounded by
@@ -124,6 +146,7 @@ public static class LedgerReasons
     public static LedgerReasonKind KindOf(LedgerReason reason) => reason switch
     {
         LedgerReason.QuestReward or
+        LedgerReason.StoryReward or
         LedgerReason.InsurancePayout or
         LedgerReason.AdminAdjustment => LedgerReasonKind.Faucet,
 
@@ -149,9 +172,12 @@ public static class LedgerReasons
     /// True if this reason is subject to the daily faucet cap.
     /// </summary>
     /// <remarks>
-    /// Only <see cref="LedgerReason.QuestReward"/> is capped. Insurance payouts are exempt
-    /// by design — losing a capital ship must not be throttled by a daily budget — and
-    /// admin adjustments bypass the cap because that is the point of them.
+    /// Only <see cref="LedgerReason.QuestReward"/> — repeatable sidequests — is capped, because it
+    /// is the only faucet a player can farm indefinitely. The other three faucets are each bounded
+    /// by something other than a budget: <see cref="LedgerReason.StoryReward"/> by each quest
+    /// completing once per character, <see cref="LedgerReason.InsurancePayout"/> by how many ships
+    /// players can actually build, and <see cref="LedgerReason.AdminAdjustment"/> by an operator
+    /// deliberately doing it.
     /// </remarks>
     public static bool IsCappedFaucet(LedgerReason reason) => reason == LedgerReason.QuestReward;
 }
