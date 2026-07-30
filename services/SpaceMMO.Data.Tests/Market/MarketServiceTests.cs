@@ -400,6 +400,31 @@ public sealed class MarketServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         _sellerId = seller.Id;
         _buyerId = buyer.Id;
         _secondBuyerId = secondBuyer.Id;
+
+        // Anyone who might place a sell order needs goods to reserve, since sell orders now move
+        // items out of the hangar at placement.
+        foreach (int characterId in new[] { seller.Id, secondBuyer.Id })
+        {
+            var hangar = new Inventory
+            {
+                CharacterId = characterId,
+                StationId = station.Id,
+                Kind = InventoryKind.StationHangar,
+                CapacityM3 = 0,
+            };
+
+            context.Inventories.Add(hangar);
+            await context.SaveChangesAsync();
+
+            context.InventoryItems.Add(new InventoryItem
+            {
+                InventoryId = hangar.Id,
+                ItemDefId = itemDef.Id,
+                Quantity = 1_000,
+            });
+        }
+
+        await context.SaveChangesAsync();
     }
 
     private static Character NewCharacter(int accountId, int homeBodyId, string name) => new()
@@ -412,31 +437,25 @@ public sealed class MarketServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         CreatedAt = DateTimeOffset.UtcNow,
     };
 
-    /// <summary>Inserts a resting order directly, bypassing matching, to set up a book.</summary>
+    /// <summary>
+    /// Puts an order on the book through the real service.
+    /// </summary>
+    /// <remarks>
+    /// This used to insert rows directly, which was faster to write but produced orders that
+    /// could not exist in production — a sell order with no reserved goods, promising items its
+    /// owner did not hold. The <c>reserved_quantity &gt;= 0</c> check constraint caught it as soon
+    /// as a fill tried to decrement below zero. Going through the service keeps test setup and
+    /// production on the same path, so invalid states cannot be constructed in the first place.
+    /// </remarks>
     private async Task<long> RestOrderAsync(
         int characterId, OrderSide side, long price, int quantity, int expiresInDays = 30)
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        PlaceOrderResult result = await new MarketService(context).PlaceOrderAsync(
+            new PlaceOrderRequest(
+                characterId, _stationId, _itemDefId, side, Cr(price), quantity, expiresInDays));
 
-        var order = new MarketOrder
-        {
-            StationId = _stationId,
-            StarSystemId = 1,
-            ItemDefId = _itemDefId,
-            CharacterId = characterId,
-            Side = side,
-            Price = Cr(price),
-            QuantityOriginal = quantity,
-            QuantityRemaining = quantity,
-            PlacedAt = now,
-            ExpiresAt = now.AddDays(expiresInDays),
-        };
-
-        context.MarketOrders.Add(order);
-        await context.SaveChangesAsync();
-
-        return order.Id;
+        return result.OrderId;
     }
 }

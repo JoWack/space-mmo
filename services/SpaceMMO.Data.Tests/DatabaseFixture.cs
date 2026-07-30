@@ -30,7 +30,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        await EnsureDatabaseExistsAsync();
+        await RecreateDatabaseAsync();
 
         await using SpaceMmoDbContext context = CreateContext();
         await context.Database.MigrateAsync();
@@ -104,23 +104,42 @@ public sealed class DatabaseFixture : IAsyncLifetime
 #pragma warning restore EF1002
     }
 
-    private static async Task EnsureDatabaseExistsAsync()
+    /// <summary>
+    /// Drops and recreates the test database from scratch.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Recreated rather than reused, because the schema is still churning. Regenerating a
+    /// migration changes its identity, which leaves an existing database holding the right tables
+    /// under the wrong migration id — and the resulting <c>relation "accounts" already exists</c>
+    /// is a genuinely confusing way to spend twenty minutes. Migrating 25 tables takes about a
+    /// second, which is a fine price for never seeing that failure again.
+    /// </para>
+    /// <para>
+    /// <c>WITH (FORCE)</c> evicts any lingering pooled connections; without it the drop fails
+    /// whenever a previous run left a connection open.
+    /// </para>
+    /// </remarks>
+    private static async Task RecreateDatabaseAsync()
     {
         try
         {
+            // Pooled connections to the old database would otherwise block the drop and then be
+            // handed out against a database that no longer exists.
+            NpgsqlConnection.ClearAllPools();
+
             await using NpgsqlConnection connection = new(AdminConnectionString);
             await connection.OpenAsync();
 
-            await using NpgsqlCommand exists = new(
-                "SELECT 1 FROM pg_database WHERE datname = @name", connection);
-            exists.Parameters.AddWithValue("name", TestDatabaseName);
-
-            if (await exists.ExecuteScalarAsync() is not null)
+            // The database name is a compile-time constant, and CREATE/DROP DATABASE cannot take
+            // parameters in any case.
+            await using (NpgsqlCommand drop = new(
+                $"DROP DATABASE IF EXISTS \"{TestDatabaseName}\" WITH (FORCE)", connection))
             {
-                return;
+                await drop.ExecuteNonQueryAsync();
             }
 
-            // CREATE DATABASE cannot be parameterised, and the name is a compile-time constant.
+            // Matches the C collation of the dev database, so ordering behaves identically.
             await using NpgsqlCommand create = new(
                 $"CREATE DATABASE \"{TestDatabaseName}\" TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C'",
                 connection);

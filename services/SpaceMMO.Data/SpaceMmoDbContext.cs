@@ -339,6 +339,13 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
                 .WithMany()
                 .HasForeignKey(e => e.ShipItemInstanceId);
 
+            // One station hangar per character per station. Without this, two concurrent
+            // get-or-create calls would each create a hangar and the character's goods would end
+            // up split across two containers, one of which nothing would ever look in.
+            // Ship holds and carried inventories have a null station id, and Postgres treats
+            // NULLs as distinct, so this correctly permits many of those.
+            entity.HasIndex(e => new { e.CharacterId, e.StationId, e.Kind }).IsUnique();
+
             entity.ToTable(t => t.HasCheckConstraint(
                 "ck_inventories_capacity_non_negative", "capacity_m3 >= 0"));
         });
@@ -409,6 +416,20 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
                 t.HasCheckConstraint(
                     "ck_market_orders_quantity_remaining_in_range",
                     "quantity_remaining >= 0 AND quantity_remaining <= quantity_original");
+
+                t.HasCheckConstraint(
+                    "ck_market_orders_escrow_non_negative", "escrowed_credits >= 0");
+
+                t.HasCheckConstraint(
+                    "ck_market_orders_reserved_non_negative", "reserved_quantity >= 0");
+
+                // Escrow belongs to buy orders and reserved goods to sell orders, never the
+                // other way round. Enforced here because a sell order holding credits would
+                // mean money was locked with nothing to release it.
+                t.HasCheckConstraint(
+                    "ck_market_orders_escrow_matches_side",
+                    "(side = 'Buy' AND reserved_quantity = 0) OR "
+                    + "(side = 'Sell' AND escrowed_credits = 0)");
             });
         });
 

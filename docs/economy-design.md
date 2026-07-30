@@ -380,6 +380,25 @@ they're expected to fail early and guide tuning.
 Per-station order books; there is no global market. Regional price differences are
 the point, and hauling between them is a profession.
 
+**Buy orders lock credits at placement; sell orders reserve goods.** An order on the
+book therefore always represents money or material that exists and has been committed,
+and can never fail to honour itself. The cost is that capital and cargo are tied up
+while an order rests — the intended tradeoff, since a book full of orders nobody can pay
+for is worse than a book that reflects real commitments.
+
+Two consequences follow:
+
+- **Money supply is `Σ balances + Σ escrow on open orders`.** Escrowed credits have left
+  the buyer's balance but still exist; they live on the order until paid to a seller,
+  destroyed as tax, or released on cancellation.
+- **Escrow is locked at the buyer's *limit* price, while fills execute at the *resting*
+  price.** The difference must be refunded, or a buyer who bid 150 and filled at 100
+  would silently lose 50 per unit and those credits would vanish from the economy. When
+  the buyer is the resting side the two prices are equal, so the refund falls out as
+  zero and one formula covers both cases.
+
+Mechanics:
+
 - Limit orders only, both sides. `side ∈ {buy, sell}`.
 - **Price-time priority**: best price first, oldest first at equal price.
 - Immediate match on crossing, with partial fills supported.

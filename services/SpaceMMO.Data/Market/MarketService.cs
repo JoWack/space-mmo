@@ -1,9 +1,22 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Entities;
+using SpaceMMO.Data.Inventories;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Market;
 
 namespace SpaceMMO.Data.Market;
+
+/// <summary>Thrown when a character cannot cover the cost of an order.</summary>
+public sealed class InsufficientFundsException(int characterId, Credits required, Credits available)
+    : InvalidOperationException(
+        $"Character {characterId} has {available} but {required} is required.")
+{
+    public int CharacterId { get; } = characterId;
+
+    public Credits Required { get; } = required;
+
+    public Credits Available { get; } = available;
+}
 
 /// <summary>A request to place a limit order.</summary>
 /// <param name="CharacterId">Who is placing it.</param>
@@ -29,11 +42,15 @@ public readonly record struct PlaceOrderRequest(
 /// </param>
 /// <param name="QuantityFilled">Units executed immediately.</param>
 /// <param name="QuantityResting">Units left on the book. Zero means the order filled completely.</param>
+/// <param name="BrokerFee">Non-refundable fee charged at placement.</param>
+/// <param name="EscrowRemaining">Credits still locked against the resting remainder.</param>
 /// <param name="TradeIds">Trades written, in execution order.</param>
 public readonly record struct PlaceOrderResult(
     long OrderId,
     int QuantityFilled,
     int QuantityResting,
+    Credits BrokerFee,
+    Credits EscrowRemaining,
     IReadOnlyList<long> TradeIds)
 {
     /// <summary>True if nothing remains on the book.</summary>
@@ -41,27 +58,26 @@ public readonly record struct PlaceOrderResult(
 }
 
 /// <summary>
-/// Places orders atomically, per economy-design §5.
+/// Places, settles, and cancels market orders, per economy-design §5.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This class exists to make <see cref="MatchingEngine"/>'s decisions durable without letting
-/// two concurrent placements both consume the same resting quantity. It does not re-implement
-/// any matching logic — that would be two sources of truth for the most correctness-critical
-/// rule in the game.
+/// <strong>Buy orders lock credits at placement and sell orders reserve goods.</strong> An order
+/// on the book therefore always represents money or material that actually exists and has been
+/// committed — it can never fail to honour itself. The cost is that capital and cargo are tied up
+/// while an order rests, which is the intended tradeoff: a book full of orders nobody can pay for
+/// is worse than a book that reflects real commitments.
 /// </para>
 /// <para>
-/// <strong>The locking protocol, which is the whole point of the class:</strong> the candidate
-/// resting orders are read with <c>FOR UPDATE</c> inside a transaction. A second transaction
-/// running the same query blocks until the first commits, and then re-reads the decremented
-/// quantities rather than the stale ones. Without that, two buyers could each see five
-/// available units and each be told they bought five, creating items from nothing.
+/// <strong>Concurrency.</strong> Crossing orders are read with <c>FOR UPDATE</c>, so a competing
+/// placement blocks and then re-reads decremented quantities. Balance changes go through atomic
+/// <c>UPDATE … SET balance = balance + n</c> statements rather than read-modify-write, so
+/// crediting two sellers concurrently cannot lose an update.
 /// </para>
 /// <para>
-/// <strong>Not yet implemented: settlement.</strong> Orders, fills, and trades are recorded,
-/// but credits and items do not move yet — that needs credit escrow on buy orders and
-/// inventory reservation on sell orders, which is the next increment. Nothing here writes
-/// ledger entries, so the money supply is unaffected in the meantime.
+/// <strong>Matching logic lives in <see cref="MatchingEngine"/> and settlement arithmetic in
+/// <see cref="Settlement"/>.</strong> This class only makes their decisions durable. Two sources
+/// of truth for either would be a poor trade.
 /// </para>
 /// </remarks>
 public sealed class MarketService(SpaceMmoDbContext database)
@@ -69,10 +85,15 @@ public sealed class MarketService(SpaceMmoDbContext database)
     private readonly SpaceMmoDbContext _database =
         database ?? throw new ArgumentNullException(nameof(database));
 
+    private readonly InventoryService _inventories = new(database);
+
     /// <summary>
-    /// Matches an order against the book and rests any remainder, in one transaction.
+    /// Places an order: charges the broker fee, commits money or goods, matches, and settles —
+    /// all in one transaction.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">If quantity or price is not positive.</exception>
+    /// <exception cref="InsufficientFundsException">If the buyer cannot cover escrow plus fee.</exception>
+    /// <exception cref="InsufficientItemsException">If the seller lacks the goods.</exception>
     public async Task<PlaceOrderResult> PlaceOrderAsync(
         PlaceOrderRequest request, CancellationToken cancellationToken = default)
     {
@@ -96,20 +117,45 @@ public sealed class MarketService(SpaceMmoDbContext database)
             .Select(s => s.StarSystemId)
             .SingleAsync(cancellationToken);
 
+        // Locks are always taken in the same order — character, then hangar, then market orders —
+        // because inconsistent ordering is what produces deadlocks. Creating the hangar first
+        // deadlocked two concurrent placements from the same character, since one would hold the
+        // new hangar row while waiting for the character row the other already held.
+        Credits balance = await LockAndReadBalanceAsync(request.CharacterId, cancellationToken);
+
+        Inventory hangar = await _inventories.GetOrCreateStationHangarAsync(
+            request.CharacterId, request.StationId, cancellationToken);
+
+        Credits brokerFee = MarketFees.BrokerFee(request.LimitPrice, request.Quantity);
+        Credits escrowRequired = request.Side == OrderSide.Buy
+            ? Settlement.EscrowRequired(request.LimitPrice, request.Quantity)
+            : Credits.Zero;
+
+        Credits upfrontCost = brokerFee + escrowRequired;
+
+        if (balance < upfrontCost)
+        {
+            throw new InsufficientFundsException(request.CharacterId, upfrontCost, balance);
+        }
+
+        if (request.Side == OrderSide.Sell)
+        {
+            // Throws if the seller does not hold the goods, before anything else is written.
+            await _inventories.RemoveAsync(
+                hangar.Id, request.ItemDefId, request.Quantity, cancellationToken);
+        }
+
         List<MarketOrder> candidates = await LoadAndLockCandidatesAsync(request, cancellationToken);
 
-        // The pure engine decides everything; this method only persists the decision.
         MatchResult match = MatchingEngine.Match(
             new MatchRequest(request.CharacterId, request.Side, request.LimitPrice, request.Quantity),
             [.. candidates.Select(ToRestingOrder)]);
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
-        // The incoming order is persisted before its trades, even when it fills entirely.
-        // Recording only the unfilled remainder would leave a taker's trades pointing at no
-        // order at all, which breaks the audit trail precisely for the trades that matter most.
-        // The partial index on the book is filtered to quantity_remaining > 0, so a fully
-        // filled order drops out of the order book automatically at no cost.
+        // Persisted even when it fills entirely: recording only the unfilled remainder would
+        // leave a taker's trades pointing at no order, breaking the audit trail for exactly the
+        // trades that matter most. The book's partial index excludes filled orders at no cost.
         var incomingOrder = new MarketOrder
         {
             StationId = request.StationId,
@@ -120,6 +166,8 @@ public sealed class MarketService(SpaceMmoDbContext database)
             Price = request.LimitPrice,
             QuantityOriginal = request.Quantity,
             QuantityRemaining = match.QuantityUnfilled,
+            EscrowedCredits = escrowRequired,
+            ReservedQuantity = request.Side == OrderSide.Sell ? request.Quantity : 0,
             PlacedAt = now,
             ExpiresAt = now.AddDays(request.GoodForDays),
         };
@@ -127,14 +175,25 @@ public sealed class MarketService(SpaceMmoDbContext database)
         _database.MarketOrders.Add(incomingOrder);
         await _database.SaveChangesAsync(cancellationToken);
 
+        await AdjustBalanceAsync(
+            request.CharacterId, -brokerFee, LedgerReason.BrokerFee, incomingOrder.Id, now,
+            cancellationToken);
+
+        if (escrowRequired.IsPositive)
+        {
+            await AdjustBalanceAsync(
+                request.CharacterId, -escrowRequired, LedgerReason.MarketEscrowLocked,
+                incomingOrder.Id, now, cancellationToken);
+        }
+
         var trades = new List<Trade>(match.Fills.Count);
 
         foreach (Fill fill in match.Fills)
         {
             MarketOrder resting = candidates.Single(o => o.Id == fill.RestingOrderId);
 
-            // Guarded rather than assumed: if this ever trips, the lock did not hold and the
-            // failure must be loud instead of an overfilled order.
+            // Guarded rather than assumed: if this trips, the lock did not hold, and the failure
+            // must be loud instead of an overfilled order.
             if (fill.Quantity > resting.QuantityRemaining)
             {
                 throw new InvalidOperationException(
@@ -145,24 +204,54 @@ public sealed class MarketService(SpaceMmoDbContext database)
             resting.QuantityRemaining -= fill.Quantity;
 
             bool incomingIsBuy = request.Side == OrderSide.Buy;
+            MarketOrder buyOrder = incomingIsBuy ? incomingOrder : resting;
+            MarketOrder sellOrder = incomingIsBuy ? resting : incomingOrder;
+
+            // Escrow was locked at the buy order's own limit price, so that is the rate to settle
+            // against. Fills at a better price refund the difference rather than pocketing it.
+            FillSettlement settlement = Settlement.ForFill(
+                buyOrder.Price, fill.Price, fill.Quantity);
+
+            buyOrder.EscrowedCredits -= settlement.TotalEscrowReleased;
+            sellOrder.ReservedQuantity -= fill.Quantity;
 
             var trade = new Trade
             {
-                BuyOrderId = incomingIsBuy ? incomingOrder.Id : resting.Id,
-                SellOrderId = incomingIsBuy ? resting.Id : incomingOrder.Id,
+                BuyOrderId = buyOrder.Id,
+                SellOrderId = sellOrder.Id,
                 StationId = request.StationId,
                 StarSystemId = starSystemId,
                 ItemDefId = request.ItemDefId,
-                BuyerCharacterId = incomingIsBuy ? request.CharacterId : resting.CharacterId,
-                SellerCharacterId = incomingIsBuy ? resting.CharacterId : request.CharacterId,
+                BuyerCharacterId = buyOrder.CharacterId,
+                SellerCharacterId = sellOrder.CharacterId,
                 Quantity = fill.Quantity,
                 Price = fill.Price,
-                SalesTax = MarketFees.SalesTax(fill.Price, fill.Quantity),
+                SalesTax = settlement.SalesTax,
                 ExecutedAt = now,
             };
 
-            trades.Add(trade);
             _database.Trades.Add(trade);
+            await _database.SaveChangesAsync(cancellationToken);
+            trades.Add(trade);
+
+            await AdjustBalanceAsync(
+                sellOrder.CharacterId, settlement.SellerProceeds, LedgerReason.MarketSale,
+                trade.Id, now, cancellationToken);
+
+            if (settlement.BuyerRefund.IsPositive)
+            {
+                await AdjustBalanceAsync(
+                    buyOrder.CharacterId, settlement.BuyerRefund,
+                    LedgerReason.MarketEscrowReleased, trade.Id, now, cancellationToken);
+            }
+
+            // Goods go to the buyer's hangar at this station. The seller's copy already left
+            // their inventory when the sell order was placed.
+            Inventory buyerHangar = await _inventories.GetOrCreateStationHangarAsync(
+                buyOrder.CharacterId, request.StationId, cancellationToken);
+
+            await _inventories.AddAsync(
+                buyerHangar.Id, request.ItemDefId, fill.Quantity, cancellationToken);
         }
 
         await _database.SaveChangesAsync(cancellationToken);
@@ -172,7 +261,132 @@ public sealed class MarketService(SpaceMmoDbContext database)
             OrderId: incomingOrder.Id,
             QuantityFilled: match.QuantityFilled,
             QuantityResting: match.QuantityUnfilled,
+            BrokerFee: brokerFee,
+            EscrowRemaining: incomingOrder.EscrowedCredits,
             TradeIds: [.. trades.Select(t => t.Id)]);
+    }
+
+    /// <summary>
+    /// Cancels an order, releasing any remaining escrow and returning any reserved goods.
+    /// </summary>
+    /// <remarks>
+    /// The broker fee is <em>not</em> refunded. That is what makes it discourage order spam:
+    /// placing and cancelling to probe the book has to cost something, or the book becomes noise.
+    /// </remarks>
+    /// <returns>True if the order was cancelled; false if it was already closed.</returns>
+    public async Task<bool> CancelOrderAsync(
+        long orderId, int characterId, CancellationToken cancellationToken = default)
+    {
+        await using var transaction =
+            await _database.Database.BeginTransactionAsync(cancellationToken);
+
+        List<MarketOrder> locked = await _database.MarketOrders
+            .FromSqlInterpolated($"SELECT * FROM market_orders WHERE id = {orderId} FOR UPDATE")
+            .ToListAsync(cancellationToken);
+
+        MarketOrder order = locked.Count == 1
+            ? locked[0]
+            : throw new InvalidOperationException($"Order {orderId} does not exist.");
+
+        if (order.CharacterId != characterId)
+        {
+            throw new UnauthorizedAccessException(
+                $"Order {orderId} belongs to character {order.CharacterId}, not {characterId}.");
+        }
+
+        if (order.CancelledAt is not null)
+        {
+            return false;
+        }
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        if (order.EscrowedCredits.IsPositive)
+        {
+            await AdjustBalanceAsync(
+                order.CharacterId, order.EscrowedCredits, LedgerReason.MarketEscrowReleased,
+                order.Id, now, cancellationToken);
+
+            order.EscrowedCredits = Credits.Zero;
+        }
+
+        if (order.ReservedQuantity > 0)
+        {
+            Inventory hangar = await _inventories.GetOrCreateStationHangarAsync(
+                order.CharacterId, order.StationId, cancellationToken);
+
+            await _inventories.AddAsync(
+                hangar.Id, order.ItemDefId, order.ReservedQuantity, cancellationToken);
+
+            order.ReservedQuantity = 0;
+        }
+
+        order.CancelledAt = now;
+        order.QuantityRemaining = 0;
+
+        await _database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Applies a balance change and records the matching ledger entry.
+    /// </summary>
+    /// <remarks>
+    /// The balance moves via <c>SET balance = balance + n</c> rather than a read-modify-write, so
+    /// two sellers being credited concurrently cannot lose an update. The ledger entry is written
+    /// in the same transaction, which is what keeps the cached balance reconcilable against the
+    /// ledger that is authoritative over it (ADR-0005).
+    /// </remarks>
+    private async Task AdjustBalanceAsync(
+        int characterId,
+        Credits delta,
+        LedgerReason reason,
+        long? referenceId,
+        DateTimeOffset at,
+        CancellationToken cancellationToken)
+    {
+        if (delta.IsZero)
+        {
+            return;
+        }
+
+        long minorUnits = delta.MinorUnits;
+
+        await _database.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE characters SET balance = balance + {minorUnits} WHERE id = {characterId}",
+            cancellationToken);
+
+        _database.LedgerEntries.Add(new LedgerEntry
+        {
+            CharacterId = characterId,
+            DeltaCredits = delta,
+            Reason = reason,
+            ReferenceId = referenceId,
+            CreatedAt = at,
+        });
+
+        await _database.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Locks a character's row and returns their balance.
+    /// </summary>
+    /// <remarks>
+    /// The lock is what makes the sufficiency check meaningful — without it, two orders from the
+    /// same character could each pass a check against the same credits and jointly overspend.
+    /// </remarks>
+    private async Task<Credits> LockAndReadBalanceAsync(
+        int characterId, CancellationToken cancellationToken)
+    {
+        List<Character> locked = await _database.Characters
+            .FromSqlInterpolated($"SELECT * FROM characters WHERE id = {characterId} FOR UPDATE")
+            .ToListAsync(cancellationToken);
+
+        return locked.Count == 1
+            ? locked[0].Balance
+            : throw new InvalidOperationException($"Character {characterId} does not exist.");
     }
 
     /// <summary>
@@ -194,9 +408,6 @@ public sealed class MarketService(SpaceMmoDbContext database)
     {
         long limitMinorUnits = request.LimitPrice.MinorUnits;
 
-        // The two branches differ only in the price comparison, but they have to be written
-        // out: FromSqlInterpolated parameterises every hole, so an operator cannot be
-        // interpolated. That is a feature — it is also what makes this injection-proof.
         // Assigned in branches rather than by ternary: an interpolated string only becomes a
         // FormattableString when the target type is known, and a conditional expression
         // resolves to string first.

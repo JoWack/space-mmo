@@ -567,6 +567,8 @@ namespace SpaceMMO.Data.Migrations
                     price = table.Column<long>(type: "bigint", nullable: false),
                     quantity_original = table.Column<int>(type: "integer", nullable: false),
                     quantity_remaining = table.Column<int>(type: "integer", nullable: false),
+                    escrowed_credits = table.Column<long>(type: "bigint", nullable: false),
+                    reserved_quantity = table.Column<int>(type: "integer", nullable: false),
                     placed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     cancelled_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
@@ -574,9 +576,12 @@ namespace SpaceMMO.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_market_orders", x => x.id);
+                    table.CheckConstraint("ck_market_orders_escrow_matches_side", "(side = 'Buy' AND reserved_quantity = 0) OR (side = 'Sell' AND escrowed_credits = 0)");
+                    table.CheckConstraint("ck_market_orders_escrow_non_negative", "escrowed_credits >= 0");
                     table.CheckConstraint("ck_market_orders_price_positive", "price > 0");
                     table.CheckConstraint("ck_market_orders_quantity_original_positive", "quantity_original > 0");
                     table.CheckConstraint("ck_market_orders_quantity_remaining_in_range", "quantity_remaining >= 0 AND quantity_remaining <= quantity_original");
+                    table.CheckConstraint("ck_market_orders_reserved_non_negative", "reserved_quantity >= 0");
                     table.ForeignKey(
                         name: "fk_market_orders_characters_character_id",
                         column: x => x.character_id,
@@ -822,6 +827,12 @@ namespace SpaceMMO.Data.Migrations
                 name: "ix_inventories_character_id",
                 table: "inventories",
                 column: "character_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventories_character_id_station_id_kind",
+                table: "inventories",
+                columns: new[] { "character_id", "station_id", "kind" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_inventories_ship_item_instance_id",

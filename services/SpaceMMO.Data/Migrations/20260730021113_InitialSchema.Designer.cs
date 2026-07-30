@@ -12,7 +12,7 @@ using SpaceMMO.Data;
 namespace SpaceMMO.Data.Migrations
 {
     [DbContext(typeof(SpaceMmoDbContext))]
-    [Migration("20260730012947_InitialSchema")]
+    [Migration("20260730021113_InitialSchema")]
     partial class InitialSchema
     {
         /// <inheritdoc />
@@ -558,6 +558,10 @@ namespace SpaceMMO.Data.Migrations
                     b.HasIndex("StationId")
                         .HasDatabaseName("ix_inventories_station_id");
 
+                    b.HasIndex("CharacterId", "StationId", "Kind")
+                        .IsUnique()
+                        .HasDatabaseName("ix_inventories_character_id_station_id_kind");
+
                     b.ToTable("inventories", null, t =>
                         {
                             t.HasCheckConstraint("ck_inventories_capacity_non_negative", "capacity_m3 >= 0");
@@ -744,6 +748,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("character_id");
 
+                    b.Property<long>("EscrowedCredits")
+                        .HasColumnType("bigint")
+                        .HasColumnName("escrowed_credits");
+
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
@@ -767,6 +775,10 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<int>("QuantityRemaining")
                         .HasColumnType("integer")
                         .HasColumnName("quantity_remaining");
+
+                    b.Property<int>("ReservedQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("reserved_quantity");
 
                     b.Property<string>("Side")
                         .IsRequired()
@@ -801,11 +813,17 @@ namespace SpaceMMO.Data.Migrations
 
                     b.ToTable("market_orders", null, t =>
                         {
+                            t.HasCheckConstraint("ck_market_orders_escrow_matches_side", "(side = 'Buy' AND reserved_quantity = 0) OR (side = 'Sell' AND escrowed_credits = 0)");
+
+                            t.HasCheckConstraint("ck_market_orders_escrow_non_negative", "escrowed_credits >= 0");
+
                             t.HasCheckConstraint("ck_market_orders_price_positive", "price > 0");
 
                             t.HasCheckConstraint("ck_market_orders_quantity_original_positive", "quantity_original > 0");
 
                             t.HasCheckConstraint("ck_market_orders_quantity_remaining_in_range", "quantity_remaining >= 0 AND quantity_remaining <= quantity_original");
+
+                            t.HasCheckConstraint("ck_market_orders_reserved_non_negative", "reserved_quantity >= 0");
                         });
                 });
 

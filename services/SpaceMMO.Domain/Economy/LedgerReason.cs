@@ -63,20 +63,33 @@ public enum LedgerReason
 
     // ── Transfers: these move credits without changing the supply ────────────
 
-    /// <summary>Paid by the buyer in a market trade.</summary>
-    MarketPurchase = 20,
+    /// <summary>
+    /// Credits locked out of a buyer's balance when they place a buy order.
+    /// </summary>
+    /// <remarks>
+    /// A transfer, not a sink: the money still exists, it just lives on the order rather than in
+    /// the balance until the order fills or is cancelled. Total money supply is therefore
+    /// <c>Σ balances + Σ open order escrow</c>.
+    /// </remarks>
+    MarketEscrowLocked = 20,
 
-    /// <summary>Received by the seller in a market trade.</summary>
-    MarketSale = 21,
+    /// <summary>
+    /// Escrow returned to a buyer — on cancellation, expiry, or as a price-improvement refund
+    /// when a fill executed below their limit price.
+    /// </summary>
+    MarketEscrowReleased = 21,
+
+    /// <summary>Received by the seller in a market trade, net of sales tax.</summary>
+    MarketSale = 22,
 
     /// <summary>Escrowed when posting a bounty on another player.</summary>
-    BountyPosted = 22,
+    BountyPosted = 23,
 
     /// <summary>Paid out to whoever collected a bounty.</summary>
-    BountyClaimed = 23,
+    BountyClaimed = 24,
 
     /// <summary>A direct player-to-player transfer.</summary>
-    PlayerTransfer = 24,
+    PlayerTransfer = 25,
 }
 
 /// <summary>
@@ -122,7 +135,8 @@ public static class LedgerReasons
         LedgerReason.InsurancePremium or
         LedgerReason.RepairCost => LedgerReasonKind.Sink,
 
-        LedgerReason.MarketPurchase or
+        LedgerReason.MarketEscrowLocked or
+        LedgerReason.MarketEscrowReleased or
         LedgerReason.MarketSale or
         LedgerReason.BountyPosted or
         LedgerReason.BountyClaimed or

@@ -47,6 +47,33 @@ public class MarketOrder
     /// </remarks>
     public int QuantityRemaining { get; set; }
 
+    /// <summary>
+    /// Credits still held against this order. Always zero for sell orders.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Buy orders lock credits at placement, so an order can never fail to honour itself. The
+    /// money leaves the buyer's balance immediately and lives here until it is paid to a seller,
+    /// destroyed as tax, or released back on cancellation. Total money supply is therefore
+    /// <c>Σ balances + Σ escrow on open orders</c>.
+    /// </para>
+    /// <para>
+    /// Held here rather than in a single balance column because escrow is locked at the buyer's
+    /// <em>limit</em> price while fills execute at the <em>resting</em> price. The per-order
+    /// figure is what makes the price-improvement refund computable.
+    /// </para>
+    /// </remarks>
+    public Credits EscrowedCredits { get; set; }
+
+    /// <summary>
+    /// Units of the item held against this order. Always zero for buy orders.
+    /// </summary>
+    /// <remarks>
+    /// The sell-side mirror of escrow: goods leave the seller's inventory at placement, so a sell
+    /// order cannot promise items the seller has since spent elsewhere.
+    /// </remarks>
+    public int ReservedQuantity { get; set; }
+
     public DateTimeOffset PlacedAt { get; set; }
 
     /// <summary>

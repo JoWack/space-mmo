@@ -4,20 +4,23 @@ A space MMO in Unreal Engine 5: procedurally generated galaxy, seamless planet
 landing, four playable races across two factions, RuneScape-style 1–99 skills, and a
 player-driven economy in which every tradeable good was manufactured by a player.
 
-**Status: M0 complete, M1 in progress — 267 tests passing** (255 unit, 12 integration). The
+**Status: M0 complete, M1 in progress — 301 tests passing** (273 unit, 28 integration). The
 backend economy core is being built first, because it can be fully validated without Unreal,
 art, or players.
 
 Implemented in `SpaceMMO.Domain`: the RuneScape XP curve, the `Credits` value type, the
 credit-faucet daily cap, tiered ship insurance, cause-based death and loot resolution,
-ledger-reason classification, order matching, and market fees.
+ledger-reason classification, order matching, market fees, and fill settlement.
 
-Implemented in `SpaceMMO.Data`: the full 25-table Postgres schema via EF Core migrations —
-79 indexes, 31 check constraints, 40 foreign keys — plus `MarketService`, which makes order
-placement atomic under `SELECT … FOR UPDATE`.
+Implemented in `SpaceMMO.Data`: the full 25-table Postgres schema via EF Core migrations,
+plus `InventoryService` and a `MarketService` that escrows credits on buy orders, reserves
+goods on sell orders, and settles both sides atomically under `SELECT … FOR UPDATE`.
 
-Still to come in M1: trade settlement (moving credits and items), the quest engine, content
-JSON in `data/`, and EconSim.
+**A market trade works end to end**: two characters can trade an item, with credits, goods,
+fees, tax, and price-improvement refunds all settled and reconciled against the ledger.
+
+Still to come in M1: the quest engine, gathering and crafting, content JSON in `data/`, and
+EconSim.
 
 ## Start here
 
