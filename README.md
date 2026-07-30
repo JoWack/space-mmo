@@ -4,7 +4,7 @@ A space MMO in Unreal Engine 5: procedurally generated galaxy, seamless planet
 landing, four playable races across two factions, RuneScape-style 1–99 skills, and a
 player-driven economy in which every tradeable good was manufactured by a player.
 
-**Status: M0 complete, M1 in progress — 456 tests passing** (370 unit, 86 integration). The
+**Status: M0 complete, M1 in progress — 496 tests passing** (398 unit, 98 integration). The
 backend economy core is being built first, because it can be fully validated without Unreal,
 art, or players.
 
@@ -26,7 +26,11 @@ reconciled against the ledger.
 The quest engine sits on top: prerequisite chains, per-quest cooldowns, and rewards routed
 through the daily faucet cap for repeatables while one-shot story rewards bypass it.
 
-Still to come in M1: content JSON in `data/` and its loader, and EconSim.
+Skills, items, recipes, and the onboarding questline live in `data/` as JSON, validated before
+they touch the database and upserted by key so startup is idempotent. **The shipped content is
+part of the test suite** — a typo in a recipe fails the build rather than the server.
+
+Still to come in M1: EconSim.
 
 ## Start here
 

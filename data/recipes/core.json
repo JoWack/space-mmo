@@ -1,0 +1,60 @@
+{
+  "$comment": "The M1 crafting chain, per design-bible §5. Every recipe runs as a time-gated industry job (§6). Job durations and level gates are first-draft numbers expected to move once EconSim can measure the economy — which is exactly why they live here rather than in code.",
+  "recipes": [
+    {
+      "key": "craft_crude_mining_laser",
+      "output": "crude_mining_laser",
+      "outputQuantity": 1,
+      "skill": "toolcrafting",
+      "requiredLevel": 1,
+      "jobSeconds": 30,
+      "xpPerRun": 300,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "scrap_alloy", "quantity": 8 }
+      ],
+      "$comment": "The first craft. Deliberately needs no tool, or the chain could never start."
+    },
+    {
+      "key": "refine_ferrite_plate",
+      "output": "ferrite_plate",
+      "outputQuantity": 4,
+      "skill": "refining",
+      "requiredLevel": 1,
+      "jobSeconds": 60,
+      "xpPerRun": 600,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "ferrite_ore", "quantity": 20 }
+      ]
+    },
+    {
+      "key": "build_shuttle_hull_section",
+      "output": "shuttle_hull_section",
+      "outputQuantity": 1,
+      "skill": "shipcrafting",
+      "requiredLevel": 5,
+      "jobSeconds": 300,
+      "xpPerRun": 900,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "ferrite_plate", "quantity": 4 },
+        { "item": "scrap_alloy", "quantity": 2 }
+      ]
+    },
+    {
+      "key": "assemble_hull_shuttle",
+      "output": "hull_shuttle",
+      "outputQuantity": 1,
+      "skill": "shipcrafting",
+      "requiredLevel": 10,
+      "jobSeconds": 900,
+      "xpPerRun": 1200,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "shuttle_hull_section", "quantity": 1 },
+        { "item": "crude_thruster", "quantity": 1 }
+      ]
+    }
+  ]
+}

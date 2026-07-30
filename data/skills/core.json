@@ -1,0 +1,10 @@
+{
+  "$comment": "Skills, per design-bible §2. Only the M1 subset is defined so far; the remaining skills are listed in the design bible and get added as the systems behind them are built. Keys are permanent — they end up in the database.",
+  "skills": [
+    { "key": "gathering", "name": "Gathering", "category": "Life" },
+    { "key": "mining", "name": "Mining", "category": "Life" },
+    { "key": "refining", "name": "Refining", "category": "Life" },
+    { "key": "toolcrafting", "name": "Toolcrafting", "category": "Life" },
+    { "key": "shipcrafting", "name": "Shipcrafting", "category": "Life" }
+  ]
+}

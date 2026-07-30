@@ -1,0 +1,138 @@
+{
+  "$comment": "The onboarding questline, per design-bible §4. Paid as StoryReward, which is exempt from the daily faucet cap — a 5,000/day budget against this chain's 13,000 credits would stall a new player's tutorial for three days. Safe to exempt because each quest completes once per character, so the total is bounded by construction.",
+  "quests": [
+    {
+      "key": "intro_gather_scrap",
+      "name": "Salvage Rights",
+      "kind": "MainStory",
+      "prerequisite": null,
+      "rewardCredits": 500,
+      "rewardSkill": "gathering",
+      "rewardXp": 200,
+      "cooldownSeconds": null,
+      "steps": [
+        {
+          "ordinal": 1,
+          "description": "Gather 10 scrap alloy from the debris scattered across the surface.",
+          "objective": "Gather",
+          "target": "scrap_alloy",
+          "quantity": 10
+        }
+      ]
+    },
+    {
+      "key": "intro_craft_tool",
+      "name": "First Tools",
+      "kind": "MainStory",
+      "prerequisite": "intro_gather_scrap",
+      "rewardCredits": 750,
+      "rewardSkill": "toolcrafting",
+      "rewardXp": 300,
+      "cooldownSeconds": null,
+      "steps": [
+        {
+          "ordinal": 1,
+          "description": "Craft a crude mining laser from the scrap you collected.",
+          "objective": "Craft",
+          "target": "crude_mining_laser",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "key": "intro_mine_ore",
+      "name": "Into the Rock",
+      "kind": "MainStory",
+      "prerequisite": "intro_craft_tool",
+      "rewardCredits": 1000,
+      "rewardSkill": "mining",
+      "rewardXp": 500,
+      "cooldownSeconds": null,
+      "steps": [
+        {
+          "ordinal": 1,
+          "description": "Mine 20 ferrite ore. Your new laser will cut where bare hands cannot.",
+          "objective": "Gather",
+          "target": "ferrite_ore",
+          "quantity": 20
+        }
+      ]
+    },
+    {
+      "key": "intro_refine_plate",
+      "name": "Trial by Furnace",
+      "kind": "MainStory",
+      "prerequisite": "intro_mine_ore",
+      "rewardCredits": 1250,
+      "rewardSkill": "refining",
+      "rewardXp": 600,
+      "cooldownSeconds": null,
+      "steps": [
+        {
+          "ordinal": 1,
+          "description": "Refine your ore into 4 ferrite plates. Good work takes time.",
+          "objective": "Refine",
+          "target": "ferrite_plate",
+          "quantity": 4
+        }
+      ]
+    },
+    {
+      "key": "intro_build_hull",
+      "name": "Bones of a Ship",
+      "kind": "MainStory",
+      "prerequisite": "intro_refine_plate",
+      "rewardCredits": 2000,
+      "rewardSkill": "shipcrafting",
+      "rewardXp": 900,
+      "cooldownSeconds": null,
+      "steps": [
+        {
+          "ordinal": 1,
+          "description": "Build a shuttle hull section from your plates.",
+          "objective": "Craft",
+          "target": "shuttle_hull_section",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "key": "intro_assemble_ship",
+      "name": "Your Own Two Hands",
+      "kind": "MainStory",
+      "prerequisite": "intro_build_hull",
+      "rewardCredits": 2500,
+      "rewardSkill": "shipcrafting",
+      "rewardXp": 1200,
+      "cooldownSeconds": null,
+      "steps": [
+        {
+          "ordinal": 1,
+          "description": "Fit a thruster to your hull section and assemble your first ship.",
+          "objective": "Craft",
+          "target": "hull_shuttle",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "key": "intro_fly_to_capital",
+      "name": "Out of the Gravity Well",
+      "kind": "MainStory",
+      "prerequisite": "intro_assemble_ship",
+      "rewardCredits": 5000,
+      "rewardSkill": null,
+      "rewardXp": 0,
+      "cooldownSeconds": null,
+      "steps": [
+        {
+          "ordinal": 1,
+          "description": "Fly to the capital world and dock. Everything begins there.",
+          "objective": "Dock",
+          "target": "station_capital_hub",
+          "quantity": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "$comment": "The M1 item catalog, per design-bible §5. Volumes are cubic metres; cargo capacity is volumetric rather than slot-based, which is what makes bulk hauling a real profession.",
+  "items": [
+    {
+      "key": "scrap_alloy",
+      "name": "Scrap Alloy",
+      "category": "Raw",
+      "volumeM3": 0.1,
+      "$comment": "Hand-gatherable with no tool, so a brand-new character always has somewhere to start."
+    },
+    {
+      "key": "ferrite_ore",
+      "name": "Ferrite Ore",
+      "category": "Raw",
+      "volumeM3": 0.4,
+      "$comment": "Tool-gated behind crude_mining_laser."
+    },
+    {
+      "key": "ferrite_plate",
+      "name": "Ferrite Plate",
+      "category": "Refined",
+      "volumeM3": 0.2,
+      "$comment": "Denser than its inputs by design: refining should make hauling easier, not harder."
+    },
+    {
+      "key": "crude_mining_laser",
+      "name": "Crude Mining Laser",
+      "category": "Tool",
+      "volumeM3": 2.0
+    },
+    {
+      "key": "crude_thruster",
+      "name": "Crude Thruster",
+      "category": "Component",
+      "volumeM3": 5.0,
+      "$comment": "The one intentional exception to everything being player-made. Bought from a faction supply order so the onboarding chain can complete before the electronics skill exists. Remove once players can manufacture thrusters."
+    },
+    {
+      "key": "shuttle_hull_section",
+      "name": "Shuttle Hull Section",
+      "category": "Component",
+      "volumeM3": 20.0
+    },
+    {
+      "key": "hull_shuttle",
+      "name": "Shuttle",
+      "category": "Hull",
+      "volumeM3": 200.0,
+      "$comment": "The player's first ship."
+    }
+  ]
+}
