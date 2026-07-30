@@ -9,12 +9,12 @@ Detected state of this machine as of 2026-07-29:
 | Node 20.10 | ✅ installed (not needed yet) |
 | Python 3.12.1 | ✅ installed (not needed yet) |
 | .NET SDK 10.0.302 | ✅ installed — solution builds, 176 tests pass |
-| Docker Desktop | ❌ **required for M1** |
+| Docker Desktop 29.6.2 | ✅ installed — Postgres 17.10 running and healthy |
 | Visual Studio 2022 + C++ | ❌ required for M2 |
 | Unreal Engine 5 | ❌ required for M2 |
 
-**Install order matters.** Item 1 unblocks the rest of M1; items 2 and 3 are only
-needed once M2 starts and take hours, so start them downloading in the background.
+**Everything M1 needs is installed.** The two remaining items are only needed once M2
+starts and take hours to download, so start them in the background when you get there.
 
 ---
 
@@ -30,22 +30,14 @@ dotnet test services/SpaceMMO.Server.sln
 `<TargetFramework>` in `services/Directory.Build.props` — rather than editing every
 `.csproj`. That file exists for exactly this reason.
 
-## 1. Docker Desktop — required now
+## 1. Docker Desktop — already done
 
-Needed for Postgres. Install from <https://www.docker.com/products/docker-desktop/>,
-or:
-
-```bash
-winget install Docker.DockerDesktop
-```
-
-Then bring the database up:
+Installed and verified: Postgres 17.10 comes up healthy in about a second, with `C`
+collation applied as intended.
 
 ```bash
 cp infra/.env.example infra/.env && docker compose -f infra/docker-compose.yml up -d
 ```
-
-Verify it is healthy and accepting connections:
 
 ```bash
 docker compose -f infra/docker-compose.yml ps
@@ -53,6 +45,43 @@ docker compose -f infra/docker-compose.yml ps
 
 `STATUS` should read `healthy`. If it says `starting` for more than about 30 seconds,
 check `docker compose -f infra/docker-compose.yml logs postgres`.
+
+### ⚠️ Docker is a per-user install on this machine
+
+Docker Desktop installed to `%LOCALAPPDATA%\Programs\DockerDesktop`, **not** to
+`C:\Program Files\Docker`. The CLI therefore lives at:
+
+```
+C:\Users\Joe\AppData\Local\Programs\DockerDesktop\resources\bin
+```
+
+The installer adds that to the *user* PATH, but **already-open shells keep the
+environment they started with**. So `docker: command not found` right after installing
+means the shell is stale, not that anything is broken — restart the terminal.
+
+To confirm the daemon is actually up rather than just the CLI being present:
+
+```bash
+docker info --format "{{.ServerVersion}}"
+```
+
+### Checking the database by hand
+
+```bash
+docker exec spacemmo-postgres psql -U spacemmo -d spacemmo -c "select version();"
+```
+
+Note that `SHOW lc_collate` no longer works on Postgres 17 — it stopped being a runtime
+parameter. Collation is per-database now:
+
+```bash
+docker exec spacemmo-postgres psql -U spacemmo -d spacemmo -c "select datcollate from pg_database where datname='spacemmo';"
+```
+
+That must return `C`. If it returns anything else, the volume was created before
+`POSTGRES_INITDB_ARGS` was set — `initdb` only runs on an empty volume, so the fix is
+`docker compose -f infra/docker-compose.yml down -v` to destroy the data and let it
+re-initialize.
 
 **Alternative if you'd rather not run Docker:** a native Postgres 17 install works
 identically — `winget install PostgreSQL.PostgreSQL.17`. Match the credentials in
