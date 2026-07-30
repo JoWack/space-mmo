@@ -12,7 +12,7 @@ using SpaceMMO.Data;
 namespace SpaceMMO.Data.Migrations
 {
     [DbContext(typeof(SpaceMmoDbContext))]
-    [Migration("20260730021113_InitialSchema")]
+    [Migration("20260730141407_InitialSchema")]
     partial class InitialSchema
     {
         /// <inheritdoc />
@@ -403,6 +403,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("fee_paid");
 
+                    b.Property<long>("InputCostBasis")
+                        .HasColumnType("bigint")
+                        .HasColumnName("input_cost_basis");
+
                     b.Property<int>("RecipeId")
                         .HasColumnType("integer")
                         .HasColumnName("recipe_id");
@@ -443,7 +447,43 @@ namespace SpaceMMO.Data.Migrations
 
                     b.ToTable("industry_jobs", null, t =>
                         {
+                            t.HasCheckConstraint("ck_industry_jobs_fee_non_negative", "fee_paid >= 0");
+
+                            t.HasCheckConstraint("ck_industry_jobs_input_cost_non_negative", "input_cost_basis >= 0");
+
                             t.HasCheckConstraint("ck_industry_jobs_runs_positive", "runs > 0");
+                        });
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.IndustryJobInput", b =>
+                {
+                    b.Property<long>("IndustryJobId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("industry_job_id");
+
+                    b.Property<int>("ItemDefId")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_def_id");
+
+                    b.Property<long>("CostBasis")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cost_basis");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("IndustryJobId", "ItemDefId")
+                        .HasName("pk_industry_job_inputs");
+
+                    b.HasIndex("ItemDefId")
+                        .HasDatabaseName("ix_industry_job_inputs_item_def_id");
+
+                    b.ToTable("industry_job_inputs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_industry_job_inputs_cost_non_negative", "cost_basis >= 0");
+
+                            t.HasCheckConstraint("ck_industry_job_inputs_quantity_positive", "quantity > 0");
                         });
                 });
 
@@ -578,6 +618,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("item_def_id");
 
+                    b.Property<long>("CostBasis")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cost_basis");
+
                     b.Property<int>("Quantity")
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
@@ -590,6 +634,8 @@ namespace SpaceMMO.Data.Migrations
 
                     b.ToTable("inventory_items", null, t =>
                         {
+                            t.HasCheckConstraint("ck_inventory_items_cost_basis_non_negative", "cost_basis >= 0");
+
                             t.HasCheckConstraint("ck_inventory_items_quantity_positive", "quantity > 0");
                         });
                 });
@@ -775,6 +821,10 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<int>("QuantityRemaining")
                         .HasColumnType("integer")
                         .HasColumnName("quantity_remaining");
+
+                    b.Property<long>("ReservedCostBasis")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reserved_cost_basis");
 
                     b.Property<int>("ReservedQuantity")
                         .HasColumnType("integer")
@@ -994,6 +1044,10 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<int>("SkillId")
                         .HasColumnType("integer")
                         .HasColumnName("skill_id");
+
+                    b.Property<long>("XpPerRun")
+                        .HasColumnType("bigint")
+                        .HasColumnName("xp_per_run");
 
                     b.HasKey("Id")
                         .HasName("pk_recipes");
@@ -1464,6 +1518,27 @@ namespace SpaceMMO.Data.Migrations
                     b.Navigation("Station");
                 });
 
+            modelBuilder.Entity("SpaceMMO.Data.Entities.IndustryJobInput", b =>
+                {
+                    b.HasOne("SpaceMMO.Data.Entities.IndustryJob", "IndustryJob")
+                        .WithMany("Inputs")
+                        .HasForeignKey("IndustryJobId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_industry_job_inputs_industry_jobs_industry_job_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.ItemDef", "ItemDef")
+                        .WithMany()
+                        .HasForeignKey("ItemDefId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_industry_job_inputs_item_defs_item_def_id");
+
+                    b.Navigation("IndustryJob");
+
+                    b.Navigation("ItemDef");
+                });
+
             modelBuilder.Entity("SpaceMMO.Data.Entities.InsurancePolicy", b =>
                 {
                     b.HasOne("SpaceMMO.Data.Entities.Character", "Character")
@@ -1754,6 +1829,11 @@ namespace SpaceMMO.Data.Migrations
                     b.Navigation("Inventories");
 
                     b.Navigation("Skills");
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.IndustryJob", b =>
+                {
+                    b.Navigation("Inputs");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.Inventory", b =>

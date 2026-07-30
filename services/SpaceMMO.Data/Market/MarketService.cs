@@ -138,10 +138,14 @@ public sealed class MarketService(SpaceMmoDbContext database)
             throw new InsufficientFundsException(request.CharacterId, upfrontCost, balance);
         }
 
+        Credits reservedCostBasis = Credits.Zero;
+
         if (request.Side == OrderSide.Sell)
         {
-            // Throws if the seller does not hold the goods, before anything else is written.
-            await _inventories.RemoveAsync(
+            // Throws if the seller does not hold the goods, before anything else is written. The
+            // returned cost basis travels with the reservation so that cancelling puts the goods
+            // back at what they originally cost rather than at zero.
+            reservedCostBasis = await _inventories.RemoveAsync(
                 hangar.Id, request.ItemDefId, request.Quantity, cancellationToken);
         }
 
@@ -168,6 +172,7 @@ public sealed class MarketService(SpaceMmoDbContext database)
             QuantityRemaining = match.QuantityUnfilled,
             EscrowedCredits = escrowRequired,
             ReservedQuantity = request.Side == OrderSide.Sell ? request.Quantity : 0,
+            ReservedCostBasis = reservedCostBasis,
             PlacedAt = now,
             ExpiresAt = now.AddDays(request.GoodForDays),
         };
@@ -213,7 +218,15 @@ public sealed class MarketService(SpaceMmoDbContext database)
                 buyOrder.Price, fill.Price, fill.Quantity);
 
             buyOrder.EscrowedCredits -= settlement.TotalEscrowReleased;
+
+            // The reserved goods leave with their share of the seller's original cost basis, which
+            // is discarded: for the buyer these units now cost what they just paid, not what the
+            // seller once paid for them.
+            Credits soldCostBasis = ShareOfCostBasis(
+                sellOrder.ReservedCostBasis, fill.Quantity, sellOrder.ReservedQuantity);
+
             sellOrder.ReservedQuantity -= fill.Quantity;
+            sellOrder.ReservedCostBasis -= soldCostBasis;
 
             var trade = new Trade
             {
@@ -250,8 +263,15 @@ public sealed class MarketService(SpaceMmoDbContext database)
             Inventory buyerHangar = await _inventories.GetOrCreateStationHangarAsync(
                 buyOrder.CharacterId, request.StationId, cancellationToken);
 
+            // The buyer's cost basis is what they actually paid for these units — the trade value,
+            // not any market reference. That is what keeps a hull later built from them insurable
+            // at an honest figure (ADR-0006).
             await _inventories.AddAsync(
-                buyerHangar.Id, request.ItemDefId, fill.Quantity, cancellationToken);
+                buyerHangar.Id,
+                request.ItemDefId,
+                fill.Quantity,
+                settlement.EscrowConsumed,
+                cancellationToken);
         }
 
         await _database.SaveChangesAsync(cancellationToken);
@@ -315,10 +335,17 @@ public sealed class MarketService(SpaceMmoDbContext database)
             Inventory hangar = await _inventories.GetOrCreateStationHangarAsync(
                 order.CharacterId, order.StationId, cancellationToken);
 
+            // Returned at their original cost, not at zero. Resetting it would let a player launder
+            // an item's cost basis away by listing and cancelling.
             await _inventories.AddAsync(
-                hangar.Id, order.ItemDefId, order.ReservedQuantity, cancellationToken);
+                hangar.Id,
+                order.ItemDefId,
+                order.ReservedQuantity,
+                order.ReservedCostBasis,
+                cancellationToken);
 
             order.ReservedQuantity = 0;
+            order.ReservedCostBasis = Credits.Zero;
         }
 
         order.CancelledAt = now;
@@ -445,6 +472,28 @@ public sealed class MarketService(SpaceMmoDbContext database)
         }
 
         return await _database.MarketOrders.FromSqlInterpolated(sql).ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The share of a cost basis belonging to <paramref name="quantity"/> of
+    /// <paramref name="totalQuantity"/> units.
+    /// </summary>
+    /// <remarks>
+    /// Floored, with the remainder staying behind, so splitting never creates or loses basis.
+    /// </remarks>
+    private static Credits ShareOfCostBasis(Credits basis, int quantity, int totalQuantity)
+    {
+        if (totalQuantity <= 0 || basis.IsZero)
+        {
+            return Credits.Zero;
+        }
+
+        if (quantity >= totalQuantity)
+        {
+            return basis;
+        }
+
+        return Credits.FromMinorUnits((long)((Int128)basis.MinorUnits * quantity / totalQuantity));
     }
 
     private static RestingOrder ToRestingOrder(MarketOrder order) => new(

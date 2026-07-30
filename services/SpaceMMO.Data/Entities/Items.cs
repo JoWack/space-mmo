@@ -59,6 +59,14 @@ public class Recipe
     public int JobSeconds { get; set; }
 
     /// <summary>
+    /// Skill XP granted per run, awarded at claim and never at start.
+    /// </summary>
+    /// <remarks>
+    /// Awarding at start would make start-and-cancel an XP farm costing only the job fee.
+    /// </remarks>
+    public long XpPerRun { get; set; }
+
+    /// <summary>
     /// A tool that must be held to run this recipe, or null if none is needed. This is how
     /// the onboarding chain gates ore mining behind crafting a mining laser first.
     /// </summary>
@@ -135,6 +143,29 @@ public class InventoryItem
     public ItemDef? ItemDef { get; set; }
 
     public int Quantity { get; set; }
+
+    /// <summary>
+    /// What this whole stack actually cost its owner.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gathered material costs nothing but labour, so it enters at zero. Bought material enters at
+    /// the price actually paid. When a job consumes a stack, its share of the cost basis flows
+    /// into the crafted output's <see cref="ItemInstance.AcquisitionValue"/>.
+    /// </para>
+    /// <para>
+    /// This exists so insurance can be pegged to what a hull genuinely cost to build (ADR-0006).
+    /// Without it a crafted ship has no honest acquisition value, and the alternatives are a market
+    /// reference price — precisely the insurance fraud vector — or a placeholder that permanently
+    /// understates every player-built ship.
+    /// </para>
+    /// <para>
+    /// A whole-stack total rather than a per-unit average, because per-unit would need rounding on
+    /// every add and those errors would accumulate. Removal takes a proportional share and leaves
+    /// the remainder, so the two always sum back to the original exactly.
+    /// </para>
+    /// </remarks>
+    public Credits CostBasis { get; set; }
 }
 
 /// <summary>

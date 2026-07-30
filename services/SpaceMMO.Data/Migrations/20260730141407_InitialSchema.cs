@@ -159,6 +159,7 @@ namespace SpaceMMO.Data.Migrations
                     skill_id = table.Column<int>(type: "integer", nullable: false),
                     required_level = table.Column<int>(type: "integer", nullable: false),
                     job_seconds = table.Column<int>(type: "integer", nullable: false),
+                    xp_per_run = table.Column<long>(type: "bigint", nullable: false),
                     required_tool_item_def_id = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
@@ -527,11 +528,14 @@ namespace SpaceMMO.Data.Migrations
                     started_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     completes_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     claimed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    fee_paid = table.Column<long>(type: "bigint", nullable: false)
+                    fee_paid = table.Column<long>(type: "bigint", nullable: false),
+                    input_cost_basis = table.Column<long>(type: "bigint", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_industry_jobs", x => x.id);
+                    table.CheckConstraint("ck_industry_jobs_fee_non_negative", "fee_paid >= 0");
+                    table.CheckConstraint("ck_industry_jobs_input_cost_non_negative", "input_cost_basis >= 0");
                     table.CheckConstraint("ck_industry_jobs_runs_positive", "runs > 0");
                     table.ForeignKey(
                         name: "fk_industry_jobs_characters_character_id",
@@ -569,6 +573,7 @@ namespace SpaceMMO.Data.Migrations
                     quantity_remaining = table.Column<int>(type: "integer", nullable: false),
                     escrowed_credits = table.Column<long>(type: "bigint", nullable: false),
                     reserved_quantity = table.Column<int>(type: "integer", nullable: false),
+                    reserved_cost_basis = table.Column<long>(type: "bigint", nullable: false),
                     placed_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     expires_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     cancelled_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
@@ -598,6 +603,34 @@ namespace SpaceMMO.Data.Migrations
                         name: "fk_market_orders_stations_station_id",
                         column: x => x.station_id,
                         principalTable: "stations",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "industry_job_inputs",
+                columns: table => new
+                {
+                    industry_job_id = table.Column<long>(type: "bigint", nullable: false),
+                    item_def_id = table.Column<int>(type: "integer", nullable: false),
+                    quantity = table.Column<int>(type: "integer", nullable: false),
+                    cost_basis = table.Column<long>(type: "bigint", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_industry_job_inputs", x => new { x.industry_job_id, x.item_def_id });
+                    table.CheckConstraint("ck_industry_job_inputs_cost_non_negative", "cost_basis >= 0");
+                    table.CheckConstraint("ck_industry_job_inputs_quantity_positive", "quantity > 0");
+                    table.ForeignKey(
+                        name: "fk_industry_job_inputs_industry_jobs_industry_job_id",
+                        column: x => x.industry_job_id,
+                        principalTable: "industry_jobs",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_industry_job_inputs_item_defs_item_def_id",
+                        column: x => x.item_def_id,
+                        principalTable: "item_defs",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -668,11 +701,13 @@ namespace SpaceMMO.Data.Migrations
                 {
                     inventory_id = table.Column<long>(type: "bigint", nullable: false),
                     item_def_id = table.Column<int>(type: "integer", nullable: false),
-                    quantity = table.Column<int>(type: "integer", nullable: false)
+                    quantity = table.Column<int>(type: "integer", nullable: false),
+                    cost_basis = table.Column<long>(type: "bigint", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_inventory_items", x => new { x.inventory_id, x.item_def_id });
+                    table.CheckConstraint("ck_inventory_items_cost_basis_non_negative", "cost_basis >= 0");
                     table.CheckConstraint("ck_inventory_items_quantity_positive", "quantity > 0");
                     table.ForeignKey(
                         name: "fk_inventory_items_inventories_inventory_id",
@@ -789,6 +824,11 @@ namespace SpaceMMO.Data.Migrations
                 table: "death_records",
                 column: "killer_character_id",
                 filter: "killer_character_id IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_industry_job_inputs_item_def_id",
+                table: "industry_job_inputs",
+                column: "item_def_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_industry_jobs_character_id_state",
@@ -1045,6 +1085,10 @@ namespace SpaceMMO.Data.Migrations
                 table: "stations");
 
             migrationBuilder.DropForeignKey(
+                name: "fk_item_instances_item_defs_item_def_id",
+                table: "item_instances");
+
+            migrationBuilder.DropForeignKey(
                 name: "fk_inventories_stations_station_id",
                 table: "inventories");
 
@@ -1068,7 +1112,7 @@ namespace SpaceMMO.Data.Migrations
                 name: "death_records");
 
             migrationBuilder.DropTable(
-                name: "industry_jobs");
+                name: "industry_job_inputs");
 
             migrationBuilder.DropTable(
                 name: "insurance_policies");
@@ -1095,6 +1139,9 @@ namespace SpaceMMO.Data.Migrations
                 name: "trades");
 
             migrationBuilder.DropTable(
+                name: "industry_jobs");
+
+            migrationBuilder.DropTable(
                 name: "quest_defs");
 
             migrationBuilder.DropTable(
@@ -1116,6 +1163,9 @@ namespace SpaceMMO.Data.Migrations
                 name: "bodies");
 
             migrationBuilder.DropTable(
+                name: "item_defs");
+
+            migrationBuilder.DropTable(
                 name: "stations");
 
             migrationBuilder.DropTable(
@@ -1123,9 +1173,6 @@ namespace SpaceMMO.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "inventories");
-
-            migrationBuilder.DropTable(
-                name: "item_defs");
         }
     }
 }

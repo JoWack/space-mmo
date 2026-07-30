@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Entities;
+using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Items;
 
 namespace SpaceMMO.Data.Inventories;
@@ -42,12 +43,27 @@ public sealed class InventoryService(SpaceMmoDbContext database)
     /// <summary>
     /// Adds a quantity, creating the stack row if the inventory does not already hold the item.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">If quantity is not positive.</exception>
+    /// <param name="cost">
+    /// What these units cost their new owner. Zero for gathered material, which costs only labour;
+    /// the price paid for bought material. Feeds the acquisition value of anything crafted from
+    /// them (ADR-0006).
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">If quantity is not positive or cost is negative.</exception>
     /// <exception cref="InvalidOperationException">If the item is not stackable.</exception>
     public async Task AddAsync(
-        long inventoryId, int itemDefId, int quantity, CancellationToken cancellationToken = default)
+        long inventoryId,
+        int itemDefId,
+        int quantity,
+        Credits cost,
+        CancellationToken cancellationToken = default)
     {
         GuardQuantity(quantity);
+
+        if (cost.IsNegative)
+        {
+            throw new ArgumentOutOfRangeException(nameof(cost), cost, "Cost cannot be negative.");
+        }
+
         await GuardStackableAsync(itemDefId, cancellationToken);
 
         InventoryItem? stack = await _database.InventoryItems
@@ -61,25 +77,38 @@ public sealed class InventoryService(SpaceMmoDbContext database)
                 InventoryId = inventoryId,
                 ItemDefId = itemDefId,
                 Quantity = quantity,
+                CostBasis = cost,
             });
 
             return;
         }
 
         stack.Quantity += quantity;
+        stack.CostBasis += cost;
     }
 
     /// <summary>
     /// Removes a quantity, deleting the stack row if it reaches zero.
     /// </summary>
+    /// <returns>
+    /// The share of the stack's cost basis that left with those units, so a caller consuming
+    /// materials knows what they were worth.
+    /// </returns>
     /// <remarks>
-    /// The row is deleted rather than left at zero because a zero-quantity stack is forbidden by
-    /// a check constraint — "does the player have any?" should never also need to ask "but is it
-    /// more than none?".
+    /// <para>
+    /// The row is deleted rather than left at zero because a zero-quantity stack is forbidden by a
+    /// check constraint — "does the player have any?" should never also need to ask "but is it more
+    /// than none?".
+    /// </para>
+    /// <para>
+    /// The cost share is floored and the remainder stays with the stack, so removed plus remaining
+    /// always sums back to the original exactly. Cost basis is never created or lost by splitting a
+    /// stack.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">If quantity is not positive.</exception>
     /// <exception cref="InsufficientItemsException">If the inventory holds too few.</exception>
-    public async Task RemoveAsync(
+    public async Task<Credits> RemoveAsync(
         long inventoryId, int itemDefId, int quantity, CancellationToken cancellationToken = default)
     {
         GuardQuantity(quantity);
@@ -97,11 +126,21 @@ public sealed class InventoryService(SpaceMmoDbContext database)
 
         if (available == quantity)
         {
-            _database.InventoryItems.Remove(stack!);
-            return;
+            Credits whole = stack!.CostBasis;
+            _database.InventoryItems.Remove(stack);
+
+            return whole;
         }
 
-        stack!.Quantity -= quantity;
+        // Int128 keeps the intermediate exact; a large stack with a large basis would otherwise
+        // overflow int64 on the multiply.
+        Credits removed = Credits.FromMinorUnits(
+            (long)((Int128)stack!.CostBasis.MinorUnits * quantity / available));
+
+        stack.Quantity -= quantity;
+        stack.CostBasis -= removed;
+
+        return removed;
     }
 
     /// <summary>How many of an item an inventory holds. Zero if it holds none.</summary>

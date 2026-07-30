@@ -74,6 +74,16 @@ public class MarketOrder
     /// </remarks>
     public int ReservedQuantity { get; set; }
 
+    /// <summary>
+    /// Cost basis travelling with <see cref="ReservedQuantity"/>. Zero for buy orders.
+    /// </summary>
+    /// <remarks>
+    /// Held so that cancelling a sell order returns the goods at what they originally cost, rather
+    /// than resetting them to free. Without it, listing and cancelling would launder away an
+    /// item's cost basis and inflate the insurance value of anything later built from it.
+    /// </remarks>
+    public Credits ReservedCostBasis { get; set; }
+
     public DateTimeOffset PlacedAt { get; set; }
 
     /// <summary>
@@ -157,4 +167,37 @@ public class IndustryJob
 
     /// <summary>Fee charged at job start. Ties the sink to real production volume.</summary>
     public Credits FeePaid { get; set; }
+
+    /// <summary>
+    /// Total cost basis of everything consumed, carried into the output's acquisition value.
+    /// </summary>
+    public Credits InputCostBasis { get; set; }
+
+    /// <summary>
+    /// Exactly what this job consumed, recorded at start.
+    /// </summary>
+    /// <remarks>
+    /// Stored rather than re-derived from the recipe, because recipes are content and can be
+    /// rebalanced. A job started before a change must refund what it actually took, not what the
+    /// recipe says today.
+    /// </remarks>
+    public ICollection<IndustryJobInput> Inputs { get; } = [];
+}
+
+/// <summary>One material a job consumed, with what it cost.</summary>
+public class IndustryJobInput
+{
+    public long IndustryJobId { get; set; }
+
+    public IndustryJob? IndustryJob { get; set; }
+
+    public int ItemDefId { get; set; }
+
+    public ItemDef? ItemDef { get; set; }
+
+    /// <summary>Units taken, already multiplied by the run count.</summary>
+    public int Quantity { get; set; }
+
+    /// <summary>What those units cost their owner, for the refund and the output's value.</summary>
+    public Credits CostBasis { get; set; }
 }

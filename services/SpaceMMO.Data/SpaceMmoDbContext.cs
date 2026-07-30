@@ -69,6 +69,8 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
     public DbSet<IndustryJob> IndustryJobs => Set<IndustryJob>();
 
+    public DbSet<IndustryJobInput> IndustryJobInputs => Set<IndustryJobInput>();
+
     public DbSet<QuestDef> QuestDefs => Set<QuestDef>();
 
     public DbSet<QuestStep> QuestSteps => Set<QuestStep>();
@@ -360,10 +362,16 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
             entity.HasOne(e => e.ItemDef).WithMany().HasForeignKey(e => e.ItemDefId);
 
-            // A zero-quantity stack should be deleted, not stored. Enforcing this keeps
-            // "does the player have any?" from needing to also ask "but is it more than none?"
-            entity.ToTable(t => t.HasCheckConstraint(
-                "ck_inventory_items_quantity_positive", "quantity > 0"));
+            entity.ToTable(t =>
+            {
+                // A zero-quantity stack should be deleted, not stored. Enforcing this keeps
+                // "does the player have any?" from needing to also ask "but is it more than none?"
+                t.HasCheckConstraint("ck_inventory_items_quantity_positive", "quantity > 0");
+
+                // Cost basis feeds insurance acquisition values, so a negative one would be an
+                // exploit rather than merely odd data (ADR-0006).
+                t.HasCheckConstraint("ck_inventory_items_cost_basis_non_negative", "cost_basis >= 0");
+            });
         });
 
         modelBuilder.Entity<ItemInstance>(entity =>
@@ -460,7 +468,31 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
             // Drives the completion sweep, so it is filtered to jobs that can still complete.
             entity.HasIndex(e => e.CompletesAt).HasFilter("state = 'Running'");
 
-            entity.ToTable(t => t.HasCheckConstraint("ck_industry_jobs_runs_positive", "runs > 0"));
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_industry_jobs_runs_positive", "runs > 0");
+                t.HasCheckConstraint("ck_industry_jobs_fee_non_negative", "fee_paid >= 0");
+                t.HasCheckConstraint(
+                    "ck_industry_jobs_input_cost_non_negative", "input_cost_basis >= 0");
+            });
+        });
+
+        modelBuilder.Entity<IndustryJobInput>(entity =>
+        {
+            entity.HasKey(e => new { e.IndustryJobId, e.ItemDefId });
+
+            entity.HasOne(e => e.IndustryJob)
+                .WithMany(j => j.Inputs)
+                .HasForeignKey(e => e.IndustryJobId);
+
+            entity.HasOne(e => e.ItemDef).WithMany().HasForeignKey(e => e.ItemDefId);
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_industry_job_inputs_quantity_positive", "quantity > 0");
+                t.HasCheckConstraint(
+                    "ck_industry_job_inputs_cost_non_negative", "cost_basis >= 0");
+            });
         });
     }
 
