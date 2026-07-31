@@ -24,6 +24,33 @@ public sealed record SimulationConfig
     public int Traders { get; init; } = 5;
 
     /// <summary>
+    /// Bots that buy hull sections and lose them, and make nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The economy's <em>terminal demand</em>, and the thing whose absence broke the first run.
+    /// Miners, refiners and crafters all sell to each other, but without someone who buys the
+    /// finished good and destroys it, the last stage in the chain has no customer — every seller
+    /// undercuts toward the price floor, revenue goes to nearly nothing while industry fees stay
+    /// real, and the producers go broke. That is a missing consumer, not a missing sink.
+    /// </para>
+    /// <para>
+    /// This is what players are. A player buys a ship because they intend to fly it and expect to
+    /// lose it, and that expectation is the whole revenue base every upstream profession rests on.
+    /// </para>
+    /// </remarks>
+    public int Pilots { get; init; } = 25;
+
+    /// <summary>
+    /// Chance per pilot per day of losing a hull section they own.
+    /// </summary>
+    /// <remarks>
+    /// 5% is roughly one loss every three weeks of daily play — frequent enough to sustain demand,
+    /// rare enough that losing a ship still reads as an event rather than as a running cost.
+    /// </remarks>
+    public double PilotLossChance { get; init; } = 0.05;
+
+    /// <summary>
     /// Seconds each bot spends actively working per day.
     /// </summary>
     /// <remarks>
@@ -68,5 +95,5 @@ public sealed record SimulationConfig
     /// <summary>Where to write the per-day CSV, or null to skip it.</summary>
     public string? CsvPath { get; init; }
 
-    public int TotalBots => Miners + Refiners + Crafters + Traders;
+    public int TotalBots => Miners + Refiners + Crafters + Traders + Pilots;
 }

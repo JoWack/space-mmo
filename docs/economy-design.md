@@ -489,6 +489,89 @@ The tool is in the repository so the sweep can simply be re-run.
 
 ---
 
+## 5b. Corrections to §5a — most of it was measuring the bots
+
+§5a is left standing above rather than rewritten, because what it got wrong is more instructive
+than what it got right. Investigating its worst finding showed that **three of its four
+conclusions were artifacts of bot behaviour, not properties of the economy.**
+
+### The ore price never actually reached zero
+
+Asks are floored at one minor unit, so the lowest a price can go is **0.01 cr**. The report
+printed prices through a whole-credits formatter, which integer-divided that floor to `0`. The
+sub-credit range is precisely where a collapsing price spends its time, so it was the one range
+the report must not have rounded away. Fixed; prices now print with minor units intact.
+
+### The real cause was no terminal demand, not a missing material sink
+
+The table that mattered was not ore's. It was this one:
+
+| | Created | Destroyed |
+|---|---|---|
+| `shuttle_hull_section` | 270,003 | **0** |
+
+Nothing ever consumed the finished good. Miners, refiners and crafters all sold to each other,
+but the last stage in the chain had no customer, so every seller undercut toward the floor while
+industry fees stayed real — producers went broke and the chain stalled. That is a missing
+*consumer*, not a missing sink.
+
+Sweeping `DailyLossRate` from 0% to an absurd 25%/day moved ore consumption only 34%, which is
+what proved a sink could not be the answer. EconSim now has a **pilot** archetype: it produces
+nothing, buys hull sections, and loses them. That is what players are, and their willingness to
+buy is the revenue base every upstream profession rests on.
+
+### The ask rule could only ever ratchet downwards
+
+Sellers always undercut the best standing ask and never raised. A price could therefore only
+fall, no matter how strong demand became — every market walked to the floor and stayed there.
+Asks are now two-sided, keyed to unsold stock: a seller with a backlog undercuts to move it, a
+seller whose goods clear as fast as they are listed asks for more.
+
+With that one change, plates price at **663 cr** and hull sections at **113,029 cr** instead of
+sitting on the floor.
+
+### A miner listed once and then hoarded forever
+
+The listing rule skipped placing an order whenever one was already resting. It looked like fee
+discipline; it modelled a miner with a single stale order on the book and unbounded stock piling
+up behind it. Miners now list each day's production. This one mattered least — it doubled ore
+consumption and changed no conclusion.
+
+### What this does to §5a's numbers
+
+**The faucet equilibrium re-measures to roughly 7 cr/day, not 50.** With a market that actually
+trades, the sinks bite far harder, so far less needs to enter:
+
+| cr/day/character | Money supply vs bootstrap |
+|---|---|
+| 0 | 34.0% |
+| 5 | 77.9% |
+| **~7** | **≈100% — equilibrium** |
+| 10 | 126.0% |
+| 50 | 500.8% |
+
+Two of §5a's conclusions survive. Sales tax is still a rounding error next to the broker fee, so
+the incidence point stands: a fee on *placement* and a fee on *execution* fall very differently.
+And the first-draft daily cap of 5,000 cr is further above equilibrium than §5a thought, not
+closer — it is an anti-abuse backstop and nothing more.
+
+### The material question is still open, and the tool cannot yet answer it
+
+Ore still accumulates: ~1.4 billion created against ~10 million consumed, and that held across
+every bot variation tried. But the same investigation that produced this section is the reason
+not to trust it. In theory the content values are close to balanced — one refiner running a
+single slot can absorb about three miners' daily output, and the roster is 40 miners to 15
+refiners — so the shortfall is refiners unable to *afford* ore rather than unable to process it,
+which is a credit-flow question that traces straight back to the behaviour above.
+
+**No content values were changed on the strength of these runs.** The honest conclusion is that
+EconSim's findings are currently dominated by how its agents behave, and it needs better agents
+before its balance numbers mean anything. Tuning node respawn or fee rates against these
+particular bots would be fitting content to a simulation artifact — which is exactly the mistake
+§5a already made once.
+
+---
+
 ## 6. First-draft price targets
 
 Anchored to the 13,000-credit bootstrap so early prices are sane relative to the only

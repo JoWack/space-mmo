@@ -97,6 +97,11 @@ public sealed class SimWorld
         {
             Characters.Add(NewCharacter(id++, "trader"));
         }
+
+        for (int i = 0; i < config.Pilots; i++)
+        {
+            Characters.Add(NewCharacter(id++, "pilot"));
+        }
     }
 
     public List<SimCharacter> Characters { get; } = [];

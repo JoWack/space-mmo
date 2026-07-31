@@ -11,7 +11,15 @@ using SpaceMMO.EconSim;
 
 if (args.Length > 0 && args[0] == "--sweep")
 {
-    RunSweep();
+    if (args.Length > 1 && args[1] == "loss")
+    {
+        RunLossSweep();
+    }
+    else
+    {
+        RunSweep();
+    }
+
     return 0;
 }
 
@@ -42,7 +50,7 @@ var rows = new List<string>
 Console.WriteLine(
     $"Simulating {config.Days:N0} days with {config.TotalBots} bots "
     + $"({config.Miners} miners, {config.Refiners} refiners, {config.Crafters} crafters, "
-    + $"{config.Traders} traders)...");
+    + $"{config.Traders} traders, {config.Pilots} pilots)...");
 Console.WriteLine();
 
 int tradesAtLastDay = 0;
@@ -131,10 +139,84 @@ static void RunSweep()
     Console.WriteLine("A supply holding near 100% of bootstrap is the equilibrium F ≈ S.");
 }
 
+/// <summary>
+/// Sweeps the material sink to find the loss rate at which manufactured goods stop accumulating.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The companion to <see cref="RunSweep"/>, and the answer to the worst finding in §5a: ore was
+/// created four orders of magnitude faster than it was consumed, and its price collapsed to zero.
+/// The faucet sweep asks how many credits must enter per day; this asks how much <em>matter</em>
+/// must leave.
+/// </para>
+/// <para>
+/// Losses fall on plates and hull sections rather than on ore, which is the honest model — nobody
+/// blows up a pile of raw ore. Ore is consumed <em>indirectly</em>, by the refining and crafting
+/// that replaces what was destroyed, so the ore market is pulled by demand rather than by a rule
+/// that deletes ore. That the ore price responds at all is therefore the finding, not a given.
+/// </para>
+/// </remarks>
+static void RunLossSweep()
+{
+    Console.WriteLine("Sweeping the daily material loss rate against a 5-year run.");
+    Console.WriteLine("Losses apply to plates and hull sections; ore is consumed by replacing them.");
+    Console.WriteLine();
+    Console.WriteLine(
+        $"  {"loss/day",9} {"ore created",14} {"ore consumed",14} {"ore held",14} "
+        + $"{"ore price",11} {"section price",14}");
+    Console.WriteLine(new string('─', 88));
+
+    foreach (double rate in new[] { 0.0, 0.001, 0.005, 0.01, 0.025, 0.05, 0.10, 0.25 })
+    {
+        var sweepConfig = new SimulationConfig
+        {
+            Days = 1_825,
+            // Held at the measured equilibrium so the material question is asked of an economy
+            // whose money supply is stable. Sweeping a material rate against a collapsing credit
+            // supply would confound the two and answer neither.
+            DailyQuestCredits = Credits.FromWholeCredits(50),
+            DailyLossRate = rate,
+        };
+
+        var sweepWorld = new SimWorld(sweepConfig);
+        var sweepBots = new Bots(sweepConfig, sweepWorld);
+        var sweepRng = new SplitMix64(sweepConfig.Seed);
+
+        for (int day = 1; day <= sweepConfig.Days; day++)
+        {
+            sweepBots.RunDay(day, ref sweepRng);
+        }
+
+        long oreCreated = sweepWorld.Gathered.GetValueOrDefault(Sim.Ore);
+        long oreHeld = Held(sweepWorld, Sim.Ore);
+
+        Console.WriteLine(
+            $"  {rate,9:P1} {oreCreated,14:N0} {oreCreated - oreHeld,14:N0} {oreHeld,14:N0} "
+            + $"{Money(sweepWorld.LastPrice[Sim.Ore]),11} "
+            + $"{Money(sweepWorld.LastPrice[Sim.Section]),14}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Ore stops accumulating where consumption approaches creation.");
+}
+
 static Credits MoneySupply(SimWorld world) =>
     Credits.FromMinorUnits(world.Characters.Sum(c => c.Balance.MinorUnits)) + world.Escrow;
 
 static long Whole(Credits credits) => credits.MinorUnits / Credits.MinorUnitsPerCredit;
+
+/// <summary>
+/// Formats a price with its minor units intact.
+/// </summary>
+/// <remarks>
+/// Prices are floored at one minor unit, never at zero. Printing them through <c>Whole</c>
+/// integer-divided that floor down to "0 cr" and made a collapsed-but-live market look like a
+/// dead one — the sub-credit range is exactly where a collapsing price spends its time, so it is
+/// the one range the report must not round away.
+/// </remarks>
+static string Money(Credits credits) => string.Create(
+    CultureInfo.InvariantCulture,
+    $"{credits.MinorUnits / (decimal)Credits.MinorUnitsPerCredit:N2}");
 
 static long Held(SimWorld world, string item) =>
     world.Characters.Sum(c => (long)c.Held(item)) + world.GoodsOnBook(item);
@@ -225,9 +307,9 @@ static void Report(SimWorld world, SimulationConfig config, List<InvariantViolat
 
         string window = recent.Count == 0
             ? "no trades in the last 100 days"
-            : $"last-100-day mean {Whole(Mean(recent)),8:N0} cr over {recent.Count,7:N0} trades";
+            : $"last-100-day mean {Money(Mean(recent)),8} cr over {recent.Count,7:N0} trades";
 
-        Console.WriteLine($"  {item,-20} {Whole(world.LastPrice[item]),8:N0} cr   {window}");
+        Console.WriteLine($"  {item,-20} {Money(world.LastPrice[item]),8} cr   {window}");
     }
 
     Console.WriteLine();
