@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The HTTP surface. Deliberately thin: every rule already lives in SpaceMMO.Domain
+    and every transaction in SpaceMMO.Data, so this project's whole job is to
+    authenticate a caller, bind a request, and hand it to a service.
+
+    Nothing here decides a game outcome. The client sends intent; the server owns
+    every result (ADR-0003).
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>SpaceMMO.Api</RootNamespace>
+    <AssemblyName>SpaceMMO.Api</AssemblyName>
+    <UserSecretsId>spacemmo-api</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SpaceMMO.Data\SpaceMMO.Data.csproj" />
+    <ProjectReference Include="..\SpaceMMO.Domain\SpaceMMO.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Npgsql is referenced directly because Program.cs calls UseNpgsql; relying on it arriving
+      transitively means a reorganisation of SpaceMMO.Data can break this project's compile.
+
+      The EF Core pin is the same one SpaceMMO.Data carries, and for the same reason: the Npgsql
+      provider resolves Relational to 10.0.4 while the Design package wants 10.0.10, and without
+      an explicit version the build picks the older one and warns (MSB3277).
+    -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
+</Project>
