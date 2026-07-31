@@ -89,6 +89,32 @@ public:
 	FOnBackendCharacterStateLoaded OnCharacterStateLoaded;
 
 private:
+	/**
+	 * Drives login → characters → skills and inventory from the command line, logging each step.
+	 *
+	 * Exists because the protocol layer is tested against fixtures and the API against its own
+	 * integration suite, and neither proves the two agree. This walks the real client code across
+	 * a real socket to a real server, which is the only thing that does.
+	 *
+	 * Runs only when <c>-BackendSmokeTest</c> is passed, so a normal session never touches it.
+	 */
+	void BeginSmokeTest();
+
+	UFUNCTION()
+	void OnSmokeSessionChanged(bool bIsSignedIn);
+
+	UFUNCTION()
+	void OnSmokeCharactersLoaded();
+
+	UFUNCTION()
+	void OnSmokeCharacterStateLoaded();
+
+	UFUNCTION()
+	void OnSmokeFailed(const FBackendFailure& Failure);
+
+	/** True once a character's state has been requested, so the summary is logged only once. */
+	bool bSmokeStateRequested = false;
+
 	/** Called with the response body once a request succeeds. */
 	using FOnBody = TFunction<void(const FString&)>;
 

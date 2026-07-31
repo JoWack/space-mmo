@@ -1,7 +1,8 @@
-using System.Net;
+using SpaceMMO.Domain.Characters;
+using SpaceMMO.Domain.Progression;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using SpaceMMO.Domain.Characters;
+using System.Net;
 using Xunit;
 
 namespace SpaceMMO.Api.Tests;
@@ -198,6 +199,58 @@ public sealed class AccountAndCharacterTests(ApiDatabaseFixture fixture) : IAsyn
     }
 
     [Fact]
+    public async Task A_brand_new_character_still_reports_every_skill()
+    {
+        // XP rows are created lazily, on first award, so a fresh character has none at all. The
+        // skills panel must still show the full catalog at level 1 — otherwise a new player opens
+        // it to an empty list, which is what the first live client run actually showed.
+        await SeedSkillsAsync();
+
+        SessionPayload session = await RegisterAsync("freshskills@example.com");
+
+        HttpResponseMessage created = await CreateCharacterAsync(session, "Rookie");
+        CharacterPayload? character = await created.Content.ReadFromJsonAsync<CharacterPayload>();
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get, new Uri($"/characters/{character!.Id}/skills", UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+
+        List<SkillPayload>? skills = await response.Content.ReadFromJsonAsync<List<SkillPayload>>();
+
+        Assert.Equal(3, skills!.Count);
+        Assert.All(skills, s => Assert.Equal(0, s.Xp));
+        Assert.All(skills, s => Assert.Equal(1, s.Level));
+        Assert.Contains(skills, s => s.Key == "mining");
+    }
+
+    /// <summary>Three skills, so the endpoint has a catalog to report against.</summary>
+    private async Task SeedSkillsAsync()
+    {
+        await using SpaceMMO.Data.SpaceMmoDbContext context = _fixture.CreateContext();
+
+        context.Skills.AddRange(
+            new SpaceMMO.Data.Entities.Skill
+            {
+                Key = "mining", Name = "Mining", Category = SkillCategory.Life,
+            },
+            new SpaceMMO.Data.Entities.Skill
+            {
+                Key = "refining", Name = "Refining", Category = SkillCategory.Life,
+            },
+            new SpaceMMO.Data.Entities.Skill
+            {
+                Key = "gunnery", Name = "Gunnery", Category = SkillCategory.Combat,
+            });
+
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task Duplicate_character_names_conflict()
     {
         SessionPayload session = await RegisterAsync("namer@example.com");
@@ -234,4 +287,7 @@ public sealed class AccountAndCharacterTests(ApiDatabaseFixture fixture) : IAsyn
 
     private sealed record CharacterPayload(
         int Id, string Name, Race Race, Faction Faction, int HomeBodyId, long BalanceMinorUnits);
+
+    private sealed record SkillPayload(
+        string Key, string Name, SkillCategory Category, long Xp, int Level);
 }

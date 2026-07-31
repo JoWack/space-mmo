@@ -130,6 +130,22 @@ Seeding is a separate command rather than something startup does, on purpose. A 
 migrates and rewrites content on every boot will eventually do that to a production database
 during an unrelated restart.
 
+### Proving the client and server actually talk
+
+Fixtures and integration tests each cover one side of the wire and neither proves the two agree.
+This drives the real `USpaceMMOBackendClient` across a real socket. Start the API, then:
+
+```bash
+"/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -game -unattended -nopause -nosplash -nullrhi -BackendSmokeTest -BackendUrl=http://localhost:5080 -BackendEmail=you@example.com -BackendPassword=your-password
+```
+
+Results appear in `client/Saved/Logs/SpaceMMO.log` tagged `SMOKE:`. The token is never logged.
+
+**Wait for an outcome line, not a fixed delay.** The request is issued during subsystem init,
+before the engine loop ticks the HTTP manager, and the editor spends ten-plus seconds loading
+plugins after that. A short sleep kills the process with the request still in flight and reports
+nothing at all — no success, no failure.
+
 ### Running the automation tests
 
 ```bash

@@ -130,12 +130,25 @@ public static class CharacterEndpoints
     }
 
     /// <summary>
-    /// A character's skills.
+    /// A character's skills — <em>every</em> skill, including ones they have never trained.
     /// </summary>
     /// <remarks>
-    /// XP is stored; level is derived through <see cref="SkillCurve"/> on read. Storing both
+    /// <para>
+    /// XP rows are created lazily, on the first award. That is right for storage — a fresh
+    /// character would otherwise get a row per skill, all of them zero — but it is wrong for
+    /// reading, because a new player's skill panel would be empty until they happened to gather
+    /// something. In a game where everyone has every skill at level 1 from creation, the absence
+    /// of a row means zero XP, not the absence of a skill.
+    /// </para>
+    /// <para>
+    /// So the catalog is the source of truth here and stored XP is joined onto it. A skill added
+    /// to <c>data/skills/</c> then appears for every existing character with no backfill.
+    /// </para>
+    /// <para>
+    /// Level is derived through <see cref="SkillCurve"/> on read rather than stored. Storing both
     /// would allow a row whose level disagrees with its XP, and there is no version of that bug
     /// that is not player-visible.
+    /// </para>
     /// </remarks>
     private static async Task<IResult> SkillsAsync(
         int characterId,
@@ -151,15 +164,27 @@ public static class CharacterEndpoints
             return owned.ToProblem();
         }
 
-        var rows = await database.CharacterSkills
-            .Where(cs => cs.CharacterId == characterId)
-            .Include(cs => cs.Skill)
-            .OrderBy(cs => cs.Skill!.Key)
-            .Select(cs => new { cs.Skill!.Key, cs.Skill.Name, cs.Skill.Category, cs.Xp })
+        var rows = await database.Skills
+            .OrderBy(s => s.Key)
+            .Select(s => new
+            {
+                s.Key,
+                s.Name,
+                s.Category,
+                Xp = database.CharacterSkills
+                    .Where(cs => cs.CharacterId == characterId && cs.SkillId == s.Id)
+                    .Select(cs => (long?)cs.Xp)
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellation);
 
         return Results.Ok(rows
-            .Select(r => new SkillResponse(r.Key, r.Name, r.Category, r.Xp, SkillCurve.LevelForXp(r.Xp)))
+            .Select(r =>
+            {
+                long xp = r.Xp ?? 0;
+
+                return new SkillResponse(r.Key, r.Name, r.Category, xp, SkillCurve.LevelForXp(xp));
+            })
             .ToList());
     }
 

@@ -20,6 +20,101 @@ void USpaceMMOBackendClient::Initialize(FSubsystemCollectionBase& Collection)
 	}
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Backend client ready, base URL %s"), *BaseUrl);
+
+	if (FParse::Param(FCommandLine::Get(), TEXT("BackendSmokeTest")))
+	{
+		BeginSmokeTest();
+	}
+}
+
+void USpaceMMOBackendClient::BeginSmokeTest()
+{
+	FString Email;
+	FString Password;
+
+	if (!FParse::Value(FCommandLine::Get(), TEXT("BackendEmail="), Email)
+		|| !FParse::Value(FCommandLine::Get(), TEXT("BackendPassword="), Password))
+	{
+		UE_LOG(LogSpaceMMOBackend, Error,
+			TEXT("SMOKE: -BackendSmokeTest needs -BackendEmail= and -BackendPassword=."));
+
+		return;
+	}
+
+	// Subscribed through the same delegates any UI would use, so this exercises the notification
+	// path as well as the requests.
+	OnSessionChanged.AddDynamic(this, &USpaceMMOBackendClient::OnSmokeSessionChanged);
+	OnCharactersLoaded.AddDynamic(this, &USpaceMMOBackendClient::OnSmokeCharactersLoaded);
+	OnCharacterStateLoaded.AddDynamic(this, &USpaceMMOBackendClient::OnSmokeCharacterStateLoaded);
+	OnFailed.AddDynamic(this, &USpaceMMOBackendClient::OnSmokeFailed);
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("SMOKE: logging in as %s at %s"), *Email, *BaseUrl);
+
+	LogIn(Email, Password);
+}
+
+void USpaceMMOBackendClient::OnSmokeSessionChanged(const bool bIsSignedIn)
+{
+	if (!bIsSignedIn)
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning, TEXT("SMOKE: signed out."));
+
+		return;
+	}
+
+	// The token itself is never logged. Logs get pasted into bug reports.
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("SMOKE: signed in as account %d; fetching characters."), Session.AccountId);
+
+	FetchCharacters();
+}
+
+void USpaceMMOBackendClient::OnSmokeCharactersLoaded()
+{
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("SMOKE: %d character(s) returned."), Characters.Num());
+
+	for (const FBackendCharacter& Character : Characters)
+	{
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("SMOKE:   #%d %s  race=%d faction=%d home=%d balance=%s cr"),
+			Character.Id,
+			*Character.Name,
+			static_cast<int32>(Character.Race),
+			static_cast<int32>(Character.Faction),
+			Character.HomeBodyId,
+			*Character.FormatBalance());
+	}
+
+	if (Characters.Num() == 0 || bSmokeStateRequested)
+	{
+		return;
+	}
+
+	bSmokeStateRequested = true;
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("SMOKE: loading state for character %d."), Characters[0].Id);
+
+	SelectCharacter(Characters[0].Id);
+}
+
+void USpaceMMOBackendClient::OnSmokeCharacterStateLoaded()
+{
+	// Fires twice — skills and inventory are separate requests — which is itself worth seeing.
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("SMOKE: character %d state: %d skill(s), %d inventory stack(s)."),
+		SelectedCharacterId,
+		Skills.Num(),
+		Inventory.Num());
+}
+
+void USpaceMMOBackendClient::OnSmokeFailed(const FBackendFailure& Failure)
+{
+	UE_LOG(LogSpaceMMOBackend, Error,
+		TEXT("SMOKE: FAILED error=%d status=%d message=%s"),
+		static_cast<int32>(Failure.Error),
+		Failure.HttpStatus,
+		*Failure.Message);
 }
 
 void USpaceMMOBackendClient::Deinitialize()
