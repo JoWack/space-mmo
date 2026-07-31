@@ -1,0 +1,23 @@
+using UnrealBuildTool;
+
+/// <summary>
+/// Core runtime systems: coordinates, physics grids, and flight.
+/// </summary>
+/// <remarks>
+/// Kept free of gameplay so it can be reasoned about — and tested — on its own. Anything that
+/// knows what a quest or an item is belongs in a gameplay module, not here.
+/// </remarks>
+public class SpaceMMOCore : ModuleRules
+{
+	public SpaceMMOCore(ReadOnlyTargetRules Target) : base(Target)
+	{
+		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+
+		PublicDependencyModuleNames.AddRange(new string[]
+		{
+			"Core",
+			"CoreUObject",
+			"Engine",
+		});
+	}
+}

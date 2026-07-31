@@ -42,7 +42,17 @@ dotnet run --project tools/SpaceMMO.EconSim -- 3650
 dotnet run --project tools/SpaceMMO.EconSim -- --sweep
 ```
 
-M1 is functionally complete. Next is M2: the Unreal client.
+**M1 is functionally complete. M2 has started.** `client/` is a UE 5.8.1 C++ project whose game
+target compiles, containing the three-tier coordinate system from
+[ADR-0001](docs/adr/0001-coordinates.md) — galaxy space as `int64`, system space as double
+kilometres, and local render space in centimetres near the origin.
+
+```bash
+"/d/Programming/UnrealEngine/UE_5.8/Engine/Build/BatchFiles/Build.bat" SpaceMMO Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject"
+```
+
+Two toolchain items still block parts of M2 — the editor build and dedicated servers. See
+[docs/setup.md](docs/setup.md) §2.
 
 ## Start here
 
@@ -63,7 +73,7 @@ services/      .NET backend (SpaceMMO.Server.sln)
   SpaceMMO.Data/          EF Core entities, DbContext, migrations, services
   SpaceMMO.Data.Tests/    integration tests — need the Postgres container running
 tools/         EconSim — headless economy simulator
-client/        UE5 project (M2)
+client/        UE 5.8 project — SpaceMMOCore holds coordinates and physics grids
 data/          item, recipe, and quest definitions as JSON
 infra/         docker-compose for local Postgres
 ```

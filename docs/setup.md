@@ -10,11 +10,15 @@ Detected state of this machine as of 2026-07-29:
 | Python 3.12.1 | ✅ installed (not needed yet) |
 | .NET SDK 10.0.302 | ✅ installed — solution builds, 176 tests pass |
 | Docker Desktop 29.6.2 | ✅ installed — Postgres 17.10 running and healthy |
-| Visual Studio 2022 + C++ | ❌ required for M2 |
-| Unreal Engine 5 | ❌ required for M2 |
+| VS Build Tools 2022 (MSVC 14.44) | ✅ installed — this is what compiles UE C++ |
+| Windows SDK 10.0.26100 | ✅ installed |
+| Unreal Engine 5.8.1 | ✅ `D:\Programming\UnrealEngine\UE_5.8` |
+| .NET Framework SDK 4.6+ | ❌ **blocks the editor build** — see below |
+| UE source build | ❌ **required for any dedicated server target** — see below |
 
-**Everything M1 needs is installed.** The two remaining items are only needed once M2
-starts and take hours to download, so start them in the background when you get there.
+**Everything M1 needs is installed**, and the UE game target compiles. Two things still block
+parts of M2: the .NET Framework SDK stops the editor building, and a source build of Unreal is
+needed before any dedicated server work. Both are described in §2.
 
 ---
 
@@ -27,7 +31,7 @@ dotnet test services/SpaceMMO.Server.sln
 ```
 
 **If you ever move to a different SDK version**, change one line —
-`<TargetFramework>` in `services/Directory.Build.props` — rather than editing every
+`<TargetFramework>` in `Directory.Build.props` at the repo root — rather than editing every
 `.csproj`. That file exists for exactly this reason.
 
 ## 1. Docker Desktop — already done
@@ -88,7 +92,51 @@ identically — `winget install PostgreSQL.PostgreSQL.17`. Match the credentials
 `infra/.env.example`, and initialize the cluster with `--locale=C` to match the
 compose file, or `ORDER BY` results will differ between your machine and CI.
 
-## 2. Visual Studio 2022 — required for M2
+## 2. Unreal toolchain — two things still blocked
+
+The C++ compiler is **Visual Studio Build Tools 2022**, not VS Code. The C/C++ extension only
+provides IntelliSense and debugging; UnrealBuildTool finds MSVC through `vswhere` and Build
+Tools registers there, so the full Visual Studio IDE is not needed.
+
+**Verified working:** the game target compiles.
+
+```bash
+"/d/Programming/UnrealEngine/UE_5.8/Engine/Build/BatchFiles/Build.bat" SpaceMMO Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject"
+```
+
+### ⚠️ The editor target needs the .NET Framework SDK
+
+Building `SpaceMMOEditor` currently fails:
+
+```
+Unable to instantiate module 'SwarmInterface': Could not find NetFxSDK install dir
+```
+
+`SwarmInterface` is an editor-only module and needs .NET Framework SDK 4.6 or higher.
+`C:\Program Files (x86)\Windows Kits\NETFXSDK` does not exist on this machine. Fix it through
+the Visual Studio Installer — modify Build Tools 2022, Individual components, and tick:
+
+- **.NET Framework 4.8 SDK**
+- **.NET Framework 4.8 targeting pack**
+
+The editor is what runs the automation tests, so this blocks verifying the coordinate tests.
+
+### ⚠️ Dedicated servers need a source build of Unreal
+
+```
+Server targets are not currently supported from this engine distribution.
+```
+
+**This corrects earlier guidance in this document.** A source build is not only needed for Linux
+cross-compilation — the launcher binary distribution cannot build *any* dedicated server target,
+including Windows. Since ADR-0003 puts one dedicated server per star system at the centre of the
+architecture, a source build from GitHub becomes necessary before M2's networking work.
+
+It is a large undertaking — a linked Epic GitHub account, roughly 100 GB, and hours of
+compilation — so it is worth starting well before it blocks anything. It is not needed for the
+coordinate and flight work that comes first.
+
+## 3. Visual Studio 2022 — optional
 
 UE 5.x requires **VS 2022**; VS 2019 will not work. Community edition is sufficient.
 
@@ -112,7 +160,7 @@ winget install Microsoft.VisualStudio.2022.Community
 
 Workloads still have to be selected in the installer UI after that.
 
-## 3. Unreal Engine 5 — required for M2
+## 4. Unreal Engine 5 — installed
 
 The Epic Games Launcher is already installed on this machine.
 
@@ -132,18 +180,9 @@ In the launcher, use the dropdown beside Install to set the location, and under
   stack traces
 - ❌ All target platforms except Windows
 
-**Use the launcher build, not a GitHub source build.** A source build is only needed
-for Linux dedicated-server cross-compilation, which is an M2-plus concern, and it
-costs hours of compile time you don't need to spend yet.
-
-Verify by creating a throwaway C++ (not Blueprint) project — this confirms the whole
-UE + VS + MSVC chain works together, which is the part that actually breaks:
-
-```
-Games → Blank → C++ → Create
-```
-
-If it compiles and the editor opens, the toolchain is good.
+UE 5.8.1 is installed to `D:\Programming\UnrealEngine\UE_5.8`. The launcher build is enough for
+the client and for all the coordinate and flight work in M2 — but **not** for dedicated servers,
+which need a source build. See §2.
 
 ---
 
