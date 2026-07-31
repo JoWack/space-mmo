@@ -12,5 +12,6 @@ public class SpaceMMOEditorTarget : TargetRules
 		IncludeOrderVersion = EngineIncludeOrderVersion.Latest;
 
 		ExtraModuleNames.Add("SpaceMMOCore");
+		ExtraModuleNames.Add("SpaceMMOBackend");
 	}
 }
