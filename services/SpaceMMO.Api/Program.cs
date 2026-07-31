@@ -14,10 +14,15 @@ using SpaceMMO.Data.Quests;
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<SpaceMmoDbContext>(options =>
-    options.UseNpgsql(
-        builder.Configuration.GetConnectionString("SpaceMmo")
-        ?? throw new InvalidOperationException(
-            "Connection string 'SpaceMmo' is not configured.")));
+    options
+        .UseNpgsql(
+            builder.Configuration.GetConnectionString("SpaceMmo")
+            ?? throw new InvalidOperationException(
+                "Connection string 'SpaceMmo' is not configured."))
+        // The migrations were generated with this convention, so the tables are snake_case.
+        // Without it here, EF quotes "Accounts" and Postgres — which folds unquoted identifiers to
+        // lower case but honours quoted ones — reports that the relation does not exist.
+        .UseSnakeCaseNamingConvention());
 
 // Scoped, matching the DbContext they wrap: these services run multi-statement transactions with
 // row locks, and sharing one across requests would interleave two players' transactions.

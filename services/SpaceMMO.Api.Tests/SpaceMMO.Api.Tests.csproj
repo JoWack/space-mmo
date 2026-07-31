@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    End-to-end tests over the real application, driven through WebApplicationFactory
+    against a real Postgres. Not a stand-in host and not an in-memory provider: the
+    seam being tested is exactly the one where HTTP binding, authorization and real
+    transactions meet, and every one of those is a place a mock would agree with a
+    bug.
+
+    Web SDK rather than the plain one, because WebApplicationFactory needs the
+    framework reference to boot the application under test.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>SpaceMMO.Api.Tests</RootNamespace>
+    <AssemblyName>SpaceMMO.Api.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- See SpaceMMO.Domain.Tests for why CA1707 is suppressed in test projects. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.2" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SpaceMMO.Api\SpaceMMO.Api.csproj" />
+  </ItemGroup>
+
+</Project>

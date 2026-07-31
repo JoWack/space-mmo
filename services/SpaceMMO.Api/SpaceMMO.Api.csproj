@@ -29,6 +29,7 @@
       provider resolves Relational to 10.0.4 while the Design package wants 10.0.10, and without
       an explicit version the build picks the older one and warns (MSB3277).
     -->
+    <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
