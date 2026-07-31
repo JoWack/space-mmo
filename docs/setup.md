@@ -116,6 +116,20 @@ Unable to instantiate module 'SwarmInterface': Could not find NetFxSDK install d
 **.NET Framework 4.8 SDK** and **targeting pack** through the Visual Studio Installer fixed it.
 NETFXSDK 4.8 is now present and the editor builds.
 
+### Seeding a database
+
+A migrated database is still empty, and an empty database cannot create a character — the four
+race homeworlds live in `data/universe/`, not in a migration. Apply migrations and load all
+authored content with:
+
+```bash
+dotnet run --project services/SpaceMMO.Api -- --seed
+```
+
+Seeding is a separate command rather than something startup does, on purpose. A server that
+migrates and rewrites content on every boot will eventually do that to a production database
+during an unrelated restart.
+
 ### Running the automation tests
 
 ```bash

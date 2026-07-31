@@ -1,7 +1,9 @@
+using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Content;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
 using SpaceMMO.Domain.Quests;
+using SpaceMMO.Domain.Universe;
 using Xunit;
 
 namespace SpaceMMO.Domain.Tests.Content;
@@ -50,11 +52,19 @@ public sealed class ContentValidatorTests
         IReadOnlyList<SkillContent>? skills = null,
         IReadOnlyList<ItemContent>? items = null,
         IReadOnlyList<RecipeContent>? recipes = null,
-        IReadOnlyList<QuestContent>? quests = null) =>
+        IReadOnlyList<QuestContent>? quests = null,
+        IReadOnlyList<StarSystemContent>? systems = null,
+        IReadOnlyList<BodyContent>? bodies = null,
+        IReadOnlyList<StationContent>? stations = null) =>
         new(skills ?? [Skill()],
             items ?? [Item("ore"), Item("plate", ItemCategory.Refined)],
             recipes ?? [],
-            quests ?? []);
+            quests ?? [],
+            systems ?? [],
+            // Empty by default. ValidateUniverse only demands the four homeworlds once a pack
+            // authors any body at all, so recipe and quest tests are unaffected by it.
+            bodies ?? [],
+            stations ?? []);
 
     private static bool HasError(IReadOnlyList<ContentError> errors, string fragment) =>
         errors.Any(e => e.Message.Contains(fragment, StringComparison.OrdinalIgnoreCase));
@@ -213,17 +223,16 @@ public sealed class ContentValidatorTests
     public void ADeepRecipeChain_IsNotMistakenForACycle()
     {
         // A long chain revisits shared ingredients, which a naive check would flag.
-        ContentPack pack = new(
-            [Skill()],
-            [Item("ore"), Item("plate"), Item("part"), Item("hull")],
+        ContentPack pack = Pack(
+            items: [Item("ore"), Item("plate"), Item("part"), Item("hull")],
+            recipes:
             [
                 Recipe("r1", output: "plate", inputs: new RecipeInputContent("ore", 1)),
                 Recipe("r2", output: "part",
                     inputs: [new RecipeInputContent("plate", 1), new RecipeInputContent("ore", 1)]),
                 Recipe("r3", output: "hull",
                     inputs: [new RecipeInputContent("part", 1), new RecipeInputContent("plate", 1)]),
-            ],
-            []);
+            ]);
 
         Assert.Empty(ContentValidator.Validate(pack));
     }
@@ -352,4 +361,102 @@ public sealed class ContentValidatorTests
     {
         Assert.Throws<ArgumentNullException>(() => ContentValidator.Validate(null!));
     }
+
+    // ── Universe ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void EveryRaceMustHaveAStartingBody()
+    {
+        // The one that matters. A missing homeworld does not degrade something — character
+        // creation fails outright for everyone who picks that race, and it fails at the API with
+        // a 500 rather than at load with an explanation. This is exactly the state the live
+        // database was in.
+        ContentPack missingOrcHome = Pack(
+            systems: [System()],
+            bodies:
+            [
+                Body("body_terra"),
+                Body("body_ares"),
+                Body("body_verdance"),
+            ]);
+
+        Assert.True(HasError(
+            ContentValidator.Validate(missingOrcHome), "Missing starting body for SpaceOrc"));
+    }
+
+    [Fact]
+    public void AFullUniverseValidates()
+    {
+        Assert.Empty(ContentValidator.Validate(Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations: [Station("station_hub", body: "body_terra")])));
+    }
+
+    [Fact]
+    public void ABodyInAnUnknownSystemIsRejected()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: [.. AllHomeworlds(), Body("body_orphan", system: "system_nowhere")]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Unknown system 'system_nowhere'"));
+    }
+
+    [Fact]
+    public void AStationOnAnUnknownBodyIsRejected()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations: [Station("station_ghost", body: "body_nowhere")]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Unknown body 'body_nowhere'"));
+    }
+
+    [Fact]
+    public void ADeepSpaceStationNeedsNoBody()
+    {
+        // A null body is legitimate — a station orbiting nothing — and must not be confused with
+        // a dangling reference.
+        Assert.Empty(ContentValidator.Validate(Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations: [Station("station_deep", body: null)])));
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    public void ABodyRadiusMustBePositive(double radius)
+    {
+        // Zero makes every gravity and altitude calculation degenerate; negative inverts "up".
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: [.. AllHomeworlds(), Body("body_flat", radiusKm: radius)]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Radius must be positive"));
+    }
+
+    [Fact]
+    public void APackWithNoUniverseAtAllIsStillValid()
+    {
+        // Content is split across files, so a pack holding only recipes is an ordinary thing to
+        // validate. Demanding homeworlds of it would fail every other test in this class.
+        Assert.Empty(ContentValidator.Validate(Pack()));
+    }
+
+    private static StarSystemContent System(string key = "system_origin") =>
+        new(key, "Origin", 0, 0, 0, 42, SecurityLevel.Secure);
+
+    private static BodyContent Body(
+        string key, string system = "system_origin", double radiusKm = 637.1) =>
+        new(key, key, system, BodyKind.Planet, SecurityLevel.Secure, radiusKm);
+
+    private static StationContent Station(string key, string? body) =>
+        new(key, key, "system_origin", body, StationKind.TradingHub);
+
+    /// <summary>The four starting bodies every race needs, so a test can add one more problem.</summary>
+    private static IReadOnlyList<BodyContent> AllHomeworlds() =>
+        [.. Enum.GetValues<Race>().Select(r => Body(Races.HomeBodyKeyFor(r)))];
 }

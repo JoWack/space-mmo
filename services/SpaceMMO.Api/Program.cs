@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Api.Endpoints;
 using SpaceMMO.Data;
+using SpaceMMO.Data.Content;
 using SpaceMMO.Data.Gathering;
 using SpaceMMO.Data.Industry;
 using SpaceMMO.Data.Inventories;
@@ -43,6 +44,34 @@ builder.Services.AddProblemDetails();
 
 WebApplication app = builder.Build();
 
+// Seeding is an explicit command, not something startup does on its own.
+//
+//   dotnet run --project services/SpaceMMO.Api -- --seed
+//
+// A server that migrates and rewrites content every time it boots will eventually do that to a
+// production database during an unrelated restart. Making it a separate invocation means applying
+// content is always something somebody chose to do.
+if (args.Contains("--seed", StringComparer.Ordinal))
+{
+    await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
+
+    SpaceMmoDbContext database = scope.ServiceProvider.GetRequiredService<SpaceMmoDbContext>();
+
+    await database.Database.MigrateAsync();
+
+    // Walks up from the binary to the repository root. The content lives in the repo, not beside
+    // the assembly, so a relative path from the working directory would depend on where it was
+    // launched from.
+    string contentRoot = Path.Combine(builder.Environment.ContentRootPath, "..", "..", "data");
+
+    var loader = new ContentLoader(database);
+    await loader.LoadAsync(Path.GetFullPath(contentRoot));
+
+    Console.WriteLine($"Seeded content from {Path.GetFullPath(contentRoot)}.");
+
+    return 0;
+}
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
@@ -56,6 +85,8 @@ app.MapMarketEndpoints();
 app.MapQuestEndpoints();
 
 await app.RunAsync();
+
+return 0;
 
 /// <summary>
 /// Exposed so integration tests can drive the real application through

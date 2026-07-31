@@ -88,7 +88,10 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 file.Skills ?? [],
                 file.Items ?? [],
                 file.Recipes ?? [],
-                file.Quests ?? []));
+                file.Quests ?? [],
+                file.Systems ?? [],
+                file.Bodies ?? [],
+                file.Stations ?? []));
         }
 
         return pack;
@@ -112,6 +115,12 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         Dictionary<string, int> skillIds = await UpsertSkillsAsync(pack, cancellationToken);
         Dictionary<string, int> itemIds = await UpsertItemsAsync(pack, cancellationToken);
 
+        // Universe before the rest only because stations reference bodies reference systems.
+        // Nothing else depends on it — a character's home body is resolved by key at creation.
+        Dictionary<string, int> systemIds = await UpsertSystemsAsync(pack, cancellationToken);
+        Dictionary<string, int> bodyIds = await UpsertBodiesAsync(pack, systemIds, cancellationToken);
+
+        await UpsertStationsAsync(pack, systemIds, bodyIds, cancellationToken);
         await UpsertRecipesAsync(pack, skillIds, itemIds, cancellationToken);
         await UpsertQuestsAsync(pack, skillIds, cancellationToken);
 
@@ -312,6 +321,126 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         await _database.SaveChangesAsync(cancellationToken);
     }
 
+    private async Task<Dictionary<string, int>> UpsertSystemsAsync(
+        ContentPack pack, CancellationToken cancellationToken)
+    {
+        Dictionary<string, StarSystem> existing = await _database.StarSystems
+            .ToDictionaryAsync(s => s.Key, StringComparer.Ordinal, cancellationToken);
+
+        foreach (StarSystemContent content in pack.Systems)
+        {
+            if (existing.TryGetValue(content.Key, out StarSystem? system))
+            {
+                system.Name = content.Name;
+                system.GalaxyX = content.GalaxyX;
+                system.GalaxyY = content.GalaxyY;
+                system.GalaxyZ = content.GalaxyZ;
+                system.SecurityLevel = content.SecurityLevel;
+
+                // Seed is deliberately not updated. Generation is a pure function of it
+                // (ADR-0002), so changing the seed of a system players have already built in
+                // would regenerate a different system underneath them.
+                continue;
+            }
+
+            _database.StarSystems.Add(new StarSystem
+            {
+                Key = content.Key,
+                Name = content.Name,
+                GalaxyX = content.GalaxyX,
+                GalaxyY = content.GalaxyY,
+                GalaxyZ = content.GalaxyZ,
+                Seed = content.Seed,
+                GeneratorVersion = 1,
+                SecurityLevel = content.SecurityLevel,
+            });
+        }
+
+        await _database.SaveChangesAsync(cancellationToken);
+
+        return await _database.StarSystems
+            .ToDictionaryAsync(s => s.Key, s => s.Id, StringComparer.Ordinal, cancellationToken);
+    }
+
+    private async Task<Dictionary<string, int>> UpsertBodiesAsync(
+        ContentPack pack,
+        Dictionary<string, int> systemIds,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<string, Body> existing = await _database.Bodies
+            .ToDictionaryAsync(b => b.Key, StringComparer.Ordinal, cancellationToken);
+
+        foreach (BodyContent content in pack.Bodies)
+        {
+            int systemId = systemIds[content.System];
+
+            if (existing.TryGetValue(content.Key, out Body? body))
+            {
+                body.Name = content.Name;
+                body.StarSystemId = systemId;
+                body.Kind = content.Kind;
+                body.SecurityLevel = content.SecurityLevel;
+                body.RadiusKm = content.RadiusKm;
+
+                continue;
+            }
+
+            _database.Bodies.Add(new Body
+            {
+                Key = content.Key,
+                Name = content.Name,
+                StarSystemId = systemId,
+                Kind = content.Kind,
+                SecurityLevel = content.SecurityLevel,
+                RadiusKm = content.RadiusKm,
+            });
+        }
+
+        await _database.SaveChangesAsync(cancellationToken);
+
+        return await _database.Bodies
+            .ToDictionaryAsync(b => b.Key, b => b.Id, StringComparer.Ordinal, cancellationToken);
+    }
+
+    private async Task UpsertStationsAsync(
+        ContentPack pack,
+        Dictionary<string, int> systemIds,
+        Dictionary<string, int> bodyIds,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<string, Station> existing = await _database.Stations
+            .ToDictionaryAsync(s => s.Key, StringComparer.Ordinal, cancellationToken);
+
+        foreach (StationContent content in pack.Stations)
+        {
+            int systemId = systemIds[content.System];
+
+            // Null body is legitimate: a deep-space station orbits nothing.
+            int? bodyId = content.Body is null ? null : bodyIds[content.Body];
+
+            if (existing.TryGetValue(content.Key, out Station? station))
+            {
+                station.Name = content.Name;
+                station.StarSystemId = systemId;
+                station.BodyId = bodyId;
+                station.Kind = content.Kind;
+
+                continue;
+            }
+
+            _database.Stations.Add(new Station
+            {
+                Key = content.Key,
+                Name = content.Name,
+                StarSystemId = systemId,
+                BodyId = bodyId,
+                Kind = content.Kind,
+            });
+        }
+
+        await _database.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>
     /// The shape of one content file. Every section is optional, so a file can define just one
     /// kind of thing.
@@ -320,5 +449,8 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         IReadOnlyList<SkillContent>? Skills,
         IReadOnlyList<ItemContent>? Items,
         IReadOnlyList<RecipeContent>? Recipes,
-        IReadOnlyList<QuestContent>? Quests);
+        IReadOnlyList<QuestContent>? Quests,
+        IReadOnlyList<StarSystemContent>? Systems,
+        IReadOnlyList<BodyContent>? Bodies,
+        IReadOnlyList<StationContent>? Stations);
 }

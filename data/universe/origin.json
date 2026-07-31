@@ -1,0 +1,102 @@
+{
+  "$comment": "The starting system at the galactic centre, per design-bible §1. Four race homeworlds and the capital world's trading hub. Radii are already at the 1:10 universe scale (ADR-0001) — the scale is applied once here in authored content, never at conversion time, so a body's radius means the same thing everywhere it is read. TODO(name): every name below is a placeholder; the races and factions are still unnamed.",
+
+  "systems": [
+    {
+      "key": "system_origin",
+      "name": "Origin",
+      "$comment": "Galaxy-space coordinates are int64 kilometres and never enter Unreal (ADR-0001). The starting system sits at the origin because every player begins here; nothing else is authored yet, so there is nothing for it to be offset from.",
+      "galaxyX": 0,
+      "galaxyY": 0,
+      "galaxyZ": 0,
+      "seed": 20260731,
+      "securityLevel": "Secure"
+    }
+  ],
+
+  "bodies": [
+    {
+      "key": "body_terra",
+      "name": "Terra",
+      "system": "system_origin",
+      "kind": "Planet",
+      "securityLevel": "Secure",
+      "$comment": "Earth-analog. 6371 km at true scale becomes 637.1 at 1:10.",
+      "radiusKm": 637.1
+    },
+    {
+      "key": "body_ares",
+      "name": "Ares",
+      "system": "system_origin",
+      "kind": "Planet",
+      "securityLevel": "Secure",
+      "$comment": "Mars-analog: thin atmosphere, red desert, low gravity.",
+      "radiusKm": 339.0
+    },
+    {
+      "key": "body_verdance",
+      "name": "Verdance",
+      "system": "system_origin",
+      "kind": "Planet",
+      "securityLevel": "Secure",
+      "$comment": "Lush and luminous — a planet that reads as alive.",
+      "radiusKm": 610.0
+    },
+    {
+      "key": "body_grimhold",
+      "name": "Grimhold",
+      "system": "system_origin",
+      "kind": "Planet",
+      "securityLevel": "Secure",
+      "$comment": "Dark and industrial, heavy gravity, perpetual overcast. Larger than the rest, which is where the heavy gravity comes from.",
+      "radiusKm": 780.0
+    },
+    {
+      "key": "body_capital",
+      "name": "The Capital",
+      "system": "system_origin",
+      "kind": "Planet",
+      "securityLevel": "Secure",
+      "$comment": "The shared capital world the onboarding questline ends at. Neutral ground: both factions trade here, which is why career questlines live here rather than on a homeworld.",
+      "radiusKm": 700.0
+    }
+  ],
+
+  "stations": [
+    {
+      "key": "station_capital_hub",
+      "name": "Capital Trading Hub",
+      "system": "system_origin",
+      "body": "body_capital",
+      "kind": "TradingHub"
+    },
+    {
+      "key": "station_terra_hub",
+      "name": "Terra Outpost",
+      "system": "system_origin",
+      "body": "body_terra",
+      "kind": "TradingHub"
+    },
+    {
+      "key": "station_ares_hub",
+      "name": "Ares Outpost",
+      "system": "system_origin",
+      "body": "body_ares",
+      "kind": "TradingHub"
+    },
+    {
+      "key": "station_verdance_hub",
+      "name": "Verdance Outpost",
+      "system": "system_origin",
+      "body": "body_verdance",
+      "kind": "TradingHub"
+    },
+    {
+      "key": "station_grimhold_hub",
+      "name": "Grimhold Outpost",
+      "system": "system_origin",
+      "body": "body_grimhold",
+      "kind": "TradingHub"
+    }
+  ]
+}

@@ -1,6 +1,8 @@
+using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
 using SpaceMMO.Domain.Quests;
+using SpaceMMO.Domain.Universe;
 
 namespace SpaceMMO.Domain.Content;
 
@@ -46,9 +48,14 @@ public static class ContentValidator
             .Select(i => i.Key)
             .ToHashSet(StringComparer.Ordinal);
 
+        HashSet<string> systemKeys = CollectKeys(pack.Systems.Select(s => s.Key), "system", errors);
+        HashSet<string> bodyKeys = CollectKeys(pack.Bodies.Select(b => b.Key), "body", errors);
+        CollectKeys(pack.Stations.Select(s => s.Key), "station", errors);
+
         ValidateItems(pack, errors);
         ValidateRecipes(pack, skillKeys, itemKeys, toolKeys, errors);
         ValidateQuests(pack, skillKeys, questKeys, errors);
+        ValidateUniverse(pack, systemKeys, bodyKeys, errors);
         ValidateRecipeGraphIsAcyclic(pack, errors);
         ValidatePrerequisitesAreAcyclic(pack, errors);
 
@@ -93,6 +100,74 @@ public static class ContentValidator
         }
 
         return seen;
+    }
+
+    /// <summary>
+    /// Checks the universe: references resolve, radii are real, and every race can start.
+    /// </summary>
+    /// <remarks>
+    /// The last of those is the one that matters. A missing homeworld is not a content typo that
+    /// degrades something — it makes character creation fail outright for everyone who picks that
+    /// race, and it fails at the API with a 500 rather than at load with an explanation. Checking
+    /// it here turns a runtime outage into a startup error naming the missing key.
+    /// </remarks>
+    private static void ValidateUniverse(
+        ContentPack pack,
+        HashSet<string> systemKeys,
+        HashSet<string> bodyKeys,
+        List<ContentError> errors)
+    {
+        foreach (BodyContent body in pack.Bodies)
+        {
+            if (!systemKeys.Contains(body.System))
+            {
+                errors.Add(new ContentError("body", body.Key, $"Unknown system '{body.System}'."));
+            }
+
+            if (body.RadiusKm <= 0.0)
+            {
+                // A zero radius makes every gravity and altitude calculation degenerate, and a
+                // negative one inverts "up".
+                errors.Add(new ContentError("body", body.Key, "Radius must be positive."));
+            }
+        }
+
+        foreach (StationContent station in pack.Stations)
+        {
+            if (!systemKeys.Contains(station.System))
+            {
+                errors.Add(new ContentError(
+                    "station", station.Key, $"Unknown system '{station.System}'."));
+            }
+
+            // A null body is a deep-space station and legitimate. A named one that does not exist
+            // is not.
+            if (station.Body is not null && !bodyKeys.Contains(station.Body))
+            {
+                errors.Add(new ContentError(
+                    "station", station.Key, $"Unknown body '{station.Body}'."));
+            }
+        }
+
+        // Only worth checking once any universe is authored at all — an empty pack is a valid
+        // thing to validate, and demanding homeworlds of it would break every content unit test.
+        if (pack.Bodies.Count == 0)
+        {
+            return;
+        }
+
+        foreach (Race race in Enum.GetValues<Race>())
+        {
+            string required = Races.HomeBodyKeyFor(race);
+
+            if (!bodyKeys.Contains(required))
+            {
+                errors.Add(new ContentError(
+                    "body",
+                    required,
+                    $"Missing starting body for {race}; characters of that race cannot be created."));
+            }
+        }
     }
 
     private static void ValidateItems(ContentPack pack, List<ContentError> errors)

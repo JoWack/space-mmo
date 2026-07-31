@@ -1,6 +1,7 @@
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
 using SpaceMMO.Domain.Quests;
+using SpaceMMO.Domain.Universe;
 
 namespace SpaceMMO.Domain.Content;
 
@@ -47,6 +48,37 @@ public sealed record QuestContent(
     int? CooldownSeconds,
     IReadOnlyList<QuestStepContent> Steps);
 
+/// <summary>A star system, as authored in <c>data/universe/</c>.</summary>
+/// <param name="GalaxyX">Galaxy-space coordinates in kilometres, int64 (ADR-0001). These never
+/// enter Unreal — they position systems relative to each other and nothing more.</param>
+public sealed record StarSystemContent(
+    string Key,
+    string Name,
+    long GalaxyX,
+    long GalaxyY,
+    long GalaxyZ,
+    long Seed,
+    SecurityLevel SecurityLevel);
+
+/// <summary>A planet or moon, as authored in <c>data/universe/</c>.</summary>
+/// <param name="RadiusKm">Already at the 1:10 universe scale (ADR-0001). The scale is applied
+/// once, here in authored content, rather than at every conversion.</param>
+public sealed record BodyContent(
+    string Key,
+    string Name,
+    string System,
+    BodyKind Kind,
+    SecurityLevel SecurityLevel,
+    double RadiusKm);
+
+/// <summary>A station, as authored in <c>data/universe/</c>.</summary>
+public sealed record StationContent(
+    string Key,
+    string Name,
+    string System,
+    string? Body,
+    StationKind Kind);
+
 /// <summary>
 /// Everything loaded from <c>data/</c>, before it reaches the database.
 /// </summary>
@@ -59,10 +91,13 @@ public sealed record ContentPack(
     IReadOnlyList<SkillContent> Skills,
     IReadOnlyList<ItemContent> Items,
     IReadOnlyList<RecipeContent> Recipes,
-    IReadOnlyList<QuestContent> Quests)
+    IReadOnlyList<QuestContent> Quests,
+    IReadOnlyList<StarSystemContent> Systems,
+    IReadOnlyList<BodyContent> Bodies,
+    IReadOnlyList<StationContent> Stations)
 {
     /// <summary>An empty pack, for tests and for merging.</summary>
-    public static ContentPack Empty { get; } = new([], [], [], []);
+    public static ContentPack Empty { get; } = new([], [], [], [], [], [], []);
 
     /// <summary>Combines two packs, so content can be split across many files.</summary>
     public ContentPack Concat(ContentPack other)
@@ -73,6 +108,9 @@ public sealed record ContentPack(
             [.. Skills, .. other.Skills],
             [.. Items, .. other.Items],
             [.. Recipes, .. other.Recipes],
-            [.. Quests, .. other.Quests]);
+            [.. Quests, .. other.Quests],
+            [.. Systems, .. other.Systems],
+            [.. Bodies, .. other.Bodies],
+            [.. Stations, .. other.Stations]);
     }
 }
