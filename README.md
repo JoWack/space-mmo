@@ -63,8 +63,17 @@ face somewhere else — most of what makes space flight feel like space flight r
 A flyable `ASpaceMMOShipPawn` holds its position in system-space kilometres and derives its
 Unreal transform from it, moving the render origin whenever it drifts past the physics budget.
 Unreal's transform is a *view* of the position, not the truth of it — so the ship can fly
-arbitrarily far without single-precision rendering falling apart. Press Play and fly with
-WASD, mouse, Q/E to roll, Shift to boost, C to switch camera.
+arbitrarily far without single-precision rendering falling apart.
+
+**Open `client/SpaceMMO.uproject` and press Play.** WASD thrusts, mouse pitches and yaws, Q/E
+rolls, Space/Ctrl move up and down, Shift boosts, C toggles third and first person. A readout
+shows system position, speed and rebase count.
+
+The scene is spawned from code — there are no authored assets yet. 352 marker cubes sit at
+known positions in **system** space, so they are a live demonstration of the coordinate model
+rather than scenery: they stay exactly where they are while the ship moves and the render origin
+jumps beneath them. Their instances are rebuilt only when the origin actually moves, so a
+rebasing bug would show up immediately as markers jumping.
 
 **36 automation tests pass** — 8 coordinate, 10 grid, 13 flight, 5 navigation:
 

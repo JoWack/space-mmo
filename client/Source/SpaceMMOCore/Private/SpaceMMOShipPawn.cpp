@@ -4,7 +4,12 @@
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Materials/MaterialInterface.h"
+#include "SpaceMMOLog.h"
+#include "SpaceMMORenderOrigin.h"
+#include "UObject/ConstructorHelpers.h"
 
 ASpaceMMOShipPawn::ASpaceMMOShipPawn()
 {
@@ -20,6 +25,29 @@ ASpaceMMOShipPawn::ASpaceMMOShipPawn()
 	// Leaving collision on would let the physics solver fight the authoritative position and win
 	// intermittently, which is a miserable class of bug to chase.
 	Hull->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Engine content so the ship is visible without any authored asset. A placeholder until there
+	// is a real hull, but an invisible ship makes every flight change impossible to evaluate.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> HullMesh(
+		TEXT("/Engine/BasicShapes/Cone.Cone"));
+
+	if (HullMesh.Succeeded())
+	{
+		Hull->SetStaticMesh(HullMesh.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> HullMaterial(
+		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+
+	if (HullMaterial.Succeeded())
+	{
+		Hull->SetMaterial(0, HullMaterial.Object);
+	}
+
+	// The cone points up by default; rotate it to point along +X, which is the ship's forward axis
+	// and the direction thrust is applied in.
+	Hull->SetRelativeRotation(FRotator(-90.0, 0.0, 0.0));
+	Hull->SetRelativeScale3D(FVector(1.0, 1.0, 2.0));
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(ShipRoot);
@@ -57,7 +85,10 @@ void ASpaceMMOShipPawn::BeginPlay()
 	FlightState = FShipFlightState();
 	FlightState.Rotation = GetActorQuat();
 
+	PublishRenderOrigin();
 	ApplyWorldTransform();
+
+	UE_LOG(LogSpaceMMO, Log, TEXT("Ship ready at %s"), *Navigation.SystemPosition.ToString());
 }
 
 void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
@@ -68,6 +99,7 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 
 	Navigation = FShipFlightModel::Advance(Navigation, FlightState, DeltaSeconds);
 
+	PublishRenderOrigin();
 	ApplyWorldTransform();
 
 	// Axes are cleared each frame because the legacy input path calls the handlers only while a
@@ -91,6 +123,20 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 	}
 }
 
+void ASpaceMMOShipPawn::PublishRenderOrigin()
+{
+	// The piloted ship owns the render origin: it is what the camera is attached to, so it is the
+	// thing that must stay near Unreal's origin for physics and rendering to behave.
+	if (UWorld* World = GetWorld())
+	{
+		if (USpaceMMORenderOriginSubsystem* Origin =
+			World->GetSubsystem<USpaceMMORenderOriginSubsystem>())
+		{
+			Origin->SetRenderOrigin(Navigation.RenderOrigin);
+		}
+	}
+}
+
 void ASpaceMMOShipPawn::ApplyWorldTransform()
 {
 	SetActorLocationAndRotation(Navigation.RenderLocationCentimetres(), FlightState.Rotation);
@@ -102,6 +148,7 @@ void ASpaceMMOShipPawn::SetSystemPosition(const FSystemCoordinate& NewPosition)
 	Navigation.RenderOrigin = NewPosition;
 	++Navigation.RebaseCount;
 
+	PublishRenderOrigin();
 	ApplyWorldTransform();
 }
 

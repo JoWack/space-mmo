@@ -82,6 +82,8 @@ protected:
 	bool bShowFlightDebug = true;
 
 private:
+	void PublishRenderOrigin();
+
 	void ApplyWorldTransform();
 
 	void ThrustForward(float Value);
