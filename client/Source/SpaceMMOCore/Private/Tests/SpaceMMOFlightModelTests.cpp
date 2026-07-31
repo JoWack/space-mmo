@@ -19,7 +19,7 @@ namespace
 	constexpr double FlightTolerance = 1e-3;
 
 	/** One frame at 60 Hz. */
-	constexpr double Frame = 1.0 / 60.0;
+	constexpr double FrameSeconds = 1.0 / 60.0;
 
 	FShipFlightConfig TestConfig()
 	{
@@ -52,7 +52,7 @@ namespace
 	{
 		for (int32 Index = 0; Index < Frames; ++Index)
 		{
-			State = FShipFlightModel::Step(State, Input, Config, Frame);
+			State = FShipFlightModel::Step(State, Input, Config, FrameSeconds);
 		}
 
 		return State;
@@ -349,6 +349,157 @@ bool FSpaceMMOFlightZeroTimeIsNoOpTest::RunTest(const FString& Parameters)
 	TestTrue(
 		TEXT("No movement"),
 		FShipFlightModel::PositionDeltaKilometres(State, 0.0).IsNearlyZero());
+
+	return true;
+}
+
+// ── Navigation and render-origin rebasing ────────────────────────────────────
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMONavigationAccumulatesTest,
+	"SpaceMMO.Navigation.PositionAccumulates",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMONavigationAccumulatesTest::RunTest(const FString& Parameters)
+{
+	FShipFlightState State;
+	State.Velocity = FVector(100000.0, 0.0, 0.0); // 1 km/s
+
+	FShipNavigation Navigation;
+
+	for (int32 Second = 0; Second < 5; ++Second)
+	{
+		Navigation = FShipFlightModel::Advance(Navigation, State, 1.0);
+	}
+
+	TestEqual(TEXT("Five kilometres"), Navigation.SystemPosition.Kilometres.X, 5.0, FlightTolerance);
+	TestEqual(TEXT("No rebase needed yet"), Navigation.RebaseCount, 0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMONavigationRebasesTest,
+	"SpaceMMO.Navigation.RebasesWhenOutOfBudget",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMONavigationRebasesTest::RunTest(const FString& Parameters)
+{
+	FShipFlightState State;
+	State.Velocity = FVector(100000.0, 0.0, 0.0); // 1 km/s
+
+	FShipNavigation Navigation;
+
+	// The budget is 20 km, so 30 seconds must cross it.
+	for (int32 Second = 0; Second < 30; ++Second)
+	{
+		Navigation = FShipFlightModel::Advance(Navigation, State, 1.0);
+	}
+
+	TestTrue(TEXT("Rebased"), Navigation.RebaseCount > 0);
+
+	// The ship really is 30 km out...
+	TestEqual(TEXT("System position kept"), Navigation.SystemPosition.Kilometres.X, 30.0, FlightTolerance);
+
+	// ...but renders near the origin, which is the entire point.
+	TestTrue(
+		TEXT("Renders near origin"),
+		Navigation.RenderLocationCentimetres().Size() < SpaceMMO::Coordinates::LocalSpaceLimitCentimetres);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMONavigationStaysInBudgetTest,
+	"SpaceMMO.Navigation.AlwaysStaysWithinPhysicsBudget",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMONavigationStaysInBudgetTest::RunTest(const FString& Parameters)
+{
+	// The guarantee the whole mechanism exists to provide: however far the ship travels, and
+	// however fast, the render location never leaves the range Chaos behaves well in.
+	FShipNavigation Navigation;
+
+	for (const double SpeedCmPerSecond : { 1000.0, 100000.0, 5000000.0, 200000000.0 })
+	{
+		FShipFlightState State;
+		State.Velocity = FVector(SpeedCmPerSecond, SpeedCmPerSecond * 0.5, 0.0);
+
+		for (int32 Frame = 0; Frame < 600; ++Frame)
+		{
+			Navigation = FShipFlightModel::Advance(Navigation, State, 1.0 / 60.0);
+
+			TestTrue(
+				FString::Printf(
+					TEXT("Within budget at %.0f cm/s: render location was %.1f cm"),
+					SpeedCmPerSecond,
+					Navigation.RenderLocationCentimetres().Size()),
+				Navigation.RenderLocationCentimetres().Size()
+					<= SpaceMMO::Coordinates::LocalSpaceLimitCentimetres);
+		}
+	}
+
+	// And after all that it is genuinely a long way from where it started. Four ten-second phases
+	// at |v| = speed * sqrt(1.25) come to about 22,931 km, so anything near that confirms the ship
+	// really travelled rather than the loop quietly doing nothing.
+	TestTrue(
+		FString::Printf(
+			TEXT("Travelled far: %.0f km"), Navigation.SystemPosition.Kilometres.Size()),
+		Navigation.SystemPosition.Kilometres.Size() > 22000.0);
+
+	TestTrue(TEXT("Rebased many times"), Navigation.RebaseCount > 10);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMONavigationRebaseIsInvisibleTest,
+	"SpaceMMO.Navigation.RebaseDoesNotMoveTheShip",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMONavigationRebaseIsInvisibleTest::RunTest(const FString& Parameters)
+{
+	FShipFlightState State;
+	State.Velocity = FVector(3000000.0, 0.0, 0.0); // 30 km/s — one step crosses the budget
+
+	FShipNavigation Before;
+	Before.SystemPosition = FSystemCoordinate(1000.0, 0.0, 0.0);
+	Before.RenderOrigin = Before.SystemPosition;
+
+	const FShipNavigation After = FShipFlightModel::Advance(Before, State, 1.0);
+
+	// A rebase happened, and the ship's actual position advanced by exactly the distance flown —
+	// no more and no less. If rebasing ever altered the system position, ships would teleport
+	// whenever they crossed a boundary.
+	TestTrue(TEXT("Rebased"), After.RebaseCount == Before.RebaseCount + 1);
+	TestEqual(TEXT("Moved exactly 30 km"), After.SystemPosition.Kilometres.X, 1030.0, FlightTolerance);
+
+	// And having just rebased, it sits exactly at the origin.
+	TestTrue(TEXT("At the origin"), After.RenderLocationCentimetres().IsNearlyZero(1.0));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMONavigationStationaryTest,
+	"SpaceMMO.Navigation.StationaryShipNeverRebases",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMONavigationStationaryTest::RunTest(const FString& Parameters)
+{
+	// Rebasing costs a discontinuity for everything else being rendered, so a parked ship must
+	// never trigger one however long it sits there.
+	FShipNavigation Navigation;
+	Navigation.SystemPosition = FSystemCoordinate(500.0, -200.0, 75.0);
+	Navigation.RenderOrigin = Navigation.SystemPosition;
+
+	for (int32 Frame = 0; Frame < 3600; ++Frame)
+	{
+		Navigation = FShipFlightModel::Advance(Navigation, FShipFlightState(), 1.0 / 60.0);
+	}
+
+	TestEqual(TEXT("Never rebased"), Navigation.RebaseCount, 0);
+	TestTrue(TEXT("Never moved"), Navigation.RenderLocationCentimetres().IsNearlyZero(FlightTolerance));
 
 	return true;
 }

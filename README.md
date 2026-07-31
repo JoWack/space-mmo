@@ -60,7 +60,13 @@ Flight is a pure 6DOF model: thrust applied in the ship's frame, velocity held i
 frame. That separation is what makes a ship keep drifting the way it was going while it turns to
 face somewhere else — most of what makes space flight feel like space flight rather than driving.
 
-**31 automation tests pass** — 8 coordinate, 10 grid, 13 flight:
+A flyable `ASpaceMMOShipPawn` holds its position in system-space kilometres and derives its
+Unreal transform from it, moving the render origin whenever it drifts past the physics budget.
+Unreal's transform is a *view* of the position, not the truth of it — so the ship can fly
+arbitrarily far without single-precision rendering falling apart. Press Play and fly with
+WASD, mouse, Q/E to roll, Shift to boost, C to switch camera.
+
+**36 automation tests pass** — 8 coordinate, 10 grid, 13 flight, 5 navigation:
 
 ```bash
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -ExecCmds="Automation RunTests SpaceMMO" -testexit="Automation Test Queue Empty" -unattended -nopause -nosplash -log
@@ -130,7 +136,7 @@ dotnet test services/SpaceMMO.Domain.Tests
 
 - **M0** — repo, docs, ADRs, toolchain ✅
 - **M1** — backend economy core: schema, XP curve, order book, quest engine, EconSim ✅
-- **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight model ✅, ship pawn,
+- **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight ✅, ship pawn ✅,
   one landable planet, dedicated server
 - **M3** — closing the loop: mine → craft → sell, two players trading a player-made item
 - **M4** — universe scale: procedural galaxy, warp handoff, careers, security zones

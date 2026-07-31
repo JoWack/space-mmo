@@ -121,3 +121,27 @@ FVector FShipFlightModel::PositionDeltaKilometres(
 
 	return (State.Velocity * DeltaSeconds) / SpaceMMO::Coordinates::CentimetresPerKilometre;
 }
+
+FShipNavigation FShipFlightModel::Advance(
+	const FShipNavigation& Navigation,
+	const FShipFlightState& State,
+	const double DeltaSeconds)
+{
+	FShipNavigation Result = Navigation;
+
+	Result.SystemPosition = FSystemCoordinate(
+		Navigation.SystemPosition.Kilometres + PositionDeltaKilometres(State, DeltaSeconds));
+
+	if (Result.SystemPosition.IsWithinLocalSpaceOf(Result.RenderOrigin))
+	{
+		return Result;
+	}
+
+	// Rebase. The origin snaps to the ship rather than stepping toward it, so a single frame of
+	// very high speed cannot leave the render location outside the budget — which a fixed-size
+	// step could, and then the budget would be a suggestion rather than a guarantee.
+	Result.RenderOrigin = Result.SystemPosition;
+	++Result.RebaseCount;
+
+	return Result;
+}

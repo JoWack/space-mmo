@@ -18,6 +18,10 @@ public class SpaceMMOCore : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+
+			// Legacy axis and action bindings live here. See SpaceMMOShipPawn.h for why the
+			// project is not on Enhanced Input yet.
+			"InputCore",
 		});
 	}
 }

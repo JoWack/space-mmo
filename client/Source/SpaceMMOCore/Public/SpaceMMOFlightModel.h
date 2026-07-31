@@ -116,6 +116,37 @@ struct SPACEMMOCORE_API FShipFlightState
 };
 
 /**
+ * Where a ship is, and the window currently used to render it.
+ *
+ * The ship's authoritative position is a system-space coordinate in kilometres. Unreal's world
+ * location is derived from it relative to a movable render origin, so the engine transform is a
+ * <em>view</em> of the position rather than the truth of it.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOCORE_API FShipNavigation
+{
+	GENERATED_BODY()
+
+	/** The truth: where the ship is in system space. */
+	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	FSystemCoordinate SystemPosition;
+
+	/** The system position that currently maps to Unreal's world origin. */
+	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	FSystemCoordinate RenderOrigin;
+
+	/** How many times the origin has moved. Rebasing leaves no other trace when it works. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Flight")
+	int32 RebaseCount = 0;
+
+	/** Where to place the actor, in centimetres. */
+	FVector RenderLocationCentimetres() const
+	{
+		return SystemPosition.ToLocalCentimetres(RenderOrigin);
+	}
+};
+
+/**
  * Six-degree-of-freedom flight integration.
  *
  * Pure functions over plain state, deliberately knowing nothing about actors, components or
@@ -156,4 +187,20 @@ public:
 	 * accelerates somewhere other than where it is pointing.
 	 */
 	static FVector ThrustDirection(const FQuat& Rotation, const FVector& LocalThrust);
+
+	/**
+	 * Moves a ship through system space and rebases the render origin when it drifts too far.
+	 *
+	 * The guarantee: after this returns, the render location is always inside the physics budget,
+	 * however far the ship has actually travelled. That is what keeps Chaos in the range it
+	 * behaves well in over a flight of any length.
+	 *
+	 * Rebasing is meant to be invisible. The system position is untouched and only the window onto
+	 * it moves, so nothing on screen jumps — which is also why the count exists, since a rebase
+	 * that works leaves nothing else to observe.
+	 */
+	static FShipNavigation Advance(
+		const FShipNavigation& Navigation,
+		const FShipFlightState& State,
+		double DeltaSeconds);
 };
