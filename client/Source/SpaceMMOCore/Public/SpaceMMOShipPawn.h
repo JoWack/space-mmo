@@ -4,6 +4,7 @@
 #include "GameFramework/Pawn.h"
 #include "SpaceMMOCoordinates.h"
 #include "SpaceMMOFlightModel.h"
+#include "SpaceMMOPlanet.h"
 #include "SpaceMMOShipPawn.generated.h"
 
 class UCameraComponent;
@@ -61,6 +62,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Ship")
 	void ToggleCameraView();
 
+	/** Altitude above the nearest planet's surface, in kilometres. Zero if there is none. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
+	double GetAltitudeKilometres() const;
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
+	EPlanetProximity GetProximity() const { return Proximity; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -83,6 +91,9 @@ protected:
 
 private:
 	void PublishRenderOrigin();
+
+	/** Gravity from every planet in the world, summed. */
+	FVector ComputeGravity() const;
 
 	void ApplyWorldTransform();
 
@@ -118,4 +129,6 @@ private:
 	FShipFlightInput PendingInput;
 
 	bool bFirstPerson = false;
+
+	EPlanetProximity Proximity = EPlanetProximity::Orbital;
 };

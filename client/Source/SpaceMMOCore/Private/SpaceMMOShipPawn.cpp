@@ -8,6 +8,8 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOLog.h"
+#include "EngineUtils.h"
+#include "SpaceMMOPlanetActor.h"
 #include "SpaceMMORenderOrigin.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -95,12 +97,23 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	FlightState = FShipFlightModel::Step(FlightState, PendingInput, FlightConfig, DeltaSeconds);
+	FlightState = FShipFlightModel::Step(
+		FlightState, PendingInput, FlightConfig, DeltaSeconds, ComputeGravity());
 
 	Navigation = FShipFlightModel::Advance(Navigation, FlightState, DeltaSeconds);
 
 	PublishRenderOrigin();
 	ApplyWorldTransform();
+
+	// Classified after moving, and fed its own previous value so the hysteresis in
+	// ClassifyProximity has something to work against.
+	for (TActorIterator<ASpaceMMOPlanetActor> It(GetWorld()); It; ++It)
+	{
+		Proximity = FPlanetPhysics::ClassifyProximity(
+			It->GetPlanetConfig(), Navigation.SystemPosition, Proximity);
+
+		break;
+	}
 
 	// Axes are cleared each frame because the legacy input path calls the handlers only while a
 	// key is held. Without this a tapped key would stay applied forever.
@@ -117,10 +130,57 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 				GetSpeedKilometresPerSecond(),
 				Navigation.RebaseCount));
 
+		const TCHAR* ProximityName =
+			Proximity == EPlanetProximity::Surface ? TEXT("SURFACE")
+			: Proximity == EPlanetProximity::Atmospheric ? TEXT("ATMOSPHERE")
+			: TEXT("ORBIT");
+
+		GEngine->AddOnScreenDebugMessage(
+			3, 0.0f, FColor::Yellow,
+			FString::Printf(
+				TEXT("Altitude %.2f km | %s"), GetAltitudeKilometres(), ProximityName));
+
 		GEngine->AddOnScreenDebugMessage(
 			2, 0.0f, FColor::Silver,
 			FString::Printf(TEXT("World %s"), *GetActorLocation().ToCompactString()));
 	}
+}
+
+double ASpaceMMOShipPawn::GetAltitudeKilometres() const
+{
+    if (const UWorld* World = GetWorld())
+    {
+        for (TActorIterator<ASpaceMMOPlanetActor> It(const_cast<UWorld*>(World)); It; ++It)
+        {
+            return FPlanetPhysics::AltitudeKilometres(
+                It->GetPlanetConfig(), Navigation.SystemPosition);
+        }
+    }
+
+    return 0.0;
+}
+
+FVector ASpaceMMOShipPawn::ComputeGravity() const
+{
+	UWorld* World = GetWorld();
+
+	if (World == nullptr)
+	{
+		return FVector::ZeroVector;
+	}
+
+	// Summed rather than nearest-only, so a ship between two bodies is pulled by both. With one
+	// planet it makes no difference; with a planet and its moon it is the difference between
+	// orbital mechanics working and not.
+	FVector Total = FVector::ZeroVector;
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		Total += FPlanetPhysics::GravityAcceleration(
+			It->GetPlanetConfig(), Navigation.SystemPosition);
+	}
+
+	return Total;
 }
 
 void ASpaceMMOShipPawn::PublishRenderOrigin()

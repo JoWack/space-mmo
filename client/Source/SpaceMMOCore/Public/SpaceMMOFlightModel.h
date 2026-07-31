@@ -163,13 +163,21 @@ public:
 	/**
 	 * Advances one step.
 	 *
-	 * @param DeltaSeconds  Frame time. Zero or negative returns the state untouched.
+	 * @param DeltaSeconds           Frame time. Zero or negative returns the state untouched.
+	 * @param ExternalAcceleration   Environmental forces in system-frame axes, centimetres per
+	 *                               second squared — gravity today, drag and tractor beams later.
+	 *
+	 * External acceleration is a separate parameter rather than part of the input, because the
+	 * input is <em>pilot intent</em> and this is the world acting on the ship. Keeping them apart
+	 * is what lets flight assist damp the pilot's velocity without also cancelling gravity, which
+	 * would leave ships hovering over planets with the engines off.
 	 */
 	static FShipFlightState Step(
 		const FShipFlightState& State,
 		const FShipFlightInput& Input,
 		const FShipFlightConfig& Config,
-		double DeltaSeconds);
+		double DeltaSeconds,
+		const FVector& ExternalAcceleration = FVector::ZeroVector);
 
 	/**
 	 * How far a ship travels this step, in kilometres, ready to add to a grid's system origin.

@@ -6,6 +6,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "SpaceMMOLog.h"
+#include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOShipPawn.h"
 #include "SpaceMMOTestScene.h"
 
@@ -45,6 +46,28 @@ void ASpaceMMOGameMode::SpawnTestScene()
 
 	UE_LOG(LogSpaceMMO, Log, TEXT("Spawned test scene: %s"),
 		Scene != nullptr ? TEXT("ok") : TEXT("FAILED"));
+
+	// A planet to fly to. 20 km radius at 200 km, so it starts as a small sphere ahead and the
+	// whole orbital-to-atmospheric-to-surface transition is reachable in a couple of minutes.
+	// Spawned deferred so the configuration is in place before BeginPlay runs. A plain SpawnActor
+	// begins play immediately, so anything set afterwards arrives too late — the planet would
+	// briefly exist at the system origin with default settings, and BeginPlay would report them.
+	if (ASpaceMMOPlanetActor* PlanetActor = World->SpawnActorDeferred<ASpaceMMOPlanetActor>(
+		ASpaceMMOPlanetActor::StaticClass(),
+		FTransform::Identity,
+		nullptr,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
+	{
+		FPlanetConfig Config;
+		Config.Centre = FSystemCoordinate(200.0, 0.0, 0.0);
+		Config.RadiusKilometres = 20.0;
+		Config.SurfaceGravity = 981.0;
+		Config.AtmosphereHeightKilometres = 12.0;
+
+		PlanetActor->SetPlanetConfig(Config);
+		PlanetActor->FinishSpawning(FTransform::Identity);
+	}
 
 	// A key light at an angle, so the marker cubes read as solid objects rather than flat
 	// silhouettes and it is possible to tell which way one is facing.

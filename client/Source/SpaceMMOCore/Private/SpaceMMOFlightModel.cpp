@@ -45,7 +45,8 @@ FShipFlightState FShipFlightModel::Step(
 	const FShipFlightState& State,
 	const FShipFlightInput& Input,
 	const FShipFlightConfig& Config,
-	const double DeltaSeconds)
+	const double DeltaSeconds,
+	const FVector& ExternalAcceleration)
 {
 	if (DeltaSeconds <= 0.0)
 	{
@@ -105,6 +106,11 @@ FShipFlightState FShipFlightModel::Step(
 	{
 		Result.Velocity = ApplyDamping(Result.Velocity, Config.LinearDamping, DeltaSeconds);
 	}
+
+	// Applied after damping, deliberately. Damping models the ship's own manoeuvring thrusters
+	// holding it steady, and those have no business cancelling gravity — if they did, cutting the
+	// engines over a planet would leave the ship hovering rather than falling.
+	Result.Velocity += ExternalAcceleration * DeltaSeconds;
 
 	Result.Velocity = ClampMagnitude(Result.Velocity, Config.MaxSpeed);
 

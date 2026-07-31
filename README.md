@@ -75,7 +75,12 @@ rather than scenery: they stay exactly where they are while the ship moves and t
 jumps beneath them. Their instances are rebuilt only when the origin actually moves, so a
 rebasing bug would show up immediately as markers jumping.
 
-**36 automation tests pass** — 8 coordinate, 10 grid, 13 flight, 5 navigation:
+A planet sits 200 km ahead: 20 km radius, Earth-like surface gravity, a 12 km atmosphere. Fly
+toward it and the readout moves from ORBIT through ATMOSPHERE to SURFACE, with gravity pulling
+inverse-square the whole way. It is a **sphere, not terrain** — enough to prove the approach
+transition, which is deliberately the easier half of the hardest problem in the project.
+
+**50 automation tests pass** — 8 coordinate, 10 grid, 13 flight, 5 navigation, 14 planet:
 
 ```bash
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -ExecCmds="Automation RunTests SpaceMMO" -testexit="Automation Test Queue Empty" -unattended -nopause -nosplash -log
@@ -146,6 +151,6 @@ dotnet test services/SpaceMMO.Domain.Tests
 - **M0** — repo, docs, ADRs, toolchain ✅
 - **M1** — backend economy core: schema, XP curve, order book, quest engine, EconSim ✅
 - **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight ✅, ship pawn ✅,
-  one landable planet, dedicated server
+  planet approach ✅, walkable terrain, dedicated server
 - **M3** — closing the loop: mine → craft → sell, two players trading a player-made item
 - **M4** — universe scale: procedural galaxy, warp handoff, careers, security zones
