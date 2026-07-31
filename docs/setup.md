@@ -13,11 +13,11 @@ Detected state of this machine as of 2026-07-29:
 | VS Build Tools 2022 (MSVC 14.44) | ✅ installed — this is what compiles UE C++ |
 | Windows SDK 10.0.26100 | ✅ installed |
 | Unreal Engine 5.8.1 | ✅ `D:\Programming\UnrealEngine\UE_5.8` |
-| .NET Framework SDK 4.8 | ✅ installed — editor builds, 8 automation tests pass |
+| .NET Framework SDK 4.8 | ✅ installed — editor builds, 18 automation tests pass |
 | UE source build | ❌ **required for any dedicated server target** — see below |
 
 **Everything M1 needs is installed**, and both the UE game and editor targets compile with the
-coordinate automation tests passing. One thing still blocks part of M2: dedicated server targets
+18 automation tests passing. One thing still blocks part of M2: dedicated server targets
 need a source build of Unreal. See §2.
 
 ---
@@ -121,7 +121,7 @@ NETFXSDK 4.8 is now present and the editor builds.
 ```bash
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" \
   "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" \
-  -ExecCmds="Automation RunTests SpaceMMO.Coordinates" \
+  -ExecCmds="Automation RunTests SpaceMMO" \
   -testexit="Automation Test Queue Empty" \
   -unattended -nopause -nosplash -log
 ```

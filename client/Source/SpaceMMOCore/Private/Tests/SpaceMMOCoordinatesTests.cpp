@@ -31,7 +31,7 @@
 
 namespace
 {
-	constexpr double Tolerance = 1e-6;
+	constexpr double CoordinateTolerance = 1e-6;
 
 	/** One kilometre in system space is one kilometre of Unreal space, in centimetres. */
 	constexpr double CentimetresPerKilometre = SpaceMMO::Coordinates::CentimetresPerKilometre;
@@ -51,9 +51,9 @@ bool FSpaceMMOSystemToLocalTest::RunTest(const FString& Parameters)
 
 	// One kilometre away in system space is 100,000 cm of Unreal space. No scale factor: the
 	// universe scale is applied when content is authored, not on every conversion.
-	TestEqual(TEXT("X"), Local.X, CentimetresPerKilometre, Tolerance);
-	TestEqual(TEXT("Y"), Local.Y, 0.0, Tolerance);
-	TestEqual(TEXT("Z"), Local.Z, 0.0, Tolerance);
+	TestEqual(TEXT("X"), Local.X, CentimetresPerKilometre, CoordinateTolerance);
+	TestEqual(TEXT("Y"), Local.Y, 0.0, CoordinateTolerance);
+	TestEqual(TEXT("Z"), Local.Z, 0.0, CoordinateTolerance);
 
 	return true;
 }
@@ -95,9 +95,9 @@ bool FSpaceMMORoundTripTest::RunTest(const FString& Parameters)
 		const FVector Local = Position.ToLocalCentimetres(Origin);
 		const FSystemCoordinate Restored = FSystemCoordinate::FromLocalCentimetres(Local, Origin);
 
-		TestEqual(TEXT("X"), Restored.Kilometres.X, Position.Kilometres.X, Tolerance);
-		TestEqual(TEXT("Y"), Restored.Kilometres.Y, Position.Kilometres.Y, Tolerance);
-		TestEqual(TEXT("Z"), Restored.Kilometres.Z, Position.Kilometres.Z, Tolerance);
+		TestEqual(TEXT("X"), Restored.Kilometres.X, Position.Kilometres.X, CoordinateTolerance);
+		TestEqual(TEXT("Y"), Restored.Kilometres.Y, Position.Kilometres.Y, CoordinateTolerance);
+		TestEqual(TEXT("Z"), Restored.Kilometres.Z, Position.Kilometres.Z, CoordinateTolerance);
 	}
 
 	return true;
@@ -159,7 +159,7 @@ bool FSpaceMMOGalaxyDistanceTest::RunTest(const FString& Parameters)
 	// Exact integer arithmetic, so a warp-range check has a definite answer rather than one that
 	// depends on rounding.
 	TestEqual(TEXT("Squared distance"), Origin.DistanceSquaredTo(Nearby), static_cast<int64>(25));
-	TestEqual(TEXT("Distance"), Origin.DistanceTo(Nearby), 5.0, Tolerance);
+	TestEqual(TEXT("Distance"), Origin.DistanceTo(Nearby), 5.0, CoordinateTolerance);
 
 	return true;
 }

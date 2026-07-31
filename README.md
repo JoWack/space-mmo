@@ -51,10 +51,15 @@ kilometres, and local render space in centimetres near the origin.
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Build/BatchFiles/Build.bat" SpaceMMO Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject"
 ```
 
-Eight automation tests cover the coordinate math and **pass**:
+Local physics grids sit on top: nested frames (ship interior → ship → planet → system) that
+resolve to system space and produce render transforms relative to whichever frame is active. The
+active frame always resolves to identity, which is what keeps Chaos simulating near the origin —
+and what makes walking around inside a moving ship an ordinary problem rather than a hard one.
+
+**18 automation tests pass** — 8 coordinate, 10 grid:
 
 ```bash
-"/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -ExecCmds="Automation RunTests SpaceMMO.Coordinates" -testexit="Automation Test Queue Empty" -unattended -nopause -nosplash -log
+"/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -ExecCmds="Automation RunTests SpaceMMO" -testexit="Automation Test Queue Empty" -unattended -nopause -nosplash -log
 ```
 
 One toolchain item still blocks part of M2: dedicated servers need a source build of Unreal.
@@ -121,7 +126,7 @@ dotnet test services/SpaceMMO.Domain.Tests
 
 - **M0** — repo, docs, ADRs, toolchain ✅
 - **M1** — backend economy core: schema, XP curve, order book, quest engine, EconSim ✅
-- **M2** — UE vertical slice: coordinates ✅, physics grids, flight, one landable planet,
+- **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight, one landable planet,
   dedicated server
 - **M3** — closing the loop: mine → craft → sell, two players trading a player-made item
 - **M4** — universe scale: procedural galaxy, warp handoff, careers, security zones
