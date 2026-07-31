@@ -56,7 +56,11 @@ resolve to system space and produce render transforms relative to whichever fram
 active frame always resolves to identity, which is what keeps Chaos simulating near the origin —
 and what makes walking around inside a moving ship an ordinary problem rather than a hard one.
 
-**18 automation tests pass** — 8 coordinate, 10 grid:
+Flight is a pure 6DOF model: thrust applied in the ship's frame, velocity held in the system
+frame. That separation is what makes a ship keep drifting the way it was going while it turns to
+face somewhere else — most of what makes space flight feel like space flight rather than driving.
+
+**31 automation tests pass** — 8 coordinate, 10 grid, 13 flight:
 
 ```bash
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -ExecCmds="Automation RunTests SpaceMMO" -testexit="Automation Test Queue Empty" -unattended -nopause -nosplash -log
@@ -126,7 +130,7 @@ dotnet test services/SpaceMMO.Domain.Tests
 
 - **M0** — repo, docs, ADRs, toolchain ✅
 - **M1** — backend economy core: schema, XP curve, order book, quest engine, EconSim ✅
-- **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight, one landable planet,
-  dedicated server
+- **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight model ✅, ship pawn,
+  one landable planet, dedicated server
 - **M3** — closing the loop: mine → craft → sell, two players trading a player-made item
 - **M4** — universe scale: procedural galaxy, warp handoff, careers, security zones

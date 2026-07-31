@@ -1,0 +1,159 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "SpaceMMOCoordinates.h"
+#include "SpaceMMOFlightModel.generated.h"
+
+/**
+ * Pilot intent for one frame, each axis in -1..1.
+ *
+ * Intent, never outcome. The client sends this and the server integrates it, which is what keeps
+ * flight server-authoritative without paying for full server-side rewind on every input.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOCORE_API FShipFlightInput
+{
+	GENERATED_BODY()
+
+	/** Ship-local thrust: X forward, Y right, Z up. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	FVector Thrust = FVector::ZeroVector;
+
+	/** Ship-local torque: X roll, Y pitch, Z yaw. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	FVector Torque = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	bool bBoost = false;
+
+	/**
+	 * Clamps every axis into range.
+	 *
+	 * Applied before integration because input arrives from a client, and a client that sends 100
+	 * on an axis would otherwise fly a hundred times faster than anyone else.
+	 */
+	FShipFlightInput Sanitised() const
+	{
+		FShipFlightInput Result;
+		Result.Thrust = Thrust.BoundToBox(FVector(-1.0), FVector(1.0));
+		Result.Torque = Torque.BoundToBox(FVector(-1.0), FVector(1.0));
+		Result.bBoost = bBoost;
+
+		return Result;
+	}
+};
+
+/**
+ * A hull's handling characteristics. Content, not code — these come from the ship's definition.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOCORE_API FShipFlightConfig
+{
+	GENERATED_BODY()
+
+	/** Centimetres per second squared at full thrust. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double ThrustAcceleration = 2000.0;
+
+	/** Degrees per second squared at full torque. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double AngularAcceleration = 120.0;
+
+	/**
+	 * Fraction of velocity shed per second when not thrusting — "flight assist".
+	 *
+	 * Zero is Newtonian: cut the engines and you coast forever, which is physically honest and
+	 * unforgiving to fly. Non-zero bleeds speed off so a released stick means slowing down.
+	 * <strong>Whether this defaults on is a real design decision and is not settled</strong>; it
+	 * shapes how flying feels more than any other number here.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double LinearDamping = 0.4;
+
+	/** Fraction of angular velocity shed per second when not applying torque. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double AngularDamping = 3.0;
+
+	/** Hard speed ceiling, in centimetres per second. 2 km/s by default. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double MaxSpeed = 200000.0;
+
+	/** Degrees per second ceiling, so a ship cannot spin itself into unrenderable rates. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double MaxAngularSpeed = 180.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double BoostMultiplier = 4.0;
+};
+
+/**
+ * A ship's motion at an instant.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOCORE_API FShipFlightState
+{
+	GENERATED_BODY()
+
+	/** Velocity in system-frame axes, centimetres per second. */
+	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	FVector Velocity = FVector::ZeroVector;
+
+	/** Angular velocity in ship-local axes, degrees per second: X roll, Y pitch, Z yaw. */
+	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	FVector AngularVelocity = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	FQuat Rotation = FQuat::Identity;
+
+	/** Speed in centimetres per second. */
+	double Speed() const { return Velocity.Size(); }
+
+	/** Speed in kilometres per second, which is the unit that means anything in space. */
+	double SpeedKilometresPerSecond() const
+	{
+		return Velocity.Size() / SpaceMMO::Coordinates::CentimetresPerKilometre;
+	}
+};
+
+/**
+ * Six-degree-of-freedom flight integration.
+ *
+ * Pure functions over plain state, deliberately knowing nothing about actors, components or
+ * ticking. The same code therefore runs on the server, on the client for prediction, and in a
+ * test — and there is no second implementation to drift out of agreement with the first.
+ *
+ * Velocity is held in the <em>system</em> frame while thrust is applied in the <em>ship's</em>
+ * frame. That is what makes a ship keep drifting the way it was going while it turns to face
+ * somewhere else, which is most of what makes space flight feel like space flight.
+ */
+class SPACEMMOCORE_API FShipFlightModel
+{
+public:
+	/**
+	 * Advances one step.
+	 *
+	 * @param DeltaSeconds  Frame time. Zero or negative returns the state untouched.
+	 */
+	static FShipFlightState Step(
+		const FShipFlightState& State,
+		const FShipFlightInput& Input,
+		const FShipFlightConfig& Config,
+		double DeltaSeconds);
+
+	/**
+	 * How far a ship travels this step, in kilometres, ready to add to a grid's system origin.
+	 *
+	 * Kilometres because that is what system space is in. Doing the conversion here keeps the
+	 * centimetre-to-kilometre factor in one place rather than scattered across every caller that
+	 * moves something.
+	 */
+	static FVector PositionDeltaKilometres(const FShipFlightState& State, double DeltaSeconds);
+
+	/**
+	 * Thrust direction in system-frame axes, for a given rotation and input.
+	 *
+	 * Exposed because it is the piece most worth checking on its own: if this is wrong, a ship
+	 * accelerates somewhere other than where it is pointing.
+	 */
+	static FVector ThrustDirection(const FQuat& Rotation, const FVector& LocalThrust);
+};

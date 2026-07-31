@@ -13,11 +13,11 @@ Detected state of this machine as of 2026-07-29:
 | VS Build Tools 2022 (MSVC 14.44) | ✅ installed — this is what compiles UE C++ |
 | Windows SDK 10.0.26100 | ✅ installed |
 | Unreal Engine 5.8.1 | ✅ `D:\Programming\UnrealEngine\UE_5.8` |
-| .NET Framework SDK 4.8 | ✅ installed — editor builds, 18 automation tests pass |
+| .NET Framework SDK 4.8 | ✅ installed — editor builds, 31 automation tests pass |
 | UE source build | ❌ **required for any dedicated server target** — see below |
 
 **Everything M1 needs is installed**, and both the UE game and editor targets compile with the
-18 automation tests passing. One thing still blocks part of M2: dedicated server targets
+31 automation tests passing. One thing still blocks part of M2: dedicated server targets
 need a source build of Unreal. See §2.
 
 ---
@@ -138,6 +138,24 @@ Three flag details, each of which cost a debugging cycle:
 The project also needs `Config/DefaultEngine.ini` with a `[/Script/EngineSettings.GameMapsSettings]`
 section. Without a default map the editor initialises fully and then dies on a null assertion,
 which looks nothing like missing configuration.
+
+### If the compiler runs out of memory
+
+```
+c1xx: error C3859: Failed to create virtual memory for PCH
+c1xx: fatal error C1076: compiler limit: internal heap limit reached
+```
+
+Not a code error. UnrealBuildTool defaults to one compile process per physical core — eight here —
+and Unreal's precompiled headers are large enough that eight at once can exhaust the compiler's
+address space on a 32 GB machine, especially with the editor, Docker and Postgres also resident.
+
+```bash
+"/d/Programming/UnrealEngine/UE_5.8/Engine/Build/BatchFiles/Build.bat" SpaceMMOEditor Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -MaxParallelActions=3
+```
+
+Slower, but it completes. Worth reaching for immediately rather than hunting for a compile error
+that is not there.
 
 ### ⚠️ Dedicated servers need a source build of Unreal
 
