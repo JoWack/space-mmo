@@ -13,12 +13,12 @@ Detected state of this machine as of 2026-07-29:
 | VS Build Tools 2022 (MSVC 14.44) | ✅ installed — this is what compiles UE C++ |
 | Windows SDK 10.0.26100 | ✅ installed |
 | Unreal Engine 5.8.1 | ✅ `D:\Programming\UnrealEngine\UE_5.8` |
-| .NET Framework SDK 4.6+ | ❌ **blocks the editor build** — see below |
+| .NET Framework SDK 4.8 | ✅ installed — editor builds, 8 automation tests pass |
 | UE source build | ❌ **required for any dedicated server target** — see below |
 
-**Everything M1 needs is installed**, and the UE game target compiles. Two things still block
-parts of M2: the .NET Framework SDK stops the editor building, and a source build of Unreal is
-needed before any dedicated server work. Both are described in §2.
+**Everything M1 needs is installed**, and both the UE game and editor targets compile with the
+coordinate automation tests passing. One thing still blocks part of M2: dedicated server targets
+need a source build of Unreal. See §2.
 
 ---
 
@@ -92,7 +92,7 @@ identically — `winget install PostgreSQL.PostgreSQL.17`. Match the credentials
 `infra/.env.example`, and initialize the cluster with `--locale=C` to match the
 compose file, or `ORDER BY` results will differ between your machine and CI.
 
-## 2. Unreal toolchain — two things still blocked
+## 2. Unreal toolchain
 
 The C++ compiler is **Visual Studio Build Tools 2022**, not VS Code. The C/C++ extension only
 provides IntelliSense and debugging; UnrealBuildTool finds MSVC through `vswhere` and Build
@@ -104,22 +104,40 @@ Tools registers there, so the full Visual Studio IDE is not needed.
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Build/BatchFiles/Build.bat" SpaceMMO Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject"
 ```
 
-### ⚠️ The editor target needs the .NET Framework SDK
+### The editor target needs the .NET Framework SDK — resolved
 
-Building `SpaceMMOEditor` currently fails:
+`SpaceMMOEditor` initially failed with:
 
 ```
 Unable to instantiate module 'SwarmInterface': Could not find NetFxSDK install dir
 ```
 
-`SwarmInterface` is an editor-only module and needs .NET Framework SDK 4.6 or higher.
-`C:\Program Files (x86)\Windows Kits\NETFXSDK` does not exist on this machine. Fix it through
-the Visual Studio Installer — modify Build Tools 2022, Individual components, and tick:
+`SwarmInterface` is editor-only and needs .NET Framework SDK 4.6+. Installing the
+**.NET Framework 4.8 SDK** and **targeting pack** through the Visual Studio Installer fixed it.
+NETFXSDK 4.8 is now present and the editor builds.
 
-- **.NET Framework 4.8 SDK**
-- **.NET Framework 4.8 targeting pack**
+### Running the automation tests
 
-The editor is what runs the automation tests, so this blocks verifying the coordinate tests.
+```bash
+"/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" \
+  "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" \
+  -ExecCmds="Automation RunTests SpaceMMO.Coordinates" \
+  -testexit="Automation Test Queue Empty" \
+  -unattended -nopause -nosplash -log
+```
+
+Three flag details, each of which cost a debugging cycle:
+
+- **`-testexit` is required.** Putting `Quit` in `-ExecCmds` exits as soon as tests are *queued*,
+  so the editor shuts down before any run — and exits 0, reporting success having done nothing.
+- **`-nullrhi` crashes UE 5.8** on a `TNotNull` assertion immediately after engine init. It is the
+  obvious flag for headless runs and it does not work.
+- **`-NoShaderCompile` trips `Assertion failed: AllowShaderCompiling()`.** The editor must be able
+  to compile shaders even when nothing is rendered.
+
+The project also needs `Config/DefaultEngine.ini` with a `[/Script/EngineSettings.GameMapsSettings]`
+section. Without a default map the editor initialises fully and then dies on a null assertion,
+which looks nothing like missing configuration.
 
 ### ⚠️ Dedicated servers need a source build of Unreal
 

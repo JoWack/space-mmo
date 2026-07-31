@@ -51,14 +51,20 @@ kilometres, and local render space in centimetres near the origin.
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Build/BatchFiles/Build.bat" SpaceMMO Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject"
 ```
 
-Two toolchain items still block parts of M2 — the editor build and dedicated servers. See
-[docs/setup.md](docs/setup.md) §2.
+Eight automation tests cover the coordinate math and **pass**:
+
+```bash
+"/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -ExecCmds="Automation RunTests SpaceMMO.Coordinates" -testexit="Automation Test Queue Empty" -unattended -nopause -nosplash -log
+```
+
+One toolchain item still blocks part of M2: dedicated servers need a source build of Unreal.
+See [docs/setup.md](docs/setup.md) §2.
 
 ## Start here
 
 | Document | What it covers |
 |---|---|
-| [docs/setup.md](docs/setup.md) | Toolchain install. Everything M1 needs is installed; Unreal and Visual Studio are still pending for M2. |
+| [docs/setup.md](docs/setup.md) | Toolchain state and the UE flag pitfalls that cost real debugging time. |
 | [docs/design-bible.md](docs/design-bible.md) | Races, factions, skills, item taxonomy, and the onboarding questline. Content spec; becomes `data/*.json`. |
 | [docs/economy-design.md](docs/economy-design.md) | Faucets, sinks, market mechanics, and the invariants EconSim asserts. |
 | [docs/adr/](docs/adr/README.md) | The six decisions that are expensive to reverse, and why. |
@@ -114,7 +120,8 @@ dotnet test services/SpaceMMO.Domain.Tests
 ## Roadmap
 
 - **M0** — repo, docs, ADRs, toolchain ✅
-- **M1** — backend economy core: schema, XP curve, order book, quest engine, EconSim
-- **M2** — UE vertical slice: coordinates, flight, one landable planet, dedicated server
+- **M1** — backend economy core: schema, XP curve, order book, quest engine, EconSim ✅
+- **M2** — UE vertical slice: coordinates ✅, physics grids, flight, one landable planet,
+  dedicated server
 - **M3** — closing the loop: mine → craft → sell, two players trading a player-made item
 - **M4** — universe scale: procedural galaxy, warp handoff, careers, security zones

@@ -12,7 +12,21 @@
  * geometry jittering, physics exploding, and objects in the wrong place.
  *
  * Run with:
- *   UnrealEditor-Cmd.exe SpaceMMO.uproject -ExecCmds="Automation RunTests SpaceMMO" -unattended -nullrhi
+ *
+ *   UnrealEditor-Cmd.exe SpaceMMO.uproject \
+ *     -ExecCmds="Automation RunTests SpaceMMO.Coordinates" \
+ *     -testexit="Automation Test Queue Empty" \
+ *     -unattended -nopause -nosplash -log
+ *
+ * Three details, each of which cost a debugging cycle to find:
+ *
+ *   -testexit is required. Putting "Quit" in -ExecCmds exits as soon as the tests are *queued*,
+ *   so the editor shuts down before a single one runs and reports success having done nothing.
+ *
+ *   -nullrhi crashes UE 5.8 on a TNotNull assertion immediately after engine init.
+ *
+ *   -NoShaderCompile trips `Assertion failed: AllowShaderCompiling()`. The editor needs to be
+ *   able to compile shaders even when nothing is being rendered.
  */
 
 namespace
