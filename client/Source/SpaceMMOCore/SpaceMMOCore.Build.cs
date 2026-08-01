@@ -22,6 +22,13 @@ public class SpaceMMOCore : ModuleRules
 			// Legacy axis and action bindings live here. See SpaceMMOShipPawn.h for why the
 			// project is not on Enhanced Input yet.
 			"InputCore",
+
+			// Runtime mesh generation for terrain patches. GeometryFramework carries
+			// UDynamicMeshComponent; GeometryCore carries the mesh itself. Both are runtime
+			// modules, so they are available in a server build as well — though the server has no
+			// reason to build a mesh, and does not.
+			"GeometryCore",
+			"GeometryFramework",
 		});
 	}
 }

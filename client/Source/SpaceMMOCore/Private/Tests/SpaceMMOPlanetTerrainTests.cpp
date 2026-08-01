@@ -5,7 +5,7 @@
 
 namespace
 {
-	FPlanetTerrainConfig TestTerrain()
+	FPlanetTerrainConfig TerrainTestConfig()
 	{
 		FPlanetTerrainConfig Terrain;
 		Terrain.Seed = 20260801;
@@ -15,7 +15,7 @@ namespace
 		return Terrain;
 	}
 
-	FPlanetConfig TestPlanet()
+	FPlanetConfig TerrainTestPlanet()
 	{
 		FPlanetConfig Planet;
 		Planet.Centre = FSystemCoordinate(FVector(200.0, 0.0, 0.0));
@@ -32,7 +32,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOTerrainIsDeterministicTest::RunTest(const FString& Parameters)
 {
-	const FPlanetTerrainConfig Terrain = TestTerrain();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
 	const FVector Direction = FVector(0.3, -0.7, 0.5).GetSafeNormal();
 
 	// The whole authority model rests on this: the server decides where the ground is and the
@@ -57,8 +57,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOTerrainSeedChangesTheWorldTest::RunTest(const FString& Parameters)
 {
-	FPlanetTerrainConfig A = TestTerrain();
-	FPlanetTerrainConfig B = TestTerrain();
+	FPlanetTerrainConfig A = TerrainTestConfig();
+	FPlanetTerrainConfig B = TerrainTestConfig();
 	B.Seed = A.Seed + 1;
 
 	// Sampled across many directions rather than one, because a single coincidental match proves
@@ -92,7 +92,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOTerrainStaysInRangeTest::RunTest(const FString& Parameters)
 {
-	const FPlanetTerrainConfig Terrain = TestTerrain();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
 
 	double Lowest = TNumericLimits<double>::Max();
 	double Highest = TNumericLimits<double>::Lowest();
@@ -128,7 +128,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOTerrainHasNoCubeSeamsTest::RunTest(const FString& Parameters)
 {
-	const FPlanetTerrainConfig Terrain = TestTerrain();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
 
 	// The classic cube-sphere failure. Sampling noise per cube face makes the six faces disagree
 	// along every shared edge, and worst of all at the eight corners where three faces meet.
@@ -196,7 +196,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOTerrainIsContinuousTest::RunTest(const FString& Parameters)
 {
-	const FPlanetTerrainConfig Terrain = TestTerrain();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
 
 	// Walk a great circle in small steps. A hashing mistake shows up here as a cliff — terrain
 	// that teleports between adjacent samples — which is invisible in a single-point test.
@@ -271,8 +271,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOTerrainAltitudeTest::RunTest(const FString& Parameters)
 {
-	const FPlanetConfig Planet = TestPlanet();
-	const FPlanetTerrainConfig Terrain = TestTerrain();
+	const FPlanetConfig Planet = TerrainTestPlanet();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
 
 	const FVector Direction = FVector(0.2, 0.9, -0.3).GetSafeNormal();
 
@@ -314,7 +314,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOTerrainDegenerateInputTest::RunTest(const FString& Parameters)
 {
-	const FPlanetTerrainConfig Terrain = TestTerrain();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
 
 	// A direction of zero has no "up" to have terrain along. It must not produce a NaN, because a
 	// NaN here propagates into a position and then into everything that touches it.

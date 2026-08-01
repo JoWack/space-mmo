@@ -1,0 +1,128 @@
+#include "SpaceMMOPlanetPatch.h"
+
+void FPlanetPatch::BuildTangentFrame(
+	const FVector& Direction, FVector& OutTangent, FVector& OutBitangent)
+{
+	const FVector Up = Direction.GetSafeNormal();
+
+	// The reference axis is chosen to be the one the direction points along least. Crossing with a
+	// fixed axis produces a zero vector whenever the direction happens to equal it, which collapses
+	// the patch at exactly the two poles nobody thinks to test.
+	const FVector Reference =
+		FMath::Abs(Up.Z) < 0.9 ? FVector(0.0, 0.0, 1.0) : FVector(1.0, 0.0, 0.0);
+
+	OutTangent = FVector::CrossProduct(Reference, Up).GetSafeNormal();
+	OutBitangent = FVector::CrossProduct(Up, OutTangent).GetSafeNormal();
+}
+
+FVector FPlanetPatch::DirectionAt(
+	const FVector& CentreDirection,
+	const double AngularRadiusDegrees,
+	const double U,
+	const double V)
+{
+	const FVector Up = CentreDirection.GetSafeNormal();
+
+	FVector Tangent;
+	FVector Bitangent;
+	BuildTangentFrame(Up, Tangent, Bitangent);
+
+	// Gnomonic: step across a plane tangent at the centre, then project back onto the sphere.
+	// Faithful near the middle and stretched toward the edges, which is why the angular radius is
+	// capped well short of a hemisphere.
+	const double Extent = FMath::Tan(FMath::DegreesToRadians(
+		FMath::Clamp(AngularRadiusDegrees, 0.0001, 75.0)));
+
+	return (Up + (Tangent * (U * Extent)) + (Bitangent * (V * Extent))).GetSafeNormal();
+}
+
+FPlanetPatchMesh FPlanetPatch::Build(
+	const FPlanetConfig& Planet,
+	const FPlanetTerrainConfig& Terrain,
+	const FPlanetPatchConfig& Patch)
+{
+	FPlanetPatchMesh Result;
+
+	const int32 Resolution = FMath::Clamp(Patch.Resolution, 2, 512);
+	const FVector Centre = Patch.CentreDirection.GetSafeNormal();
+
+	// The patch is anchored at the ground beneath its own centre, so its vertices are small
+	// numbers regardless of where the planet is in the system.
+	const double CentreRadius = FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Centre);
+
+	Result.Origin = FSystemCoordinate(Planet.Centre.Kilometres + (Centre * CentreRadius));
+
+	Result.Positions.Reserve(Resolution * Resolution);
+	Result.Normals.SetNumZeroed(Resolution * Resolution);
+
+	for (int32 Row = 0; Row < Resolution; ++Row)
+	{
+		for (int32 Column = 0; Column < Resolution; ++Column)
+		{
+			const double U = -1.0 + ((2.0 * Column) / (Resolution - 1));
+			const double V = -1.0 + ((2.0 * Row) / (Resolution - 1));
+
+			const FVector Direction = DirectionAt(Centre, Patch.AngularRadiusDegrees, U, V);
+			const double Radius = FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Direction);
+
+			const FSystemCoordinate Point(Planet.Centre.Kilometres + (Direction * Radius));
+
+			Result.Positions.Add(Point.ToLocalCentimetres(Result.Origin));
+		}
+	}
+
+	Result.Triangles.Reserve((Resolution - 1) * (Resolution - 1) * 6);
+
+	for (int32 Row = 0; Row < Resolution - 1; ++Row)
+	{
+		for (int32 Column = 0; Column < Resolution - 1; ++Column)
+		{
+			const int32 TopLeft = (Row * Resolution) + Column;
+			const int32 TopRight = TopLeft + 1;
+			const int32 BottomLeft = TopLeft + Resolution;
+			const int32 BottomRight = BottomLeft + 1;
+
+			// Wound so that cross(second - first, third - first) points away from the planet.
+			//
+			// The tangent frame is right-handed with the outward direction as its third axis
+			// (tangent × bitangent = up), so a triangle must step along the tangent before the
+			// bitangent to face outward. Taking them the other way round produces inward normals
+			// and a patch lit from underneath — which is what the first version did.
+			Result.Triangles.Add(TopLeft);
+			Result.Triangles.Add(TopRight);
+			Result.Triangles.Add(BottomLeft);
+
+			Result.Triangles.Add(TopRight);
+			Result.Triangles.Add(BottomRight);
+			Result.Triangles.Add(BottomLeft);
+		}
+	}
+
+	// Vertex normals accumulated from the faces that share them, rather than taken as the radial
+	// direction. Radial normals are cheap and would light the patch as a smooth ball no matter
+	// what the terrain does — the whole point is that hills catch the light.
+	for (int32 Index = 0; Index + 2 < Result.Triangles.Num(); Index += 3)
+	{
+		const int32 A = Result.Triangles[Index];
+		const int32 B = Result.Triangles[Index + 1];
+		const int32 C = Result.Triangles[Index + 2];
+
+		const FVector FaceNormal = FVector::CrossProduct(
+			Result.Positions[B] - Result.Positions[A],
+			Result.Positions[C] - Result.Positions[A]);
+
+		Result.Normals[A] += FaceNormal;
+		Result.Normals[B] += FaceNormal;
+		Result.Normals[C] += FaceNormal;
+	}
+
+	for (int32 Index = 0; Index < Result.Normals.Num(); ++Index)
+	{
+		// A degenerate accumulation falls back to radial, which is always outward and never zero.
+		Result.Normals[Index] = Result.Normals[Index].IsNearlyZero()
+			? (Result.Positions[Index] + (Centre * 1000.0)).GetSafeNormal()
+			: Result.Normals[Index].GetSafeNormal();
+	}
+
+	return Result;
+}
