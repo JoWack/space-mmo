@@ -15,6 +15,29 @@ void FPlanetPatch::BuildTangentFrame(
 	OutBitangent = FVector::CrossProduct(Up, OutTangent).GetSafeNormal();
 }
 
+bool FPlanetPatch::ShouldRebuild(
+	const FVector& PatchDirection,
+	const FVector& ViewerDirection,
+	const double AngularRadiusDegrees,
+	const double DriftFraction)
+{
+	// No patch yet, or a viewer with no meaningful direction: build one.
+	if (PatchDirection.IsNearlyZero() || ViewerDirection.IsNearlyZero())
+	{
+		return true;
+	}
+
+	const double Cosine = FVector::DotProduct(
+		PatchDirection.GetSafeNormal(), ViewerDirection.GetSafeNormal());
+
+	// Clamped before the arc cosine: floating point routinely produces dot products a hair outside
+	// -1..1 for nearly parallel vectors, and acos of 1.0000000001 is NaN — which would compare
+	// false against any threshold and silently stop rebuilding forever.
+	const double DriftDegrees = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Cosine, -1.0, 1.0)));
+
+	return DriftDegrees > AngularRadiusDegrees * FMath::Clamp(DriftFraction, 0.05, 0.9);
+}
+
 FVector FPlanetPatch::DirectionAt(
 	const FVector& CentreDirection,
 	const double AngularRadiusDegrees,

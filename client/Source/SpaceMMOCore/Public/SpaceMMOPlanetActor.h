@@ -3,8 +3,10 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "SpaceMMOPlanet.h"
+#include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOPlanetActor.generated.h"
 
+class ASpaceMMOTerrainPatchActor;
 class UStaticMeshComponent;
 
 /**
@@ -35,14 +37,57 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Planet")
 	void SetPlanetConfig(const FPlanetConfig& NewConfig);
 
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Planet")
+	FPlanetTerrainConfig GetTerrainConfig() const { return TerrainConfig; }
+
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Planet")
+	void SetTerrainConfig(const FPlanetTerrainConfig& NewTerrain) { TerrainConfig = NewTerrain; }
+
+	/** Proximity of the local viewer, as the planet last classified it. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Planet")
+	EPlanetProximity GetViewerProximity() const { return ViewerProximity; }
+
 protected:
 	virtual void BeginPlay() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
 	FPlanetConfig Planet;
 
+	/** The shape of this planet's surface. Only meaningful once close enough to mesh it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
+	FPlanetTerrainConfig TerrainConfig;
+
+	/**
+	 * How much ground to mesh around the viewer, in degrees of arc.
+	 *
+	 * Ten degrees of a 20 km planet is roughly 3.5 km across — far enough that the edge is not
+	 * obviously nearby, small enough to rebuild without a hitch.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
+	double PatchAngularRadiusDegrees = 10.0;
+
 private:
 	void ApplyRenderTransform();
+
+	/**
+	 * Streams the landing zone in and out as the viewer approaches and leaves.
+	 *
+	 * Lives on the planet rather than on the ship, because the planet is what owns the surface and
+	 * a ship has no business knowing how terrain is built. It also means several planets each
+	 * manage their own ground without anything coordinating them.
+	 */
+	void UpdateTerrainPatch();
+
+	/** Where the local viewer is, in system space, or false if there is nobody to render for. */
+	bool TryGetViewerPosition(FSystemCoordinate& OutPosition) const;
+
+	UPROPERTY()
+	TObjectPtr<ASpaceMMOTerrainPatchActor> TerrainPatch;
+
+	/** Direction the current patch is centred on, or zero if there is no patch. */
+	FVector PatchDirection = FVector::ZeroVector;
+
+	EPlanetProximity ViewerProximity = EPlanetProximity::Orbital;
 
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Planet")
 	TObjectPtr<UStaticMeshComponent> Surface;

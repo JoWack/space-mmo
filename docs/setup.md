@@ -13,11 +13,11 @@ Detected state of this machine as of 2026-07-29:
 | VS Build Tools 2022 (MSVC 14.44) | ✅ installed — this is what compiles UE C++ |
 | Windows SDK 10.0.26100 | ✅ installed |
 | Unreal Engine 5.8.1 | ✅ `D:\Programming\UnrealEngine\UE_5.8` |
-| .NET Framework SDK 4.8 | ✅ installed — editor builds, 78 automation tests pass |
+| .NET Framework SDK 4.8 | ✅ installed — editor builds, 79 automation tests pass |
 | UE source build | ❌ **required for any dedicated server target** — see below |
 
 **Everything M1 needs is installed**, and both the UE game and editor targets compile with the
-78 automation tests passing. One thing still blocks part of M2: dedicated server targets
+79 automation tests passing. One thing still blocks part of M2: dedicated server targets
 need a source build of Unreal. See §2.
 
 ---
@@ -161,6 +161,26 @@ Each client logs `Ship ready` twice — its own ship and the other player's, rep
 server logs two as well and flies neither: a dedicated server owns the simulation and has no pawn
 of its own. Allow about seventy seconds for both clients to reach the server on a cold start,
 which is long enough that an impatient timeout reads as a hang.
+
+### Seeing terrain stream in
+
+The ship starts 200 km from the planet, which is a two-minute flight before anything terrain-
+related happens. Skip it:
+
+```bash
+"/d/Programming/UnrealEngineSource/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:/Programming/SpaceMMO/client/SpaceMMO.uproject" -game -unattended -nopause -nosplash -nullrhi -ShipStartX=175 -ShipStartY=0 -ShipStartZ=0
+```
+
+The planet sits at 200 km with a 20 km radius and a 12 km atmosphere, so 175 km puts the ship
+25 km from the centre — inside the shell where terrain streams. Expect:
+
+```
+Terrain patch at (179.657, 0.000, 0.000) km: 8192 triangles across 10.0 degrees.
+```
+
+Three separate scalars rather than one comma-separated vector, because **`FParse::Value` treats a
+comma as a delimiter** and returns only the first component. That fails silently and looks
+identical to the flag being ignored, which is a genuinely annoying twenty minutes.
 
 ### Proving the client and server actually talk
 

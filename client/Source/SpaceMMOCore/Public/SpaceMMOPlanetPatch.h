@@ -93,6 +93,25 @@ public:
 		const FPlanetPatchConfig& Patch);
 
 	/**
+	 * Whether a patch centred one way still covers a viewer who has moved another.
+	 *
+	 * Rebuilding every frame would be wasteful and rebuilding never would leave a player walking
+	 * off the edge of the world, so the question is how far they may drift before the patch under
+	 * them is regenerated around their new position.
+	 *
+	 * The threshold is a fraction of the patch's own angular radius rather than a fixed angle,
+	 * because a wider patch can tolerate more drift by definition. Kept well below 1 so the rebuild
+	 * happens while there is still ground ahead, not once the player has reached the edge.
+	 *
+	 * @param DriftFraction How far, as a fraction of the angular radius, a viewer may move first.
+	 */
+	static bool ShouldRebuild(
+		const FVector& PatchDirection,
+		const FVector& ViewerDirection,
+		double AngularRadiusDegrees,
+		double DriftFraction = 0.4);
+
+	/**
 	 * An orthonormal basis whose Z is the given direction.
 	 *
 	 * Exposed because choosing the reference axis badly is the classic way this breaks: crossing

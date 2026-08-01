@@ -40,6 +40,10 @@ public:
 		const FPlanetTerrainConfig& InTerrain,
 		const FVector& Direction);
 
+	/** Sets how much ground the next build covers, in degrees of arc from its centre. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Terrain")
+	void SetAngularRadiusDegrees(const double Degrees) { PatchConfig.AngularRadiusDegrees = Degrees; }
+
 	/** The patch's anchor in system space. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Terrain")
 	FSystemCoordinate GetPatchOrigin() const { return PatchOrigin; }

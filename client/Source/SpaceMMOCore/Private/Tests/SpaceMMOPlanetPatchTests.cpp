@@ -285,4 +285,55 @@ bool FSpaceMMOPatchCentreIsTheRequestedPlaceTest::RunTest(const FString& Paramet
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchRebuildThresholdTest,
+	"SpaceMMO.Patch.RebuildThreshold",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchRebuildThresholdTest::RunTest(const FString& Parameters)
+{
+	const FVector Centre = FVector(1, 0, 0);
+	const double Radius = 10.0;
+
+	// No patch yet is always a reason to build one.
+	TestTrue(
+		TEXT("No patch means build"),
+		FPlanetPatch::ShouldRebuild(FVector::ZeroVector, Centre, Radius));
+
+	// Standing still must not rebuild, or the mesh is regenerated every single frame.
+	TestFalse(
+		TEXT("Standing still does not rebuild"),
+		FPlanetPatch::ShouldRebuild(Centre, Centre, Radius));
+
+	// A small drift is still comfortably inside the patch.
+	const FVector Nearby = FVector(FMath::Cos(FMath::DegreesToRadians(1.0)),
+		FMath::Sin(FMath::DegreesToRadians(1.0)), 0.0);
+
+	TestFalse(TEXT("A degree of drift is fine"), FPlanetPatch::ShouldRebuild(Centre, Nearby, Radius));
+
+	// Past the threshold — 40% of a 10 degree radius — the ground ahead is running out.
+	const FVector Far = FVector(FMath::Cos(FMath::DegreesToRadians(6.0)),
+		FMath::Sin(FMath::DegreesToRadians(6.0)), 0.0);
+
+	TestTrue(TEXT("Six degrees of drift rebuilds"), FPlanetPatch::ShouldRebuild(Centre, Far, Radius));
+
+	// The rebuild has to happen while there is still ground ahead, not once the player has walked
+	// off the edge, so the threshold must be inside the patch rather than at its rim.
+	const FVector AtRim = FVector(FMath::Cos(FMath::DegreesToRadians(Radius)),
+		FMath::Sin(FMath::DegreesToRadians(Radius)), 0.0);
+
+	TestTrue(TEXT("Reaching the rim certainly rebuilds"), FPlanetPatch::ShouldRebuild(Centre, AtRim, Radius));
+
+	// Identical directions produce a dot product that floating point often nudges just past 1,
+	// and acos of that is NaN — which compares false against any threshold and would silently
+	// stop rebuilding forever.
+	const FVector Same = Centre.GetSafeNormal();
+
+	TestFalse(
+		TEXT("Exactly parallel does not produce NaN"),
+		FPlanetPatch::ShouldRebuild(Same, Same, Radius));
+
+	return true;
+}
+
 #endif

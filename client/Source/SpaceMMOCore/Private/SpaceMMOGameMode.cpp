@@ -66,6 +66,15 @@ void ASpaceMMOGameMode::SpawnTestScene()
 		Config.AtmosphereHeightKilometres = 12.0;
 
 		PlanetActor->SetPlanetConfig(Config);
+
+		// Terrain the planet streams in once a viewer is close enough to see it. Half a kilometre
+		// of relief on a 20 km world is proportionally close to Everest on Earth — dramatic on
+		// foot, and almost invisible from orbit, which is how a planet should read.
+		FPlanetTerrainConfig Terrain;
+		Terrain.Seed = 20260801;
+		Terrain.MaxElevationKilometres = 0.5;
+
+		PlanetActor->SetTerrainConfig(Terrain);
 		PlanetActor->FinishSpawning(FTransform::Identity);
 	}
 

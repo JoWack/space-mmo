@@ -90,6 +90,30 @@ void ASpaceMMOShipPawn::BeginPlay()
 	Navigation = FShipNavigation();
 	Navigation.SystemPosition = FSystemCoordinate(StartingSystemPositionKilometres);
 
+	// Dev affordance: start somewhere specific without editing content or flying there.
+	//   -ShipStartX=175 -ShipStartY=0 -ShipStartZ=0
+	// Useful for anything that only happens near a planet, where the alternative is a two-minute
+	// flight before the thing under test even begins.
+	//
+	// Three scalars rather than one comma-separated vector: FParse::Value treats a comma as a
+	// delimiter and returns only the first component, which fails silently and looks exactly like
+	// the flag being ignored.
+	double StartX = 0.0;
+	double StartY = 0.0;
+	double StartZ = 0.0;
+
+	if (FParse::Value(FCommandLine::Get(), TEXT("ShipStartX="), StartX)
+		| FParse::Value(FCommandLine::Get(), TEXT("ShipStartY="), StartY)
+		| FParse::Value(FCommandLine::Get(), TEXT("ShipStartZ="), StartZ))
+	{
+		// Single pipe, not double: every component must be parsed, and short-circuiting would skip
+		// Y and Z whenever X was present.
+		Navigation.SystemPosition = FSystemCoordinate(FVector(StartX, StartY, StartZ));
+
+		UE_LOG(LogSpaceMMO, Log, TEXT("Ship start overridden to %s"),
+			*Navigation.SystemPosition.ToString());
+	}
+
 	// Start with the ship at the render origin, so it begins exactly where physics behaves best.
 	Navigation.RenderOrigin = Navigation.SystemPosition;
 
