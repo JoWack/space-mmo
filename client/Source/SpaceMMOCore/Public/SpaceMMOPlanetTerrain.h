@@ -48,6 +48,35 @@ struct SPACEMMOCORE_API FPlanetTerrainConfig
 };
 
 /**
+ * The result of resolving something against the ground.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOCORE_API FGroundContact
+{
+	GENERATED_BODY()
+
+	/** True if the object was touching or below the surface and had to be resolved. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Terrain")
+	bool bOnGround = false;
+
+	/** Position after resolution. Unchanged when airborne. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Terrain")
+	FSystemCoordinate Position;
+
+	/** Velocity after resolution. Unchanged when airborne. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Terrain")
+	FVector Velocity = FVector::ZeroVector;
+
+	/** Outward normal of the ground beneath, whether or not it was touched. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Terrain")
+	FVector SurfaceNormal = FVector::UpVector;
+
+	/** How fast the object was moving into the ground before resolution, in cm/s. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Terrain")
+	double ImpactSpeed = 0.0;
+};
+
+/**
  * The shape of a planet's surface.
  *
  * <strong>Height is sampled from a three-dimensional direction, not from a per-face coordinate.</strong>
@@ -99,6 +128,46 @@ public:
 		const FPlanetConfig& Planet,
 		const FPlanetTerrainConfig& Terrain,
 		const FSystemCoordinate& Position);
+
+	/**
+	 * The outward normal of the ground at a direction.
+	 *
+	 * Computed by sampling the height a small angle either side and taking the cross product of
+	 * the two resulting tangents, rather than returning the radial direction. On a slope those are
+	 * not the same thing, and it is the difference between a ship settling onto a hillside at the
+	 * angle of the hill and standing bolt upright through it.
+	 *
+	 * @param SampleAngleDegrees How far apart to sample. Too small and floating point noise
+	 *                           dominates the difference; too large and a hill is averaged flat.
+	 */
+	static FVector SurfaceNormal(
+		const FPlanetConfig& Planet,
+		const FPlanetTerrainConfig& Terrain,
+		const FVector& Direction,
+		double SampleAngleDegrees = 0.05);
+
+	/**
+	 * Stops something passing through the ground.
+	 *
+	 * <strong>This, not the mesh, is what collision means here.</strong> The dedicated server has
+	 * no mesh to collide against and must still agree about where a player may stand, so contact
+	 * has to be a function of position — the same function the client tessellates. Colliding
+	 * against generated triangles would give the server and the client two different surfaces and
+	 * no way to notice they had diverged.
+	 *
+	 * Fully inelastic: the inward component of velocity is removed rather than reflected, so a
+	 * ship settles rather than bouncing. Tangential motion is left alone, so it can still slide
+	 * along a slope, and the impact speed is reported so a caller can decide whether that was a
+	 * landing or a crash.
+	 *
+	 * @param ContactRadiusKilometres How far the object's surface is from its centre.
+	 */
+	static FGroundContact ResolveContact(
+		const FPlanetConfig& Planet,
+		const FPlanetTerrainConfig& Terrain,
+		const FSystemCoordinate& Position,
+		const FVector& Velocity,
+		double ContactRadiusKilometres);
 
 	/**
 	 * Maps a point on a unit cube to the unit sphere.

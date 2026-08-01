@@ -13,11 +13,11 @@ Detected state of this machine as of 2026-07-29:
 | VS Build Tools 2022 (MSVC 14.44) | ✅ installed — this is what compiles UE C++ |
 | Windows SDK 10.0.26100 | ✅ installed |
 | Unreal Engine 5.8.1 | ✅ `D:\Programming\UnrealEngine\UE_5.8` |
-| .NET Framework SDK 4.8 | ✅ installed — editor builds, 79 automation tests pass |
+| .NET Framework SDK 4.8 | ✅ installed — editor builds, 84 automation tests pass |
 | UE source build | ❌ **required for any dedicated server target** — see below |
 
 **Everything M1 needs is installed**, and both the UE game and editor targets compile with the
-79 automation tests passing. One thing still blocks part of M2: dedicated server targets
+84 automation tests passing. One thing still blocks part of M2: dedicated server targets
 need a source build of Unreal. See §2.
 
 ---
@@ -177,6 +177,15 @@ The planet sits at 200 km with a 20 km radius and a 12 km atmosphere, so 175 km 
 ```
 Terrain patch at (179.657, 0.000, 0.000) km: 8192 triangles across 10.0 degrees.
 ```
+
+Start at 178 instead and the ship falls the last two kilometres under gravity and lands:
+
+```
+Touched down at (179.637, 0.000, 0.000) km
+```
+
+That is the ground at 179.657 minus the ship's own 0.02 km hull radius, which is what resting on
+a surface should look like.
 
 Three separate scalars rather than one comma-separated vector, because **`FParse::Value` treats a
 comma as a delimiter** and returns only the first component. That fails silently and looks

@@ -10,6 +10,7 @@
 #include "SpaceMMOLog.h"
 #include "EngineUtils.h"
 #include "SpaceMMOPlanetActor.h"
+#include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMORenderOrigin.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
@@ -257,6 +258,62 @@ void ASpaceMMOShipPawn::SimulateStep(const double DeltaSeconds)
 		FlightState, PendingInput, FlightConfig, DeltaSeconds, ComputeGravity());
 
 	Navigation = FShipFlightModel::Advance(Navigation, FlightState, DeltaSeconds);
+
+	// After moving, not before. Resolving first would let the very step that drives the ship into
+	// the ground happen unopposed, so it would sink one frame's worth every frame.
+	ResolveGroundContact();
+}
+
+void ASpaceMMOShipPawn::ResolveGroundContact()
+{
+	UWorld* World = GetWorld();
+
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const bool bWasOnGround = bOnGround;
+
+	bOnGround = false;
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		const FGroundContact Contact = FPlanetTerrain::ResolveContact(
+			It->GetPlanetConfig(),
+			It->GetTerrainConfig(),
+			Navigation.SystemPosition,
+			FlightState.Velocity,
+			HullRadiusKilometres);
+
+		if (!Contact.bOnGround)
+		{
+			continue;
+		}
+
+		bOnGround = true;
+
+		Navigation.SystemPosition = Contact.Position;
+		FlightState.Velocity = Contact.Velocity;
+
+		if (Contact.ImpactSpeed > 50000.0)
+		{
+			// Half a kilometre per second into the ground. Nothing happens to the ship yet — the
+			// death and insurance rules exist server-side and are not wired to flight — but a
+			// landing this hard is worth seeing in a log while tuning.
+			UE_LOG(LogSpaceMMO, Warning,
+				TEXT("Hard contact at %.1f km/s."), Contact.ImpactSpeed / 100000.0);
+		}
+	}
+
+	// Logged on the transition rather than every frame, because touching down is the event and
+	// resting on the ground is not.
+	if (bOnGround != bWasOnGround)
+	{
+		UE_LOG(LogSpaceMMO, Log, TEXT("%s at %s"),
+			bOnGround ? TEXT("Touched down") : TEXT("Lifted off"),
+			*Navigation.SystemPosition.ToString());
+	}
 }
 
 void ASpaceMMOShipPawn::PublishNetState()

@@ -342,4 +342,207 @@ bool FSpaceMMOTerrainDegenerateInputTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ── Ground contact ───────────────────────────────────────────────────────────
+//
+// This, not the mesh, is what collision means here: the server has no triangles to collide
+// against and must still agree about where a player may stand.
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOContactLeavesFlightAloneTest,
+	"SpaceMMO.Contact.LeavesFlightAlone",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOContactLeavesFlightAloneTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TerrainTestPlanet();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+
+	const FVector Direction = FVector(0.3, 0.5, 0.8).GetSafeNormal();
+	const FSystemCoordinate Aloft(Planet.Centre.Kilometres + (Direction * 30.0));
+	const FVector Velocity(1000.0, -2000.0, 500.0);
+
+	const FGroundContact Contact =
+		FPlanetTerrain::ResolveContact(Planet, Terrain, Aloft, Velocity, 0.02);
+
+	TestFalse(TEXT("Ten km up is not on the ground"), Contact.bOnGround);
+	TestTrue(TEXT("Position untouched"), Contact.Position.Kilometres.Equals(Aloft.Kilometres, 0.0));
+	TestTrue(TEXT("Velocity untouched"), Contact.Velocity.Equals(Velocity, 0.0));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOContactStopsSinkingTest,
+	"SpaceMMO.Contact.StopsSinking",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOContactStopsSinkingTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TerrainTestPlanet();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+
+	const FVector Direction = FVector(0.1, -0.4, 0.9).GetSafeNormal();
+
+	// Well underground, falling fast — the state a ship reaches if nothing stops it.
+	const double GroundRadius =
+		FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Direction);
+
+	const FSystemCoordinate Buried(Planet.Centre.Kilometres + (Direction * (GroundRadius - 2.0)));
+	const FVector Falling = Direction * -50000.0;
+
+	const FGroundContact Contact =
+		FPlanetTerrain::ResolveContact(Planet, Terrain, Buried, Falling, 0.02);
+
+	TestTrue(TEXT("Detected as ground contact"), Contact.bOnGround);
+
+	// Lifted to exactly the contact height, not merely somewhere above the ground.
+	const double Resolved = (Contact.Position.Kilometres - Planet.Centre.Kilometres).Size();
+
+	TestTrue(
+		TEXT("Placed exactly on the surface plus its own radius"),
+		FMath::IsNearlyEqual(Resolved, GroundRadius + 0.02, 1e-9));
+
+	// No longer heading downward.
+	TestTrue(
+		TEXT("Inward motion removed"),
+		FVector::DotProduct(Contact.Velocity, Contact.SurfaceNormal) >= -1e-6);
+
+	TestTrue(TEXT("Impact speed reported"), Contact.ImpactSpeed > 0.0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOContactRestsWithoutDriftTest,
+	"SpaceMMO.Contact.RestsWithoutDrift",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOContactRestsWithoutDriftTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TerrainTestPlanet();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+
+	const FVector Direction = FVector(0.6, 0.2, 0.4).GetSafeNormal();
+	const double GroundRadius =
+		FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Direction);
+
+	FSystemCoordinate Position(Planet.Centre.Kilometres + (Direction * (GroundRadius + 0.02)));
+	FVector Velocity = FVector::ZeroVector;
+
+	// Resolved repeatedly, as it would be every frame while parked. A resting object must not
+	// creep upward from a bias or sink from a rounding error — either is visible within seconds.
+	const double StartRadius = (Position.Kilometres - Planet.Centre.Kilometres).Size();
+
+	for (int32 Frame = 0; Frame < 600; ++Frame)
+	{
+		const FGroundContact Contact =
+			FPlanetTerrain::ResolveContact(Planet, Terrain, Position, Velocity, 0.02);
+
+		Position = Contact.Position;
+		Velocity = Contact.Velocity;
+	}
+
+	const double EndRadius = (Position.Kilometres - Planet.Centre.Kilometres).Size();
+
+	TestTrue(
+		TEXT("Ten seconds of resting does not drift"),
+		FMath::Abs(EndRadius - StartRadius) < 1e-9);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOContactAllowsSlidingTest,
+	"SpaceMMO.Contact.AllowsSliding",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOContactAllowsSlidingTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TerrainTestPlanet();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+
+	const FVector Direction = FVector(0.0, 0.0, 1.0);
+	const double GroundRadius =
+		FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Direction);
+
+	const FSystemCoordinate Buried(Planet.Centre.Kilometres + (Direction * (GroundRadius - 0.5)));
+
+	// Moving sideways and downward at once. Only the downward part should be taken away — freezing
+	// everything on contact would make a ship stick to the ground the instant it touched.
+	const FVector Sideways = FVector(30000.0, 0.0, 0.0);
+	const FVector Velocity = Sideways + (Direction * -20000.0);
+
+	const FGroundContact Contact =
+		FPlanetTerrain::ResolveContact(Planet, Terrain, Buried, Velocity, 0.0);
+
+	TestTrue(TEXT("On the ground"), Contact.bOnGround);
+
+	const FVector Tangential =
+		Contact.Velocity - (Contact.SurfaceNormal * FVector::DotProduct(Contact.Velocity, Contact.SurfaceNormal));
+
+	TestTrue(
+		TEXT("Sideways motion survives"),
+		Tangential.Size() > Sideways.Size() * 0.9);
+
+	// And it settles rather than bouncing: no outward velocity was invented.
+	TestTrue(
+		TEXT("Does not bounce"),
+		FVector::DotProduct(Contact.Velocity, Contact.SurfaceNormal) < 1.0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOSurfaceNormalTest,
+	"SpaceMMO.Contact.SurfaceNormal",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOSurfaceNormalTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TerrainTestPlanet();
+
+	FPlanetTerrainConfig Flat = TerrainTestConfig();
+	Flat.MaxElevationKilometres = 0.0;
+
+	// With no relief at all the ground is a sphere, so its normal is exactly radial. Anything else
+	// means the finite differences are wrong.
+	const FVector Direction = FVector(0.3, -0.6, 0.7).GetSafeNormal();
+
+	const FVector FlatNormal = FPlanetTerrain::SurfaceNormal(Planet, Flat, Direction);
+
+	TestTrue(TEXT("Flat ground is radial"), FlatNormal.Equals(Direction, 1e-6));
+
+	// With relief, normals tilt away from radial but must stay outward and unit length, or a ship
+	// landing on a slope is pushed through the hill instead of onto it.
+	const FPlanetTerrainConfig Rough = TerrainTestConfig();
+
+	double WorstDot = 1.0;
+	double WorstLengthError = 0.0;
+	bool bAnyTilt = false;
+
+	for (int32 Index = 0; Index < 200; ++Index)
+	{
+		const double U = Index * 0.037;
+		const FVector Sample =
+			FVector(FMath::Cos(U * 2.3), FMath::Sin(U * 1.7), FMath::Cos(U)).GetSafeNormal();
+
+		const FVector Normal = FPlanetTerrain::SurfaceNormal(Planet, Rough, Sample);
+		const double Dot = FVector::DotProduct(Normal, Sample);
+
+		WorstDot = FMath::Min(WorstDot, Dot);
+		WorstLengthError = FMath::Max(WorstLengthError, FMath::Abs(Normal.Size() - 1.0));
+
+		if (Dot < 0.9999)
+		{
+			bAnyTilt = true;
+		}
+	}
+
+	TestTrue(TEXT("Never points into the planet"), WorstDot > 0.0);
+	TestTrue(TEXT("Always unit length"), WorstLengthError < 1e-6);
+	TestTrue(TEXT("Slopes actually tilt the normal"), bAnyTilt);
+
+	return true;
+}
+
 #endif

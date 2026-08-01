@@ -137,6 +137,109 @@ double FPlanetTerrain::AltitudeAboveGroundKilometres(
 	return Offset.Size() - SurfaceRadiusKilometres(Planet, Terrain, Offset);
 }
 
+FVector FPlanetTerrain::SurfaceNormal(
+	const FPlanetConfig& Planet,
+	const FPlanetTerrainConfig& Terrain,
+	const FVector& Direction,
+	const double SampleAngleDegrees)
+{
+	const FVector Up = Direction.GetSafeNormal();
+
+	if (Up.IsNearlyZero())
+	{
+		return FVector::UpVector;
+	}
+
+	// A tangent frame to sample across. The reference axis is whichever the direction points along
+	// least, so the cross product never degenerates at the poles.
+	const FVector Reference =
+		FMath::Abs(Up.Z) < 0.9 ? FVector(0.0, 0.0, 1.0) : FVector(1.0, 0.0, 0.0);
+
+	const FVector Tangent = FVector::CrossProduct(Reference, Up).GetSafeNormal();
+	const FVector Bitangent = FVector::CrossProduct(Up, Tangent).GetSafeNormal();
+
+	const double Offset = FMath::Tan(FMath::DegreesToRadians(
+		FMath::Clamp(SampleAngleDegrees, 0.0005, 5.0)));
+
+	// Four samples rather than three: a central difference either side is symmetric, so a constant
+	// slope produces exactly the right answer instead of one biased toward the sample point.
+	auto SurfacePoint = [&](const FVector& Offsets)
+	{
+		const FVector SampleDirection = (Up + Offsets).GetSafeNormal();
+
+		return SampleDirection * SurfaceRadiusKilometres(Planet, Terrain, SampleDirection);
+	};
+
+	const FVector AlongTangent =
+		SurfacePoint(Tangent * Offset) - SurfacePoint(Tangent * -Offset);
+
+	const FVector AlongBitangent =
+		SurfacePoint(Bitangent * Offset) - SurfacePoint(Bitangent * -Offset);
+
+	const FVector Normal = FVector::CrossProduct(AlongTangent, AlongBitangent).GetSafeNormal();
+
+	// Flat ground makes the cross product vanish, and a slope steep enough to flip it would be
+	// an overhang, which a height field cannot represent anyway. Radial is right in both cases.
+	if (Normal.IsNearlyZero() || FVector::DotProduct(Normal, Up) <= 0.0)
+	{
+		return Up;
+	}
+
+	return Normal;
+}
+
+FGroundContact FPlanetTerrain::ResolveContact(
+	const FPlanetConfig& Planet,
+	const FPlanetTerrainConfig& Terrain,
+	const FSystemCoordinate& Position,
+	const FVector& Velocity,
+	const double ContactRadiusKilometres)
+{
+	FGroundContact Contact;
+	Contact.Position = Position;
+	Contact.Velocity = Velocity;
+
+	const FVector Offset = Position.Kilometres - Planet.Centre.Kilometres;
+	const double Distance = Offset.Size();
+
+	// At the exact centre there is no direction to be pushed along. Nothing sensible can be done,
+	// and inventing one would produce a NaN.
+	if (Distance < UE_DOUBLE_SMALL_NUMBER)
+	{
+		return Contact;
+	}
+
+	const FVector Up = Offset / Distance;
+
+	Contact.SurfaceNormal = SurfaceNormal(Planet, Terrain, Up);
+
+	const double GroundRadius = SurfaceRadiusKilometres(Planet, Terrain, Up);
+	const double Floor = GroundRadius + FMath::Max(0.0, ContactRadiusKilometres);
+
+	if (Distance >= Floor)
+	{
+		return Contact;
+	}
+
+	Contact.bOnGround = true;
+
+	// Placed exactly on the floor rather than nudged above it. A bias would make a resting object
+	// hover, and hovering is indistinguishable from a bug at any altitude a player can see.
+	Contact.Position = FSystemCoordinate(Planet.Centre.Kilometres + (Up * Floor));
+
+	const double IntoGround = FVector::DotProduct(Velocity, Contact.SurfaceNormal);
+
+	// Only motion into the surface is cancelled. Removing all of it would freeze a ship the moment
+	// it touched anything, and reflecting it would make a landing a bounce.
+	if (IntoGround < 0.0)
+	{
+		Contact.ImpactSpeed = -IntoGround;
+		Contact.Velocity = Velocity - (Contact.SurfaceNormal * IntoGround);
+	}
+
+	return Contact;
+}
+
 FVector FPlanetTerrain::CubeToSphere(const FVector& CubePoint)
 {
 	const double X2 = CubePoint.X * CubePoint.X;

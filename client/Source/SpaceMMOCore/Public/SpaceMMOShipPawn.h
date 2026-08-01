@@ -102,6 +102,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	EPlanetProximity GetProximity() const { return Proximity; }
 
+	/** True while the ship is resting on terrain. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
+	bool IsOnGround() const { return bOnGround; }
+
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -131,6 +135,15 @@ protected:
 	/** Handling characteristics. Ultimately comes from the hull's definition. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
 	FShipFlightConfig FlightConfig;
+
+	/**
+	 * Distance from the ship's centre to its hull, in kilometres.
+	 *
+	 * What ground contact resolves against. Twenty metres for the placeholder cone; ultimately it
+	 * comes from the hull definition alongside the flight characteristics.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
+	double HullRadiusKilometres = 0.02;
 
 	/** Where the ship starts, in kilometres. */
 	UPROPERTY(EditAnywhere, Category = "SpaceMMO|Ship")
@@ -162,6 +175,14 @@ private:
 
 	/** Gravity from every planet in the world, summed. */
 	FVector ComputeGravity() const;
+
+	/**
+	 * Stops the ship falling through any planet it is touching.
+	 *
+	 * Resolved against the terrain height function rather than against collision geometry, so the
+	 * server reaches the same answer without a renderer or a mesh.
+	 */
+	void ResolveGroundContact();
 
 	void ApplyWorldTransform();
 
@@ -216,4 +237,6 @@ private:
 	bool bFirstPerson = false;
 
 	EPlanetProximity Proximity = EPlanetProximity::Orbital;
+
+	bool bOnGround = false;
 };
