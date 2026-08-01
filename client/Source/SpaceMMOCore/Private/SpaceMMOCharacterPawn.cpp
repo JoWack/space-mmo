@@ -1,0 +1,395 @@
+#include "SpaceMMOCharacterPawn.h"
+
+#include "Camera/CameraComponent.h"
+#include "Components/InputComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/StaticMesh.h"
+#include "EngineUtils.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "Materials/MaterialInterface.h"
+#include "Net/UnrealNetwork.h"
+#include "SpaceMMOLog.h"
+#include "SpaceMMOPlanetActor.h"
+#include "SpaceMMOPlanetTerrain.h"
+#include "SpaceMMORenderOrigin.h"
+#include "UObject/ConstructorHelpers.h"
+
+ASpaceMMOCharacterPawn::ASpaceMMOCharacterPawn()
+{
+	PrimaryActorTick.bCanEverTick = true;
+
+	bReplicates = true;
+
+	// Off for the same reason as the ship: Unreal replicates world transforms, and world
+	// transforms are not comparable between clients that rebase independently.
+	SetReplicateMovement(false);
+
+	CharacterRoot = CreateDefaultSubobject<USceneComponent>(TEXT("CharacterRoot"));
+	SetRootComponent(CharacterRoot);
+
+	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
+	Body->SetupAttachment(CharacterRoot);
+
+	// Position is owned by the walk model and ground contact, not by Chaos. Leaving collision on
+	// would let the solver fight the authoritative position and win intermittently.
+	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> BodyMesh(
+		TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+
+	if (BodyMesh.Succeeded())
+	{
+		Body->SetStaticMesh(BodyMesh.Object);
+	}
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BodyMaterial(
+		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+
+	if (BodyMaterial.Succeeded())
+	{
+		Body->SetMaterial(0, BodyMaterial.Object);
+	}
+
+	// The engine cylinder is 100 cm tall with its origin at the centre, so a person-sized one is
+	// 1.8 units tall and lifted 90 cm to stand on its feet rather than sink to its waist.
+	Body->SetRelativeScale3D(FVector(0.4, 0.4, 0.9));
+	Body->SetRelativeLocation(FVector(0.0, 0.0, 90.0));
+
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom->SetupAttachment(CharacterRoot);
+	CameraBoom->TargetArmLength = 400.0f;
+	CameraBoom->SetRelativeLocation(FVector(0.0, 0.0, 160.0));
+	CameraBoom->bDoCollisionTest = false;
+
+	// Follows the character's own orientation rather than the controller's, because the character's
+	// up is the ground's normal and the controller has no idea where that points.
+	CameraBoom->bUsePawnControlRotation = false;
+	CameraBoom->bInheritPitch = true;
+	CameraBoom->bInheritYaw = true;
+	CameraBoom->bInheritRoll = true;
+
+	ThirdPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ThirdPersonCamera"));
+	ThirdPersonCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+
+	FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
+	FirstPersonCamera->SetupAttachment(CharacterRoot);
+	FirstPersonCamera->SetRelativeLocation(FVector(20.0, 0.0, 165.0));
+	FirstPersonCamera->SetActive(false);
+}
+
+void ASpaceMMOCharacterPawn::BeginPlay()
+{
+	Super::BeginPlay();
+
+	Navigation = FShipNavigation();
+	Navigation.SystemPosition = FSystemCoordinate(StartingSystemPositionKilometres);
+	Navigation.RenderOrigin = Navigation.SystemPosition;
+
+	double StartX = 0.0;
+	double StartY = 0.0;
+	double StartZ = 0.0;
+
+	if (FParse::Value(FCommandLine::Get(), TEXT("WalkStartX="), StartX)
+		| FParse::Value(FCommandLine::Get(), TEXT("WalkStartY="), StartY)
+		| FParse::Value(FCommandLine::Get(), TEXT("WalkStartZ="), StartZ))
+	{
+		Navigation.SystemPosition = FSystemCoordinate(FVector(StartX, StartY, StartZ));
+		Navigation.RenderOrigin = Navigation.SystemPosition;
+	}
+
+	// Resolve the ground before the first step so the character starts standing on the surface with
+	// its up already correct, rather than upright in world space and snapping on frame one.
+	ResolveSurface();
+
+	WalkState.Rotation = FCharacterWalkModel::AlignToSurface(GetActorQuat(), SurfaceNormal);
+
+	PublishRenderOrigin();
+	ApplyWorldTransform();
+
+	UE_LOG(LogSpaceMMO, Log, TEXT("Character ready at %s, up %s"),
+		*Navigation.SystemPosition.ToString(), *SurfaceNormal.ToCompactString());
+}
+
+void ASpaceMMOCharacterPawn::GetLifetimeReplicatedProps(
+	TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ASpaceMMOCharacterPawn, NetState);
+}
+
+void ASpaceMMOCharacterPawn::ResolveSurface()
+{
+	UWorld* World = GetWorld();
+
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	Gravity = FVector::ZeroVector;
+	bOnGround = false;
+	SurfaceNormal = FVector::UpVector;
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		const FPlanetConfig& Planet = It->GetPlanetConfig();
+
+		Gravity += FPlanetPhysics::GravityAcceleration(Planet, Navigation.SystemPosition);
+
+		const FGroundContact Contact = FPlanetTerrain::ResolveContact(
+			Planet,
+			It->GetTerrainConfig(),
+			Navigation.SystemPosition,
+			WalkState.Velocity,
+			StandingHeightKilometres);
+
+		// The normal is taken from whichever body is underfoot even when not touching it, so a
+		// jumping character stays oriented to the ground it left rather than snapping upright.
+		SurfaceNormal = Contact.SurfaceNormal;
+
+		if (!Contact.bOnGround)
+		{
+			continue;
+		}
+
+		bOnGround = true;
+
+		Navigation.SystemPosition = Contact.Position;
+		WalkState.Velocity = Contact.Velocity;
+	}
+}
+
+void ASpaceMMOCharacterPawn::SimulateStep(const double DeltaSeconds)
+{
+	// Ground first: the walk model needs to know which way is up and whether it has anything to
+	// push against before it can decide what this step does.
+	ResolveSurface();
+
+	WalkState = FCharacterWalkModel::Step(
+		WalkState, PendingInput, WalkConfig, SurfaceNormal, Gravity, bOnGround, DeltaSeconds);
+
+	Navigation.SystemPosition = FSystemCoordinate(
+		Navigation.SystemPosition.Kilometres
+		+ FCharacterWalkModel::PositionDeltaKilometres(WalkState, DeltaSeconds));
+
+	// And again after moving, so the step that would have driven the character into a hill is
+	// undone in the same frame rather than being visible for one.
+	ResolveSurface();
+
+	if (!Navigation.SystemPosition.IsWithinLocalSpaceOf(Navigation.RenderOrigin))
+	{
+		Navigation.RenderOrigin = Navigation.SystemPosition;
+		++Navigation.RebaseCount;
+	}
+}
+
+void ASpaceMMOCharacterPawn::PublishNetState()
+{
+	NetState.SystemPosition = Navigation.SystemPosition;
+	NetState.Velocity = WalkState.Velocity;
+	NetState.Rotation = WalkState.Rotation;
+	NetState.bOnGround = bOnGround;
+
+	const UWorld* World = GetWorld();
+
+	NetState.ServerTimeSeconds = World != nullptr ? World->GetTimeSeconds() : 0.0;
+}
+
+bool ASpaceMMOCharacterPawn::ServerSendWalkInput_Validate(FWalkInput Input)
+{
+	// Nothing to reject; Sanitised clamps every axis, so no value here can be hostile.
+	return true;
+}
+
+void ASpaceMMOCharacterPawn::ServerSendWalkInput_Implementation(FWalkInput Input)
+{
+	PendingInput = Input.Sanitised();
+}
+
+void ASpaceMMOCharacterPawn::ReconcileWithServer(const double DeltaSeconds)
+{
+	if (NetState.ServerTimeSeconds <= LastAppliedServerTime)
+	{
+		return;
+	}
+
+	LastAppliedServerTime = NetState.ServerTimeSeconds;
+
+	Navigation.SystemPosition = FShipFlightModel::ReconcilePosition(
+		Navigation.SystemPosition, NetState.SystemPosition, Reconciliation, DeltaSeconds);
+
+	WalkState.Velocity = NetState.Velocity;
+}
+
+void ASpaceMMOCharacterPawn::FollowServerState(const double DeltaSeconds)
+{
+	const UWorld* World = GetWorld();
+	const double Now = World != nullptr ? World->GetTimeSeconds() : 0.0;
+
+	if (NetState.ServerTimeSeconds > LastAppliedServerTime)
+	{
+		LastAppliedServerTime = NetState.ServerTimeSeconds;
+		LastNetStateReceivedAt = Now;
+	}
+
+	const FSystemCoordinate Target = FShipFlightModel::Extrapolate(
+		NetState.SystemPosition, NetState.Velocity, Now - LastNetStateReceivedAt);
+
+	Navigation.SystemPosition = FShipFlightModel::ReconcilePosition(
+		Navigation.SystemPosition, Target, Reconciliation, DeltaSeconds);
+
+	// Drawn, not simulated. Orientation comes from the server, which already aligned it to the
+	// ground the character is actually standing on.
+	WalkState.Rotation = NetState.Rotation;
+	WalkState.Velocity = NetState.Velocity;
+	bOnGround = NetState.bOnGround;
+}
+
+void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (HasAuthority())
+	{
+		SimulateStep(DeltaSeconds);
+		PublishNetState();
+	}
+	else if (IsLocallyControlled())
+	{
+		SimulateStep(DeltaSeconds);
+		ServerSendWalkInput(PendingInput);
+		ReconcileWithServer(DeltaSeconds);
+	}
+	else
+	{
+		FollowServerState(DeltaSeconds);
+	}
+
+	if (IsLocallyControlled())
+	{
+		PublishRenderOrigin();
+	}
+
+	ApplyWorldTransform();
+
+	// Cleared each frame because the legacy input path only calls the handlers while a key is held.
+	PendingInput.Move = FVector2D::ZeroVector;
+	PendingInput.Turn = 0.0;
+
+	if (bShowWalkDebug && GEngine != nullptr && IsLocallyControlled())
+	{
+		GEngine->AddOnScreenDebugMessage(
+			10, 0.0f, FColor::Green,
+			FString::Printf(
+				TEXT("On foot %s | %.1f m/s | %s"),
+				*Navigation.SystemPosition.ToString(),
+				GetSpeedMetresPerSecond(),
+				bOnGround ? TEXT("GROUNDED") : TEXT("AIRBORNE")));
+
+		GEngine->AddOnScreenDebugMessage(
+			11, 0.0f, FColor::Emerald,
+			FString::Printf(TEXT("Up %s"), *SurfaceNormal.ToCompactString()));
+	}
+}
+
+void ASpaceMMOCharacterPawn::PublishRenderOrigin()
+{
+	const UWorld* World = GetWorld();
+
+	if (USpaceMMORenderOriginSubsystem* Origin =
+		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr)
+	{
+		Origin->SetRenderOrigin(Navigation.RenderOrigin);
+	}
+}
+
+void ASpaceMMOCharacterPawn::ApplyWorldTransform()
+{
+	const UWorld* World = GetWorld();
+
+	const USpaceMMORenderOriginSubsystem* Origin =
+		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
+
+	// Against the subsystem's origin, not this pawn's own, so remote characters are drawn in the
+	// frame of reference this client is actually rendering in.
+	const FVector Location = Origin != nullptr
+		? Origin->ToWorldLocation(Navigation.SystemPosition)
+		: Navigation.RenderLocationCentimetres();
+
+	SetActorLocationAndRotation(Location, WalkState.Rotation);
+}
+
+void ASpaceMMOCharacterPawn::SetSystemPosition(const FSystemCoordinate& NewPosition)
+{
+	Navigation.SystemPosition = NewPosition;
+	Navigation.RenderOrigin = NewPosition;
+	++Navigation.RebaseCount;
+
+	ResolveSurface();
+
+	WalkState.Rotation = FCharacterWalkModel::AlignToSurface(WalkState.Rotation, SurfaceNormal);
+
+	PublishRenderOrigin();
+	ApplyWorldTransform();
+}
+
+void ASpaceMMOCharacterPawn::ToggleCameraView()
+{
+	bFirstPerson = !bFirstPerson;
+
+	ThirdPersonCamera->SetActive(!bFirstPerson);
+	FirstPersonCamera->SetActive(bFirstPerson);
+}
+
+void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	if (PlayerInputComponent == nullptr)
+	{
+		return;
+	}
+
+	PlayerInputComponent->BindAxis(
+		TEXT("WalkForward"), this, &ASpaceMMOCharacterPawn::MoveForward);
+	PlayerInputComponent->BindAxis(
+		TEXT("WalkRight"), this, &ASpaceMMOCharacterPawn::MoveRight);
+	PlayerInputComponent->BindAxis(
+		TEXT("WalkTurn"), this, &ASpaceMMOCharacterPawn::TurnRight);
+
+	PlayerInputComponent->BindAction(
+		TEXT("WalkJump"), IE_Pressed, this, &ASpaceMMOCharacterPawn::StartJump);
+	PlayerInputComponent->BindAction(
+		TEXT("WalkJump"), IE_Released, this, &ASpaceMMOCharacterPawn::StopJump);
+	PlayerInputComponent->BindAction(
+		TEXT("ToggleCamera"), IE_Pressed, this, &ASpaceMMOCharacterPawn::ToggleCameraView);
+}
+
+void ASpaceMMOCharacterPawn::MoveForward(const float Value)
+{
+	PendingInput.Move.X = Value;
+}
+
+void ASpaceMMOCharacterPawn::MoveRight(const float Value)
+{
+	PendingInput.Move.Y = Value;
+}
+
+void ASpaceMMOCharacterPawn::TurnRight(const float Value)
+{
+	PendingInput.Turn = Value;
+}
+
+void ASpaceMMOCharacterPawn::StartJump()
+{
+	PendingInput.bJump = true;
+}
+
+void ASpaceMMOCharacterPawn::StopJump()
+{
+	// Held rather than edge-triggered, so the jump survives until a frame actually consumes it —
+	// pressing jump between two ticks would otherwise be silently dropped.
+	PendingInput.bJump = false;
+}

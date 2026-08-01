@@ -191,6 +191,23 @@ Three separate scalars rather than one comma-separated vector, because **`FParse
 comma as a delimiter** and returns only the first component. That fails silently and looks
 identical to the flag being ignored, which is a genuinely annoying twenty minutes.
 
+### Standing a character on the planet
+
+```bash
+"/d/Programming/UnrealEngineSource/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:/Programming/SpaceMMO/client/SpaceMMO.uproject" -game -unattended -nopause -nosplash -nullrhi -SpawnCharacter -CharacterDirX=0 -CharacterDirY=0 -CharacterDirZ=-1
+```
+
+`-CharacterDir*` is a direction from the planet centre, so it picks a point on the sphere. The
+south pole is the one worth trying, because a character there is upside down in world space:
+
+```
+Character ready at (200.000, 0.000, -20.267) km, up V(X=0.00, Y=-0.00, Z=-1.00)
+```
+
+Spawned deferred, with the position set **before** FinishSpawning. BeginPlay resolves the ground
+and aligns the character to it, so a position applied afterwards is too late and the character
+spends its first frame somewhere else — the same ordering trap the planet actor hit.
+
 ### Proving the client and server actually talk
 
 Fixtures and integration tests each cover one side of the wire and neither proves the two agree.
