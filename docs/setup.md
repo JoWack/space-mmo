@@ -130,6 +130,38 @@ Seeding is a separate command rather than something startup does, on purpose. A 
 migrates and rewrites content on every boot will eventually do that to a production database
 during an unrelated restart.
 
+### After cooking, the project belongs to the source engine
+
+`BuildCookRun` rebuilds `SpaceMMOEditor` against the **source** engine and writes it into
+`client/Binaries/Win64` — the same place the launcher engine's build went. From then on the
+launcher engine cannot run the project at all, and fails with:
+
+> The game module 'SpaceMMOCore' could not be found. Please ensure that this module exists and
+> that it is compiled.
+
+That message is misleading: the module exists and is compiled, just against a different engine.
+**Once you have cooked, run everything from the source tree** — automation tests, PIE clients,
+all of it. Mixing the two engines was never going to work for networking anyway, since a client
+and server built from different engines disagree on the network version.
+
+### Two clients on the dedicated server
+
+```bash
+cd /d/Programming/SpaceMMO/client/Saved/StagedBuilds/WindowsServer && ./SpaceMMOServer.exe -log -unattended -nopause -port=7777
+```
+
+Then two clients, from the **source** engine's editor:
+
+```bash
+"/d/Programming/UnrealEngineSource/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:/Programming/SpaceMMO/client/SpaceMMO.uproject" 127.0.0.1:7777 -game -unattended -nopause -nosplash -nullrhi -log=ClientA.log
+```
+
+Expect `Welcomed by server` on each client and one `Join succeeded` per client on the server.
+Each client logs `Ship ready` twice — its own ship and the other player's, replicated in. The
+server logs two as well and flies neither: a dedicated server owns the simulation and has no pawn
+of its own. Allow about seventy seconds for both clients to reach the server on a cold start,
+which is long enough that an impatient timeout reads as a hang.
+
 ### Proving the client and server actually talk
 
 Fixtures and integration tests each cover one side of the wire and neither proves the two agree.
