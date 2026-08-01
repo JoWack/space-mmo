@@ -9,6 +9,8 @@
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOLog.h"
 #include "EngineUtils.h"
+#include "SpaceMMOBoarding.h"
+#include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMORenderOrigin.h"
@@ -313,6 +315,16 @@ void ASpaceMMOShipPawn::ResolveGroundContact()
 		UE_LOG(LogSpaceMMO, Log, TEXT("%s at %s"),
 			bOnGround ? TEXT("Touched down") : TEXT("Lifted off"),
 			*Navigation.SystemPosition.ToString());
+
+		// Dev affordance: -AutoDisembark steps out the moment the ship settles, so the whole
+		// descend-land-disembark sequence can be checked without a human holding a key.
+		if (bOnGround && !bAutoDisembarked
+			&& FParse::Param(FCommandLine::Get(), TEXT("AutoDisembark")))
+		{
+			bAutoDisembarked = true;
+
+			RequestDisembark();
+		}
 	}
 }
 
@@ -441,6 +453,82 @@ void ASpaceMMOShipPawn::SetSystemPosition(const FSystemCoordinate& NewPosition)
 	ApplyWorldTransform();
 }
 
+void ASpaceMMOShipPawn::RequestDisembark()
+{
+	ServerDisembark();
+}
+
+void ASpaceMMOShipPawn::ServerDisembark_Implementation()
+{
+	// Checked here rather than on the client, because this is where it counts.
+	if (!FBoarding::CanDisembark(bOnGround))
+	{
+		UE_LOG(LogSpaceMMO, Log, TEXT("Cannot step out: the ship is not on the ground."));
+
+		return;
+	}
+
+	AController* OwningController = GetController();
+	UWorld* World = GetWorld();
+
+	if (OwningController == nullptr || World == nullptr)
+	{
+		return;
+	}
+
+	// Up is whichever planet the ship is resting on. Without it the character would step out along
+	// an arbitrary axis and end up inside the ground or hanging above it.
+	FVector Up = FVector::UpVector;
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		const FGroundContact Contact = FPlanetTerrain::ResolveContact(
+			It->GetPlanetConfig(),
+			It->GetTerrainConfig(),
+			Navigation.SystemPosition,
+			FVector::ZeroVector,
+			HullRadiusKilometres);
+
+		if (Contact.bOnGround)
+		{
+			Up = Contact.SurfaceNormal;
+
+			break;
+		}
+	}
+
+	const FSystemCoordinate StepOut = FBoarding::StepOutPosition(
+		Navigation.SystemPosition, Up, FlightState.Rotation.GetRightVector());
+
+	// Assigned in two statements rather than one conditional: TSubclassOf and UClass* both convert
+	// to several common types, so the ternary is ambiguous.
+	TSubclassOf<ASpaceMMOCharacterPawn> SpawnClass = CharacterClass;
+
+	if (SpawnClass == nullptr)
+	{
+		SpawnClass = ASpaceMMOCharacterPawn::StaticClass();
+	}
+
+	ASpaceMMOCharacterPawn* Character = World->SpawnActorDeferred<ASpaceMMOCharacterPawn>(
+		SpawnClass, FTransform::Identity, nullptr, nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (Character == nullptr)
+	{
+		return;
+	}
+
+	// Before FinishSpawning. BeginPlay resolves the ground and aligns to it, so a position applied
+	// afterwards is a frame too late.
+	Character->SetStartingSystemPosition(StepOut.Kilometres);
+	Character->FinishSpawning(FTransform::Identity);
+
+	// The ship stays exactly where it is, unpossessed, waiting to be climbed back into.
+	OwningController->Possess(Character);
+
+	UE_LOG(LogSpaceMMO, Log, TEXT("Stepped out of the ship at %s"), *StepOut.ToString());
+}
+
 void ASpaceMMOShipPawn::ToggleCameraView()
 {
 	bFirstPerson = !bFirstPerson;
@@ -472,6 +560,9 @@ void ASpaceMMOShipPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		TEXT("ShipBoost"), IE_Released, this, &ASpaceMMOShipPawn::StopBoost);
 	PlayerInputComponent->BindAction(
 		TEXT("ToggleCamera"), IE_Pressed, this, &ASpaceMMOShipPawn::ToggleCameraView);
+
+	PlayerInputComponent->BindAction(
+		TEXT("Board"), IE_Pressed, this, &ASpaceMMOShipPawn::RequestDisembark);
 }
 
 void ASpaceMMOShipPawn::ThrustForward(const float Value) { PendingInput.Thrust.X = Value; }

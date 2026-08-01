@@ -95,6 +95,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Ship")
 	void ToggleCameraView();
 
+	/**
+	 * Asks to step out onto the surface.
+	 *
+	 * A request, not an instruction. The server checks the ship is actually landed and does the
+	 * possession itself — a client that decides it has disembarked has decided nothing.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Ship")
+	void RequestDisembark();
+
 	/** Altitude above the nearest planet's surface, in kilometres. Zero if there is none. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	double GetAltitudeKilometres() const;
@@ -127,6 +136,14 @@ protected:
 	 */
 	UFUNCTION(Server, Unreliable, WithValidation)
 	void ServerSendInput(FShipFlightInput Input);
+
+	/** Reliable, unlike input: a dropped boarding request is not corrected by the next frame. */
+	UFUNCTION(Server, Reliable)
+	void ServerDisembark();
+
+	/** Class spawned when stepping out. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
+	TSubclassOf<class ASpaceMMOCharacterPawn> CharacterClass;
 
 	/** How this client resolves disagreement with the server. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
@@ -239,4 +256,7 @@ private:
 	EPlanetProximity Proximity = EPlanetProximity::Orbital;
 
 	bool bOnGround = false;
+
+	/** Guards the -AutoDisembark affordance, so it fires once rather than on every landing. */
+	bool bAutoDisembarked = false;
 };

@@ -87,6 +87,15 @@ public:
 	void ToggleCameraView();
 
 	/**
+	 * Asks to climb into the nearest ship.
+	 *
+	 * A request. The server picks the ship and checks the range, because a client that nominates
+	 * a ship on the other side of the planet is nominating, not deciding.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Character")
+	void RequestEmbark();
+
+	/**
 	 * Where the character will be when it begins play.
 	 *
 	 * Must be called on a deferred spawn, before FinishSpawning. Setting the position afterwards
@@ -105,6 +114,10 @@ protected:
 	/** Pilot intent, sent to the server every frame the character is locally controlled. */
 	UFUNCTION(Server, Unreliable, WithValidation)
 	void ServerSendWalkInput(FWalkInput Input);
+
+	/** Reliable, unlike input: a dropped boarding request is not fixed by the next frame. */
+	UFUNCTION(Server, Reliable)
+	void ServerEmbark();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Character")
 	FWalkConfig WalkConfig;

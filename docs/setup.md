@@ -13,11 +13,11 @@ Detected state of this machine as of 2026-07-29:
 | VS Build Tools 2022 (MSVC 14.44) | ✅ installed — this is what compiles UE C++ |
 | Windows SDK 10.0.26100 | ✅ installed |
 | Unreal Engine 5.8.1 | ✅ `D:\Programming\UnrealEngine\UE_5.8` |
-| .NET Framework SDK 4.8 | ✅ installed — editor builds, 90 automation tests pass |
+| .NET Framework SDK 4.8 | ✅ installed — editor builds, 95 automation tests pass |
 | UE source build | ❌ **required for any dedicated server target** — see below |
 
 **Everything M1 needs is installed**, and both the UE game and editor targets compile with the
-90 automation tests passing. One thing still blocks part of M2: dedicated server targets
+95 automation tests passing. One thing still blocks part of M2: dedicated server targets
 need a source build of Unreal. See §2.
 
 ---
@@ -207,6 +207,24 @@ Character ready at (200.000, 0.000, -20.267) km, up V(X=0.00, Y=-0.00, Z=-1.00)
 Spawned deferred, with the position set **before** FinishSpawning. BeginPlay resolves the ground
 and aligns the character to it, so a position applied afterwards is too late and the character
 spends its first frame somewhere else — the same ordering trap the planet actor hit.
+
+### Descend, land, and step out
+
+```bash
+"/d/Programming/UnrealEngineSource/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:/Programming/SpaceMMO/client/SpaceMMO.uproject" -game -unattended -nopause -nosplash -nullrhi -ShipStartX=178 -ShipStartY=0 -ShipStartZ=0 -AutoDisembark
+```
+
+`-AutoDisembark` steps out the instant the ship settles, so the whole sequence runs without a
+human holding a key:
+
+```
+Terrain patch at (179.657, 0.000, 0.000) km: 8192 triangles across 10.0 degrees.
+Touched down at  (179.637, 0.000, 0.000) km
+Character ready at (179.637, 0.030, 0.002) km, up V(X=-1.00, Y=-0.00, Z=-0.00)
+```
+
+Thirty metres to the side and two above, which is exactly the step-out offset. In an interactive
+session the key is **F**, for both directions.
 
 ### Proving the client and server actually talk
 

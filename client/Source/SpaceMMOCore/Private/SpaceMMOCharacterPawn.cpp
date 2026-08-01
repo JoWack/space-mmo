@@ -10,7 +10,9 @@
 #include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "SpaceMMOLog.h"
+#include "SpaceMMOBoarding.h"
 #include "SpaceMMOPlanetActor.h"
+#include "SpaceMMOShipPawn.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMORenderOrigin.h"
 #include "UObject/ConstructorHelpers.h"
@@ -335,6 +337,64 @@ void ASpaceMMOCharacterPawn::SetSystemPosition(const FSystemCoordinate& NewPosit
 	ApplyWorldTransform();
 }
 
+void ASpaceMMOCharacterPawn::RequestEmbark()
+{
+	ServerEmbark();
+}
+
+void ASpaceMMOCharacterPawn::ServerEmbark_Implementation()
+{
+	AController* OwningController = GetController();
+	UWorld* World = GetWorld();
+
+	if (OwningController == nullptr || World == nullptr)
+	{
+		return;
+	}
+
+	// Nearest in range, chosen here rather than named by the client. Nearest rather than first,
+	// so parking two ships side by side does not board whichever happened to spawn earlier.
+	ASpaceMMOShipPawn* Best = nullptr;
+	double BestDistance = TNumericLimits<double>::Max();
+
+	for (TActorIterator<ASpaceMMOShipPawn> It(World); It; ++It)
+	{
+		ASpaceMMOShipPawn* Ship = *It;
+
+		// Somebody else is flying it.
+		if (Ship == nullptr || Ship->GetController() != nullptr)
+		{
+			continue;
+		}
+
+		const double Distance =
+			(Navigation.SystemPosition.Kilometres - Ship->GetSystemPosition().Kilometres).Size();
+
+		if (Distance < BestDistance
+			&& FBoarding::CanEmbark(Navigation.SystemPosition, Ship->GetSystemPosition()))
+		{
+			Best = Ship;
+			BestDistance = Distance;
+		}
+	}
+
+	if (Best == nullptr)
+	{
+		UE_LOG(LogSpaceMMO, Log, TEXT("No ship within boarding range."));
+
+		return;
+	}
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Boarded a ship from %.3f km away."), BestDistance);
+
+	OwningController->Possess(Best);
+
+	// Destroyed only after possession has moved on. Destroying first would leave the controller
+	// briefly possessing nothing, and anything that runs in that window has no pawn to ask.
+	Destroy();
+}
+
 void ASpaceMMOCharacterPawn::ToggleCameraView()
 {
 	bFirstPerson = !bFirstPerson;
@@ -365,6 +425,9 @@ void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerIn
 		TEXT("WalkJump"), IE_Released, this, &ASpaceMMOCharacterPawn::StopJump);
 	PlayerInputComponent->BindAction(
 		TEXT("ToggleCamera"), IE_Pressed, this, &ASpaceMMOCharacterPawn::ToggleCameraView);
+
+	PlayerInputComponent->BindAction(
+		TEXT("Board"), IE_Pressed, this, &ASpaceMMOCharacterPawn::RequestEmbark);
 }
 
 void ASpaceMMOCharacterPawn::MoveForward(const float Value)
