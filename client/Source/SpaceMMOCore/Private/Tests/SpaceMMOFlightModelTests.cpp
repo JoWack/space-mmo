@@ -505,3 +505,151 @@ bool FSpaceMMONavigationStationaryTest::RunTest(const FString& Parameters)
 }
 
 #endif // WITH_DEV_AUTOMATION_TESTS
+
+// ── Reconciliation ───────────────────────────────────────────────────────────
+//
+// Client prediction always drifts from the server, so these decide what a player actually sees
+// when it does: a correction that eases in, or one that yanks.
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOReconcileBlendsSmallErrorsTest,
+	"SpaceMMO.Netcode.BlendsSmallErrors",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOReconcileBlendsSmallErrorsTest::RunTest(const FString& Parameters)
+{
+	FShipReconciliation Rules;
+	Rules.SnapThresholdKilometres = 1.0;
+	Rules.BlendRatePerSecond = 5.0;
+
+	const FSystemCoordinate Predicted(FVector(100.0, 0.0, 0.0));
+	const FSystemCoordinate Authoritative(FVector(100.2, 0.0, 0.0));
+
+	const FSystemCoordinate Result =
+		FShipFlightModel::ReconcilePosition(Predicted, Authoritative, Rules, 1.0 / 60.0);
+
+	// Moved toward the server, but nowhere near all the way — that partial step is the whole point.
+	TestTrue(TEXT("Moved toward the server"), Result.Kilometres.X > Predicted.Kilometres.X);
+	TestTrue(TEXT("Did not jump to it"), Result.Kilometres.X < Authoritative.Kilometres.X);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOReconcileSnapsLargeErrorsTest,
+	"SpaceMMO.Netcode.SnapsLargeErrors",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOReconcileSnapsLargeErrorsTest::RunTest(const FString& Parameters)
+{
+	FShipReconciliation Rules;
+	Rules.SnapThresholdKilometres = 1.0;
+
+	const FSystemCoordinate Predicted(FVector::ZeroVector);
+	const FSystemCoordinate Authoritative(FVector(50.0, 0.0, 0.0));
+
+	const FSystemCoordinate Result =
+		FShipFlightModel::ReconcilePosition(Predicted, Authoritative, Rules, 1.0 / 60.0);
+
+	// Blending 50 km at any sane rate would have the ship visibly flying a path neither side
+	// believes in for several seconds. An honest jump beats a prolonged lie.
+	TestTrue(
+		TEXT("Snapped exactly to the server"),
+		Result.Kilometres.Equals(Authoritative.Kilometres, 1e-9));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOReconcileIsFrameRateIndependentTest,
+	"SpaceMMO.Netcode.ReconcileIsFrameRateIndependent",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOReconcileIsFrameRateIndependentTest::RunTest(const FString& Parameters)
+{
+	FShipReconciliation Rules;
+	Rules.SnapThresholdKilometres = 10.0;
+	Rules.BlendRatePerSecond = 5.0;
+
+	const FSystemCoordinate Start(FVector::ZeroVector);
+	const FSystemCoordinate Target(FVector(1.0, 0.0, 0.0));
+
+	// One second of correction, reached at two very different frame rates. A linear catch-up
+	// would land in different places and shudder on a struggling connection — which is exactly
+	// when the connection is already struggling.
+	FSystemCoordinate Fast = Start;
+
+	for (int32 Frame = 0; Frame < 120; ++Frame)
+	{
+		Fast = FShipFlightModel::ReconcilePosition(Fast, Target, Rules, 1.0 / 120.0);
+	}
+
+	FSystemCoordinate Slow = Start;
+
+	for (int32 Frame = 0; Frame < 15; ++Frame)
+	{
+		Slow = FShipFlightModel::ReconcilePosition(Slow, Target, Rules, 1.0 / 15.0);
+	}
+
+	TestTrue(
+		TEXT("120 Hz and 15 Hz converge to the same place"),
+		FMath::Abs(Fast.Kilometres.X - Slow.Kilometres.X) < 0.01);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOReconcileIgnoresZeroDeltaTest,
+	"SpaceMMO.Netcode.ReconcileIgnoresZeroDelta",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOReconcileIgnoresZeroDeltaTest::RunTest(const FString& Parameters)
+{
+	FShipReconciliation Rules;
+
+	const FSystemCoordinate Predicted(FVector(7.0, 0.0, 0.0));
+	const FSystemCoordinate Authoritative(FVector(7.1, 0.0, 0.0));
+
+	// A paused or hitching client must not be dragged. Zero elapsed time is zero correction.
+	const FSystemCoordinate Result =
+		FShipFlightModel::ReconcilePosition(Predicted, Authoritative, Rules, 0.0);
+
+	TestTrue(TEXT("Untouched"), Result.Kilometres.Equals(Predicted.Kilometres, 1e-9));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOExtrapolationTest,
+	"SpaceMMO.Netcode.Extrapolation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOExtrapolationTest::RunTest(const FString& Parameters)
+{
+	const FSystemCoordinate LastKnown(FVector::ZeroVector);
+
+	// 100,000 cm/s is 1 km/s, so a tenth of a second is 0.1 km.
+	const FVector Velocity(100000.0, 0.0, 0.0);
+
+	const FSystemCoordinate Tenth =
+		FShipFlightModel::Extrapolate(LastKnown, Velocity, 0.1);
+
+	TestTrue(TEXT("Carried forward 0.1 km"), FMath::IsNearlyEqual(Tenth.Kilometres.X, 0.1, 1e-9));
+
+	// Capped: flying a stale heading for a whole second puts a ship somewhere it never was, and
+	// the correction that follows is worse than the stutter it was hiding.
+	const FSystemCoordinate Stale =
+		FShipFlightModel::Extrapolate(LastKnown, Velocity, 10.0, 0.5);
+
+	TestTrue(
+		TEXT("Clamped to the cap rather than run on"),
+		FMath::IsNearlyEqual(Stale.Kilometres.X, 0.5, 1e-9));
+
+	// No elapsed time, no movement.
+	const FSystemCoordinate Immediate =
+		FShipFlightModel::Extrapolate(LastKnown, Velocity, 0.0);
+
+	TestTrue(TEXT("Zero elapsed is a no-op"), Immediate.Kilometres.IsNearlyZero());
+
+	return true;
+}

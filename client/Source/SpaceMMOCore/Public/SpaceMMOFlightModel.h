@@ -147,6 +147,39 @@ struct SPACEMMOCORE_API FShipNavigation
 };
 
 /**
+ * How a client resolves disagreement with the server about where it is.
+ *
+ * Prediction always drifts: the client integrates ahead of the server on its own clock, and packet
+ * loss, jitter and float divergence all pull the two apart. The question is never whether to
+ * correct, only how visibly.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOCORE_API FShipReconciliation
+{
+	GENERATED_BODY()
+
+	/**
+	 * Error beyond which the client stops blending and simply snaps, in kilometres.
+	 *
+	 * A blend that has to cover a large error takes long enough that the ship is visibly flying
+	 * the wrong path while it catches up. Past some distance an honest jump reads better than a
+	 * prolonged lie, and it also bounds how far a client can be dragged by a bad prediction.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double SnapThresholdKilometres = 1.0;
+
+	/**
+	 * Fraction of the remaining error removed per second while blending.
+	 *
+	 * Exponential rather than linear so the correction does not depend on frame rate — the same
+	 * reason damping is exponential. A linear catch-up overshoots at low frame rates and produces
+	 * a shudder exactly when the connection is already struggling.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double BlendRatePerSecond = 5.0;
+};
+
+/**
  * Six-degree-of-freedom flight integration.
  *
  * Pure functions over plain state, deliberately knowing nothing about actors, components or
@@ -211,4 +244,39 @@ public:
 		const FShipNavigation& Navigation,
 		const FShipFlightState& State,
 		double DeltaSeconds);
+
+	/**
+	 * Moves a predicted position toward the server's, either by blending or by snapping.
+	 *
+	 * <strong>Position is reconciled in system space, never in Unreal world space.</strong> Every
+	 * client rebases its own render origin independently, so the same system coordinate maps to a
+	 * different world location on each of them — comparing world transforms across the wire would
+	 * be comparing two numbers that were never in the same frame of reference.
+	 *
+	 * @param DeltaSeconds Frame time. Zero or negative returns the prediction untouched, so a
+	 *                     paused or hitching client is not silently dragged.
+	 */
+	static FSystemCoordinate ReconcilePosition(
+		const FSystemCoordinate& Predicted,
+		const FSystemCoordinate& Authoritative,
+		const FShipReconciliation& Rules,
+		double DeltaSeconds);
+
+	/**
+	 * Where a ship should be drawn now, given the last state the server sent and how long ago.
+	 *
+	 * Used for <em>other</em> players' ships. Replication arrives at a fraction of the frame rate,
+	 * so holding the last received position would make every remote ship visibly stutter. Carrying
+	 * it forward along its known velocity is what makes other traffic look like it is flying
+	 * rather than teleporting.
+	 *
+	 * Extrapolation is capped: past a point, continuing to fly a stale heading takes a ship
+	 * further from the truth than simply waiting would, and the correction becomes worse than the
+	 * stutter it was hiding.
+	 */
+	static FSystemCoordinate Extrapolate(
+		const FSystemCoordinate& LastKnown,
+		const FVector& Velocity,
+		double SecondsSinceUpdate,
+		double MaxExtrapolationSeconds = 0.5);
 };

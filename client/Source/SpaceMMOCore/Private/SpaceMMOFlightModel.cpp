@@ -128,6 +128,59 @@ FVector FShipFlightModel::PositionDeltaKilometres(
 	return (State.Velocity * DeltaSeconds) / SpaceMMO::Coordinates::CentimetresPerKilometre;
 }
 
+FSystemCoordinate FShipFlightModel::ReconcilePosition(
+	const FSystemCoordinate& Predicted,
+	const FSystemCoordinate& Authoritative,
+	const FShipReconciliation& Rules,
+	const double DeltaSeconds)
+{
+	if (DeltaSeconds <= 0.0)
+	{
+		return Predicted;
+	}
+
+	const FVector Error = Authoritative.Kilometres - Predicted.Kilometres;
+
+	// Snap once the disagreement is large enough that blending would have the ship visibly flying
+	// a path neither side believes in.
+	if (Error.Size() >= Rules.SnapThresholdKilometres)
+	{
+		return Authoritative;
+	}
+
+	if (Rules.BlendRatePerSecond <= 0.0)
+	{
+		return Predicted;
+	}
+
+	// Exponential: remove a fraction of what remains, so the result is frame-rate independent.
+	const double Alpha = 1.0 - FMath::Exp(-Rules.BlendRatePerSecond * DeltaSeconds);
+
+	return FSystemCoordinate(Predicted.Kilometres + (Error * Alpha));
+}
+
+FSystemCoordinate FShipFlightModel::Extrapolate(
+	const FSystemCoordinate& LastKnown,
+	const FVector& Velocity,
+	const double SecondsSinceUpdate,
+	const double MaxExtrapolationSeconds)
+{
+	if (SecondsSinceUpdate <= 0.0)
+	{
+		return LastKnown;
+	}
+
+	// Clamped, not extended indefinitely. A ship that stopped updating has probably stopped doing
+	// what it was doing, and flying its last heading for a whole second puts it somewhere it never
+	// was — which costs more on correction than the stutter would have.
+	const double Seconds = FMath::Min(SecondsSinceUpdate, FMath::Max(0.0, MaxExtrapolationSeconds));
+
+	const FVector DeltaKilometres =
+		(Velocity * Seconds) / SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+	return FSystemCoordinate(LastKnown.Kilometres + DeltaKilometres);
+}
+
 FShipNavigation FShipFlightModel::Advance(
 	const FShipNavigation& Navigation,
 	const FShipFlightState& State,

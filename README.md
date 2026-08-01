@@ -80,8 +80,8 @@ toward it and the readout moves from ORBIT through ATMOSPHERE to SURFACE, with g
 inverse-square the whole way. It is a **sphere, not terrain** — enough to prove the approach
 transition, which is deliberately the easier half of the hardest problem in the project.
 
-**58 automation tests pass** — 8 coordinate, 10 grid, 13 flight, 5 navigation, 14 planet,
-8 backend protocol:
+**63 automation tests pass** — 8 coordinate, 10 grid, 13 flight, 5 navigation, 14 planet,
+8 backend protocol, 5 netcode:
 
 ```bash
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -ExecCmds="Automation RunTests SpaceMMO" -testexit="Automation Test Queue Empty" -unattended -nopause -nosplash -log
@@ -152,6 +152,6 @@ dotnet test services/SpaceMMO.Domain.Tests
 - **M0** — repo, docs, ADRs, toolchain ✅
 - **M1** — backend economy core: schema, XP curve, order book, quest engine, EconSim ✅
 - **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight ✅, ship pawn ✅,
-  planet approach ✅, walkable terrain, dedicated server
+  planet approach ✅, dedicated server ✅, replicated flight ✅, walkable terrain
 - **M3** — closing the loop: mine → craft → sell, two players trading a player-made item
 - **M4** — universe scale: procedural galaxy, warp handoff, careers, security zones

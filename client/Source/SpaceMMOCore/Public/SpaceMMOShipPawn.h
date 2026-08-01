@@ -12,6 +12,39 @@ class USpringArmComponent;
 class UStaticMeshComponent;
 
 /**
+ * What the server publishes about a ship.
+ *
+ * <strong>Position travels as a system coordinate, not as an Unreal transform.</strong> Every
+ * client rebases its own render origin independently, so a world location means something
+ * different on each of them — replicating one would put every remote ship in the wrong place for
+ * everybody except whoever happened to share the sender's origin.
+ *
+ * Doubles cross the wire uncompressed for now. That is honest but not cheap, and quantising
+ * position and rotation is the obvious first saving once there are enough ships to care.
+ */
+USTRUCT()
+struct FShipNetState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FSystemCoordinate SystemPosition;
+
+	UPROPERTY()
+	FVector Velocity = FVector::ZeroVector;
+
+	UPROPERTY()
+	FQuat Rotation = FQuat::Identity;
+
+	UPROPERTY()
+	FVector AngularVelocity = FVector::ZeroVector;
+
+	/** Server time the state was captured, so a receiver knows how stale it is. */
+	UPROPERTY()
+	double ServerTimeSeconds = 0.0;
+};
+
+/**
  * A flyable ship.
  *
  * Holds its authoritative position as an {@link FSystemCoordinate} in kilometres and derives its
@@ -69,8 +102,31 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	EPlanetProximity GetProximity() const { return Proximity; }
 
+	virtual void GetLifetimeReplicatedProps(
+		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	/** How far the last server correction moved this client, in kilometres. Diagnostic. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
+	double GetLastCorrectionKilometres() const { return LastCorrectionKilometres; }
+
 protected:
 	virtual void BeginPlay() override;
+
+	/**
+	 * Pilot intent, sent to the server every frame the ship is locally controlled.
+	 *
+	 * Unreliable on purpose. Input is a continuous stream, and a dropped frame of it is corrected
+	 * by the next one — retransmitting stale intent would arrive late and be wrong twice over.
+	 *
+	 * The server sanitises what arrives, so a client sending an out-of-range axis flies exactly as
+	 * fast as one sending a legal value.
+	 */
+	UFUNCTION(Server, Unreliable, WithValidation)
+	void ServerSendInput(FShipFlightInput Input);
+
+	/** How this client resolves disagreement with the server. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
+	FShipReconciliation Reconciliation;
 
 	/** Handling characteristics. Ultimately comes from the hull's definition. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
@@ -90,6 +146,18 @@ protected:
 	bool bShowFlightDebug = true;
 
 private:
+	/** Integrates one step from PendingInput. Runs on the server and on the predicting client. */
+	void SimulateStep(double DeltaSeconds);
+
+	/** Server only: captures the authoritative state for replication. */
+	void PublishNetState();
+
+	/** Owning client: pulls the prediction back toward the server's answer. */
+	void ReconcileWithServer(double DeltaSeconds);
+
+	/** Other players' ships: carries the last known state forward and eases toward new ones. */
+	void FollowServerState(double DeltaSeconds);
+
 	void PublishRenderOrigin();
 
 	/** Gravity from every planet in the world, summed. */
@@ -127,6 +195,23 @@ private:
 	FShipFlightState FlightState;
 
 	FShipFlightInput PendingInput;
+
+	/**
+	 * The server's last word on this ship.
+	 *
+	 * Replicated to everyone rather than only to the owner, because remote ships are drawn from it
+	 * too — this is the single channel through which one player learns another exists.
+	 */
+	UPROPERTY(Replicated)
+	FShipNetState NetState;
+
+	/** Client-side clock reading when NetState last changed, for extrapolating between updates. */
+	double LastNetStateReceivedAt = 0.0;
+
+	/** Server time carried by the last state actually applied, so repeats are ignored. */
+	double LastAppliedServerTime = -1.0;
+
+	double LastCorrectionKilometres = 0.0;
 
 	bool bFirstPerson = false;
 

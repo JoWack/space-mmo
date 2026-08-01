@@ -21,7 +21,14 @@ class SPACEMMOCORE_API USpaceMMORenderOriginSubsystem : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
-	/** The system position that currently maps to Unreal's world origin. */
+	/**
+	 * The system position that currently maps to Unreal's world origin.
+	 *
+	 * The single per-client answer to "what is world zero?". Anything drawn from a system
+	 * coordinate must resolve against <em>this</em> rather than its own idea of an origin —
+	 * otherwise two ships carrying different origins are drawn in two different frames of
+	 * reference and appear nowhere near each other.
+	 */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Coordinates")
 	FSystemCoordinate GetRenderOrigin() const { return RenderOrigin; }
 
