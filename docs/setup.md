@@ -146,6 +146,25 @@ before the engine loop ticks the HTTP manager, and the editor spends ten-plus se
 plugins after that. A short sleep kills the process with the request still in flight and reports
 nothing at all — no success, no failure.
 
+### The dedicated server
+
+Built against the **source** engine, not the launcher one — the launcher build ships zero Server
+targets and cannot produce this at all.
+
+```bash
+cd /d/Programming/UnrealEngineSource && ./Engine/Build/BatchFiles/Build.bat SpaceMMOServer Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -WaitMutex -NoUBA
+```
+
+**It compiles and links, but does not yet run.** Launched against the raw `.uproject` it asserts
+in `BufferReader.h` while a background thread reads a package summary, before any game code runs.
+Engine content is intact (5,247 valid packages) and `-noasyncloadingthread` does not help, so the
+working theory is that a dedicated server needs **cooked** content — `RunUAT BuildCookRun -server
+-noclient` — rather than the uncooked tree the editor reads. Unverified; do not treat it as fact.
+
+Keep the target compiling even while it cannot run. It exists to catch client-only code before it
+becomes load-bearing, and it earned that on its first build: `ADirectionalLight::GetComponent` does
+not exist in a server configuration, so the scene lighting had to move behind `#if !UE_SERVER`.
+
 ### Running the automation tests
 
 ```bash

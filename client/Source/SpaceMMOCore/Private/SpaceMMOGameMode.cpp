@@ -69,6 +69,16 @@ void ASpaceMMOGameMode::SpawnTestScene()
 		PlanetActor->FinishSpawning(FTransform::Identity);
 	}
 
+	// ── Lighting ─────────────────────────────────────────────────────────────
+	//
+	// Compiled out of the dedicated server entirely, not merely skipped at runtime. A server has
+	// no renderer, so parts of the light API do not exist in that build at all —
+	// ADirectionalLight::GetComponent among them, which is what broke the first server compile.
+	//
+	// A runtime IsRunningDedicatedServer() check would not have helped: the code still has to
+	// compile before it can decide not to run. This is the class of drift the server target was
+	// added on day one to catch, and it caught it.
+#if !UE_SERVER
 	// A key light at an angle, so the marker cubes read as solid objects rather than flat
 	// silhouettes and it is possible to tell which way one is facing.
 	if (ADirectionalLight* KeyLight = World->SpawnActor<ADirectionalLight>(
@@ -76,10 +86,13 @@ void ASpaceMMOGameMode::SpawnTestScene()
 		FTransform(FRotator(-45.0, 45.0, 0.0)),
 		SpawnParameters))
 	{
-		if (UDirectionalLightComponent* Component = KeyLight->GetComponent())
+		// GetLightComponent rather than GetComponent: it is declared on ALight, so it survives
+		// every target configuration, and the cast is checked.
+		if (UDirectionalLightComponent* Component =
+			Cast<UDirectionalLightComponent>(KeyLight->GetLightComponent()))
 		{
-			Component->SetIntensity(4.0f);
 			Component->SetMobility(EComponentMobility::Movable);
+			Component->SetIntensity(4.0f);
 		}
 	}
 
@@ -95,4 +108,5 @@ void ASpaceMMOGameMode::SpawnTestScene()
 			Component->SetLightColor(FLinearColor(0.35f, 0.4f, 0.55f));
 		}
 	}
+#endif
 }
