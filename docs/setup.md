@@ -162,6 +162,51 @@ server logs two as well and flies neither: a dedicated server owns the simulatio
 of its own. Allow about seventy seconds for both clients to reach the server on a cold start,
 which is long enough that an impatient timeout reads as a hang.
 
+### Playing it by hand
+
+Scripts live in `scripts/`. All of them use the **source** engine, which is mandatory: once
+BuildCookRun has run, the project's binaries are compiled against `UnrealEngineSource` and the
+launcher engine can no longer load them.
+
+| Script | What it does |
+|---|---|
+| `play.bat` | Standalone single player in a window. Needs nothing else running. |
+| `editor.bat` | Opens the editor. Press Play for the same thing with tooling attached. |
+| `host-dedicated.bat` | The cooked dedicated server on port 7777. |
+| `join.bat [log]` | Connects a client to it. Run twice, with different log names, for two players. |
+| `api.bat` | The backend on port 5080. Not needed for flight, terrain or walking. |
+
+**No backend is required for gameplay.** Flight, planetary approach, terrain streaming, landing,
+walking and boarding all run client-side today; the API is only involved in accounts and
+characters, which nothing in the world calls yet.
+
+`play.bat` forwards extra arguments, so the dev flags compose:
+
+```bash
+scripts\play.bat -ShipStartX=178 -ShipStartY=0 -ShipStartZ=0 -AutoDisembark
+```
+
+**Never pass `-nullrhi` when playing.** It disables rendering entirely — it is for headless test
+runs, and with it you get a process and no window.
+
+#### Controls
+
+| | Ship | On foot |
+|---|---|---|
+| `W` `S` | Thrust forward / back | Walk forward / back |
+| `A` `D` | Thrust left / right | Strafe |
+| `Mouse` | Pitch and yaw | Turn |
+| `Q` `E` | Roll | — |
+| `Space` | Thrust up | Jump |
+| `Ctrl` | Thrust down | — |
+| `Shift` | Boost | — |
+| `C` | Toggle first/third person | Toggle first/third person |
+| `F` | Step out (only when landed) | Board a ship within 50 m |
+
+The ship starts 200 km from the planet, which is a long flight — use `-ShipStartX=178` to begin
+just above the surface instead. Flight assist is on by default, so releasing the stick slows you
+down rather than coasting.
+
 ### Seeing terrain stream in
 
 The ship starts 200 km from the planet, which is a two-minute flight before anything terrain-
