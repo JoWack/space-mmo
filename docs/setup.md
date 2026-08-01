@@ -155,6 +155,56 @@ targets and cannot produce this at all.
 cd /d/Programming/UnrealEngineSource && ./Engine/Build/BatchFiles/Build.bat SpaceMMOServer Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -WaitMutex -NoUBA
 ```
 
+**A dedicated server needs cooked content.** Run straight against the raw `.uproject` it asserts
+in `BufferReader.h` reading a package summary, before any game code executes — engine content is
+fine and `-noasyncloadingthread` does not help. Cook and stage instead:
+
+```bash
+cd /d/Programming/UnrealEngineSource && ./Engine/Build/BatchFiles/RunUAT.bat BuildCookRun -project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -noP4 -utf8output -platform=Win64 -serverconfig=Development -server -noclient -build -cook -stage -pak
+```
+
+That also rebuilds `SpaceMMOEditor` against the source engine, which cooking requires. Then run
+the staged server:
+
+```bash
+./SpaceMMOServer.exe -log -unattended -nopause -port=7777
+```
+
+A healthy start reaches `IpNetDriver listening on port 7777` and `Bringing World
+/Engine/Maps/Entry.Entry up for play (max tick rate 30)`, with `Game class is 'SpaceMMOGameMode'`.
+Point it at a backend with `-BackendUrl=`; it defaults to `http://localhost:5000`.
+
+Keep the server target compiling even before it is needed. It exists to catch client-only code
+before it becomes load-bearing, and it earned that on its first build:
+`ADirectionalLight::GetComponent` does not exist in a server configuration, so scene lighting had
+to move behind `#if !UE_SERVER`. A runtime check could not have helped — code has to compile
+before it can decide not to run.
+
+### Proving the client and server actually talk
+
+Fixtures and integration tests each cover one side of the wire and neither proves the two agree.
+This drives the real `USpaceMMOBackendClient` across a real socket. Start the API, then:
+
+```bash
+"/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -game -unattended -nopause -nosplash -nullrhi -BackendSmokeTest -BackendUrl=http://localhost:5080 -BackendEmail=you@example.com -BackendPassword=your-password
+```
+
+Results appear in `client/Saved/Logs/SpaceMMO.log` tagged `SMOKE:`. The token is never logged.
+
+**Wait for an outcome line, not a fixed delay.** The request is issued during subsystem init,
+before the engine loop ticks the HTTP manager, and the editor spends ten-plus seconds loading
+plugins after that. A short sleep kills the process with the request still in flight and reports
+nothing at all — no success, no failure.
+
+### The dedicated server
+
+Built against the **source** engine, not the launcher one — the launcher build ships zero Server
+targets and cannot produce this at all.
+
+```bash
+cd /d/Programming/UnrealEngineSource && ./Engine/Build/BatchFiles/Build.bat SpaceMMOServer Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -WaitMutex -NoUBA
+```
+
 **It compiles and links, but does not yet run.** Launched against the raw `.uproject` it asserts
 in `BufferReader.h` while a background thread reads a package summary, before any game code runs.
 Engine content is intact (5,247 valid packages) and `-noasyncloadingthread` does not help, so the
