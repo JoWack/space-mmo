@@ -32,7 +32,7 @@ struct SPACEMMOCORE_API FPlanetTerrainConfig
 
 	/** How many layers of detail are summed. Each is finer and weaker than the last. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
-	int32 Octaves = 5;
+	int32 Octaves = 9;
 
 	/** Features per planet radius at the coarsest octave. Low values give continents. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
@@ -161,13 +161,21 @@ public:
 	 * landing or a crash.
 	 *
 	 * @param ContactRadiusKilometres How far the object's surface is from its centre.
+	 * @param ToleranceKilometres     How far above the ground still counts as standing on it.
+	 *
+	 * The tolerance is not slop, it is what makes walking on a sphere possible at all. A step taken
+	 * along the tangent of a curved surface always ends fractionally above it, so an object placed
+	 * exactly on the ground is airborne again by the next frame — grounded and airborne alternate
+	 * every tick, jumping becomes unreliable, and the residual gravity each frame shows up as a
+	 * slow drift. Twenty centimetres of tolerance costs nothing and removes all of it.
 	 */
 	static FGroundContact ResolveContact(
 		const FPlanetConfig& Planet,
 		const FPlanetTerrainConfig& Terrain,
 		const FSystemCoordinate& Position,
 		const FVector& Velocity,
-		double ContactRadiusKilometres);
+		double ContactRadiusKilometres,
+		double ToleranceKilometres = 0.0002);
 
 	/**
 	 * Maps a point on a unit cube to the unit sphere.

@@ -545,4 +545,52 @@ bool FSpaceMMOSurfaceNormalTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOContactDoesNotFlickerWhileWalkingTest,
+	"SpaceMMO.Contact.DoesNotFlickerWhileWalking",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOContactDoesNotFlickerWhileWalkingTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TerrainTestPlanet();
+
+	FPlanetTerrainConfig Terrain = TerrainTestConfig();
+	Terrain.MaxElevationKilometres = 0.0;
+
+	const double Radius = 0.001;
+
+	FSystemCoordinate Position(
+		Planet.Centre.Kilometres + FVector(0.0, 0.0, Planet.RadiusKilometres + Radius));
+
+	// Walking pace, tangential. Every such step on a curved surface ends fractionally above the
+	// ground, which is what made grounded and airborne alternate every single frame.
+	const FVector Along(600.0, 0.0, 0.0);
+
+	int32 AirborneFrames = 0;
+
+	for (int32 Frame = 0; Frame < 600; ++Frame)
+	{
+		const FGroundContact Contact =
+			FPlanetTerrain::ResolveContact(Planet, Terrain, Position, Along, Radius);
+
+		if (!Contact.bOnGround)
+		{
+			++AirborneFrames;
+		}
+
+		Position = FSystemCoordinate(
+			Contact.Position.Kilometres + (Along / SpaceMMO::Coordinates::CentimetresPerKilometre) * (1.0 / 60.0));
+	}
+
+	TestEqual(TEXT("Never leaves the ground while walking"), AirborneFrames, 0);
+
+	// A jump must still work: rising fast, the tolerance band must not pin the character down.
+	const FGroundContact Rising = FPlanetTerrain::ResolveContact(
+		Planet, Terrain, Position, FVector(0.0, 0.0, 420.0), Radius);
+
+	TestFalse(TEXT("Jumping still leaves the ground"), Rising.bOnGround);
+
+	return true;
+}
+
 #endif

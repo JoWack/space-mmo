@@ -368,6 +368,19 @@ void ASpaceMMOShipPawn::ResolveGroundContact()
 		Navigation.SystemPosition = Contact.Position;
 		FlightState.Velocity = Contact.Velocity;
 
+		// Friction, but only when the pilot is not driving. Damping a held input would stop a ship
+		// taxiing or lifting off, and the whole point is that a parked ship stays parked.
+		if (PendingInput.Thrust.IsNearlyZero() && FlightConfig.GroundFriction > 0.0)
+		{
+			const FVector Into =
+				Contact.SurfaceNormal * FVector::DotProduct(FlightState.Velocity, Contact.SurfaceNormal);
+
+			const FVector Along = FlightState.Velocity - Into;
+
+			FlightState.Velocity =
+				Into + (Along * FMath::Exp(-FlightConfig.GroundFriction * GetWorld()->GetDeltaSeconds()));
+		}
+
 		if (Contact.ImpactSpeed > 50000.0)
 		{
 			// Half a kilometre per second into the ground. Nothing happens to the ship yet — the

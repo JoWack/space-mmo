@@ -194,4 +194,7 @@ private:
 	double LastAppliedServerTime = -1.0;
 
 	double LastNetStateReceivedAt = 0.0;
+
+	/** Diagnostic only: seconds since the last on-foot line. */
+	double DiagnosticSeconds = 0.0;
 };

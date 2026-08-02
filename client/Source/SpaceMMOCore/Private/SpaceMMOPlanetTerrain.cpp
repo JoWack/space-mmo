@@ -193,7 +193,8 @@ FGroundContact FPlanetTerrain::ResolveContact(
 	const FPlanetTerrainConfig& Terrain,
 	const FSystemCoordinate& Position,
 	const FVector& Velocity,
-	const double ContactRadiusKilometres)
+	const double ContactRadiusKilometres,
+	const double ToleranceKilometres)
 {
 	FGroundContact Contact;
 	Contact.Position = Position;
@@ -216,7 +217,22 @@ FGroundContact FPlanetTerrain::ResolveContact(
 	const double GroundRadius = SurfaceRadiusKilometres(Planet, Terrain, Up);
 	const double Floor = GroundRadius + FMath::Max(0.0, ContactRadiusKilometres);
 
-	if (Distance >= Floor)
+	const double Gap = Distance - Floor;
+
+	// Deliberately a speed threshold and not just a positive sign.
+	//
+	// On a curved surface the normal tilts to follow whatever is walking across it, so a purely
+	// tangential velocity always has a small positive component along the current normal. Testing
+	// dot > 0 therefore reports every walking step as leaving the ground — which it did, on 599 of
+	// 600 frames. Half a metre per second is far below a jump and far above that artefact.
+	constexpr double MinimumSeparationSpeed = 50.0;
+
+	const bool bLeaving =
+		FVector::DotProduct(Velocity, Contact.SurfaceNormal) > MinimumSeparationSpeed;
+
+	// Clear of the ground, or genuinely climbing away from it. The second case is what lets a jump
+	// happen at all: without it the tolerance band would drag a rising character straight back down.
+	if (Gap > FMath::Max(0.0, ToleranceKilometres) || (Gap > 0.0 && bLeaving))
 	{
 		return Contact;
 	}

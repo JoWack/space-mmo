@@ -31,11 +31,11 @@ struct SPACEMMOCORE_API FPlanetPatchConfig
 	 * limit before this needs to become six proper cube faces.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
-	double AngularRadiusDegrees = 10.0;
+	double AngularRadiusDegrees = 4.0;
 
 	/** Vertices along each edge. The patch is this squared, so raising it is expensive. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
-	int32 Resolution = 65;
+	int32 Resolution = 129;
 };
 
 /**

@@ -42,10 +42,10 @@ FSystemCoordinate FBoarding::StepOutPosition(
 		Sideways = FVector::CrossProduct(Reference, Up);
 	}
 
-	// Lifted slightly as well as offset, so the character starts just above the ground and settles
-	// onto it rather than starting inside a hill and being pushed out on the first frame.
+	// Lifted half a metre, not two. Enough that the character settles onto the ground rather than
+	// starting inside a hill, small enough that stepping out is a step rather than a drop.
 	const FVector Offset =
-		(Sideways.GetSafeNormal() * FMath::Max(0.0, OffsetKilometres)) + (Up * 0.002);
+		(Sideways.GetSafeNormal() * FMath::Max(0.0, OffsetKilometres)) + (Up * 0.0005);
 
 	return FSystemCoordinate(Ship.Kilometres + Offset);
 }

@@ -60,11 +60,13 @@ protected:
 	/**
 	 * How much ground to mesh around the viewer, in degrees of arc.
 	 *
-	 * Ten degrees of a 20 km planet is roughly 3.5 km across — far enough that the edge is not
-	 * obviously nearby, small enough to rebuild without a hitch.
+	 * Four degrees of a 20 km planet is about 1.4 km across. At 129 vertices a side that is roughly
+	 * eleven metres between them, which is the difference between ground a walking person can see
+	 * changing and a flat plane that never appears to move. Ten degrees looked far more generous
+	 * and was, in practice, featureless.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
-	double PatchAngularRadiusDegrees = 10.0;
+	double PatchAngularRadiusDegrees = 4.0;
 
 private:
 	void ApplyRenderTransform();

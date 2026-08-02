@@ -80,8 +80,8 @@ toward it and the readout moves from ORBIT through ATMOSPHERE to SURFACE, with g
 inverse-square the whole way. It is a **sphere, not terrain** — enough to prove the approach
 transition, which is deliberately the easier half of the hardest problem in the project.
 
-**95 automation tests pass** — 8 coordinate, 10 grid, 13 flight, 5 navigation, 14 planet,
-8 backend protocol, 5 netcode, 8 terrain, 8 patch, 5 ground contact, 6 walking, 5 boarding:
+**96 automation tests pass** — 8 coordinate, 10 grid, 13 flight, 5 navigation, 14 planet,
+8 backend protocol, 5 netcode, 8 terrain, 8 patch, 6 ground contact, 6 walking, 5 boarding:
 
 ```bash
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -ExecCmds="Automation RunTests SpaceMMO" -testexit="Automation Test Queue Empty" -unattended -nopause -nosplash -log

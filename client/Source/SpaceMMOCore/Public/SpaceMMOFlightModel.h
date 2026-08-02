@@ -91,6 +91,21 @@ struct SPACEMMOCORE_API FShipFlightConfig
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
 	double BoostMultiplier = 4.0;
+
+	/**
+	 * Fraction of sideways speed a landed ship sheds per second.
+	 *
+	 * Ground contact cancels motion <em>into</em> the surface but leaves motion along it, which is
+	 * right for a landing and wrong for a parked ship: gravity's tangential component on any slope
+	 * accelerates it downhill forever. It drifted about ten metres a minute, which is invisible
+	 * while watching and quite enough to put a ship out of boarding range while its pilot is off
+	 * walking around.
+	 *
+	 * High, because this is standing friction rather than air resistance — a ship on its landing
+	 * gear should stay where it was put.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double GroundFriction = 6.0;
 };
 
 /**

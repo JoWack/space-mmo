@@ -14,8 +14,13 @@
 class SPACEMMOCORE_API FBoarding
 {
 public:
-	/** How close a character must be to a ship to climb into it, in kilometres. Fifty metres. */
-	static constexpr double DefaultBoardingRangeKilometres = 0.05;
+	/**
+	 * How close a character must be to a ship to climb into it, in kilometres.
+	 *
+	 * A hundred metres. Fifty was tight enough that a few seconds of walking put the ship out of
+	 * range, and with nothing marking where it is, out of range means lost.
+	 */
+	static constexpr double DefaultBoardingRangeKilometres = 0.1;
 
 	/** How far to one side a character appears when stepping out, in kilometres. */
 	static constexpr double DefaultStepOutOffsetKilometres = 0.03;

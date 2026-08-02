@@ -280,6 +280,38 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 	PendingInput.Move = FVector2D::ZeroVector;
 	PendingInput.Turn = 0.0;
 
+	DiagnosticSeconds += DeltaSeconds;
+
+	if (FParse::Param(FCommandLine::Get(), TEXT("LogApproach")) && DiagnosticSeconds >= 1.0)
+	{
+		DiagnosticSeconds = 0.0;
+
+		const ASpaceMMOShipPawn* Nearest = nullptr;
+		double NearestKm = TNumericLimits<double>::Max();
+
+		for (TActorIterator<ASpaceMMOShipPawn> It(GetWorld()); It; ++It)
+		{
+			const double Distance =
+				(Navigation.SystemPosition.Kilometres - It->GetSystemPosition().Kilometres).Size();
+
+			if (Distance < NearestKm)
+			{
+				NearestKm = Distance;
+				Nearest = *It;
+			}
+		}
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("ONFOOT: sys %s | %s | ship %.1f m away, drawn %.1f m | speed %.1f m/s"),
+			*Navigation.SystemPosition.ToString(),
+			bOnGround ? TEXT("GROUNDED") : TEXT("AIRBORNE"),
+			NearestKm * 1000.0,
+			Nearest != nullptr
+				? (Nearest->GetActorLocation() - GetActorLocation()).Size() / 100.0
+				: -1.0,
+			GetSpeedMetresPerSecond());
+	}
+
 	if (bShowWalkDebug && GEngine != nullptr && IsLocallyControlled())
 	{
 		GEngine->AddOnScreenDebugMessage(

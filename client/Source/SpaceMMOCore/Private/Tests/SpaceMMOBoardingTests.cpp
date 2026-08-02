@@ -30,15 +30,15 @@ bool FSpaceMMOBoardingRangeTest::RunTest(const FString& Parameters)
 	// Standing on it.
 	TestTrue(TEXT("Touching the ship is in range"), FBoarding::CanEmbark(Ship, Ship));
 
-	// Just inside fifty metres.
-	const FSystemCoordinate Near(Ship.Kilometres + FVector(0.04, 0.0, 0.0));
+	// Just inside the hundred-metre range.
+	const FSystemCoordinate Near(Ship.Kilometres + FVector(0.09, 0.0, 0.0));
 
-	TestTrue(TEXT("Forty metres away is in range"), FBoarding::CanEmbark(Near, Ship));
+	TestTrue(TEXT("Ninety metres away is in range"), FBoarding::CanEmbark(Near, Ship));
 
 	// Just outside. A client asking to board from further away is asking, not telling.
-	const FSystemCoordinate Far(Ship.Kilometres + FVector(0.06, 0.0, 0.0));
+	const FSystemCoordinate Far(Ship.Kilometres + FVector(0.11, 0.0, 0.0));
 
-	TestFalse(TEXT("Sixty metres away is not"), FBoarding::CanEmbark(Far, Ship));
+	TestFalse(TEXT("A hundred and ten metres away is not"), FBoarding::CanEmbark(Far, Ship));
 
 	// And nowhere near, which is what a hostile client would send.
 	const FSystemCoordinate Absurd(Ship.Kilometres + FVector(500.0, 0.0, 0.0));
@@ -47,7 +47,7 @@ bool FSpaceMMOBoardingRangeTest::RunTest(const FString& Parameters)
 
 	// Range is measured in every direction, not just along one axis.
 	const FSystemCoordinate Diagonal(
-		Ship.Kilometres + FVector(0.03, 0.03, 0.03));
+		Ship.Kilometres + FVector(0.06, 0.06, 0.06));
 
 	TestEqual(
 		TEXT("Diagonal distance is measured properly"),

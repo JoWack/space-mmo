@@ -156,11 +156,13 @@ protected:
 	/**
 	 * Distance from the ship's centre to its hull, in kilometres.
 	 *
-	 * What ground contact resolves against. Twenty metres for the placeholder cone; ultimately it
-	 * comes from the hull definition alongside the flight characteristics.
+	 * Two metres, matching the placeholder cone. It was 0.02 — twenty metres — which parked the
+	 * ship hovering twenty metres above the ground and dropped anyone stepping out off the
+	 * equivalent of a six-storey building. Kilometres are an unforgiving unit for something this
+	 * small, and that is exactly how the mistake happened.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
-	double HullRadiusKilometres = 0.02;
+	double HullRadiusKilometres = 0.002;
 
 	/** Where the ship starts, in kilometres. */
 	UPROPERTY(EditAnywhere, Category = "SpaceMMO|Ship")
