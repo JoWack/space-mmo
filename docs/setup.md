@@ -162,6 +162,24 @@ server logs two as well and flies neither: a dedicated server owns the simulatio
 of its own. Allow about seventy seconds for both clients to reach the server on a cold start,
 which is long enough that an impatient timeout reads as a hang.
 
+### Two traps when running a dedicated server
+
+**Re-cook after every code change.** Clients are built from current source; the staged server is a
+snapshot. If a replicated property has been added or removed since it was cooked, the client log
+fills with `ReceivedBunch: FieldCache == nullptr` and `GetFromIndex failed` and the session is
+unusable. That is a stale server rather than a network problem, and adding a single UPROPERTY is
+enough to cause it.
+
+**Scenery is built by every machine, not replicated.** `USpaceMMOWorldSubsystem` spawns the test
+scene, the planet and the lights in `OnWorldBeginPlay`, which runs on the server and on every
+client. It deliberately does not live in the game mode: a game mode exists only on the server, so
+anything it spawns is invisible to clients — which showed up as a joining player staring at a
+black screen with nothing but a couple of ship pawns in it and no light to see them by.
+
+Replicating it would be the wrong fix. The scene is a deterministic function of its configuration,
+so both ends build an identical copy for free rather than sending three hundred and fifty marker
+cubes over the wire to say something they both already know.
+
 ### Playing it by hand
 
 Scripts live in `scripts/`. All of them use the **source** engine, which is mandatory: once

@@ -1,0 +1,36 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Subsystems/WorldSubsystem.h"
+#include "SpaceMMOWorldSubsystem.generated.h"
+
+/**
+ * Builds the world's scenery, on every machine that has one.
+ *
+ * <strong>Not the game mode.</strong> A game mode exists only on the server, so anything it
+ * spawns exists only there — and none of this scenery replicates, so a connected client saw an
+ * empty black level with a handful of ship pawns in it and no lights to show them by. That is
+ * exactly what happened the first time anyone joined a dedicated server.
+ *
+ * Replicating it would be the wrong fix. The scene is a deterministic function of its
+ * configuration, so every machine can build an identical copy for free, and sending three hundred
+ * and fifty marker cubes over the wire to say something both ends already know would be pure
+ * cost. This is the same reasoning as ADR-0002: generated content is reproduced, not transmitted.
+ *
+ * A world subsystem's OnWorldBeginPlay runs on the server and on every client, which is precisely
+ * the audience that needs the world to exist.
+ */
+UCLASS()
+class SPACEMMOCORE_API USpaceMMOWorldSubsystem : public UWorldSubsystem
+{
+	GENERATED_BODY()
+
+public:
+	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
+
+	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
+
+	/** The planet every machine agrees on. Spawned here so both sides simulate against it. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|World")
+	void BuildScenery();
+};
