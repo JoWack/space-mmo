@@ -123,6 +123,27 @@ void ASpaceMMOShipPawn::BeginPlay()
 	FlightState = FShipFlightState();
 	FlightState.Rotation = GetActorQuat();
 
+	// Dev affordance: an initial velocity, so a headless run can actually fly somewhere without a
+	// hand on the stick. -ShipVelX=200000 is 2 km/s.
+	double VelX = 0.0;
+	double VelY = 0.0;
+	double VelZ = 0.0;
+
+	if (FParse::Value(FCommandLine::Get(), TEXT("ShipVelX="), VelX)
+		| FParse::Value(FCommandLine::Get(), TEXT("ShipVelY="), VelY)
+		| FParse::Value(FCommandLine::Get(), TEXT("ShipVelZ="), VelZ))
+	{
+		FlightState.Velocity = FVector(VelX, VelY, VelZ);
+	}
+
+	// Flight assist bleeds off any velocity the moment the stick is released, so an injected
+	// velocity coasts about five kilometres and stops. -NoFlightAssist turns it off, which is what
+	// makes an unattended run able to cross a system.
+	if (FParse::Param(FCommandLine::Get(), TEXT("NoFlightAssist")))
+	{
+		FlightConfig.LinearDamping = 0.0;
+	}
+
 	PublishRenderOrigin();
 	ApplyWorldTransform();
 
@@ -167,6 +188,55 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 	}
 
 	ApplyWorldTransform();
+
+	DiagnosticSeconds += DeltaSeconds;
+
+	if (FParse::Param(FCommandLine::Get(), TEXT("LogApproach")) && DiagnosticSeconds >= 1.0)
+	{
+		DiagnosticSeconds = 0.0;
+
+		FVector PlanetWorld = FVector::ZeroVector;
+		double PlanetSystemDistance = 0.0;
+
+		for (TActorIterator<ASpaceMMOPlanetActor> It(GetWorld()); It; ++It)
+		{
+			PlanetWorld = It->GetActorLocation();
+			PlanetSystemDistance =
+				(It->GetPlanetConfig().Centre.Kilometres - Navigation.SystemPosition.Kilometres).Size();
+
+			break;
+		}
+
+		// If the planet is stationary, the system distance must fall steadily while the drawn
+		// distance tracks it. A drawn distance that grows, or refuses to shrink, is the bug.
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("APPROACH: ship sys %.1f km | true gap %.2f km | drawn gap %.2f km | rebases %d"),
+			Navigation.SystemPosition.Kilometres.X,
+			PlanetSystemDistance,
+			(PlanetWorld - GetActorLocation()).Size() / 100000.0,
+			Navigation.RebaseCount);
+	}
+
+	if (Navigation.RebaseCount != LastLoggedRebaseCount)
+	{
+		LastLoggedRebaseCount = Navigation.RebaseCount;
+
+		FVector PlanetWorld = FVector::ZeroVector;
+
+		for (TActorIterator<ASpaceMMOPlanetActor> It(GetWorld()); It; ++It)
+		{
+			PlanetWorld = It->GetActorLocation();
+
+			break;
+		}
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("REBASE %d: ship sys %s world %s | planet world %s"),
+			Navigation.RebaseCount,
+			*Navigation.SystemPosition.ToString(),
+			*GetActorLocation().ToCompactString(),
+			*PlanetWorld.ToCompactString());
+	}
 
 	// Classified after moving, and fed its own previous value so the hysteresis in
 	// ClassifyProximity has something to work against.

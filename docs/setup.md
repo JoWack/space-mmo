@@ -180,6 +180,32 @@ Replicating it would be the wrong fix. The scene is a deterministic function of 
 so both ends build an identical copy for free rather than sending three hundred and fifty marker
 cubes over the wire to say something they both already know.
 
+### "The planet is running away from me"
+
+It is not. Planets are fixed points in system space and nothing ever moves them; this was measured
+by flying at one and logging both the true distance and the drawn distance every second, and they
+track exactly while the planet's world position steps 20 km closer on each rebase.
+
+What it really was: the demo planet sat 200 km away while the ship accelerated at 2,000 cm/s²
+toward a top speed of 200,000. Reaching that speed alone took a hundred seconds and a hundred
+kilometres, so the trip was about two and a half minutes of unbroken thrust — during which a
+distant sphere barely changes apparent size while the marker lattice streams past three kilometres
+apart. Everything nearby looks fast and the destination looks static, which reads as the planet
+running away.
+
+Fixed by tuning rather than by physics: the planet is now 60 km out and thrust is 20,000 cm/s², so
+top speed arrives in ten seconds and the approach takes well under a minute.
+
+Two flags help when investigating anything like this:
+
+```bash
+scripts\play.bat -NoFlightAssist -LogApproach -ShipVelX=200000
+```
+
+`-LogApproach` prints the true and drawn distance to the planet once a second, which is what
+settles "is it moving?" in one run. `-NoFlightAssist` zeroes the damping, without which an
+injected velocity bleeds off within about five kilometres.
+
 ### Playing it by hand
 
 Scripts live in `scripts/`. All of them use the **source** engine, which is mandatory: once

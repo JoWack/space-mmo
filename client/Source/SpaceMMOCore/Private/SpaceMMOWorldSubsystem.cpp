@@ -54,8 +54,13 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 	UE_LOG(LogSpaceMMO, Log, TEXT("Spawned test scene: %s"),
 		Scene != nullptr ? TEXT("ok") : TEXT("FAILED"));
 
-	// A planet to fly to. 20 km radius at 200 km, so it starts as a small sphere ahead and the
-	// whole orbital-to-atmospheric-to-surface transition is reachable in a couple of minutes.
+	// A planet to fly to. 20 km radius at 60 km.
+	//
+	// It was 200 km, which was unflyable: at the ship's acceleration that is around two and a half
+	// minutes of unbroken thrust, during which a distant sphere barely changes apparent size while
+	// the marker lattice streams past three kilometres apart. The planet looked stationary and
+	// everything else looked fast, which reads as the planet running away. Sixty kilometres is far
+	// enough to be a real approach and close enough to be worth making.
 	// Spawned deferred so the configuration is in place before BeginPlay runs. A plain SpawnActor
 	// begins play immediately, so anything set afterwards arrives too late — the planet would
 	// briefly exist at the system origin with default settings, and BeginPlay would report them.
@@ -67,7 +72,7 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 	{
 		FPlanetConfig Config;
-		Config.Centre = FSystemCoordinate(200.0, 0.0, 0.0);
+		Config.Centre = FSystemCoordinate(60.0, 0.0, 0.0);
 		Config.RadiusKilometres = 20.0;
 		Config.SurfaceGravity = 981.0;
 		Config.AtmosphereHeightKilometres = 12.0;

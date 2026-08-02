@@ -259,4 +259,10 @@ private:
 
 	/** Guards the -AutoDisembark affordance, so it fires once rather than on every landing. */
 	bool bAutoDisembarked = false;
+
+	/** Diagnostic only: the rebase count the last log line was written for. */
+	int32 LastLoggedRebaseCount = 0;
+
+	/** Diagnostic only: seconds since the last approach line. */
+	double DiagnosticSeconds = 0.0;
 };

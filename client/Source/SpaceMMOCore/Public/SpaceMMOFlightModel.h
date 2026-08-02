@@ -51,9 +51,16 @@ struct SPACEMMOCORE_API FShipFlightConfig
 {
 	GENERATED_BODY()
 
-	/** Centimetres per second squared at full thrust. */
+	/**
+	 * Centimetres per second squared at full thrust.
+	 *
+	 * Sized against MaxSpeed rather than picked in isolation. At 2,000 the ship needed a hundred
+	 * seconds and a hundred kilometres just to reach its own top speed, so the top speed was
+	 * decoration and every journey was a commute. At 20,000 it gets there in ten seconds, which
+	 * makes both numbers mean something.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
-	double ThrustAcceleration = 2000.0;
+	double ThrustAcceleration = 20000.0;
 
 	/** Degrees per second squared at full torque. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
