@@ -99,7 +99,8 @@ void USpaceMMOGatheringComponent::BindInput(UInputComponent* InputComponent)
 
 	bInputBound = true;
 
-	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Gather key bound on %s."), *GetNameSafe(GetOwner()));
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Gather key bound on %s by component %s (input %s)."),
+		*GetNameSafe(GetOwner()), *GetName(), *GetNameSafe(InputComponent));
 }
 
 void USpaceMMOGatheringComponent::RequestGather()

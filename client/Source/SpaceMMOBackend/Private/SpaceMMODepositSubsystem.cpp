@@ -71,6 +71,16 @@ void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 		return;
 	}
 
+	// Authority only. The component is replicated, so the server's copy arrives on each client by
+	// itself — and a client that also made its own ended up with two, both binding the gather key,
+	// so every press sent two requests and drew two rate-limited answers. The duplicate is invisible
+	// in the world and only shows up as doubled traffic, or as the second copy quietly holding
+	// character id zero because only one of them was ever told who the player is.
+	if (!Pawn->HasAuthority())
+	{
+		return;
+	}
+
 	USpaceMMOGatheringComponent* Gathering =
 		NewObject<USpaceMMOGatheringComponent>(Pawn, TEXT("Gathering"));
 
@@ -78,6 +88,10 @@ void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 	{
 		return;
 	}
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Attaching gathering to %s (subsystem %s, world %s)."),
+		*GetNameSafe(Pawn), *GetName(), *GetNameSafe(GetWorld()));
 
 	Gathering->RegisterComponent();
 

@@ -1,6 +1,7 @@
 #include "SpaceMMOPlayerController.h"
 
 #include "Engine/World.h"
+#include "Framework/Application/SlateApplication.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
 #include "SpaceMMOBackendClient.h"
@@ -32,7 +33,45 @@ void ASpaceMMOPlayerController::BeginPlay()
 	if (IsLocalController())
 	{
 		BeginIdentifying();
+
+		// Checked on a timer rather than only on the activation event. The event alone fixed the
+		// first switch and not the ones after it — measured, four presses landing and then none —
+		// so whatever drops focus does not always coincide with an activation change. Polling four
+		// times a second costs nothing and cannot miss it.
+		if (FSlateApplication::IsInitialized())
+		{
+			GetWorldTimerManager().SetTimer(
+				FocusGuardTimer, this, &ASpaceMMOPlayerController::EnsureViewportFocus, 0.25f, true);
+		}
 	}
+}
+
+void ASpaceMMOPlayerController::EnsureViewportFocus()
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return;
+	}
+
+	FSlateApplication& Slate = FSlateApplication::Get();
+
+	// Only while this window is the active one, so a background client does not fight the
+	// foreground one for focus.
+	if (!Slate.IsActive())
+	{
+		return;
+	}
+
+	// Only when nothing holds focus. Menus and text fields legitimately take it, and stealing it
+	// back four times a second would make any future UI unusable.
+	if (Slate.GetUserFocusedWidget(0).IsValid())
+	{
+		return;
+	}
+
+	Slate.SetAllUserFocusToGameViewport();
+
+	UE_LOG(LogSpaceMMOBackend, Verbose, TEXT("Focus was loose; returned it to the viewport."));
 }
 
 void ASpaceMMOPlayerController::OnPossess(APawn* InPawn)

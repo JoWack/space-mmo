@@ -31,6 +31,11 @@ public class SpaceMMOBackend : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			// Slate owns keyboard focus. The player controller has to reach it to hand focus back
+			// to the game viewport when the window is reactivated -- see HandleApplicationActivated.
+			"Slate",
+			"ApplicationCore",
+
 			// Private: callers get the subsystem's API, not the transport. Nothing outside this
 			// module should be constructing an HTTP request against the game server.
 			"HTTP",
