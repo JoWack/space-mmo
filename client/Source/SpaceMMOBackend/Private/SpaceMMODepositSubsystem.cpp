@@ -135,6 +135,41 @@ void USpaceMMODepositSubsystem::HandleBodiesLoaded()
 void USpaceMMODepositSubsystem::HandleDepositsLoaded(const int32 BodyId)
 {
 	PlaceDeposits();
+
+	// Dev affordance: -GatherSelfTest fires one gather against the first deposit as soon as the
+	// world is built, skipping the pawn, the key and the range check entirely. That isolates the
+	// HTTP and credential half of the path, which is otherwise only reachable with a human at a
+	// keyboard standing in the right spot. Same spirit as -BackendSmokeTest.
+	if (!FParse::Param(FCommandLine::Get(), TEXT("GatherSelfTest")) || PlacedDeposits.Num() == 0)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+
+	USpaceMMOBackendClient* Backend =
+		GameInstance != nullptr
+			? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
+			: nullptr;
+
+	if (Backend == nullptr || PlacedDeposits[0] == nullptr)
+	{
+		return;
+	}
+
+	int32 SelfTestCharacterId = 0;
+	int32 SelfTestStationId = 0;
+
+	FParse::Value(FCommandLine::Get(), TEXT("GatherCharacterId="), SelfTestCharacterId);
+	FParse::Value(FCommandLine::Get(), TEXT("GatherStationId="), SelfTestStationId);
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("SELFTEST: gathering %s as character %d."),
+		*PlacedDeposits[0]->GetNode().Key, SelfTestCharacterId);
+
+	Backend->GatherAsServer(
+		SelfTestCharacterId, PlacedDeposits[0]->GetNode().Id, SelfTestStationId);
 }
 
 void USpaceMMODepositSubsystem::PlaceDeposits()

@@ -119,6 +119,40 @@ void USpaceMMOBackendClient::OnSmokeFailed(const FBackendFailure& Failure)
 		*Failure.Message);
 }
 
+namespace
+{
+	/**
+	 * A short fingerprint, so two machines can be compared without either one logging its secret.
+	 *
+	 * FNV-1a over the UTF-8 bytes. Must stay byte-for-byte identical to ServiceCredential.Fingerprint
+	 * on the API side — the whole value of this is that the two can be compared by eye, and a hash
+	 * that only agrees with itself would be worse than none.
+	 */
+	FString FingerprintOf(const FString& Value)
+	{
+		if (Value.IsEmpty())
+		{
+			return TEXT("<empty>");
+		}
+
+		constexpr uint64 Offset = 14695981039346656037ULL;
+		constexpr uint64 Prime = 1099511628211ULL;
+
+		const FTCHARToUTF8 Utf8(*Value);
+		const uint8* Bytes = reinterpret_cast<const uint8*>(Utf8.Get());
+
+		uint64 Hash = Offset;
+
+		for (int32 Index = 0; Index < Utf8.Length(); ++Index)
+		{
+			Hash ^= Bytes[Index];
+			Hash *= Prime;
+		}
+
+		return FString::Printf(TEXT("%016llx"), Hash);
+	}
+}
+
 void USpaceMMOBackendClient::LoadServiceSecret()
 {
 	// Always attempted. This used to bail unless the process was a dedicated server or the editor,
@@ -145,9 +179,14 @@ void USpaceMMOBackendClient::LoadServiceSecret()
 	// value rather than as trailing whitespace.
 	ServiceSecret = Contents.TrimStartAndEnd();
 
-	// Length only. The secret itself must never reach a log, since logs get pasted into reports.
+	// Length and a hash prefix, never the secret. Logs get pasted into bug reports, but without
+	// some way to tell "the value I hold" from "the value the server holds" apart, a mismatch is
+	// indistinguishable from the header not arriving at all — which is exactly the ambiguity that
+	// cost a debugging round here.
 	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("Service credential loaded (%d chars)."), ServiceSecret.Len());
+		TEXT("Service credential loaded (%d chars, fingerprint %s)."),
+		ServiceSecret.Len(),
+		*FingerprintOf(ServiceSecret));
 }
 
 void USpaceMMOBackendClient::GatherAsServer(

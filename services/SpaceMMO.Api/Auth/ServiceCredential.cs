@@ -47,6 +47,50 @@ public sealed class ServiceCredential
 
     public bool IsConfigured => _secret is not null;
 
+    /// <summary>
+    /// A short fingerprint of a value, for comparing two machines' secrets in logs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A fingerprint rather than the value, because logs get pasted into bug reports. Matching the
+    /// Unreal client's fingerprint format exactly is the point — without one, "the header did not
+    /// arrive" and "the header arrived holding a different value" look identical from either side,
+    /// and both present as a plain 401.
+    /// </para>
+    /// <para>
+    /// FNV-1a rather than a cryptographic hash, for two reasons: it is eight lines in any language,
+    /// so the C++ side is certain to agree, and it is not pretending to be a security primitive —
+    /// this identifies a value, it does not protect one.
+    /// </para>
+    /// </remarks>
+    public static string Fingerprint(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return "<empty>";
+        }
+
+        const ulong Offset = 14695981039346656037;
+        const ulong Prime = 1099511628211;
+
+        ulong hash = Offset;
+
+        foreach (byte b in System.Text.Encoding.UTF8.GetBytes(value))
+        {
+            unchecked
+            {
+                hash ^= b;
+                hash *= Prime;
+            }
+        }
+
+        return hash.ToString("x16", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Fingerprint of the configured secret, or <c>&lt;none&gt;</c>.</summary>
+    public string ConfiguredFingerprint =>
+        _secret is null ? "<none>" : Fingerprint(System.Text.Encoding.UTF8.GetString(_secret));
+
     /// <summary>Whether a request carries the game server's credential.</summary>
     public bool IsServiceCaller(HttpContext context)
     {

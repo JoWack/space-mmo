@@ -17,6 +17,14 @@ public sealed record GatherRequest(int CharacterId, long ResourceNodeId, int Sta
 /// </remarks>
 public static class GatheringEndpoints
 {
+    /// <summary>Pre-compiled, because the analyzers require it and this sits on a request path.</summary>
+    private static readonly Action<ILogger, string, int, string, Exception?> LogRefusedServiceCall =
+        LoggerMessage.Define<string, int, string>(
+            LogLevel.Warning,
+            new EventId(1, nameof(LogRefusedServiceCall)),
+            "Service call refused: presented fingerprint {Presented} ({Length} chars), "
+            + "configured {Configured}.");
+
     public static void MapGatheringEndpoints(this IEndpointRouteBuilder routes)
     {
         RouteGroupBuilder group = routes.MapGroup("/gathering").WithTags("Gathering");
@@ -29,6 +37,8 @@ public static class GatheringEndpoints
         HttpContext context,
         Caller caller,
         GatheringService gathering,
+        ServiceCredential service,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellation)
     {
         OwnershipResult owned =
@@ -36,6 +46,20 @@ public static class GatheringEndpoints
 
         if (owned.Status != OwnershipStatus.Owned)
         {
+            // A rejected service call is worth explaining. "Header absent" and "header present but
+            // holding a different value" both surface as a bare 401, and telling them apart from
+            // the outside is guesswork — which is precisely what made this expensive to chase.
+            if (owned.Status == OwnershipStatus.Unauthenticated
+                && context.Request.Headers.TryGetValue(ServiceCredential.HeaderName, out var presented))
+            {
+                LogRefusedServiceCall(
+                    loggerFactory.CreateLogger("SpaceMMO.Auth"),
+                    ServiceCredential.Fingerprint(presented.ToString()),
+                    presented.ToString().Length,
+                    service.ConfiguredFingerprint,
+                    null);
+            }
+
             return owned.ToProblem();
         }
 

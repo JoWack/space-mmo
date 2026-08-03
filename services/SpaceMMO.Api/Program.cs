@@ -38,6 +38,14 @@ builder.Services.AddScoped<Caller>();
 // service call is refused — a missing secret must fail closed.
 builder.Services.AddSingleton<ServiceCredential>();
 
+// Announced at startup, with a fingerprint that matches the one the Unreal client logs.
+//
+// This line exists because its absence was itself the bug once: an API left running from before
+// this feature existed served every older endpoint perfectly while refusing every service call,
+// which is indistinguishable from a wrong secret. If this line is missing from the log, the
+// process is stale and needs restarting — no amount of checking the secret will help.
+builder.Services.AddHostedService<ServiceCredentialAnnouncer>();
+
 builder.Services.AddSingleton(_ => new SessionTokens(
     builder.Configuration["Auth:SigningKey"]
     ?? throw new InvalidOperationException(
