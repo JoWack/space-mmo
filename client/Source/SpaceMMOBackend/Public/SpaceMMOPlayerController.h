@@ -36,6 +36,7 @@ public:
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+
 	/**
 	 * The character this connection may act as, or zero until the server has agreed.
 	 *

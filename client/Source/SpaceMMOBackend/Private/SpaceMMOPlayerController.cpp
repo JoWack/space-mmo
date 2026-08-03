@@ -71,7 +71,10 @@ void ASpaceMMOPlayerController::EnsureViewportFocus()
 
 	Slate.SetAllUserFocusToGameViewport();
 
-	UE_LOG(LogSpaceMMOBackend, Verbose, TEXT("Focus was loose; returned it to the viewport."));
+	// Log, not Verbose, and deliberately so. This is the only evidence the guard exists at all, and
+	// without it there is no way to tell a build that has the fix from one that does not — which is
+	// exactly the ambiguity that made the last round of testing inconclusive.
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Focus was loose; returned it to the viewport."));
 }
 
 void ASpaceMMOPlayerController::OnPossess(APawn* InPawn)
