@@ -593,4 +593,109 @@ bool FSpaceMMOContactDoesNotFlickerWhileWalkingTest::RunTest(const FString& Para
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOSurfacePositionSitsOnTheGroundTest,
+	"SpaceMMO.Terrain.SurfacePositionSitsOnTheGround",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOSurfacePositionSitsOnTheGroundTest::RunTest(const FString& Parameters)
+{
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+	const FPlanetConfig Planet = TerrainTestPlanet();
+
+	// The round trip that matters. Content places a deposit by direction; this turns it into a
+	// point; the server then measures that point's altitude to decide whether a player standing
+	// near it is close enough to gather. If the two disagree by even a little, deposits sit
+	// visibly on the ground and refuse to be gathered — or hang above it and work fine.
+	const TArray<FVector> Directions = {
+		FVector(1.0, 0.0, 0.0),
+		FVector(-1.0, 0.02, 0.0),          // the authored deposit on the Capital
+		FVector(-1.0, -0.015, 0.025),      // and the second one
+		FVector(0.0, 0.0, 1.0),            // a pole, which a lat-long scheme would struggle with
+		FVector(0.577, 0.577, 0.577),      // a cube corner, where three faces meet
+	};
+
+	for (const FVector& Direction : Directions)
+	{
+		const FSystemCoordinate Position =
+			FPlanetTerrain::SurfacePosition(Planet, Terrain, Direction);
+
+		const double Altitude =
+			FPlanetTerrain::AltitudeAboveGroundKilometres(Planet, Terrain, Position);
+
+		// A millimetre. Anything looser would hide a real disagreement between the two functions.
+		TestTrue(
+			FString::Printf(
+				TEXT("Direction %s lands on the ground (altitude %f km)"),
+				*Direction.ToString(),
+				Altitude),
+			FMath::Abs(Altitude) < 0.000001);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOSurfacePositionIgnoresDirectionLengthTest,
+	"SpaceMMO.Terrain.SurfacePositionIgnoresDirectionLength",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOSurfacePositionIgnoresDirectionLengthTest::RunTest(const FString& Parameters)
+{
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+	const FPlanetConfig Planet = TerrainTestPlanet();
+
+	const FVector Direction = FVector(-1.0, 0.02, 0.0);
+
+	// The API normalises on load and there is a check constraint behind it, but this is also
+	// called with raw offsets from a player's position, whose length is a distance in kilometres.
+	// Trusting that length would scale the surface radius by it and put the answer in orbit.
+	const FSystemCoordinate FromUnit =
+		FPlanetTerrain::SurfacePosition(Planet, Terrain, Direction.GetSafeNormal());
+
+	const FSystemCoordinate FromLong =
+		FPlanetTerrain::SurfacePosition(Planet, Terrain, Direction * 4000.0);
+
+	const FSystemCoordinate FromShort =
+		FPlanetTerrain::SurfacePosition(Planet, Terrain, Direction * 0.0001);
+
+	TestTrue(
+		TEXT("A long direction gives the same point"),
+		FromUnit.Kilometres.Equals(FromLong.Kilometres, 0.000001));
+
+	TestTrue(
+		TEXT("A short direction gives the same point"),
+		FromUnit.Kilometres.Equals(FromShort.Kilometres, 0.000001));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOSurfacePositionIsRelativeToTheCentreTest,
+	"SpaceMMO.Terrain.SurfacePositionIsRelativeToTheCentre",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOSurfacePositionIsRelativeToTheCentreTest::RunTest(const FString& Parameters)
+{
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+
+	FPlanetConfig Planet = TerrainTestPlanet();
+	const FVector Direction = FVector(0.4, 0.6, -0.7).GetSafeNormal();
+
+	const FSystemCoordinate Before = FPlanetTerrain::SurfacePosition(Planet, Terrain, Direction);
+
+	// Move the planet. A deposit is authored relative to its body, so it must travel with it —
+	// the same reason terrain is sampled by direction rather than by an absolute position.
+	const FVector Shift = FVector(1000.0, -250.0, 30.0);
+	Planet.Centre = FSystemCoordinate(Planet.Centre.Kilometres + Shift);
+
+	const FSystemCoordinate After = FPlanetTerrain::SurfacePosition(Planet, Terrain, Direction);
+
+	TestTrue(
+		TEXT("The surface point moves with the planet, and by exactly as much"),
+		After.Kilometres.Equals(Before.Kilometres + Shift, 0.000001));
+
+	return true;
+}
+
 #endif

@@ -46,6 +46,19 @@ public:
 	/** Parses a JSON array of inventory stacks. */
 	static bool ParseInventory(const FString& Json, TArray<FBackendInventoryItem>& OutItems);
 
+	/** Parses a JSON array of bodies. */
+	static bool ParseBodies(const FString& Json, TArray<FBackendBody>& OutBodies);
+
+	/**
+	 * Parses a JSON array of resource deposits.
+	 *
+	 * A deposit whose direction is missing, unparseable, or the zero vector is dropped rather than
+	 * defaulted. There is no sensible default for "which way from the centre" — a zero vector names
+	 * no point on the sphere at all — and the alternative to dropping it is a deposit sitting at the
+	 * planet's core where nobody can reach it and no error was ever reported.
+	 */
+	static bool ParseResourceNodes(const FString& Json, TArray<FBackendResourceNode>& OutNodes);
+
 	/**
 	 * Classifies a response.
 	 *

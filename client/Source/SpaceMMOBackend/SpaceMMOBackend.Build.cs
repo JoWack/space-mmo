@@ -22,6 +22,11 @@ public class SpaceMMOBackend : ModuleRules
 			"Core",
 			"CoreUObject",
 			"Engine",
+
+			// Backend depends on Core, never the reverse. Placing a deposit means asking
+			// FPlanetTerrain where the ground is, and that maths belongs to Core. Core in turn
+			// stays free of any notion that deposits, items, or a server exist.
+			"SpaceMMOCore",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

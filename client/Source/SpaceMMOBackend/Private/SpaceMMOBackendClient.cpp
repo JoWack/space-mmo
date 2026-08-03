@@ -329,3 +329,59 @@ void USpaceMMOBackendClient::SelectCharacter(const int32 CharacterId)
 			OnCharacterStateLoaded.Broadcast();
 		});
 }
+
+void USpaceMMOBackendClient::FetchBodies()
+{
+	Bodies.Reset();
+
+	Send(
+		TEXT("GET"),
+		TEXT("/world/bodies"),
+		FString(),
+		false,
+		[this](const FString& Body)
+		{
+			FSpaceMMOBackendProtocol::ParseBodies(Body, Bodies);
+
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Loaded %d body/bodies."), Bodies.Num());
+
+			OnBodiesLoaded.Broadcast();
+		});
+}
+
+bool USpaceMMOBackendClient::FindBodyByKey(const FString& Key, FBackendBody& OutBody) const
+{
+	for (const FBackendBody& Body : Bodies)
+	{
+		if (Body.Key == Key)
+		{
+			OutBody = Body;
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void USpaceMMOBackendClient::FetchDeposits(const int32 BodyId)
+{
+	Deposits.Reset();
+
+	// bAuthenticated is false. The world endpoints are public, so this works before anyone has
+	// logged in and works on a dedicated server, which holds no session at all.
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/world/bodies/%d/nodes"), BodyId),
+		FString(),
+		false,
+		[this, BodyId](const FString& Body)
+		{
+			FSpaceMMOBackendProtocol::ParseResourceNodes(Body, Deposits);
+
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Loaded %d deposit(s) for body %d."),
+				Deposits.Num(), BodyId);
+
+			OnDepositsLoaded.Broadcast(BodyId);
+		});
+}

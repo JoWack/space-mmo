@@ -9,6 +9,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendSessionChanged, bool, bIsS
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendFailed, const FBackendFailure&, Failure);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharactersLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharacterStateLoaded);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendDepositsLoaded, int32, BodyId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendBodiesLoaded);
 
 /**
  * The client's connection to the game server.
@@ -76,6 +78,39 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	int32 GetSelectedCharacterId() const { return SelectedCharacterId; }
 
+	/** Loads every body in the starting system. Unauthenticated, like the deposits. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
+	void FetchBodies();
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
+	const TArray<FBackendBody>& GetBodies() const { return Bodies; }
+
+	/**
+	 * Finds a body by its content key, e.g. <c>body_capital</c>.
+	 *
+	 * By key rather than by id, because ids are assigned by the database and differ between any two
+	 * seeded environments. A hard-coded id works until the day the database is rebuilt in a
+	 * different order, and then places the world's deposits on the wrong planet.
+	 *
+	 * @return False if no such body has been loaded.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
+	bool FindBodyByKey(const FString& Key, FBackendBody& OutBody) const;
+
+	/**
+	 * Loads the deposits on a body.
+	 *
+	 * Unauthenticated, and deliberately so — the endpoint is public, which means the dedicated
+	 * server can call it without holding any player's token. The server is not a player and has no
+	 * business having a session; if placing the world required one, it would need credentials of
+	 * its own purely to ask where the ore is.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
+	void FetchDeposits(int32 BodyId);
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
+	const TArray<FBackendResourceNode>& GetDeposits() const { return Deposits; }
+
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
 	FOnBackendSessionChanged OnSessionChanged;
 
@@ -87,6 +122,12 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
 	FOnBackendCharacterStateLoaded OnCharacterStateLoaded;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
+	FOnBackendDepositsLoaded OnDepositsLoaded;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
+	FOnBackendBodiesLoaded OnBodiesLoaded;
 
 private:
 	/**
@@ -137,7 +178,15 @@ private:
 
 	void HandleSession(const FString& Body);
 
-	FString BaseUrl = TEXT("http://localhost:5000");
+	/**
+	 * Matches the port scripts\api.bat actually serves on.
+	 *
+	 * This was 5000 — Kestrel's default, but not the one this project uses. Nothing noticed while
+	 * the backend was only reached by the opt-in smoke test, and it would have gone on unnoticed:
+	 * a world that fetches its deposits from the wrong port simply has no deposits in it, which
+	 * looks like a placement bug rather than a configuration one.
+	 */
+	FString BaseUrl = TEXT("http://localhost:5080");
 
 	FBackendSession Session;
 
@@ -149,6 +198,12 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendInventoryItem> Inventory;
+
+	UPROPERTY()
+	TArray<FBackendResourceNode> Deposits;
+
+	UPROPERTY()
+	TArray<FBackendBody> Bodies;
 
 	int32 SelectedCharacterId = 0;
 };

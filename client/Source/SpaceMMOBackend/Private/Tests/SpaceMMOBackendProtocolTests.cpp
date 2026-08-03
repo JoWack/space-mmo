@@ -337,4 +337,120 @@ bool FSpaceMMOBackendParseSkillsAndInventoryTest::RunTest(const FString& Paramet
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOParseResourceNodesTest,
+	"SpaceMMO.Backend.ParseResourceNodes",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOParseResourceNodesTest::RunTest(const FString& Parameters)
+{
+	// The real response body, copied from the running API rather than invented, so this test
+	// fails if the endpoint's field names ever drift away from what the client reads.
+	const FString Json = TEXT(R"([
+		{"id":1,"key":"node_capital_ferrite_a","bodyId":5,"itemKey":"ferrite_ore",
+		 "itemName":"Ferrite Ore","skillKey":"mining","requiredLevel":1,"quantityMax":200,
+		 "directionX":-0.9998000599800071,"directionY":0.01999600119960014,"directionZ":0},
+		{"id":2,"key":"node_capital_ferrite_b","bodyId":5,"itemKey":"ferrite_ore",
+		 "itemName":"Ferrite Ore","skillKey":"mining","requiredLevel":1,"quantityMax":200,
+		 "directionX":-0.9995752707457286,"directionY":-0.01499362906118593,
+		 "directionZ":0.024989381768643217}
+	])");
+
+	TArray<FBackendResourceNode> Nodes;
+
+	TestTrue(TEXT("Parsed"), FSpaceMMOBackendProtocol::ParseResourceNodes(Json, Nodes));
+	TestEqual(TEXT("Both deposits"), Nodes.Num(), 2);
+
+	if (Nodes.Num() != 2)
+	{
+		return false;
+	}
+
+	TestEqual(TEXT("Key"), Nodes[0].Key, FString(TEXT("node_capital_ferrite_a")));
+	TestEqual(TEXT("Item"), Nodes[0].ItemKey, FString(TEXT("ferrite_ore")));
+	TestEqual(TEXT("Name"), Nodes[0].ItemName, FString(TEXT("Ferrite Ore")));
+	TestEqual(TEXT("Skill"), Nodes[0].SkillKey, FString(TEXT("mining")));
+	TestEqual(TEXT("Id"), Nodes[0].Id, static_cast<int64>(1));
+	TestEqual(TEXT("Body"), Nodes[0].BodyId, 5);
+	TestEqual(TEXT("Quantity"), Nodes[0].QuantityMax, 200);
+
+	// Direction is what everything else depends on. A deposit whose direction arrived wrong is
+	// drawn somewhere the server does not think it is, and gathering fails for invisible reasons.
+	TestTrue(
+		TEXT("Direction is a unit vector"),
+		FMath::IsNearlyEqual(Nodes[0].Direction.Size(), 1.0, 0.000001));
+
+	TestTrue(
+		TEXT("Direction points the way the server said"),
+		Nodes[0].Direction.X < -0.99 && Nodes[0].Direction.Y > 0.0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOResourceNodeWithoutDirectionIsDroppedTest,
+	"SpaceMMO.Backend.ResourceNodeWithoutDirectionIsDropped",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOResourceNodeWithoutDirectionIsDroppedTest::RunTest(const FString& Parameters)
+{
+	// Three deposits the client cannot place: no direction at all, a zero vector, and a direction
+	// that is not a number. Dropping them is the point — a defaulted direction would put a deposit
+	// at the planet's core, where it is unreachable and nothing ever reported a problem.
+	const FString Json = TEXT(R"([
+		{"id":1,"key":"no_direction","itemKey":"ferrite_ore","quantityMax":10},
+		{"id":2,"key":"zero_direction","itemKey":"ferrite_ore","quantityMax":10,
+		 "directionX":0,"directionY":0,"directionZ":0},
+		{"id":3,"key":"text_direction","itemKey":"ferrite_ore","quantityMax":10,
+		 "directionX":"north","directionY":0,"directionZ":0},
+		{"id":4,"key":"good","itemKey":"ferrite_ore","quantityMax":10,
+		 "directionX":0,"directionY":0,"directionZ":1}
+	])");
+
+	TArray<FBackendResourceNode> Nodes;
+
+	TestTrue(TEXT("Parsed"), FSpaceMMOBackendProtocol::ParseResourceNodes(Json, Nodes));
+
+	// The array as a whole is still valid; only the unusable entries are gone. One bad deposit
+	// must not cost a player every other deposit on the planet.
+	TestEqual(TEXT("Only the placeable deposit survives"), Nodes.Num(), 1);
+
+	if (Nodes.Num() == 1)
+	{
+		TestEqual(TEXT("And it is the good one"), Nodes[0].Key, FString(TEXT("good")));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOParseBodiesTest,
+	"SpaceMMO.Backend.ParseBodies",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOParseBodiesTest::RunTest(const FString& Parameters)
+{
+	const FString Json = TEXT(R"([
+		{"id":2,"key":"body_ares","name":"Ares","starSystemId":1,"radiusKm":339},
+		{"id":5,"key":"body_capital","name":"The Capital","starSystemId":1,"radiusKm":700}
+	])");
+
+	TArray<FBackendBody> Bodies;
+
+	TestTrue(TEXT("Parsed"), FSpaceMMOBackendProtocol::ParseBodies(Json, Bodies));
+	TestEqual(TEXT("Both bodies"), Bodies.Num(), 2);
+
+	if (Bodies.Num() != 2)
+	{
+		return false;
+	}
+
+	// Looked up by key, because ids are assigned by whichever database seeded last.
+	TestEqual(TEXT("Capital key"), Bodies[1].Key, FString(TEXT("body_capital")));
+	TestEqual(TEXT("Capital id"), Bodies[1].Id, 5);
+	TestEqual(TEXT("Capital radius"), Bodies[1].RadiusKilometres, 700.0);
+
+	return true;
+}
+
 #endif

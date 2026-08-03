@@ -117,6 +117,27 @@ public:
 		const FVector& Direction);
 
 	/**
+	 * The point on the ground lying in a given direction from the planet's centre.
+	 *
+	 * <strong>This is how anything authored by direction gets a position.</strong> Content places a
+	 * deposit by saying which way it lies from the centre and nothing more (see the resource node
+	 * schema), because the one remaining number — how far out the ground is — is a question this
+	 * function already answers. Storing an altitude alongside the direction would be a second answer,
+	 * free to disagree with the first the moment the terrain configuration changed, and the deposit
+	 * would end up buried or floating with nothing in the data looking wrong.
+	 *
+	 * Both machines call this. The server does it to decide whether a player is close enough to
+	 * gather; the client does it to decide where to draw the thing. They agree because they are
+	 * evaluating the same function of the same inputs, not because anyone transmitted a position.
+	 *
+	 * @param Direction Any non-zero vector from the planet centre; normalised internally.
+	 */
+	static FSystemCoordinate SurfacePosition(
+		const FPlanetConfig& Planet,
+		const FPlanetTerrainConfig& Terrain,
+		const FVector& Direction);
+
+	/**
 	 * Height of a point above the ground beneath it, in kilometres. Negative means underground.
 	 *
 	 * This is what a server checks a player's position against, and what a landing sequence

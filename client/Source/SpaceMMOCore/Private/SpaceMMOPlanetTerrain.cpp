@@ -127,6 +127,31 @@ double FPlanetTerrain::SurfaceRadiusKilometres(
 	return Planet.RadiusKilometres + ElevationKilometres(Terrain, Direction);
 }
 
+FSystemCoordinate FPlanetTerrain::SurfacePosition(
+	const FPlanetConfig& Planet,
+	const FPlanetTerrainConfig& Terrain,
+	const FVector& Direction)
+{
+	// Normalised here rather than trusted from the caller. The API normalises on load and the
+	// content validator rejects a zero vector, but this is also called with raw offsets from a
+	// player's position, and a direction of any length other than one would scale the whole
+	// surface radius — putting the result kilometres off the ground with nothing looking wrong.
+	const FVector Unit = Direction.GetSafeNormal();
+
+	if (Unit.IsNearlyZero())
+	{
+		// A zero direction names no point on the sphere. Returning the centre is the one answer
+		// that is obviously wrong on sight, rather than a plausible-looking point on the equator.
+		return Planet.Centre;
+	}
+
+	FSystemCoordinate Position;
+	Position.Kilometres =
+		Planet.Centre.Kilometres + (Unit * SurfaceRadiusKilometres(Planet, Terrain, Unit));
+
+	return Position;
+}
+
 double FPlanetTerrain::AltitudeAboveGroundKilometres(
 	const FPlanetConfig& Planet,
 	const FPlanetTerrainConfig& Terrain,

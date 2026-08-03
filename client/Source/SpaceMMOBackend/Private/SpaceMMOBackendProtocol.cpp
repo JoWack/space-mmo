@@ -336,6 +336,145 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 	return true;
 }
 
+bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendBody>& OutBodies)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutBodies.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		if (!Value.IsValid())
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> Object = Value->AsObject();
+
+		FBackendBody Body;
+
+		if (!Object.IsValid() || !Object->TryGetStringField(TEXT("key"), Body.Key))
+		{
+			continue;
+		}
+
+		Object->TryGetStringField(TEXT("name"), Body.Name);
+		Object->TryGetNumberField(TEXT("radiusKm"), Body.RadiusKilometres);
+
+		int64 Id = 0;
+		int64 StarSystemId = 0;
+
+		if (ReadInt64(Object, TEXT("id"), Id))
+		{
+			Body.Id = static_cast<int32>(Id);
+		}
+
+		if (ReadInt64(Object, TEXT("starSystemId"), StarSystemId))
+		{
+			Body.StarSystemId = static_cast<int32>(StarSystemId);
+		}
+
+		OutBodies.Add(Body);
+	}
+
+	return true;
+}
+
+bool FSpaceMMOBackendProtocol::ParseResourceNodes(
+	const FString& Json, TArray<FBackendResourceNode>& OutNodes)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutNodes.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		if (!Value.IsValid())
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> Object = Value->AsObject();
+
+		FBackendResourceNode Node;
+
+		if (!Object.IsValid() || !Object->TryGetStringField(TEXT("key"), Node.Key))
+		{
+			continue;
+		}
+
+		// The direction is required, and required to be usable. Everything else about a deposit
+		// can be missing and still leave something drawable; without a direction there is nowhere
+		// to draw it. Read before anything else is stored, so a bad one costs nothing.
+		double DirectionX = 0.0;
+		double DirectionY = 0.0;
+		double DirectionZ = 0.0;
+
+		if (!Object->TryGetNumberField(TEXT("directionX"), DirectionX)
+			|| !Object->TryGetNumberField(TEXT("directionY"), DirectionY)
+			|| !Object->TryGetNumberField(TEXT("directionZ"), DirectionZ))
+		{
+			continue;
+		}
+
+		Node.Direction = FVector(DirectionX, DirectionY, DirectionZ);
+
+		if (Node.Direction.IsNearlyZero())
+		{
+			continue;
+		}
+
+		// Normalised on arrival even though the server normalises on load and a check constraint
+		// stands behind that. It costs one square root per deposit per session, and the failure it
+		// prevents — every deposit on the planet displaced by a common factor — would look like a
+		// terrain bug rather than a parsing one.
+		Node.Direction = Node.Direction.GetSafeNormal();
+
+		Object->TryGetStringField(TEXT("itemKey"), Node.ItemKey);
+		Object->TryGetStringField(TEXT("itemName"), Node.ItemName);
+		Object->TryGetStringField(TEXT("skillKey"), Node.SkillKey);
+
+		int64 Id = 0;
+		int64 BodyId = 0;
+		int64 RequiredLevel = 0;
+		int64 QuantityMax = 0;
+
+		if (ReadInt64(Object, TEXT("id"), Id))
+		{
+			Node.Id = Id;
+		}
+
+		if (ReadInt64(Object, TEXT("bodyId"), BodyId))
+		{
+			Node.BodyId = static_cast<int32>(BodyId);
+		}
+
+		if (ReadInt64(Object, TEXT("requiredLevel"), RequiredLevel))
+		{
+			Node.RequiredLevel = static_cast<int32>(RequiredLevel);
+		}
+
+		if (ReadInt64(Object, TEXT("quantityMax"), QuantityMax))
+		{
+			Node.QuantityMax = static_cast<int32>(QuantityMax);
+		}
+
+		OutNodes.Add(Node);
+	}
+
+	return true;
+}
+
 FString FSpaceMMOBackendProtocol::ExtractErrorMessage(const FString& Body)
 {
 	const TSharedPtr<FJsonObject> Object = ParseObject(Body);

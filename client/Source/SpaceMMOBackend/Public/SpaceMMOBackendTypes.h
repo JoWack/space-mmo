@@ -144,6 +144,76 @@ struct SPACEMMOBACKEND_API FBackendInventoryItem
 	int32 Quantity = 0;
 };
 
+/** A planet or moon, as the server describes it. */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendBody
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Id = 0;
+
+	/** Stable content key, e.g. <c>body_capital</c>. What the client looks a body up by. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Key;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Name;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 StarSystemId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	double RadiusKilometres = 0.0;
+};
+
+/**
+ * A deposit on a body, as the server describes it.
+ *
+ * <strong>A direction, never a position.</strong> The server says which way the deposit lies from
+ * the body's centre and stops there, because how far out the ground is at that direction is a
+ * question <c>FPlanetTerrain::SurfacePosition</c> already answers identically on both machines. A
+ * transmitted position would be a second answer, free to disagree the moment terrain configuration
+ * changed — and the deposit would end up buried or floating with nothing in the payload looking
+ * wrong.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendResourceNode
+{
+	GENERATED_BODY()
+
+	/** Server-side id. What a gather request names. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 Id = 0;
+
+	/** Stable content key, e.g. <c>node_capital_ferrite_a</c>. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Key;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 BodyId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString ItemKey;
+
+	/** What to call it in the world, e.g. "Ferrite Ore". */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString ItemName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString SkillKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 RequiredLevel = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 QuantityMax = 0;
+
+	/** Unit vector from the body's centre. Normalised server-side on content load. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FVector Direction = FVector::ZeroVector;
+};
+
 /**
  * Why a request failed.
  *
