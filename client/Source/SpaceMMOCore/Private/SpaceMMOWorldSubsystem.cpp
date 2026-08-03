@@ -14,8 +14,8 @@ namespace
 	// Directional light intensity is in lux, and lux is unforgiving: three is roughly twilight,
 	// which is why the scene went dark the moment auto-exposure stopped compensating for it.
 	// Daylight is orders of magnitude higher; these are a starting point, not a physical claim.
-	float GKeyLightLux = 14.0f;
-	float GFillLightLux = 3.0f;
+	float GKeyLightLux = 25.0f;
+	float GFillLightLux = 6.0f;
 
 	FAutoConsoleVariableRef CVarKeyLight(
 		TEXT("SpaceMMO.KeyLight"),

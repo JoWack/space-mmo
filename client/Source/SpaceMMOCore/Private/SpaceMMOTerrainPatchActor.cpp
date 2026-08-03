@@ -5,7 +5,9 @@
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "Engine/World.h"
 #include "SpaceMMOLog.h"
+#include "Materials/MaterialInterface.h"
 #include "SpaceMMORenderOrigin.h"
+#include "UObject/ConstructorHelpers.h"
 
 using namespace UE::Geometry;
 
@@ -20,6 +22,17 @@ ASpaceMMOTerrainPatchActor::ASpaceMMOTerrainPatchActor()
 	// has no mesh to collide against and must still agree about where the ground is, so the mesh
 	// can never be the authority on it.
 	Ground->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// The same placeholder material the ship and planet use. Without one the component falls back
+	// to the engine default, so the ground was the one thing in the scene not lit like the rest of
+	// it — which makes judging the lighting harder than it needs to be.
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> GroundMaterial(
+		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+
+	if (GroundMaterial.Succeeded())
+	{
+		Ground->SetMaterial(0, GroundMaterial.Object);
+	}
 }
 
 void ASpaceMMOTerrainPatchActor::BeginPlay()

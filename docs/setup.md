@@ -180,6 +180,28 @@ Replicating it would be the wrong fix. The scene is a deterministic function of 
 so both ends build an identical copy for free rather than sending three hundred and fifty marker
 cubes over the wire to say something they both already know.
 
+### Where terrain is, and where it is not
+
+Terrain only exists inside the atmosphere. The demo planet is 20 km in radius with a 12 km
+atmosphere, so the patch appears once the viewer is within **32 km of the planet's centre** — about
+twelve kilometres above the ground — and is released again on the way out. Further away there is
+only the smooth sphere, which is all a planet needs to be at that distance.
+
+The patch is **1.4 km across**, so from high altitude it is a small square on an otherwise smooth
+world, and on foot it is simply the ground. Both are correct; it looks like a floating square
+because it is one.
+
+**That visible edge is the cost of the landing-zone approach**, not a bug. Terrain rises up to
+500 m above the nominal radius while the sphere mesh sits exactly at it, so the patch stands proud
+of the sphere and its rim is a cliff. Tapering the rim down to meet the sphere would hide it and
+must not be done: the mesh would then disagree with the height function the server uses, and
+players would stand on ground the server believes is somewhere else. `SpaceMMO.Patch.SitsOnTheTerrain`
+exists to catch exactly that. The real fix is full cube-sphere LOD, which is the deliberately
+deferred half of the terrain plan.
+
+Cheap ways to make the edge less obvious in the meantime: raise `PatchAngularRadiusDegrees` so the
+rim is further away, or lower `MaxElevationKilometres` so the step down is smaller.
+
 ### Why the scene is lit the way it is
 
 Two things that are easy to get wrong in a scene made almost entirely of empty space, both of
