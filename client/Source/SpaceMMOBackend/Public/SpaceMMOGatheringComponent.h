@@ -58,6 +58,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Gathering")
 	void BindInput(class UInputComponent* InputComponent);
 
+	/**
+	 * Shortest gap between requests the client will send, in seconds.
+	 *
+	 * <strong>Not a rate limit</strong> — the server owns that, and it is measured in wall-clock
+	 * time no client can influence. This only stops a held or hammered key turning into one HTTP
+	 * round trip per press. Two players doing that queued dozens of transactions on the same rows
+	 * and pushed response times from 30 ms to over eight seconds, which feels exactly like a
+	 * broken key even though every answer was correct.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Gathering")
+	float MinimumRequestSeconds = 0.5f;
+
 	/** Local intent. Does nothing but ask the server. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Gathering")
 	void RequestGather();
@@ -104,6 +116,9 @@ private:
 
 	/** Guards against double-binding, since binding is attempted from several places. */
 	bool bInputBound = false;
+
+	/** When the last request went out, so a hammered key does not become a queue of round trips. */
+	double LastRequestSeconds = -1000.0;
 
 	/** Nearest deposit within range of the owner, or null. Server-side truth. */
 	class ASpaceMMODepositActor* FindDepositInRange() const;

@@ -104,6 +104,23 @@ void USpaceMMOGatheringComponent::BindInput(UInputComponent* InputComponent)
 
 void USpaceMMOGatheringComponent::RequestGather()
 {
+	const UWorld* World = GetWorld();
+
+	if (World != nullptr)
+	{
+		const double Now = World->GetRealTimeSeconds();
+
+		// Dropped locally rather than sent and refused. Suppressing the request is the whole point
+		// — a refusal still costs a round trip and a database transaction, and it was those, not
+		// the gathering, that made two players hammering a key wait eight seconds for an answer.
+		if (Now - LastRequestSeconds < MinimumRequestSeconds)
+		{
+			return;
+		}
+
+		LastRequestSeconds = Now;
+	}
+
 	// Deliberately carries nothing. See the class comment: everything the server needs, it already
 	// knows better than the client does.
 	ServerGather();
