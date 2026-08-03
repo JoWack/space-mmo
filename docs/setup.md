@@ -569,6 +569,49 @@ docker compose -f infra/docker-compose.yml up -d            # start Postgres
 docker compose -f infra/docker-compose.yml down             # stop, keeping data
 ```
 
+### The service credential
+
+The Unreal dedicated server acts on players' behalf when gathering, so it holds a
+credential of its own. Run this once per machine:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\init-secrets.ps1
+```
+
+It generates one random value and writes it to two places: .NET user secrets for the
+API, and `secrets\service-secret.txt` for Unreal, which cannot read user secrets.
+`secrets\` is git-ignored.
+
+**Both processes announce a fingerprint of the value they hold, and it is the fastest
+thing to check when gathering returns 401.** The API logs it at startup:
+
+```
+Service credential configured from configuration (fingerprint 8e4f0b7f1d6b1fd4); environment Development.
+```
+
+and Unreal logs `Service credential loaded (44 chars, fingerprint 8e4f0b7f1d6b1fd4).`
+Three cases, distinguishable at a glance:
+
+| What the logs say | What it means |
+|---|---|
+| Fingerprints match, still 401 | Something else; read the refusal line, which prints both |
+| Fingerprints differ | Genuinely different values — re-run `init-secrets.ps1` and restart both |
+| API says `configured <none>` | The API has no secret, whatever is on disk |
+| API prints no credential line at all | Stale API process from before this feature — restart it |
+
+**The trap this exists for.** `dotnet user-secrets` are only loaded when the host is in
+the **Development** environment, which depends on an environment variable being set by
+whatever started the process. Launch the API a slightly different way and the secret
+silently is not there, while every other endpoint keeps working — because they either
+need no secret or fail somewhere more obvious. The value on disk is right, and
+unreachable. That is why the API also falls back to reading
+`secrets/service-secret.txt` directly, and why the startup line names both the source
+and the environment.
+
+`-GatherSelfTest` on the Unreal command line fires one gather as soon as the world
+loads, with no pawn, key or range check involved. It splits "the credential path is
+broken" from "the in-game path is broken" in a single run.
+
 ### Querying the API from PowerShell
 
 The QA checklists hit the API by hand. Windows PowerShell 5.1 has three traps that make
