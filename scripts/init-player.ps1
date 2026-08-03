@@ -17,14 +17,18 @@ param(
     [string] $Email = "player@local.test",
     [string] $CharacterName = "Prospector",
     [int]    $Race = 0,
-    [string] $BaseUrl = "http://localhost:5080"
+    [string] $BaseUrl = "http://localhost:5080",
+
+    # Which file to write. Two clients on one machine need two, since a login file names one
+    # player; pass -BackendLoginFile= to the client to point it at the matching one.
+    [string] $OutFile = "player-login.txt"
 )
 
 $ErrorActionPreference = 'Stop'
 
 $repo = Split-Path -Parent $PSScriptRoot
 $secretsDir = Join-Path $repo 'secrets'
-$loginFile = Join-Path $secretsDir 'player-login.txt'
+$loginFile = Join-Path $secretsDir $OutFile
 
 # Generated, and comfortably past the API's 12-character minimum. Not memorable on purpose: this
 # is read from a file, never typed.

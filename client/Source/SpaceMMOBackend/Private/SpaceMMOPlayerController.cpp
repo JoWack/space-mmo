@@ -105,8 +105,15 @@ bool ASpaceMMOPlayerController::FindCredentials(FString& OutEmail, FString& OutP
 		return true;
 	}
 
-	const FString Path =
-		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("secrets"), TEXT("player-login.txt"));
+	// Overridable so two clients on one machine can be two different players — which is exactly
+	// what testing a server needs, and impossible when both read the same file.
+	FString Path;
+
+	if (!FParse::Value(FCommandLine::Get(), TEXT("BackendLoginFile="), Path) || Path.IsEmpty())
+	{
+		Path = FPaths::Combine(
+			FPaths::ProjectDir(), TEXT(".."), TEXT("secrets"), TEXT("player-login.txt"));
+	}
 
 	TArray<FString> Lines;
 
