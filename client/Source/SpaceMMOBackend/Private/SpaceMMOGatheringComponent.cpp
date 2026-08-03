@@ -4,10 +4,49 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMODepositActor.h"
+
+namespace
+{
+	/**
+	 * Triggers a gather from the console: SpaceMMO.Gather
+	 *
+	 * The same path the key takes, so it is a real test rather than a parallel one. Exists because
+	 * a key binding is the one part of this that cannot be checked without a human at a keyboard —
+	 * and the first version of this feature shipped with the binding silently doing nothing, which
+	 * no automated test noticed and no log recorded.
+	 */
+	FAutoConsoleCommandWithWorld GGatherCommand(
+		TEXT("SpaceMMO.Gather"),
+		TEXT("Attempts to gather from the nearest deposit, as if the gather key were pressed."),
+		FConsoleCommandWithWorldDelegate::CreateLambda(
+			[](UWorld* World)
+			{
+				const APlayerController* Controller =
+					World != nullptr ? World->GetFirstPlayerController() : nullptr;
+
+				const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+
+				USpaceMMOGatheringComponent* Gathering =
+					Pawn != nullptr
+						? Pawn->FindComponentByClass<USpaceMMOGatheringComponent>()
+						: nullptr;
+
+				if (Gathering == nullptr)
+				{
+					UE_LOG(LogSpaceMMOBackend, Warning,
+						TEXT("SpaceMMO.Gather: the possessed pawn cannot gather. On foot?"));
+
+					return;
+				}
+
+				Gathering->RequestGather();
+			}));
+}
 
 USpaceMMOGatheringComponent::USpaceMMOGatheringComponent()
 {
@@ -22,9 +61,26 @@ void USpaceMMOGatheringComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// The pawn may not be possessed yet, in which case it has no input component and BindInput is
-	// called again by whoever possesses it. Binding here covers the already-possessed case.
-	if (const APawn* Pawn = Cast<APawn>(GetOwner()))
+	APawn* Pawn = Cast<APawn>(GetOwner());
+
+	if (Pawn == nullptr)
+	{
+		return;
+	}
+
+	// Covers the pawn that is already possessed by the time this runs.
+	BindInput(Pawn->InputComponent);
+
+	// And the far more common case: a pawn spawned unpossessed, whose input component does not
+	// exist yet. Restart fires after possession has set input up, which is the only moment binding
+	// can actually succeed. Missing this was why the key did nothing at all.
+	Pawn->ReceiveRestartedDelegate.AddDynamic(
+		this, &USpaceMMOGatheringComponent::HandlePawnRestarted);
+}
+
+void USpaceMMOGatheringComponent::HandlePawnRestarted(APawn* Pawn)
+{
+	if (Pawn != nullptr)
 	{
 		BindInput(Pawn->InputComponent);
 	}
@@ -32,13 +88,17 @@ void USpaceMMOGatheringComponent::BeginPlay()
 
 void USpaceMMOGatheringComponent::BindInput(UInputComponent* InputComponent)
 {
-	if (InputComponent == nullptr)
+	if (InputComponent == nullptr || bInputBound)
 	{
 		return;
 	}
 
 	InputComponent->BindAction(
 		TEXT("Gather"), IE_Pressed, this, &USpaceMMOGatheringComponent::RequestGather);
+
+	bInputBound = true;
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Gather key bound on %s."), *GetNameSafe(GetOwner()));
 }
 
 void USpaceMMOGatheringComponent::RequestGather()
@@ -61,8 +121,10 @@ void USpaceMMOGatheringComponent::ServerGather_Implementation()
 
 	if (Deposit == nullptr)
 	{
-		// Not an error. Pressing the key in an empty field is an ordinary thing to do.
-		UE_LOG(LogSpaceMMOBackend, Verbose, TEXT("Gather: nothing in range."));
+		// Not an error — pressing the key in an empty field is ordinary — but logged at Log level
+		// anyway. A key press is a deliberate act, so the one thing it must never do is produce
+		// no evidence at all that it was received.
+		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Gather: nothing within %.0f m."), RangeMetres);
 
 		return;
 	}

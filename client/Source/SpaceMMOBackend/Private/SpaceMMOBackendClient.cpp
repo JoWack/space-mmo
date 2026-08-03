@@ -121,13 +121,10 @@ void USpaceMMOBackendClient::OnSmokeFailed(const FBackendFailure& Failure)
 
 void USpaceMMOBackendClient::LoadServiceSecret()
 {
-	// Only the machine running the simulation should hold this. On a player's client the file is
-	// simply absent, which is the correct outcome rather than an error worth reporting.
-	if (!IsRunningDedicatedServer() && !GIsEditor)
-	{
-		return;
-	}
-
+	// Always attempted. This used to bail unless the process was a dedicated server or the editor,
+	// which silently disabled gathering in standalone play — where the one machine *is* the server
+	// and both those checks are false. The secret not being distributed is what keeps it off a
+	// player's machine; a runtime guard here only ever managed to lock out the legitimate case.
 	const FString SecretPath =
 		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("secrets"), TEXT("service-secret.txt"));
 
@@ -135,9 +132,10 @@ void USpaceMMOBackendClient::LoadServiceSecret()
 
 	if (!FFileHelper::LoadFileToString(Contents, *SecretPath))
 	{
-		UE_LOG(LogSpaceMMOBackend, Warning,
-			TEXT("No service secret at %s; gathering will be refused. Run scripts\\init-secrets.ps1."),
-			*SecretPath);
+		// Verbose, not a warning. On a real player's machine this file is meant to be absent, and
+		// a warning every launch would train everyone to ignore it. The refusal at the point of
+		// use is where it actually matters, and that one is loud.
+		UE_LOG(LogSpaceMMOBackend, Verbose, TEXT("No service secret at %s."), *SecretPath);
 
 		return;
 	}

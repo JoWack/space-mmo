@@ -47,7 +47,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Gathering")
 	int32 StationId = 0;
 
-	/** Binds the gather key on whichever input component the owning pawn ends up with. */
+	/**
+	 * Binds the gather key on whichever input component the owning pawn ends up with.
+	 *
+	 * Safe to call more than once — it binds at most once — because there is no single moment that
+	 * is reliably the right one. A pawn has no input component until it is possessed, so binding
+	 * at BeginPlay or at attach time silently does nothing, which is exactly how this shipped
+	 * broken the first time: no key, no log, nothing to see.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Gathering")
 	void BindInput(class UInputComponent* InputComponent);
 
@@ -56,8 +63,15 @@ public:
 	void RequestGather();
 
 private:
+	/** Possession is what creates the input component, so that is when binding can succeed. */
+	UFUNCTION()
+	void HandlePawnRestarted(APawn* Pawn);
+
 	UFUNCTION(Server, Reliable)
 	void ServerGather();
+
+	/** Guards against double-binding, since binding is attempted from several places. */
+	bool bInputBound = false;
 
 	/** Nearest deposit within range of the owner, or null. Server-side truth. */
 	class ASpaceMMODepositActor* FindDepositInRange() const;
