@@ -93,6 +93,12 @@ void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 	{
 		Gathering->CharacterId = Controller->GetCharacterId();
 		Gathering->StationId = Controller->StationId;
+
+		if (Gathering->CharacterId != 0)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s will gather as character %d (%s)."),
+				*GetNameSafe(Pawn), Gathering->CharacterId, *Controller->GetCharacterName());
+		}
 	}
 
 	// Registration can happen before possession, in which case the pawn has no input component

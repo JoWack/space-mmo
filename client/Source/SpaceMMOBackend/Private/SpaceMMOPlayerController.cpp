@@ -297,6 +297,16 @@ void ASpaceMMOPlayerController::RefreshPossessedPawn()
 		{
 			Gathering->CharacterId = CharacterId;
 			Gathering->StationId = StationId;
+
+			// Logged because this is the last link in the chain and the only one that was
+			// previously invisible: identity could resolve correctly and still fail to reach the
+			// thing that spends it, and the symptom would be ore credited to nobody. With two
+			// players on a server it also shows, at a glance, that each pawn got its own.
+			if (CharacterId != 0)
+			{
+				UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s will gather as character %d (%s)."),
+					*GetNameSafe(Possessed), CharacterId, *CharacterName);
+			}
 		}
 	}
 }

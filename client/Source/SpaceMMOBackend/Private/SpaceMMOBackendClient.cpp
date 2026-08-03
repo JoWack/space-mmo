@@ -159,8 +159,19 @@ void USpaceMMOBackendClient::LoadServiceSecret()
 	// which silently disabled gathering in standalone play — where the one machine *is* the server
 	// and both those checks are false. The secret not being distributed is what keeps it off a
 	// player's machine; a runtime guard here only ever managed to lock out the legitimate case.
-	const FString SecretPath =
-		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("secrets"), TEXT("service-secret.txt"));
+	// An environment variable first, because the default relative path only works when the project
+	// is being run from the repository. A staged server lives in
+	// Saved/StagedBuilds/WindowsServer/SpaceMMO, so "../secrets" points inside the staged build and
+	// finds nothing — and the failure surfaces two steps away, as every player being refused their
+	// own character. A variable rather than a command-line flag because arguments to this process
+	// have been observed arriving mangled, and a path full of dots is exactly what gets mangled.
+	FString SecretPath = FPlatformMisc::GetEnvironmentVariable(TEXT("SPACEMMO_SERVICE_SECRET_FILE"));
+
+	if (SecretPath.IsEmpty())
+	{
+		SecretPath = FPaths::Combine(
+			FPaths::ProjectDir(), TEXT(".."), TEXT("secrets"), TEXT("service-secret.txt"));
+	}
 
 	FString Contents;
 
