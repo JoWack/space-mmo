@@ -267,4 +267,7 @@ private:
 
 	/** Diagnostic only: seconds since the last approach line. */
 	double DiagnosticSeconds = 0.0;
+
+	/** Accumulates for the -LogTickHealth heartbeat. */
+	double HeartbeatSeconds = 0.0;
 };

@@ -189,6 +189,37 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 
 	ApplyWorldTransform();
 
+	// A heartbeat, and the two facts that distinguish the ways it can stop.
+	//
+	// When a second client joins, the first client's ship stops simulating: the flight HUD vanishes
+	// and input does nothing, while the process still renders and answers Windows. Measured with the
+	// per-second APPROACH line, which simply stops. That leaves two candidates and they need telling
+	// apart, because the fix is completely different for each:
+	//
+	//   the world is paused        DeltaSeconds keeps arriving, IsPaused() is true
+	//   the actor stopped ticking  no heartbeat at all, because Tick is not being called
+	//
+	// Forcing bPauseOnLossOfFocus=False on the command line did not help, so if IsPaused() is true
+	// something else is doing the pausing and this will say so.
+	if (FParse::Param(FCommandLine::Get(), TEXT("LogTickHealth")))
+	{
+		HeartbeatSeconds += DeltaSeconds;
+
+		if (HeartbeatSeconds >= 1.0)
+		{
+			HeartbeatSeconds = 0.0;
+
+			const UWorld* World = GetWorld();
+
+			UE_LOG(LogSpaceMMO, Log,
+				TEXT("TICKHEALTH: delta %.4f s | paused %d | locally controlled %d | authority %d"),
+				DeltaSeconds,
+				World != nullptr ? World->IsPaused() : -1,
+				IsLocallyControlled() ? 1 : 0,
+				HasAuthority() ? 1 : 0);
+		}
+	}
+
 	DiagnosticSeconds += DeltaSeconds;
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("LogApproach")) && DiagnosticSeconds >= 1.0)
