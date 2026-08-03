@@ -8,10 +8,14 @@ REM
 REM Optional extras, appended to this line:
 REM   -ShipStartX=38 -ShipStartY=0 -ShipStartZ=0    start ~1.7 km above the deposits, facing them
 REM   -SpawnCharacter -CharacterDirZ=-1             also put a character on the far side
-REM   -GatherCharacterId=5 -GatherStationId=1       who to credit when E is pressed at a deposit
+REM   -AutoDisembark                                step out the moment the ship lands
+REM   -BackendEmail=you@example.com -BackendPassword=... -CharacterId=8
+REM                                                 sign in, so the server knows who you are
 REM
 REM Gathering needs all three of: the API running, scripts\init-secrets.ps1 having been run once,
-REM and a real character id. Which character belongs to which connection is not decided anywhere
-REM yet -- the dedicated server has no login flow -- so it comes from the command line for now.
-REM   -AutoDisembark                                step out the moment the ship lands
+REM and the credentials above. Without them the connection has no character, and gathering says so
+REM rather than crediting somebody arbitrary.
+REM
+REM The character id is only a claim. The server checks it against your session token and refuses
+REM any character your account does not own. Omit -CharacterId= to play the first one you have.
 start "" "D:\Programming\UnrealEngineSource\Engine\Binaries\Win64\UnrealEditor.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -game -windowed -ResX=1600 -ResY=900 %*
