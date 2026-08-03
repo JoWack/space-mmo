@@ -62,6 +62,32 @@
     }
   ],
 
+  "$nodeComment": "Deposits are placed by direction from the body centre, never by latitude and longitude — a lat-long pair has two singular points and a deposit at a pole is no less valid than one at the equator. No altitude: how high the ground is there is a question the terrain function already answers, and a second answer would be free to disagree with it.",
+
+  "resourceNodes": [
+    {
+      "key": "node_capital_ferrite_a",
+      "body": "body_capital",
+      "item": "ferrite_ore",
+      "skill": "mining",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "$comment": "On the face a ship approaching from the system origin arrives at, so the first deposit a new player meets is not on the far side of the world.",
+      "direction": [-1.0, 0.02, 0.0]
+    },
+    {
+      "key": "node_capital_ferrite_b",
+      "body": "body_capital",
+      "item": "ferrite_ore",
+      "skill": "mining",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "direction": [-1.0, -0.015, 0.025]
+    }
+  ],
+
   "stations": [
     {
       "key": "station_capital_hub",

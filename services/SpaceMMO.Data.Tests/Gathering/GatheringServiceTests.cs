@@ -484,6 +484,12 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         var node = new ResourceNode
         {
+            // Unique per call: this helper is used several times in a single test, and content
+            // keys are unique by design so authored deposits upsert rather than duplicating.
+            Key = $"node_test_{Guid.NewGuid():N}",
+
+            // Every deposit needs somewhere on its body to be, and the schema now enforces it.
+            DirectionX = 1.0,
             StarSystemId = systemId,
             BodyId = bodyId,
             ItemDefId = _oreId,

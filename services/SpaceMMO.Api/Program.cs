@@ -83,6 +83,7 @@ app.MapGatheringEndpoints();
 app.MapIndustryEndpoints();
 app.MapMarketEndpoints();
 app.MapQuestEndpoints();
+app.MapWorldEndpoints();
 
 await app.RunAsync();
 

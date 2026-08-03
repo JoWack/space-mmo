@@ -91,7 +91,8 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 file.Quests ?? [],
                 file.Systems ?? [],
                 file.Bodies ?? [],
-                file.Stations ?? []));
+                file.Stations ?? [],
+                file.ResourceNodes ?? []));
         }
 
         return pack;
@@ -121,6 +122,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         Dictionary<string, int> bodyIds = await UpsertBodiesAsync(pack, systemIds, cancellationToken);
 
         await UpsertStationsAsync(pack, systemIds, bodyIds, cancellationToken);
+        await UpsertResourceNodesAsync(pack, systemIds, bodyIds, itemIds, skillIds, cancellationToken);
         await UpsertRecipesAsync(pack, skillIds, itemIds, cancellationToken);
         await UpsertQuestsAsync(pack, skillIds, cancellationToken);
 
@@ -441,6 +443,63 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         await _database.SaveChangesAsync(cancellationToken);
     }
 
+    private async Task UpsertResourceNodesAsync(
+        ContentPack pack,
+        Dictionary<string, int> systemIds,
+        Dictionary<string, int> bodyIds,
+        Dictionary<string, int> itemIds,
+        Dictionary<string, int> skillIds,
+        CancellationToken cancellationToken)
+    {
+        if (pack.ResourceNodes.Count == 0)
+        {
+            return;
+        }
+
+        Dictionary<string, ResourceNode> existing = await _database.ResourceNodes
+            .ToDictionaryAsync(n => n.Key, StringComparer.Ordinal, cancellationToken);
+
+        foreach (ResourceNodeContent content in pack.ResourceNodes)
+        {
+            int bodyId = bodyIds[content.Body];
+
+            // Normalised on load, so content can be authored as whole numbers rather than as unit
+            // vectors, and every consumer gets a direction it can use without checking.
+            double x = content.Direction[0];
+            double y = content.Direction[1];
+            double z = content.Direction[2];
+
+            double length = Math.Sqrt((x * x) + (y * y) + (z * z));
+
+            x /= length;
+            y /= length;
+            z /= length;
+
+            ResourceNode node = existing.TryGetValue(content.Key, out ResourceNode? found)
+                ? found
+                : new ResourceNode { Key = content.Key };
+
+            node.StarSystemId = systemIds[
+                pack.Bodies.Single(b => b.Key == content.Body).System];
+            node.BodyId = bodyId;
+            node.ItemDefId = itemIds[content.Item];
+            node.SkillId = skillIds[content.Skill];
+            node.RequiredLevel = content.RequiredLevel;
+            node.QuantityMax = content.QuantityMax;
+            node.RespawnSeconds = content.RespawnSeconds;
+            node.DirectionX = x;
+            node.DirectionY = y;
+            node.DirectionZ = z;
+
+            if (!existing.ContainsKey(content.Key))
+            {
+                _database.ResourceNodes.Add(node);
+            }
+        }
+
+        await _database.SaveChangesAsync(cancellationToken);
+    }
+
     /// <summary>
     /// The shape of one content file. Every section is optional, so a file can define just one
     /// kind of thing.
@@ -452,5 +511,6 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         IReadOnlyList<QuestContent>? Quests,
         IReadOnlyList<StarSystemContent>? Systems,
         IReadOnlyList<BodyContent>? Bodies,
-        IReadOnlyList<StationContent>? Stations);
+        IReadOnlyList<StationContent>? Stations,
+        IReadOnlyList<ResourceNodeContent>? ResourceNodes);
 }

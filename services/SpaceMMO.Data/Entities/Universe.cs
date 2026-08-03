@@ -117,6 +117,9 @@ public class ResourceNode
 {
     public long Id { get; set; }
 
+    /// <summary>Stable content key, so authored deposits upsert rather than duplicating.</summary>
+    public required string Key { get; set; }
+
     public int StarSystemId { get; set; }
 
     public StarSystem? StarSystem { get; set; }
@@ -144,6 +147,27 @@ public class ResourceNode
 
     /// <summary>Minimum level to gather here.</summary>
     public int RequiredLevel { get; set; }
+
+    /// <summary>
+    /// Where on the body this deposit sits, as a direction from the body's centre.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A direction rather than a latitude and longitude, for the same reason the terrain patch
+    /// uses a tangent frame: a lat-long pair has two singular points, and a deposit at a pole is
+    /// no less valid than one at the equator.
+    /// </para>
+    /// <para>
+    /// Only a direction, with no altitude. How high the ground is at that direction is a question
+    /// the terrain function already answers, and storing it here would be a second answer free to
+    /// disagree — the same mistake as letting a mesh diverge from the height field.
+    /// </para>
+    /// </remarks>
+    public double DirectionX { get; set; }
+
+    public double DirectionY { get; set; }
+
+    public double DirectionZ { get; set; }
 
     /// <summary>
     /// A tool that must be held, or null if the deposit can be worked by hand.

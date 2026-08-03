@@ -282,6 +282,7 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
             [],
             [],
             [],
+            [],
             []);
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();

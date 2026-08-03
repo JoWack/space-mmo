@@ -56,6 +56,7 @@ public static class ContentValidator
         ValidateRecipes(pack, skillKeys, itemKeys, toolKeys, errors);
         ValidateQuests(pack, skillKeys, questKeys, errors);
         ValidateUniverse(pack, systemKeys, bodyKeys, errors);
+        ValidateResourceNodes(pack, bodyKeys, itemKeys, skillKeys, errors);
         ValidateRecipeGraphIsAcyclic(pack, errors);
         ValidatePrerequisitesAreAcyclic(pack, errors);
 
@@ -166,6 +167,62 @@ public static class ContentValidator
                     "body",
                     required,
                     $"Missing starting body for {race}; characters of that race cannot be created."));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks that every deposit sits on a real body, yields a real item, and has somewhere to be.
+    /// </summary>
+    private static void ValidateResourceNodes(
+        ContentPack pack,
+        HashSet<string> bodyKeys,
+        HashSet<string> itemKeys,
+        HashSet<string> skillKeys,
+        List<ContentError> errors)
+    {
+        foreach (ResourceNodeContent node in pack.ResourceNodes)
+        {
+            if (!bodyKeys.Contains(node.Body))
+            {
+                errors.Add(new ContentError("node", node.Key, $"Unknown body '{node.Body}'."));
+            }
+
+            if (!itemKeys.Contains(node.Item))
+            {
+                errors.Add(new ContentError("node", node.Key, $"Unknown item '{node.Item}'."));
+            }
+
+            if (!skillKeys.Contains(node.Skill))
+            {
+                errors.Add(new ContentError("node", node.Key, $"Unknown skill '{node.Skill}'."));
+            }
+
+            // A zero direction has no point on the sphere to correspond to, and normalising it
+            // later would produce a NaN that ends up as a deposit at no position at all.
+            if (node.Direction is not { Length: 3 }
+                || (node.Direction[0] == 0.0 && node.Direction[1] == 0.0 && node.Direction[2] == 0.0))
+            {
+                errors.Add(new ContentError(
+                    "node", node.Key, "Direction must be three non-zero components."));
+            }
+
+            if (node.QuantityMax <= 0)
+            {
+                errors.Add(new ContentError("node", node.Key, "Quantity must be positive."));
+            }
+
+            if (node.RespawnSeconds <= 0)
+            {
+                // Zero would make the deposit infinite, which removes the throttle the whole
+                // material faucet depends on (economy-design §5b).
+                errors.Add(new ContentError("node", node.Key, "Respawn seconds must be positive."));
+            }
+
+            if (node.RequiredLevel is < SkillCurve.MinLevel or > SkillCurve.MaxLevel)
+            {
+                errors.Add(new ContentError(
+                    "node", node.Key, $"Required level {node.RequiredLevel} is outside the curve."));
             }
         }
     }

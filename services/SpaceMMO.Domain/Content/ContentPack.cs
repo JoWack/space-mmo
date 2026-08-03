@@ -71,6 +71,19 @@ public sealed record BodyContent(
     SecurityLevel SecurityLevel,
     double RadiusKm);
 
+/// <summary>A resource deposit, as authored in <c>data/universe/</c>.</summary>
+/// <param name="Direction">Direction from the body's centre. Normalised on load, so authors may
+/// write whole numbers rather than unit vectors.</param>
+public sealed record ResourceNodeContent(
+    string Key,
+    string Body,
+    string Item,
+    string Skill,
+    int RequiredLevel,
+    int QuantityMax,
+    int RespawnSeconds,
+    double[] Direction);
+
 /// <summary>A station, as authored in <c>data/universe/</c>.</summary>
 public sealed record StationContent(
     string Key,
@@ -94,10 +107,11 @@ public sealed record ContentPack(
     IReadOnlyList<QuestContent> Quests,
     IReadOnlyList<StarSystemContent> Systems,
     IReadOnlyList<BodyContent> Bodies,
-    IReadOnlyList<StationContent> Stations)
+    IReadOnlyList<StationContent> Stations,
+    IReadOnlyList<ResourceNodeContent> ResourceNodes)
 {
     /// <summary>An empty pack, for tests and for merging.</summary>
-    public static ContentPack Empty { get; } = new([], [], [], [], [], [], []);
+    public static ContentPack Empty { get; } = new([], [], [], [], [], [], [], []);
 
     /// <summary>Combines two packs, so content can be split across many files.</summary>
     public ContentPack Concat(ContentPack other)
@@ -111,6 +125,7 @@ public sealed record ContentPack(
             [.. Quests, .. other.Quests],
             [.. Systems, .. other.Systems],
             [.. Bodies, .. other.Bodies],
-            [.. Stations, .. other.Stations]);
+            [.. Stations, .. other.Stations],
+            [.. ResourceNodes, .. other.ResourceNodes]);
     }
 }

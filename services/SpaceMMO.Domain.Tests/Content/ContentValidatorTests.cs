@@ -55,7 +55,8 @@ public sealed class ContentValidatorTests
         IReadOnlyList<QuestContent>? quests = null,
         IReadOnlyList<StarSystemContent>? systems = null,
         IReadOnlyList<BodyContent>? bodies = null,
-        IReadOnlyList<StationContent>? stations = null) =>
+        IReadOnlyList<StationContent>? stations = null,
+        IReadOnlyList<ResourceNodeContent>? resourceNodes = null) =>
         new(skills ?? [Skill()],
             items ?? [Item("ore"), Item("plate", ItemCategory.Refined)],
             recipes ?? [],
@@ -64,7 +65,8 @@ public sealed class ContentValidatorTests
             // Empty by default. ValidateUniverse only demands the four homeworlds once a pack
             // authors any body at all, so recipe and quest tests are unaffected by it.
             bodies ?? [],
-            stations ?? []);
+            stations ?? [],
+            resourceNodes ?? []);
 
     private static bool HasError(IReadOnlyList<ContentError> errors, string fragment) =>
         errors.Any(e => e.Message.Contains(fragment, StringComparison.OrdinalIgnoreCase));
@@ -444,6 +446,82 @@ public sealed class ContentValidatorTests
         // Content is split across files, so a pack holding only recipes is an ordinary thing to
         // validate. Demanding homeworlds of it would fail every other test in this class.
         Assert.Empty(ContentValidator.Validate(Pack()));
+    }
+
+    [Fact]
+    public void AResourceNodeMustReferToRealContent()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes:
+            [
+                new ResourceNodeContent(
+                    "node_bad", "body_nowhere", "unobtainium", "prospecting",
+                    1, 200, 1200, [1.0, 0.0, 0.0]),
+            ]);
+
+        IReadOnlyList<ContentError> errors = ContentValidator.Validate(pack);
+
+        TestErrors(errors, "Unknown body 'body_nowhere'");
+        TestErrors(errors, "Unknown item 'unobtainium'");
+        TestErrors(errors, "Unknown skill 'prospecting'");
+    }
+
+    [Fact]
+    public void AResourceNodeNeedsSomewhereToBe()
+    {
+        // A zero direction has no point on the sphere to correspond to, and normalising it later
+        // produces a NaN — a deposit at no position at all rather than a visible mistake.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes:
+            [
+                new ResourceNodeContent(
+                    "node_nowhere", "body_terra", "ore", "refining",
+                    1, 200, 1200, [0.0, 0.0, 0.0]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Direction must be three"));
+    }
+
+    [Fact]
+    public void AResourceNodeMustRespawn()
+    {
+        // A deposit that never refills is an infinite one, which removes the throttle the whole
+        // material faucet depends on.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes:
+            [
+                new ResourceNodeContent(
+                    "node_forever", "body_terra", "ore", "refining",
+                    1, 200, 0, [1.0, 0.0, 0.0]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Respawn seconds must be positive"));
+    }
+
+    [Fact]
+    public void AValidResourceNodePasses()
+    {
+        Assert.Empty(ContentValidator.Validate(Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes:
+            [
+                new ResourceNodeContent(
+                    "node_good", "body_terra", "ore", "refining",
+                    1, 200, 1200, [1.0, 0.5, -0.2]),
+            ])));
+    }
+
+    /// <summary>Asserts a specific message is present, naming it when it is not.</summary>
+    private static void TestErrors(IReadOnlyList<ContentError> errors, string fragment)
+    {
+        Assert.True(HasError(errors, fragment), $"Expected an error mentioning '{fragment}'.");
     }
 
     private static StarSystemContent System(string key = "system_origin") =>

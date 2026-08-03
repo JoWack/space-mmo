@@ -210,6 +210,8 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
         modelBuilder.Entity<ResourceNode>(entity =>
         {
+            entity.HasIndex(e => e.Key).IsUnique();
+
             // The gathering hot path: "what can I mine on this body?"
             entity.HasIndex(e => new { e.BodyId, e.ItemDefId });
 
@@ -226,6 +228,12 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
                     "ck_resource_nodes_respawn_positive", "respawn_seconds > 0");
                 t.HasCheckConstraint(
                     "ck_resource_nodes_level_in_range", "required_level BETWEEN 1 AND 99");
+
+                // A deposit with no direction has no point on its body to be at, and normalising
+                // a zero vector downstream would put it at no position at all.
+                t.HasCheckConstraint(
+                    "ck_resource_nodes_direction_nonzero",
+                    "direction_x <> 0 OR direction_y <> 0 OR direction_z <> 0");
             });
         });
 
