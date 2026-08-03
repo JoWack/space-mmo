@@ -11,6 +11,12 @@ public sealed record LoginRequest(string Email, string Password);
 
 public sealed record SessionResponse(int AccountId, string Token, DateTimeOffset ExpiresAt);
 
+/// <summary>What the game server asks about a connecting player.</summary>
+public sealed record ResolveCharacterRequest(string Token, int CharacterId);
+
+/// <summary>Who the game server may treat that connection as.</summary>
+public sealed record ResolvedCharacter(int AccountId, int CharacterId, string CharacterName);
+
 /// <summary>
 /// Account registration and login.
 /// </summary>
@@ -31,6 +37,61 @@ public static class AccountEndpoints
 
         group.MapPost("/register", RegisterAsync);
         group.MapPost("/login", LoginAsync);
+        group.MapPost("/resolve-character", ResolveCharacterAsync);
+    }
+
+    /// <summary>
+    /// Answers the one question the game server has about a connecting player: may this connection
+    /// act as this character?
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The token is the proof, and the character id is only a claim.</strong> A connecting
+    /// client says "I am character 7"; that is worth nothing on its own, since character ids are
+    /// sequential integers and anyone can name one. What a client cannot forge is a signed session
+    /// token, so the server sends both here and this reports the character only when the token
+    /// really does belong to the account that owns it.
+    /// </para>
+    /// <para>
+    /// <strong>Service credential required.</strong> Not because the answer is secret — a player
+    /// could learn all of this with their own token — but because this is the game server's
+    /// question, and letting anyone ask it turns the endpoint into a way to test whether a stolen
+    /// token is still live without touching anything that would show up in a player's own history.
+    /// </para>
+    /// <para>
+    /// The token travels in the body rather than the URL, because URLs end up in access logs,
+    /// proxy logs and browser history. It is still a bearer secret in transit, so this needs TLS
+    /// before anything is exposed beyond localhost — the same caveat that already applies to login.
+    /// </para>
+    /// </remarks>
+    private static async Task<IResult> ResolveCharacterAsync(
+        ResolveCharacterRequest request,
+        HttpContext context,
+        ServiceCredential service,
+        SessionTokens tokens,
+        SpaceMmoDbContext database,
+        CancellationToken cancellation)
+    {
+        if (!service.IsServiceCaller(context))
+        {
+            return Results.Unauthorized();
+        }
+
+        int? accountId = tokens.Validate(request.Token);
+
+        if (accountId is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        Character? character = await database.Characters.SingleOrDefaultAsync(
+            c => c.Id == request.CharacterId && c.AccountId == accountId.Value, cancellation);
+
+        // NotFound rather than Forbidden for somebody else's character, exactly as Caller does.
+        // A distinct answer here would tell a caller which character ids exist.
+        return character is null
+            ? Results.NotFound()
+            : Results.Ok(new ResolvedCharacter(accountId.Value, character.Id, character.Name));
     }
 
     private static async Task<IResult> RegisterAsync(
