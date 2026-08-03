@@ -9,13 +9,19 @@ REM Optional extras, appended to this line:
 REM   -ShipStartX=38 -ShipStartY=0 -ShipStartZ=0    start ~1.7 km above the deposits, facing them
 REM   -SpawnCharacter -CharacterDirZ=-1             also put a character on the far side
 REM   -AutoDisembark                                step out the moment the ship lands
-REM   -BackendEmail=you@example.com -BackendPassword=... -CharacterId=8
-REM                                                 sign in, so the server knows who you are
+REM   -CharacterId=10                               play a specific character on your account
 REM
-REM Gathering needs all three of: the API running, scripts\init-secrets.ps1 having been run once,
-REM and the credentials above. Without them the connection has no character, and gathering says so
-REM rather than crediting somebody arbitrary.
+REM Gathering needs three things, each set up once:
+REM   scripts\init-secrets.ps1    the game server's own credential
+REM   scripts\api.bat             running, in another window
+REM   scripts\init-player.ps1     an account, a character, and secrets\player-login.txt
 REM
-REM The character id is only a claim. The server checks it against your session token and refuses
-REM any character your account does not own. Omit -CharacterId= to play the first one you have.
+REM Credentials are read from secrets\player-login.txt, NOT from this command line. Command lines
+REM here mangle values -- -BackendEmail=someone@gmail.com has arrived as "someone@gmail .com", and
+REM parsing stops at the space, producing a 401 that looks exactly like a wrong password.
+REM
+REM Without credentials the connection has no character, and gathering says so rather than
+REM crediting somebody arbitrary. The character id is only a claim: the server checks it against
+REM your session token and refuses any character your account does not own. Omit it and the client
+REM plays the first character on the account.
 start "" "D:\Programming\UnrealEngineSource\Engine\Binaries\Win64\UnrealEditor.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -game -windowed -ResX=1600 -ResY=900 %*

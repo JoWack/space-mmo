@@ -612,6 +612,36 @@ and the environment.
 loads, with no pawn, key or range check involved. It splits "the credential path is
 broken" from "the in-game path is broken" in a single run.
 
+### A player account to play as
+
+With the API running:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\init-player.ps1
+```
+
+It registers an account, creates a character, and writes `secrets\player-login.txt` — two lines,
+email then password — which the client reads at startup. `secrets\` is git-ignored.
+
+**Credentials go in a file, not on the command line, because command lines here mangle values.**
+A launch passing `-BackendEmail=someone@gmail.com` arrived as `someone@gmail .com`, with a space
+inserted before the dot; `FParse` stops at whitespace, so the client tried to log in as
+`someone@gmail` and got a 401 indistinguishable from a wrong password. The same mangling turned
+`-ShipStartX=39.56` into `39`. **If a numeric or dotted argument behaves as though it were
+truncated, check the `LogInit: Command Line:` line in the log before suspecting anything else** —
+it prints exactly what the process received.
+
+The client logs the address it is using (never the password), so a mangled one is visible at a
+glance:
+
+```
+LogSpaceMMOBackend: Signing in as player@local.test.
+LogSpaceMMOBackend: Connection identified as character 10 (Prospector5752) on account 7.
+```
+
+A connection with no identity is not a fault — it simply cannot gather, and says so at the point
+you try rather than failing silently.
+
 ### Querying the API from PowerShell
 
 The QA checklists hit the API by hand. Windows PowerShell 5.1 has three traps that make

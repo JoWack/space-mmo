@@ -71,22 +71,70 @@ void ASpaceMMOPlayerController::BeginIdentifying()
 	FString Email;
 	FString Password;
 
-	if (!FParse::Value(FCommandLine::Get(), TEXT("BackendEmail="), Email)
-		|| !FParse::Value(FCommandLine::Get(), TEXT("BackendPassword="), Password))
+	if (!FindCredentials(Email, Password))
 	{
 		// Not an error yet. Without credentials this connection simply has no identity, and every
-		// action that needs one will say so at the point it is needed rather than here.
+		// action that needs one says so at the point it is needed rather than here.
 		UE_LOG(LogSpaceMMOBackend, Log,
-			TEXT("No credentials given; this connection will have no character. "
-				 "Pass -BackendEmail= -BackendPassword= -CharacterId=."));
+			TEXT("No credentials found; this connection will have no character. "
+				 "Write email and password on two lines in secrets\\player-login.txt."));
 
 		return;
 	}
 
+	// The email is logged and the password never is. A mangled address is the single most likely
+	// reason a login fails here, and it is invisible unless the value actually used is shown —
+	// which cost a debugging round when "joe@gmail.com" arrived as "joe@gmail".
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Signing in as %s."), *Email);
+
 	Backend->OnSessionChanged.AddDynamic(this, &ASpaceMMOPlayerController::HandleSessionChanged);
 	Backend->OnCharactersLoaded.AddDynamic(this, &ASpaceMMOPlayerController::HandleCharactersLoaded);
+	Backend->OnFailed.AddDynamic(this, &ASpaceMMOPlayerController::HandleBackendFailed);
 
 	Backend->LogIn(Email, Password);
+}
+
+bool ASpaceMMOPlayerController::FindCredentials(FString& OutEmail, FString& OutPassword)
+{
+	const bool bFromCommandLine =
+		FParse::Value(FCommandLine::Get(), TEXT("BackendEmail="), OutEmail)
+		&& FParse::Value(FCommandLine::Get(), TEXT("BackendPassword="), OutPassword);
+
+	if (bFromCommandLine)
+	{
+		return true;
+	}
+
+	const FString Path =
+		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("secrets"), TEXT("player-login.txt"));
+
+	TArray<FString> Lines;
+
+	if (!FFileHelper::LoadFileToStringArray(Lines, *Path) || Lines.Num() < 2)
+	{
+		return false;
+	}
+
+	OutEmail = Lines[0].TrimStartAndEnd();
+	OutPassword = Lines[1].TrimStartAndEnd();
+
+	return !OutEmail.IsEmpty() && !OutPassword.IsEmpty();
+}
+
+void ASpaceMMOPlayerController::HandleBackendFailed(const FBackendFailure& Failure)
+{
+	// Only worth reporting while still trying to sign in. Later failures belong to whatever asked.
+	if (bPresented)
+	{
+		return;
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Warning,
+		TEXT("Sign-in failed (%d): %s. This connection will have no character, so gathering will "
+			 "credit nobody. Check the address above is the one you registered, and that the "
+			 "account exists."),
+		Failure.HttpStatus,
+		*Failure.Message);
 }
 
 void ASpaceMMOPlayerController::HandleSessionChanged(const bool bIsSignedIn)

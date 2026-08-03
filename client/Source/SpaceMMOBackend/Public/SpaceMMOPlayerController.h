@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "SpaceMMOBackendTypes.h"
 #include "SpaceMMOPlayerController.generated.h"
 
 /**
@@ -65,8 +66,26 @@ private:
 	 */
 	void BeginIdentifying();
 
+	/**
+	 * Finds an email and password: command line first, then secrets/player-login.txt.
+	 *
+	 * <strong>The file exists because command lines are not reliable here.</strong> A launch that
+	 * passed <c>-BackendEmail=someone@gmail.com</c> arrived as <c>someone@gmail .com</c> — a space
+	 * inserted before the dot — and FParse stops at whitespace, so the client cheerfully tried to
+	 * log in as "someone@gmail" and got a 401 that looked like a wrong password. The same mangling
+	 * turned -ShipStartX=39.56 into 39. A file has no quoting, no escaping and no shell between it
+	 * and the value.
+	 *
+	 * Two lines: email, then password. Same directory as the service secret, and git-ignored for
+	 * the same reason.
+	 */
+	static bool FindCredentials(FString& OutEmail, FString& OutPassword);
+
 	UFUNCTION()
 	void HandleSessionChanged(bool bIsSignedIn);
+
+	UFUNCTION()
+	void HandleBackendFailed(const FBackendFailure& Failure);
 
 	UFUNCTION()
 	void HandleCharactersLoaded();
