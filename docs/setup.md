@@ -569,6 +569,42 @@ docker compose -f infra/docker-compose.yml up -d            # start Postgres
 docker compose -f infra/docker-compose.yml down             # stop, keeping data
 ```
 
+### Querying the API from PowerShell
+
+The QA checklists hit the API by hand. Windows PowerShell 5.1 has three traps that make
+copied-from-anywhere commands fail in ways that look like server faults.
+
+**`&&` does not exist.** Use `;` to chain unconditionally, or `A; if ($?) { B }` to chain
+on success. Bash's inline `VAR=x cmd` prefix does not exist either — set `$env:VAR = 'x'`
+on its own statement first. Both are why `scripts\api.bat` exists; prefer it.
+
+**`curl` is an alias for `Invoke-WebRequest`, not curl.** So `curl -s http://…` fails on
+the `-s`. Write `curl.exe` explicitly to get the real one, which Windows ships in
+`System32`.
+
+**Always assign `Invoke-RestMethod`'s result to a variable before piping or counting it.**
+This is the one that actually wastes an afternoon, because it produces *wrong answers
+rather than errors*:
+
+```powershell
+# WRONG — the JSON array arrives as a single object, so $_.key is an array of every
+# key, `-eq` returns a non-empty array, that is truthy, and the filter matches
+# everything. $cap silently becomes "2 5 4 1 3" and the next request 404s.
+$cap = (Invoke-RestMethod "$base/world/bodies" | Where-Object { $_.key -eq 'body_capital' }).id
+
+# RIGHT — assignment unrolls the array, and the filter behaves.
+$bodies = Invoke-RestMethod "$base/world/bodies"
+$cap = ($bodies | Where-Object { $_.key -eq 'body_capital' }).id
+```
+
+The same quirk makes an empty result count as one: `@(Invoke-RestMethod …).Count` on a
+response of `[]` returns **1**, while assigning first and then counting returns **0**. A
+checklist step that reads "should return no deposits" will appear to fail against a
+perfectly correct endpoint.
+
+Also note `Where-Object key -eq 'x'` — the simplified syntax without braces — silently
+matches nothing here. Use the `{ $_.key -eq 'x' }` scriptblock form.
+
 ### Git LFS
 
 LFS is already initialized in this repo. Before committing any UE assets, confirm the
