@@ -19,10 +19,12 @@ namespace SpaceMMO.Api.Auth;
 /// <see cref="OwnedCharacterAsync"/> rather than loading one themselves.
 /// </para>
 /// </remarks>
-public sealed class Caller(SpaceMmoDbContext database, SessionTokens tokens)
+public sealed class Caller(
+    SpaceMmoDbContext database, SessionTokens tokens, ServiceCredential service)
 {
     private readonly SpaceMmoDbContext _database = database;
     private readonly SessionTokens _tokens = tokens;
+    private readonly ServiceCredential _service = service;
 
     /// <summary>Account id from the bearer token, or null if unauthenticated.</summary>
     public int? AccountId(HttpContext context)
@@ -49,6 +51,31 @@ public sealed class Caller(SpaceMmoDbContext database, SessionTokens tokens)
     /// not as forbidden. Distinguishing the two would turn this endpoint into an oracle for which
     /// character ids exist, which is information the caller has no business having.
     /// </remarks>
+    /// <summary>
+    /// Loads a character on behalf of the game server, which owns nobody's account.
+    /// </summary>
+    /// <remarks>
+    /// Only for outcomes the simulation decides — gathering is the one today. The character still
+    /// has to exist; what changes is where the authority comes from. See
+    /// <see cref="ServiceCredential"/> for why the game server needs one at all.
+    ///
+    /// Falls back to the ordinary ownership check when no service credential is presented, so a
+    /// player's own client keeps working and nothing has to know which kind of caller it is.
+    /// </remarks>
+    public async Task<OwnershipResult> ServiceOrOwnedCharacterAsync(
+        HttpContext context, int characterId, CancellationToken cancellation = default)
+    {
+        if (!_service.IsServiceCaller(context))
+        {
+            return await OwnedCharacterAsync(context, characterId, cancellation);
+        }
+
+        Character? character = await _database.Characters
+            .SingleOrDefaultAsync(c => c.Id == characterId, cancellation);
+
+        return character is null ? OwnershipResult.NotFound : OwnershipResult.Owned(character);
+    }
+
     public async Task<OwnershipResult> OwnedCharacterAsync(
         HttpContext context, int characterId, CancellationToken cancellation = default)
     {

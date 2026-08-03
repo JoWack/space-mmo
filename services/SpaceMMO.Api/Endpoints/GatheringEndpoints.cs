@@ -1,5 +1,6 @@
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Data.Gathering;
+using SpaceMMO.Data.Industry;
 
 namespace SpaceMMO.Api.Endpoints;
 
@@ -31,18 +32,39 @@ public static class GatheringEndpoints
         CancellationToken cancellation)
     {
         OwnershipResult owned =
-            await caller.OwnedCharacterAsync(context, request.CharacterId, cancellation);
+            await caller.ServiceOrOwnedCharacterAsync(context, request.CharacterId, cancellation);
 
         if (owned.Status != OwnershipStatus.Owned)
         {
             return owned.ToProblem();
         }
 
-        GatherResult result = await gathering.GatherAsync(
-            request.CharacterId, request.ResourceNodeId, request.StationId, cancellation);
+        // Every refusal below was previously an unhandled exception, and so a 500. Mining a deposit
+        // above your level is an ordinary thing for a player to try — it is what the level gate is
+        // for — and answering it with a server fault both hides the reason from the player and
+        // buries a real fault, if one ever happens, in the noise.
+        try
+        {
+            GatherResult result = await gathering.GatherAsync(
+                request.CharacterId, request.ResourceNodeId, request.StationId, cancellation);
 
-        // An empty result is a success, not an error: it means not enough time has passed, or the
-        // node is spent. Both are ordinary states a client renders rather than faults it reports.
-        return Results.Ok(result);
+            // An empty result is a success, not an error: it means not enough time has passed, or
+            // the node is spent. Both are ordinary states a client renders rather than reports.
+            return Results.Ok(result);
+        }
+        catch (UnknownResourceNodeException)
+        {
+            // No id echoed back. Node ids are guessable integers, and confirming which ones exist
+            // is the same oracle the ownership checks are careful not to be.
+            return Results.NotFound();
+        }
+        catch (SkillTooLowException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = "skill_too_low" });
+        }
+        catch (MissingToolException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = "missing_tool" });
+        }
     }
 }

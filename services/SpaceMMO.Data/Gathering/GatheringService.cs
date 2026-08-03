@@ -29,6 +29,21 @@ public readonly record struct GatherResult(
 }
 
 /// <summary>
+/// A deposit id that names nothing.
+/// </summary>
+/// <remarks>
+/// Its own exception rather than the raw <see cref="InvalidOperationException"/> that
+/// <c>SingleAsync</c> throws, because node ids arrive from clients and a client is free to send any
+/// number at all. Left unhandled it was a 500 — an unhandled-fault log entry and an alert-worthy
+/// status code for what is really just a caller naming something that is not there.
+/// </remarks>
+public sealed class UnknownResourceNodeException(long resourceNodeId)
+    : Exception($"No resource node with id {resourceNodeId}.")
+{
+    public long ResourceNodeId { get; } = resourceNodeId;
+}
+
+/// <summary>
 /// Extracts material from resource deposits — the only place material enters the economy.
 /// </summary>
 /// <remarks>
@@ -81,7 +96,8 @@ public sealed class GatheringService(SpaceMmoDbContext database)
 
         ResourceNode node = await _database.ResourceNodes
             .Include(n => n.Skill)
-            .SingleAsync(n => n.Id == resourceNodeId, cancellationToken);
+            .SingleOrDefaultAsync(n => n.Id == resourceNodeId, cancellationToken)
+            ?? throw new UnknownResourceNodeException(resourceNodeId);
 
         int level = await SkillLevelAsync(characterId, node.SkillId, cancellationToken);
 

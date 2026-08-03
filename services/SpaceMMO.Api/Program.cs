@@ -34,6 +34,10 @@ builder.Services.AddScoped<QuestService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<Caller>();
 
+// The Unreal dedicated server's own credential. Absent unless configured, and absent means every
+// service call is refused — a missing secret must fail closed.
+builder.Services.AddSingleton<ServiceCredential>();
+
 builder.Services.AddSingleton(_ => new SessionTokens(
     builder.Configuration["Auth:SigningKey"]
     ?? throw new InvalidOperationException(

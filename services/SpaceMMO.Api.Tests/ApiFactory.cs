@@ -12,8 +12,14 @@ namespace SpaceMMO.Api.Tests;
 /// endpoints, the actual authorization checks and the actual EF transactions agree with each
 /// other, and every substitution made here would be a place that agreement stops being tested.
 /// </remarks>
-public sealed class ApiFactory(string connectionString) : WebApplicationFactory<Program>
+public sealed class ApiFactory(string connectionString, string? serviceSecret = null)
+    : WebApplicationFactory<Program>
 {
+    /// <summary>The game server's credential in tests. Null leaves it unconfigured on purpose.</summary>
+    public const string TestServiceSecret = "test-service-secret-for-the-game-server";
+
+    private readonly string? _serviceSecret = serviceSecret;
+
     /// <summary>
     /// A signing key for tests only. Long enough to satisfy the 32-byte minimum, and obviously
     /// not a secret — the real one comes from user secrets or the environment.
@@ -31,6 +37,10 @@ public sealed class ApiFactory(string connectionString) : WebApplicationFactory<
             {
                 ["ConnectionStrings:SpaceMmo"] = _connectionString,
                 ["Auth:SigningKey"] = TestSigningKey,
+
+                // Left unset unless a test asks for it, so the fail-closed path is the default
+                // one exercised by every other test in the suite.
+                ["SpaceMMO:ServiceSecret"] = _serviceSecret,
             }));
     }
 }
