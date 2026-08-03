@@ -41,6 +41,12 @@ public sealed class ApiFactory(string connectionString, string? serviceSecret = 
                 // Left unset unless a test asks for it, so the fail-closed path is the default
                 // one exercised by every other test in the suite.
                 ["SpaceMMO:ServiceSecret"] = _serviceSecret,
+
+                // And the file fallback disabled outright. Without this the suite would quietly
+                // pick up whatever secret happens to be sitting in secrets/ on the machine running
+                // it, and the test that proves an unconfigured credential refuses everything would
+                // pass or fail depending on whose laptop it ran on.
+                ["SpaceMMO:ServiceSecretFile"] = string.Empty,
             }));
     }
 }

@@ -29,13 +29,64 @@ public sealed class ServiceCredential
 {
     private readonly byte[]? _secret;
 
-    public ServiceCredential(IConfiguration configuration)
+    /// <summary>Where the secret came from, for the startup log.</summary>
+    public string Source { get; } = "none";
+
+    /// <summary>
+    /// Reads the credential from configuration, falling back to the local secrets file.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Configuration first, so a real deployment can supply it however it likes — environment
+    /// variable, key vault, anything the configuration system reaches.
+    /// </para>
+    /// <para>
+    /// <strong>The file fallback exists because user secrets are launch-dependent.</strong> They are
+    /// only loaded when the host is running in the Development environment, which depends on an
+    /// environment variable being set by whatever started the process. Start the API a slightly
+    /// different way — a different shell, an IDE, a script that does not export it — and the secret
+    /// silently is not there, while everything else works perfectly. That produced a 401 that looked
+    /// for all the world like a wrong secret, when the value on disk was right the whole time.
+    /// </para>
+    /// <para>
+    /// Reading the same file the Unreal side reads removes the whole class of problem: one file, one
+    /// value, no dependence on how either process happened to be started. It is already excluded
+    /// from version control.
+    /// </para>
+    /// </remarks>
+    public ServiceCredential(IConfiguration configuration, IHostEnvironment environment)
     {
         string? secret = configuration["SpaceMMO:ServiceSecret"];
+        string source = "configuration";
 
-        _secret = string.IsNullOrWhiteSpace(secret)
-            ? null
-            : System.Text.Encoding.UTF8.GetBytes(secret);
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            // Overridable, and settable to empty to disable the fallback entirely. The tests do
+            // exactly that: they must be able to exercise the no-credential-configured path, and a
+            // developer machine always has this file sitting right where the default looks.
+            string? configured = configuration["SpaceMMO:ServiceSecretFile"];
+
+            string path = configured is null
+                ? Path.GetFullPath(Path.Combine(
+                    environment.ContentRootPath, "..", "..", "secrets", "service-secret.txt"))
+                : configured;
+
+            if (path.Length > 0 && File.Exists(path))
+            {
+                // Trimmed for the same reason the client trims: an editor that appends a newline
+                // would otherwise make the two differ by one invisible character.
+                secret = File.ReadAllText(path).Trim();
+                source = "secrets/service-secret.txt";
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(secret))
+        {
+            return;
+        }
+
+        _secret = System.Text.Encoding.UTF8.GetBytes(secret);
+        Source = source;
     }
 
     /// <summary>Header the game server presents. Deliberately not <c>Authorization</c>.</summary>
