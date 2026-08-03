@@ -1,6 +1,7 @@
 #include "SpaceMMOGatheringComponent.h"
 
 #include "Components/InputComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
@@ -157,8 +158,69 @@ void USpaceMMOGatheringComponent::ServerGather_Implementation()
 		CharacterId, *Deposit->GetNode().Key);
 
 	// The quantity is not ours to decide, and neither is whether this attempt yields anything at
-	// all. The server asks; the backend rules on it.
-	Backend->GatherAsServer(CharacterId, Deposit->GetNode().Id, StationId);
+	// all. The server asks; the backend rules on it; the player is told the answer.
+	const FString ItemName = Deposit->GetNode().ItemName;
+
+	TWeakObjectPtr<USpaceMMOGatheringComponent> WeakThis(this);
+
+	Backend->GatherAsServer(
+		CharacterId,
+		Deposit->GetNode().Id,
+		StationId,
+		USpaceMMOBackendClient::FOnGatherComplete::CreateLambda(
+			[WeakThis, ItemName](const FBackendGatherResult& Result)
+			{
+				// Weak, because an HTTP response can outlive the pawn that asked — a player who
+				// boards their ship mid-request destroys this component before the reply lands.
+				if (USpaceMMOGatheringComponent* Component = WeakThis.Get())
+				{
+					Component->ClientGatherResult(
+						Result.Quantity, Result.XpAwarded, Result.NodeRemaining, ItemName);
+				}
+			}));
+}
+
+FString USpaceMMOGatheringComponent::FormatGatherMessage(
+	const int32 Quantity, const int64 XpAwarded, const int32 NodeRemaining, const FString& ItemName)
+{
+	if (Quantity > 0)
+	{
+		return FString::Printf(
+			TEXT("+%d %s   (+%lld xp)   %d left"),
+			Quantity,
+			ItemName.IsEmpty() ? TEXT("ore") : *ItemName,
+			XpAwarded,
+			NodeRemaining);
+	}
+
+	// Nothing yielded, and the reason matters. Too soon is worth waiting out; spent is not.
+	return NodeRemaining > 0
+		? FString(TEXT("Nothing yet - give it a moment"))
+		: FString(TEXT("This deposit is worked out"));
+}
+
+void USpaceMMOGatheringComponent::ClientGatherResult_Implementation(
+	const int32 Quantity, const int64 XpAwarded, const int32 NodeRemaining, const FString& ItemName)
+{
+	const FString Message = FormatGatherMessage(Quantity, XpAwarded, NodeRemaining, ItemName);
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s"), *Message);
+
+	if (GEngine == nullptr)
+	{
+		return;
+	}
+
+	// A fixed key, so spamming the gather key replaces the message rather than stacking a column
+	// of them up the screen. Green for a yield and grey for a refusal, so the difference is
+	// readable without reading.
+	constexpr uint64 MessageKey = 0x5A17;
+
+	GEngine->AddOnScreenDebugMessage(
+		MessageKey,
+		MessageSeconds,
+		Quantity > 0 ? FColor::Green : FColor::Silver,
+		Message);
 }
 
 ASpaceMMODepositActor* USpaceMMOGatheringComponent::FindDepositInRange() const

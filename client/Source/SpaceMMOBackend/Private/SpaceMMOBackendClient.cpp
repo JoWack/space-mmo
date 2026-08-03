@@ -190,7 +190,10 @@ void USpaceMMOBackendClient::LoadServiceSecret()
 }
 
 void USpaceMMOBackendClient::GatherAsServer(
-	const int32 CharacterId, const int64 ResourceNodeId, const int32 StationId)
+	const int32 CharacterId,
+	const int64 ResourceNodeId,
+	const int32 StationId,
+	FOnGatherComplete OnComplete)
 {
 	if (ServiceSecret.IsEmpty())
 	{
@@ -211,7 +214,7 @@ void USpaceMMOBackendClient::GatherAsServer(
 		TEXT("/gathering/gather"),
 		Body,
 		false,
-		[this, CharacterId](const FString& ResponseBody)
+		[this, CharacterId, OnComplete](const FString& ResponseBody)
 		{
 			FBackendGatherResult Result;
 
@@ -219,6 +222,10 @@ void USpaceMMOBackendClient::GatherAsServer(
 			{
 				return;
 			}
+
+			// The caller hears first, so whatever asked can tell the player before anything else
+			// reacts to the broadcast.
+			OnComplete.ExecuteIfBound(Result);
 
 			UE_LOG(LogSpaceMMOBackend, Log,
 				TEXT("Character %d gathered %d unit(s) for %lld xp; node has %d left."),

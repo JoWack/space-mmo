@@ -91,7 +91,13 @@ public:
 	 *
 	 * @param StationId Where the ore is stored.
 	 */
-	void GatherAsServer(int32 CharacterId, int64 ResourceNodeId, int32 StationId);
+	DECLARE_DELEGATE_OneParam(FOnGatherComplete, const FBackendGatherResult&);
+
+	void GatherAsServer(
+		int32 CharacterId,
+		int64 ResourceNodeId,
+		int32 StationId,
+		FOnGatherComplete OnComplete = FOnGatherComplete());
 
 	/** True if a service secret was found, so the server can actually act. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")

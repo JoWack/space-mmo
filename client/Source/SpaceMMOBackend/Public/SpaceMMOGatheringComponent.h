@@ -62,7 +62,39 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Gathering")
 	void RequestGather();
 
+	/**
+	 * The line a player reads after working a deposit.
+	 *
+	 * Pure and static so the wording can be tested without a world, a pawn or a server. The three
+	 * cases it distinguishes — got some, too soon, deposit spent — all arrive as a 200 with a
+	 * different quantity, and confusing "wait a moment" with "this is empty" would have a player
+	 * standing at a dead rock indefinitely.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Gathering")
+	static FString FormatGatherMessage(
+		int32 Quantity, int64 XpAwarded, int32 NodeRemaining, const FString& ItemName);
+
+	/** How long a gather message stays on screen, in seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Gathering")
+	float MessageSeconds = 3.0f;
+
 private:
+	/**
+	 * Tells the player what the server decided.
+	 *
+	 * <strong>Sent from the server, not concluded by the client.</strong> The client could not
+	 * work out the yield if it wanted to — the rate limit is wall-clock time the server measures,
+	 * and how much is left in the deposit is shared with everyone else mining it. So the outcome
+	 * comes back the same way it was decided.
+	 *
+	 * Until this existed the whole feature was invisible in-game: it worked, wrote to the
+	 * database, and told the player nothing, so the only way to know you had mined anything was to
+	 * read the server's log.
+	 */
+	UFUNCTION(Client, Reliable)
+	void ClientGatherResult(
+		int32 Quantity, int64 XpAwarded, int32 NodeRemaining, const FString& ItemName);
+
 	/** Possession is what creates the input component, so that is when binding can succeed. */
 	UFUNCTION()
 	void HandlePawnRestarted(APawn* Pawn);
