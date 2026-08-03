@@ -62,3 +62,10 @@ tools/SpaceMMO.EconSim/out/
 
 # UE source build lives outside this repo, but guard against a stray checkout.
 UnrealEngineSource/
+
+# ─── Local secrets ────────────────────────────────────────────────────────────
+# The API reads its service secret from .NET user secrets, which live outside the
+# repo entirely. Unreal cannot read those, so scripts/init-secrets.ps1 writes the
+# same value here for the dedicated server to pick up. Never committed: anyone
+# holding this can gather as any character in the game.
+secrets/

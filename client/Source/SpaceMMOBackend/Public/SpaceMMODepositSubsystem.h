@@ -40,6 +40,14 @@ public:
 	int32 GetPlacedCount() const { return PlacedDeposits.Num(); }
 
 private:
+	/**
+	 * Gives a character pawn the ability to gather, as it appears in the world.
+	 *
+	 * Attached from here rather than built into the pawn, because the pawn is a SpaceMMOCore type
+	 * and Core does not know that ore exists. See USpaceMMOGatheringComponent.
+	 */
+	void AttachGathering(AActor* Actor);
+
 	UFUNCTION()
 	void HandleBodiesLoaded();
 
@@ -51,4 +59,7 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<class ASpaceMMODepositActor>> PlacedDeposits;
+
+	/** Handle for the spawn callback, so it can be released when the world goes away. */
+	FDelegateHandle ActorSpawnedHandle;
 };

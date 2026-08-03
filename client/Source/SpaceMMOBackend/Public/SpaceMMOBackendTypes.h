@@ -215,6 +215,36 @@ struct SPACEMMOBACKEND_API FBackendResourceNode
 };
 
 /**
+ * What one gathering attempt actually yielded.
+ *
+ * A zero quantity is a success, not a failure: it means too little time has passed since this
+ * character last gathered, or the deposit is spent. Both are ordinary states to render — "nothing
+ * yet" rather than "something went wrong" — which is why they arrive as a 200 with an empty result
+ * instead of an error.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendGatherResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 ItemDefId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Quantity = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 XpAwarded = 0;
+
+	/** What the deposit still holds. Zero means this attempt exhausted it. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 NodeRemaining = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bDepleted = false;
+};
+
+/**
  * Why a request failed.
  *
  * Distinguished because the client should react differently to each: a transport failure is worth

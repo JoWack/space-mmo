@@ -336,6 +336,49 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 	return true;
 }
 
+bool FSpaceMMOBackendProtocol::ParseGatherResult(
+	const FString& Json, FBackendGatherResult& OutResult)
+{
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	if (!Object.IsValid())
+	{
+		return false;
+	}
+
+	int64 ItemDefId = 0;
+	int64 Quantity = 0;
+	int64 XpAwarded = 0;
+	int64 NodeRemaining = 0;
+
+	if (ReadInt64(Object, TEXT("itemDefId"), ItemDefId))
+	{
+		OutResult.ItemDefId = static_cast<int32>(ItemDefId);
+	}
+
+	if (ReadInt64(Object, TEXT("quantity"), Quantity))
+	{
+		OutResult.Quantity = static_cast<int32>(Quantity);
+	}
+
+	// Through ReadInt64 rather than a double, like every other quantity that accumulates without
+	// bound. XP reaches 13,034,431 at level 99 today, which is comfortably exact — but the guard
+	// belongs on the field, not on the value it happens to hold this year.
+	if (ReadInt64(Object, TEXT("xpAwarded"), XpAwarded))
+	{
+		OutResult.XpAwarded = XpAwarded;
+	}
+
+	if (ReadInt64(Object, TEXT("nodeRemaining"), NodeRemaining))
+	{
+		OutResult.NodeRemaining = static_cast<int32>(NodeRemaining);
+	}
+
+	Object->TryGetBoolField(TEXT("depleted"), OutResult.bDepleted);
+
+	return true;
+}
+
 bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendBody>& OutBodies)
 {
 	TArray<TSharedPtr<FJsonValue>> Values;

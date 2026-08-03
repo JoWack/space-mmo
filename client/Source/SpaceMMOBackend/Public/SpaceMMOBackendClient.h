@@ -11,6 +11,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharactersLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharacterStateLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendDepositsLoaded, int32, BodyId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendBodiesLoaded);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnBackendGathered, int32, CharacterId, const FBackendGatherResult&, Result);
 
 /**
  * The client's connection to the game server.
@@ -78,6 +80,23 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	int32 GetSelectedCharacterId() const { return SelectedCharacterId; }
 
+	/**
+	 * Gathers on behalf of a character, as the game server rather than as that player.
+	 *
+	 * <strong>Only ever call this with authority.</strong> It presents the game server's service
+	 * credential, which lets it act for any character — the whole point being that the server has
+	 * already checked the player is standing next to the deposit, which is a fact no client can be
+	 * trusted to report. Called from a client it would still be refused, because a client has no
+	 * secret to present, but it has no business being called there at all.
+	 *
+	 * @param StationId Where the ore is stored.
+	 */
+	void GatherAsServer(int32 CharacterId, int64 ResourceNodeId, int32 StationId);
+
+	/** True if a service secret was found, so the server can actually act. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
+	bool HasServiceSecret() const { return !ServiceSecret.IsEmpty(); }
+
 	/** Loads every body in the starting system. Unauthenticated, like the deposits. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
 	void FetchBodies();
@@ -129,6 +148,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
 	FOnBackendBodiesLoaded OnBodiesLoaded;
 
+	/** Fires on the server, where gathering is decided. */
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
+	FOnBackendGathered OnGathered;
+
 private:
 	/**
 	 * Drives login → characters → skills and inventory from the command line, logging each step.
@@ -174,7 +197,20 @@ private:
 		const FString& Path,
 		const FString& Body,
 		bool bAuthenticated,
-		FOnBody OnSuccess);
+		FOnBody OnSuccess,
+		const FString& ServiceCredential = FString());
+
+	/**
+	 * Loads the game server's credential, if this machine has one.
+	 *
+	 * Read from a file outside version control rather than compiled in or passed on a command
+	 * line, since a command line is visible to every process on the box. Empty on a player's
+	 * machine, which is correct: only the server should hold this.
+	 */
+	void LoadServiceSecret();
+
+	/** Empty unless this machine is running the game server. */
+	FString ServiceSecret;
 
 	void HandleSession(const FString& Body);
 

@@ -19,6 +19,8 @@ void USpaceMMOBackendClient::Initialize(FSubsystemCollectionBase& Collection)
 		BaseUrl = Override;
 	}
 
+	LoadServiceSecret();
+
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Backend client ready, base URL %s"), *BaseUrl);
 
 	if (FParse::Param(FCommandLine::Get(), TEXT("BackendSmokeTest")))
@@ -117,6 +119,79 @@ void USpaceMMOBackendClient::OnSmokeFailed(const FBackendFailure& Failure)
 		*Failure.Message);
 }
 
+void USpaceMMOBackendClient::LoadServiceSecret()
+{
+	// Only the machine running the simulation should hold this. On a player's client the file is
+	// simply absent, which is the correct outcome rather than an error worth reporting.
+	if (!IsRunningDedicatedServer() && !GIsEditor)
+	{
+		return;
+	}
+
+	const FString SecretPath =
+		FPaths::Combine(FPaths::ProjectDir(), TEXT(".."), TEXT("secrets"), TEXT("service-secret.txt"));
+
+	FString Contents;
+
+	if (!FFileHelper::LoadFileToString(Contents, *SecretPath))
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("No service secret at %s; gathering will be refused. Run scripts\\init-secrets.ps1."),
+			*SecretPath);
+
+		return;
+	}
+
+	// Trimmed, because an editor that helpfully appends a newline would otherwise produce a secret
+	// that differs from the API's by one invisible character — a mismatch that reads as the wrong
+	// value rather than as trailing whitespace.
+	ServiceSecret = Contents.TrimStartAndEnd();
+
+	// Length only. The secret itself must never reach a log, since logs get pasted into reports.
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Service credential loaded (%d chars)."), ServiceSecret.Len());
+}
+
+void USpaceMMOBackendClient::GatherAsServer(
+	const int32 CharacterId, const int64 ResourceNodeId, const int32 StationId)
+{
+	if (ServiceSecret.IsEmpty())
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Gather refused: this machine holds no service credential."));
+
+		return;
+	}
+
+	const FString Body = FString::Printf(
+		TEXT("{\"characterId\":%d,\"resourceNodeId\":%lld,\"stationId\":%d}"),
+		CharacterId, ResourceNodeId, StationId);
+
+	// bAuthenticated false: the game server presents its own credential, never a player's token,
+	// and holds no session to present even if it wanted to.
+	Send(
+		TEXT("POST"),
+		TEXT("/gathering/gather"),
+		Body,
+		false,
+		[this, CharacterId](const FString& ResponseBody)
+		{
+			FBackendGatherResult Result;
+
+			if (!FSpaceMMOBackendProtocol::ParseGatherResult(ResponseBody, Result))
+			{
+				return;
+			}
+
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Character %d gathered %d unit(s) for %lld xp; node has %d left."),
+				CharacterId, Result.Quantity, Result.XpAwarded, Result.NodeRemaining);
+
+			OnGathered.Broadcast(CharacterId, Result);
+		},
+		ServiceSecret);
+}
+
 void USpaceMMOBackendClient::Deinitialize()
 {
 	// The token is deliberately not persisted anywhere, so dropping it here is the whole cleanup.
@@ -135,7 +210,8 @@ void USpaceMMOBackendClient::Send(
 	const FString& Path,
 	const FString& Body,
 	const bool bAuthenticated,
-	FOnBody OnSuccess)
+	FOnBody OnSuccess,
+	const FString& ServiceCredential)
 {
 	if (bAuthenticated && !Session.IsValid())
 	{
@@ -163,6 +239,13 @@ void USpaceMMOBackendClient::Send(
 	if (bAuthenticated)
 	{
 		Request->SetHeader(TEXT("Authorization"), TEXT("Bearer ") + Session.Token);
+	}
+
+	// A separate header from Authorization on purpose, so a service call can never be mistaken for
+	// a player session by anything reading this later.
+	if (!ServiceCredential.IsEmpty())
+	{
+		Request->SetHeader(TEXT("X-SpaceMMO-Service"), ServiceCredential);
 	}
 
 	// Weak, not strong. A response can arrive after the game instance has been torn down, and a

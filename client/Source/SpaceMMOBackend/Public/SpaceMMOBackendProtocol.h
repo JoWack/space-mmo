@@ -46,6 +46,9 @@ public:
 	/** Parses a JSON array of inventory stacks. */
 	static bool ParseInventory(const FString& Json, TArray<FBackendInventoryItem>& OutItems);
 
+	/** Parses one gathering result. */
+	static bool ParseGatherResult(const FString& Json, FBackendGatherResult& OutResult);
+
 	/** Parses a JSON array of bodies. */
 	static bool ParseBodies(const FString& Json, TArray<FBackendBody>& OutBodies);
 

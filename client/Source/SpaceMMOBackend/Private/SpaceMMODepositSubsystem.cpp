@@ -4,7 +4,9 @@
 #include "EngineUtils.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMODepositActor.h"
+#include "SpaceMMOGatheringComponent.h"
 #include "SpaceMMOPlanetActor.h"
 
 bool USpaceMMODepositSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -47,6 +49,55 @@ void USpaceMMODepositSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 	// Bodies first, so the deposit request can name a body by an id resolved from its content key.
 	Backend->FetchBodies();
+
+	// Character pawns are spawned on demand rather than placed, so both cases have to be covered:
+	// any that already exist, and any that appear later.
+	for (TActorIterator<ASpaceMMOCharacterPawn> It(&InWorld); It; ++It)
+	{
+		AttachGathering(*It);
+	}
+
+	ActorSpawnedHandle = InWorld.AddOnActorSpawnedHandler(
+		FOnActorSpawned::FDelegate::CreateUObject(this, &USpaceMMODepositSubsystem::AttachGathering));
+}
+
+void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
+{
+	ASpaceMMOCharacterPawn* Pawn = Cast<ASpaceMMOCharacterPawn>(Actor);
+
+	if (Pawn == nullptr || Pawn->FindComponentByClass<USpaceMMOGatheringComponent>() != nullptr)
+	{
+		return;
+	}
+
+	USpaceMMOGatheringComponent* Gathering =
+		NewObject<USpaceMMOGatheringComponent>(Pawn, TEXT("Gathering"));
+
+	if (Gathering == nullptr)
+	{
+		return;
+	}
+
+	// Which character is behind which connection is not yet decided anywhere — the dedicated
+	// server has no login flow, so it cannot know. Until it does, these come from the command
+	// line, which is enough to exercise the whole path end to end and is honest about being
+	// temporary. Zero means "nobody", and the component says so loudly rather than crediting
+	// someone arbitrary.
+	int32 GatherCharacterId = 0;
+	int32 GatherStationId = 0;
+
+	FParse::Value(FCommandLine::Get(), TEXT("GatherCharacterId="), GatherCharacterId);
+	FParse::Value(FCommandLine::Get(), TEXT("GatherStationId="), GatherStationId);
+
+	Gathering->CharacterId = GatherCharacterId;
+	Gathering->StationId = GatherStationId;
+
+	Gathering->RegisterComponent();
+
+	// Registration can happen before possession, in which case the pawn has no input component
+	// yet and the component's own BeginPlay binding found nothing. Binding again here is harmless
+	// when it already worked.
+	Gathering->BindInput(Pawn->InputComponent);
 }
 
 void USpaceMMODepositSubsystem::HandleBodiesLoaded()
