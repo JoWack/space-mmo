@@ -19,6 +19,18 @@ class SPACEMMOCORE_API ASpaceMMOGameMode : public AGameModeBase
 public:
 	ASpaceMMOGameMode();
 
+	/**
+	 * Chooses the player controller class before any controller is spawned.
+	 *
+	 * Not the constructor. A game mode's constructor first runs while its class default object is
+	 * being created, which happens as this module loads — before SpaceMMOBackend's classes are
+	 * registered, so resolving one by path there fails and warns. It appeared to work only because
+	 * the constructor runs again when the game mode is actually spawned. InitGame runs once, at
+	 * spawn, with every module loaded, which is when the answer is knowable.
+	 */
+	virtual void InitGame(
+		const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+
 	virtual void StartPlay() override;
 
 protected:

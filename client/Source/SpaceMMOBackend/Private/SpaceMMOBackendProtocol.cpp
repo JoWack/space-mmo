@@ -336,6 +336,38 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 	return true;
 }
 
+bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(
+	const FString& Json, FBackendResolvedCharacter& OutResolved)
+{
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	if (!Object.IsValid())
+	{
+		return false;
+	}
+
+	int64 AccountId = 0;
+	int64 CharacterId = 0;
+
+	// A zero or missing character id is a failure, not a default. Treating it as "character 0"
+	// would hand the caller an identity the backend never granted.
+	if (!ReadInt64(Object, TEXT("characterId"), CharacterId) || CharacterId <= 0)
+	{
+		return false;
+	}
+
+	if (ReadInt64(Object, TEXT("accountId"), AccountId))
+	{
+		OutResolved.AccountId = static_cast<int32>(AccountId);
+	}
+
+	OutResolved.CharacterId = static_cast<int32>(CharacterId);
+
+	Object->TryGetStringField(TEXT("characterName"), OutResolved.CharacterName);
+
+	return true;
+}
+
 bool FSpaceMMOBackendProtocol::ParseGatherResult(
 	const FString& Json, FBackendGatherResult& OutResult)
 {

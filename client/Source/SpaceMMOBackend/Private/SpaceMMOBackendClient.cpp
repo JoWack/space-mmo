@@ -450,6 +450,47 @@ void USpaceMMOBackendClient::SelectCharacter(const int32 CharacterId)
 		});
 }
 
+void USpaceMMOBackendClient::ResolveCharacterAsServer(
+	const FString& Token, const int32 ClaimedCharacterId, FOnCharacterResolved OnResolved)
+{
+	if (ServiceSecret.IsEmpty())
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Cannot identify players: this machine holds no service credential."));
+
+		OnResolved.ExecuteIfBound(0, 0, FString());
+
+		return;
+	}
+
+	// The token goes in the body rather than the URL, matching the API: URLs reach access logs.
+	const FString Body = FString::Printf(
+		TEXT("{\"token\":\"%s\",\"characterId\":%d}"),
+		*Token.ReplaceCharWithEscapedChar(),
+		ClaimedCharacterId);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/accounts/resolve-character"),
+		Body,
+		false,
+		[OnResolved](const FString& ResponseBody)
+		{
+			FBackendResolvedCharacter Resolved;
+
+			if (!FSpaceMMOBackendProtocol::ParseResolvedCharacter(ResponseBody, Resolved))
+			{
+				OnResolved.ExecuteIfBound(0, 0, FString());
+
+				return;
+			}
+
+			OnResolved.ExecuteIfBound(
+				Resolved.AccountId, Resolved.CharacterId, Resolved.CharacterName);
+		},
+		ServiceSecret);
+}
+
 void USpaceMMOBackendClient::FetchBodies()
 {
 	Bodies.Reset();

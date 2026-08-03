@@ -97,6 +97,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	bool HasServiceSecret() const { return !ServiceSecret.IsEmpty(); }
 
+	/** The session token, so the client can present it to the game server. Never logged. */
+	FString GetSessionToken() const { return Session.Token; }
+
+	/** Reports a resolved identity, or zero when the backend refused. */
+	DECLARE_DELEGATE_ThreeParams(FOnCharacterResolved, int32 /*AccountId*/, int32 /*CharacterId*/, const FString& /*Name*/);
+
+	/**
+	 * Asks the backend whether a token really entitles its bearer to a character.
+	 *
+	 * Server-side only: it presents the service credential, because this is the game server's
+	 * question. See ResolveCharacterAsync on the API for why it is not a player's to ask.
+	 */
+	void ResolveCharacterAsServer(
+		const FString& Token, int32 ClaimedCharacterId, FOnCharacterResolved OnResolved);
+
 	/** Loads every body in the starting system. Unauthenticated, like the deposits. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
 	void FetchBodies();

@@ -7,6 +7,7 @@
 #include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMODepositActor.h"
 #include "SpaceMMOGatheringComponent.h"
+#include "SpaceMMOPlayerController.h"
 #include "SpaceMMOPlanetActor.h"
 
 bool USpaceMMODepositSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -78,21 +79,21 @@ void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 		return;
 	}
 
-	// Which character is behind which connection is not yet decided anywhere — the dedicated
-	// server has no login flow, so it cannot know. Until it does, these come from the command
-	// line, which is enough to exercise the whole path end to end and is honest about being
-	// temporary. Zero means "nobody", and the component says so loudly rather than crediting
-	// someone arbitrary.
-	int32 GatherCharacterId = 0;
-	int32 GatherStationId = 0;
-
-	FParse::Value(FCommandLine::Get(), TEXT("GatherCharacterId="), GatherCharacterId);
-	FParse::Value(FCommandLine::Get(), TEXT("GatherStationId="), GatherStationId);
-
-	Gathering->CharacterId = GatherCharacterId;
-	Gathering->StationId = GatherStationId;
-
 	Gathering->RegisterComponent();
+
+	// Identity comes from the controller, which had to prove it to the backend — no longer from
+	// the command line, which was a single-player convenience that would have credited every
+	// player on a server to the same character.
+	//
+	// Read here as well as pushed from the controller because the two race: the backend round trip
+	// can finish before or after a pawn is possessed, and only one of the two orders is covered by
+	// each.
+	if (const ASpaceMMOPlayerController* Controller =
+		Cast<ASpaceMMOPlayerController>(Pawn->GetController()))
+	{
+		Gathering->CharacterId = Controller->GetCharacterId();
+		Gathering->StationId = Controller->StationId;
+	}
 
 	// Registration can happen before possession, in which case the pawn has no input component
 	// yet and the component's own BeginPlay binding found nothing. Binding again here is harmless

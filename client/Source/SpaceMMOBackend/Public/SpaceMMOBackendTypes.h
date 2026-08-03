@@ -144,6 +144,22 @@ struct SPACEMMOBACKEND_API FBackendInventoryItem
 	int32 Quantity = 0;
 };
 
+/** Who the backend says a connecting player is entitled to be. */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendResolvedCharacter
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 AccountId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 CharacterId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString CharacterName;
+};
+
 /** A planet or moon, as the server describes it. */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendBody

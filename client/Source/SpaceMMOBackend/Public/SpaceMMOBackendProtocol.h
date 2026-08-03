@@ -46,6 +46,9 @@ public:
 	/** Parses a JSON array of inventory stacks. */
 	static bool ParseInventory(const FString& Json, TArray<FBackendInventoryItem>& OutItems);
 
+	/** Parses a resolved identity. Fails if the character id is missing or zero. */
+	static bool ParseResolvedCharacter(const FString& Json, FBackendResolvedCharacter& OutResolved);
+
 	/** Parses one gathering result. */
 	static bool ParseGatherResult(const FString& Json, FBackendGatherResult& OutResult);
 

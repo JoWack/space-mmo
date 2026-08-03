@@ -16,6 +16,27 @@ ASpaceMMOGameMode::ASpaceMMOGameMode()
 	DefaultPawnClass = ASpaceMMOShipPawn::StaticClass();
 }
 
+void ASpaceMMOGameMode::InitGame(
+	const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+	Super::InitGame(MapName, Options, ErrorMessage);
+
+	// Resolved by path rather than by including the header, so Core keeps knowing nothing about
+	// the backend module — the same boundary that put deposits and gathering over there. A path is
+	// a name, not a link: this compiles and runs with SpaceMMOBackend absent, falling back to a
+	// plain controller and connections with no identity.
+	if (UClass* Identified = LoadClass<APlayerController>(
+		nullptr, TEXT("/Script/SpaceMMOBackend.SpaceMMOPlayerController")))
+	{
+		PlayerControllerClass = Identified;
+	}
+	else
+	{
+		UE_LOG(LogSpaceMMO, Warning,
+			TEXT("SpaceMMOPlayerController not found; connections will have no character."));
+	}
+}
+
 void ASpaceMMOGameMode::StartPlay()
 {
 	Super::StartPlay();
