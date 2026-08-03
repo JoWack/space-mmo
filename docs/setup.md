@@ -180,6 +180,24 @@ Replicating it would be the wrong fix. The scene is a deterministic function of 
 so both ends build an identical copy for free rather than sending three hundred and fifty marker
 cubes over the wire to say something they both already know.
 
+### Why the scene is lit the way it is
+
+Two things that are easy to get wrong in a scene made almost entirely of empty space, both of
+which produced a planet rendered as one white hemisphere and one black one.
+
+**Auto-exposure is off** (`r.DefaultFeature.AutoExposure=False` in `DefaultEngine.ini`). It
+measures scene brightness and adapts, and in space almost everything is black, so it opens all the
+way and saturates every lit surface to white.
+
+**Fill comes from a second directional light, not a sky light.** A sky light captures its
+surroundings to produce ambient, and there is no sky, no atmosphere and no horizon out here to
+capture — it faithfully captured black and scaled it, contributing exactly nothing. Anything
+facing away from the key light was therefore at zero. The fill is dim, cool, aimed from roughly
+the opposite side, and casts no shadows: two shadow-casting suns on a sphere produce crossing
+terminators that read as a rendering fault.
+
+A sky light becomes the right tool again the moment there is a skybox or atmosphere to capture.
+
 ### "The planet is running away from me"
 
 It is not. Planets are fixed points in system space and nothing ever moves them; this was measured

@@ -114,20 +114,35 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 			Cast<UDirectionalLightComponent>(KeyLight->GetLightComponent()))
 		{
 			Component->SetMobility(EComponentMobility::Movable);
-			Component->SetIntensity(4.0f);
+			Component->SetIntensity(3.0f);
 		}
 	}
 
-	// Ambient fill, or everything not facing the key light is pure black — which in an empty scene
-	// means half of every marker simply disappears.
-	if (ASkyLight* Fill = World->SpawnActor<ASkyLight>(
-		ASkyLight::StaticClass(), FTransform::Identity, SpawnParameters))
+	// Fill, from roughly the opposite side, so the half of a planet facing away from the key light
+	// is dim rather than absent.
+	//
+	// A second directional light rather than a sky light, which is what this was and why it did
+	// nothing: a sky light captures its surroundings to produce ambient, and out here there is no
+	// sky, no atmosphere and no horizon to capture. It faithfully captured black and scaled it,
+	// leaving every unlit surface at zero — so a planet read as one white hemisphere and one black
+	// one, with nothing in between.
+	//
+	// Dim and cool, so it reads as bounced starlight rather than a second sun.
+	if (ADirectionalLight* FillLight = World->SpawnActor<ADirectionalLight>(
+		ADirectionalLight::StaticClass(),
+		FTransform(FRotator(-15.0, 215.0, 0.0)),
+		SpawnParameters))
 	{
-		if (USkyLightComponent* Component = Fill->GetLightComponent())
+		if (UDirectionalLightComponent* Component =
+			Cast<UDirectionalLightComponent>(FillLight->GetLightComponent()))
 		{
 			Component->SetMobility(EComponentMobility::Movable);
-			Component->SetIntensity(1.5f);
-			Component->SetLightColor(FLinearColor(0.35f, 0.4f, 0.55f));
+			Component->SetIntensity(0.6f);
+			Component->SetLightColor(FLinearColor(0.45f, 0.52f, 0.7f));
+
+			// No shadows from the fill. Two shadow-casting suns on a sphere produce crossing
+			// terminators that read as a rendering fault rather than as lighting.
+			Component->SetCastShadows(false);
 		}
 	}
 #endif
