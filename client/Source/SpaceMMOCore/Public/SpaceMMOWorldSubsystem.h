@@ -21,7 +21,7 @@
  * the audience that needs the world to exist.
  */
 UCLASS()
-class SPACEMMOCORE_API USpaceMMOWorldSubsystem : public UWorldSubsystem
+class SPACEMMOCORE_API USpaceMMOWorldSubsystem : public UTickableWorldSubsystem
 {
 	GENERATED_BODY()
 
@@ -30,7 +30,28 @@ public:
 
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 
+	/**
+	 * Applies the lighting console variables when they change.
+	 *
+	 * Lighting is the one thing here that can only be judged by looking at it, and a rebuild is
+	 * minutes. SpaceMMO.KeyLight and SpaceMMO.FillLight are therefore live: type a number in the
+	 * console and the scene changes, so finding a value takes seconds rather than a compile each.
+	 */
+	virtual void Tick(float DeltaTime) override;
+
+	virtual TStatId GetStatId() const override
+	{
+		RETURN_QUICK_DECLARE_CYCLE_STAT(USpaceMMOWorldSubsystem, STATGROUP_Tickables);
+	}
+
 	/** The planet every machine agrees on. Spawned here so both sides simulate against it. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|World")
 	void BuildScenery();
+
+private:
+	UPROPERTY()
+	TObjectPtr<class UDirectionalLightComponent> KeyLight;
+
+	UPROPERTY()
+	TObjectPtr<class UDirectionalLightComponent> FillLight;
 };

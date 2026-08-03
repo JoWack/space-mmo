@@ -198,6 +198,20 @@ terminators that read as a rendering fault.
 
 A sky light becomes the right tool again the moment there is a skybox or atmosphere to capture.
 
+**Both lights are tunable live.** Lighting can only be judged by looking at it, and a rebuild is
+several minutes, so press the console key in a running game and type:
+
+```
+SpaceMMO.KeyLight 20
+SpaceMMO.FillLight 4
+```
+
+The change applies on the next frame. Directional light intensity is in **lux**, which is an
+unforgiving unit: 3 is roughly twilight, which is why the scene went dark the moment auto-exposure
+stopped compensating for it. Raise the key until the lit side looks right, then the fill until the
+dark side is dim rather than absent. Once the numbers are settled they belong in the defaults at
+the top of `SpaceMMOWorldSubsystem.cpp`.
+
 ### "The planet is running away from me"
 
 It is not. Planets are fixed points in system space and nothing ever moves them; this was measured

@@ -9,6 +9,27 @@
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOTestScene.h"
 
+namespace
+{
+	// Directional light intensity is in lux, and lux is unforgiving: three is roughly twilight,
+	// which is why the scene went dark the moment auto-exposure stopped compensating for it.
+	// Daylight is orders of magnitude higher; these are a starting point, not a physical claim.
+	float GKeyLightLux = 14.0f;
+	float GFillLightLux = 3.0f;
+
+	FAutoConsoleVariableRef CVarKeyLight(
+		TEXT("SpaceMMO.KeyLight"),
+		GKeyLightLux,
+		TEXT("Key light intensity in lux. Applies immediately."),
+		ECVF_Default);
+
+	FAutoConsoleVariableRef CVarFillLight(
+		TEXT("SpaceMMO.FillLight"),
+		GFillLightLux,
+		TEXT("Fill light intensity in lux, lighting the side facing away from the key. Applies immediately."),
+		ECVF_Default);
+}
+
 bool USpaceMMOWorldSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
 	if (!Super::ShouldCreateSubsystem(Outer))
@@ -30,6 +51,22 @@ void USpaceMMOWorldSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	Super::OnWorldBeginPlay(InWorld);
 
 	BuildScenery();
+}
+
+void USpaceMMOWorldSubsystem::Tick(const float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	// Only on change, so this is a comparison per frame rather than a light update per frame.
+	if (KeyLight != nullptr && !FMath::IsNearlyEqual(KeyLight->Intensity, GKeyLightLux))
+	{
+		KeyLight->SetIntensity(GKeyLightLux);
+	}
+
+	if (FillLight != nullptr && !FMath::IsNearlyEqual(FillLight->Intensity, GFillLightLux))
+	{
+		FillLight->SetIntensity(GFillLightLux);
+	}
 }
 
 void USpaceMMOWorldSubsystem::BuildScenery()
@@ -103,7 +140,7 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 #if !UE_SERVER
 	// A key light at an angle, so the marker cubes read as solid objects rather than flat
 	// silhouettes and it is possible to tell which way one is facing.
-	if (ADirectionalLight* KeyLight = World->SpawnActor<ADirectionalLight>(
+	if (ADirectionalLight* KeyLightActor = World->SpawnActor<ADirectionalLight>(
 		ADirectionalLight::StaticClass(),
 		FTransform(FRotator(-45.0, 45.0, 0.0)),
 		SpawnParameters))
@@ -111,10 +148,12 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 		// GetLightComponent rather than GetComponent: it is declared on ALight, so it survives
 		// every target configuration, and the cast is checked.
 		if (UDirectionalLightComponent* Component =
-			Cast<UDirectionalLightComponent>(KeyLight->GetLightComponent()))
+			Cast<UDirectionalLightComponent>(KeyLightActor->GetLightComponent()))
 		{
 			Component->SetMobility(EComponentMobility::Movable);
-			Component->SetIntensity(3.0f);
+			Component->SetIntensity(GKeyLightLux);
+
+			KeyLight = Component;
 		}
 	}
 
@@ -128,17 +167,19 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 	// one, with nothing in between.
 	//
 	// Dim and cool, so it reads as bounced starlight rather than a second sun.
-	if (ADirectionalLight* FillLight = World->SpawnActor<ADirectionalLight>(
+	if (ADirectionalLight* FillLightActor = World->SpawnActor<ADirectionalLight>(
 		ADirectionalLight::StaticClass(),
 		FTransform(FRotator(-15.0, 215.0, 0.0)),
 		SpawnParameters))
 	{
 		if (UDirectionalLightComponent* Component =
-			Cast<UDirectionalLightComponent>(FillLight->GetLightComponent()))
+			Cast<UDirectionalLightComponent>(FillLightActor->GetLightComponent()))
 		{
 			Component->SetMobility(EComponentMobility::Movable);
-			Component->SetIntensity(0.6f);
+			Component->SetIntensity(GFillLightLux);
 			Component->SetLightColor(FLinearColor(0.45f, 0.52f, 0.7f));
+
+			FillLight = Component;
 
 			// No shadows from the fill. Two shadow-casting suns on a sphere produce crossing
 			// terminators that read as a rendering fault rather than as lighting.
