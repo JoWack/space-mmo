@@ -12,11 +12,13 @@ pitch, not a decision record.
 | ADR | Decision | Status |
 |---|---|---|
 | [0001](0001-coordinates.md) | Three-tier coordinate system with local physics grids | Accepted |
-| [0002](0002-generation.md) | Procedural generation as a pure function; DB stores only deltas | Accepted |
-| [0003](0003-topology.md) | Server-per-system topology with an authoritative backend monolith | Accepted |
+| [0002](0002-generation.md) | Procedural generation as a pure function; DB stores only deltas | Accepted · narrowed to terrain by [0007](0007-one-handcrafted-system.md) |
+| [0003](0003-topology.md) | Server-per-system topology with an authoritative backend monolith | Accepted · shard boundary amended by [0007](0007-one-handcrafted-system.md) |
 | [0004](0004-progression-curve.md) | Adopt the RuneScape XP curve unmodified | Accepted |
 | [0005](0005-money-representation.md) | Credits as int64 minor units on an append-only ledger | Accepted |
 | [0006](0006-death-and-insurance.md) | Cause-based loot destruction; insurance pegged to acquisition value | Accepted |
+| [0007](0007-one-handcrafted-system.md) | One handcrafted system, not a procedural galaxy | Accepted |
+| [0008](0008-factions-pvp-and-markets.md) | Faction warfare, PvP zoning, and market structure | Accepted |
 
 ## When to write one
 

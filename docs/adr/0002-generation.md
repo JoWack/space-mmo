@@ -1,6 +1,12 @@
 # ADR-0002 — Procedural generation as a pure function; database stores only deltas
 
-**Status:** Accepted · 2026-07-29
+**Status:** Accepted · 2026-07-29 · **narrowed by
+[ADR-0007](0007-one-handcrafted-system.md)**
+
+> ADR-0007 makes the game one handcrafted system. Systems, orbits, bodies, and
+> resource placement are now authored content, so the reasoning below no longer
+> applies to them. It still governs **planet surfaces**, where terrain remains a pure
+> height function of a direction vector — that part is load-bearing today.
 
 ## Context
 

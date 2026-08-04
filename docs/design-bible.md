@@ -25,14 +25,30 @@ planet; neither is changeable later.
 - `TODO(name)`: display names for all four planets.
 - `TODO(name)`: display names for `faction_a` and `faction_b`.
 
-All four starting bodies sit in the **starting system** (`system_origin`) at the
-galactic center, alongside the **capital world** (`body_capital`) — a neutral hub
-hosting major trading hubs, spaceports, housing, and the career questline givers.
+All four starting bodies sit in the **starting system** (`system_origin`), alongside
+the **capital world** (`body_capital`) — a neutral hub hosting the global market,
+spaceports, housing, and the career questline givers.
 
-**Faction implications are deliberately unscoped for now.** Faction should not gate
-trade or travel until security zones exist (M4); it currently only affects starting
-location and flavor. Deciding faction warfare rules early would constrain the
-economy design before it's been balanced.
+This system is the whole game, permanently; there is no procedural galaxy behind it
+(see [ADR-0007](adr/0007-one-handcrafted-system.md)).
+
+### Faction implications
+
+Decided in [ADR-0008](adr/0008-factions-pvp-and-markets.md); this section previously
+deferred them.
+
+- **Space is split down the middle.** One half belongs to `faction_a`, the other to
+  `faction_b`, and PvP is enabled against the opposing faction in their space. The
+  capital sits on the line inside a neutral safe sphere.
+- **Legality is a pure function** of the two characters' factions and a position —
+  no zone actors, no regions table. It lives in `SpaceMMO.Domain`.
+- **Raw materials are planet-locked.** Each homeworld yields ores that exist nowhere
+  else, which is what makes hauling a profession and gives the line something to
+  divide.
+- **Early and mid-tier crafting is self-sufficient within a race**, so a new player
+  never stalls on an empty market. **High-tier recipes require materials from all four
+  planets** — that requirement is the reason the global market and the PvP zone both
+  exist, and removing it would quietly turn the split system into scenery.
 
 ---
 
@@ -356,7 +372,11 @@ future credit source must route through them.
 
 ## 10. Open design questions
 
-1. **Faction warfare rules** — deliberately deferred; see §1.
+1. ~~**Faction warfare rules**~~ — decided in
+   [ADR-0008](adr/0008-factions-pvp-and-markets.md); see §1. What remains open is
+   *tuning*: the capital's fee premium, flight times between bodies, and which
+   high-tier recipes cross faction lines. Those are content numbers, and EconSim
+   should settle them.
 2. **`constitution` / `stamina` XP sources** — see §2.
 3. **Repair loop mechanics** — `condition` is in the schema from the start, but the
    repair skill, its material costs, and whether repeated repairs permanently lower an

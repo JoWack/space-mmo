@@ -1,6 +1,12 @@
 # ADR-0003 — Server-per-system topology, with an authoritative backend monolith
 
-**Status:** Accepted · 2026-07-29
+**Status:** Accepted · 2026-07-29 · **amended by
+[ADR-0007](0007-one-handcrafted-system.md)**
+
+> ADR-0007 makes one system the whole game, so there is one UE dedicated server and
+> the warp handoff in point 1 is out of scope rather than deferred. Points 2 and 3 —
+> `system_id` plumbed everywhere, persistence in the backend monolith and never in UE
+> — stand unchanged and are why this remains worth reading.
 
 ## Context
 
