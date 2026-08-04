@@ -30,8 +30,48 @@ public:
 
 	virtual void BeginPlay() override;
 
+	virtual void Tick(float DeltaSeconds) override;
+
+	virtual void SetupInputComponent() override;
+
 	/** Pushes identity onto each new pawn, since a player swaps between ship and character. */
 	virtual void OnPossess(APawn* InPawn) override;
+
+	/**
+	 * Re-reads skills and inventory from the backend.
+	 *
+	 * Called after anything that changes them — gathering today, crafting and trading later. The
+	 * client asks rather than being told because the backend owns the numbers; a client that
+	 * incremented its own copy would be guessing, and would be wrong the moment two things happened
+	 * at once.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Identity")
+	void RefreshCharacterState();
+
+	/**
+	 * Builds the character panel's lines from backend state.
+	 *
+	 * Pure and static so the wording, ordering and empty cases can be tested without a world, a
+	 * backend or a pawn — the same reason FormatGatherMessage is. Every interesting case here is an
+	 * edge one: a brand-new character has no trained skills and nothing in the hold, and the panel
+	 * has to say so rather than render as a blank space that reads like a bug.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
+	static TArray<FString> BuildCharacterPanel(
+		const FString& CharacterName,
+		const TArray<FBackendSkill>& Skills,
+		const TArray<FBackendInventoryItem>& Inventory);
+
+	/**
+	 * Renders a whole number with thousands separators, e.g. 1234567 as "1,234,567".
+	 *
+	 * Takes int64 rather than clamping to int32 for FString::FormatAsNumber. XP fits in 32 bits
+	 * today, but a formatter that silently saturates is one that reports a wrong number confidently
+	 * the first time it is pointed at a credit balance, which is int64 for exactly that reason
+	 * (ADR-0005).
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
+	static FString GroupDigits(int64 Value);
 
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -56,6 +96,15 @@ public:
 	/** Where this player's gathered material goes. Not yet chosen per player. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Identity")
 	int32 StationId = 1;
+
+	/**
+	 * Whether the character panel is drawn.
+	 *
+	 * On by default. The panel is the only way to see that mining credited anything, and a display
+	 * that has to be discovered before it can report is no better than no display at all.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Identity")
+	bool bShowCharacterPanel = true;
 
 private:
 	/**
@@ -103,7 +152,40 @@ private:
 	/** Pushes the identity onto whatever the player is currently possessing. */
 	void RefreshPossessedPawn();
 
-	UPROPERTY(Replicated)
+	/** Draws the panel. Local client only; a dedicated server has nobody to draw for. */
+	void DrawCharacterPanel();
+
+	void ToggleCharacterPanel();
+
+	/**
+	 * Base key for the panel's on-screen messages.
+	 *
+	 * Well clear of the navigation readouts the pawns draw, which use 1 through 11. Two writers
+	 * sharing a key overwrite each other, and the symptom is a line that flickers between two
+	 * unrelated pieces of text.
+	 */
+	static constexpr int32 PanelMessageKey = 200;
+
+	/**
+	 * Rows the panel will draw, and the range of keys it therefore owns.
+	 *
+	 * A cap rather than a growing set, because keys have to be removed to clear a line and a
+	 * previously-longer panel would otherwise leave orphans on screen with nothing tracking them.
+	 */
+	static constexpr int32 PanelMaxLines = 40;
+
+	/**
+	 * The client's cue that the server has agreed who it is.
+	 *
+	 * Skills and inventory are fetched here rather than when the client picked a character, because
+	 * until the server confirms the claim the client only has an intention. Loading a character's
+	 * private state on the strength of an unconfirmed guess would show a player numbers that may not
+	 * be theirs.
+	 */
+	UFUNCTION()
+	void OnRep_CharacterId();
+
+	UPROPERTY(ReplicatedUsing = OnRep_CharacterId)
 	int32 CharacterId = 0;
 
 	UPROPERTY(Replicated)

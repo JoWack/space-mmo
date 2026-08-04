@@ -438,11 +438,23 @@ void USpaceMMOBackendClient::CreateCharacter(const FString& Name, const EBackend
 
 void USpaceMMOBackendClient::SelectCharacter(const int32 CharacterId)
 {
+	// Cleared only when the character actually changes. Calling this again for the same character is
+	// a refresh, and a refresh that empties the arrays first leaves the panel blank for a whole round
+	// trip — twice over, since skills and inventory answer separately. Gathering refreshes on every
+	// successful press, so that flicker would be the normal state of the display rather than a rare
+	// one.
+	if (CharacterId != SelectedCharacterId)
+	{
+		Skills.Reset();
+		Inventory.Reset();
+	}
+
 	SelectedCharacterId = CharacterId;
 
-	Skills.Reset();
-	Inventory.Reset();
-
+	// Parsed into a local and swapped in whole. Parsing straight into the live array would leave it
+	// briefly half-filled, which is the same flicker by a slower route. A failed request keeps the
+	// previous answer, which is the better of the two lies available: stale is closer to true than
+	// empty, and the request that follows will correct it.
 	Send(
 		TEXT("GET"),
 		FString::Printf(TEXT("/characters/%d/skills"), CharacterId),
@@ -450,7 +462,11 @@ void USpaceMMOBackendClient::SelectCharacter(const int32 CharacterId)
 		true,
 		[this](const FString& Body)
 		{
-			FSpaceMMOBackendProtocol::ParseSkills(Body, Skills);
+			TArray<FBackendSkill> Parsed;
+
+			FSpaceMMOBackendProtocol::ParseSkills(Body, Parsed);
+
+			Skills = MoveTemp(Parsed);
 
 			OnCharacterStateLoaded.Broadcast();
 		});
@@ -462,7 +478,11 @@ void USpaceMMOBackendClient::SelectCharacter(const int32 CharacterId)
 		true,
 		[this](const FString& Body)
 		{
-			FSpaceMMOBackendProtocol::ParseInventory(Body, Inventory);
+			TArray<FBackendInventoryItem> Parsed;
+
+			FSpaceMMOBackendProtocol::ParseInventory(Body, Parsed);
+
+			Inventory = MoveTemp(Parsed);
 
 			OnCharacterStateLoaded.Broadcast();
 		});

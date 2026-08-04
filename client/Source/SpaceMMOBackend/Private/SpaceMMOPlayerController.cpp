@@ -1,5 +1,7 @@
 #include "SpaceMMOPlayerController.h"
 
+#include "Components/InputComponent.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
@@ -10,6 +12,10 @@
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
 {
 	bReplicates = true;
+
+	// The panel is redrawn from current state each frame, the same way the pawns draw their
+	// navigation readouts. Controllers do not tick by default.
+	PrimaryActorTick.bCanEverTick = true;
 }
 
 void ASpaceMMOPlayerController::GetLifetimeReplicatedProps(
@@ -40,6 +46,209 @@ void ASpaceMMOPlayerController::OnPossess(APawn* InPawn)
 	Super::OnPossess(InPawn);
 
 	RefreshPossessedPawn();
+}
+
+void ASpaceMMOPlayerController::SetupInputComponent()
+{
+	Super::SetupInputComponent();
+
+	if (InputComponent != nullptr)
+	{
+		InputComponent->BindAction(
+			TEXT("ToggleCharacterPanel"),
+			IE_Pressed,
+			this,
+			&ASpaceMMOPlayerController::ToggleCharacterPanel);
+	}
+}
+
+void ASpaceMMOPlayerController::ToggleCharacterPanel()
+{
+	bShowCharacterPanel = !bShowCharacterPanel;
+
+	if (!bShowCharacterPanel && GEngine != nullptr)
+	{
+		// Cleared explicitly. On-screen messages persist until they expire or are overwritten, and
+		// these are drawn with an infinite lifetime, so simply not drawing them leaves the last frame
+		// on screen forever.
+		for (int32 Line = 0; Line < PanelMaxLines; ++Line)
+		{
+			GEngine->RemoveOnScreenDebugMessage(PanelMessageKey + Line);
+		}
+	}
+}
+
+void ASpaceMMOPlayerController::Tick(const float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (bShowCharacterPanel && IsLocalController())
+	{
+		DrawCharacterPanel();
+	}
+}
+
+void ASpaceMMOPlayerController::OnRep_CharacterId()
+{
+	RefreshPossessedPawn();
+
+	RefreshCharacterState();
+}
+
+void ASpaceMMOPlayerController::RefreshCharacterState()
+{
+	if (CharacterId == 0 || !IsLocalController())
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+
+	USpaceMMOBackendClient* Backend =
+		GameInstance != nullptr
+			? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
+			: nullptr;
+
+	if (Backend == nullptr || !Backend->IsSignedIn())
+	{
+		return;
+	}
+
+	Backend->SelectCharacter(CharacterId);
+}
+
+void ASpaceMMOPlayerController::DrawCharacterPanel()
+{
+	if (GEngine == nullptr)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+
+	const USpaceMMOBackendClient* Backend =
+		GameInstance != nullptr
+			? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
+			: nullptr;
+
+	if (Backend == nullptr)
+	{
+		return;
+	}
+
+	TArray<FString> Lines = BuildCharacterPanel(
+		CharacterName, Backend->GetSkills(), Backend->GetInventory());
+
+	// Says so rather than silently dropping the tail. A panel that quietly stops listing at forty
+	// rows would read as "I do not own that", which is the one thing an inventory display must never
+	// get wrong.
+	if (Lines.Num() > PanelMaxLines)
+	{
+		const int32 Hidden = Lines.Num() - PanelMaxLines + 1;
+
+		Lines.SetNum(PanelMaxLines);
+		Lines[PanelMaxLines - 1] = FString::Printf(TEXT("   ... and %d more"), Hidden);
+	}
+
+	for (int32 Line = 0; Line < PanelMaxLines; ++Line)
+	{
+		const int32 Key = PanelMessageKey + Line;
+
+		if (Line >= Lines.Num())
+		{
+			// Removed rather than blanked. A shrinking list -- the last of an ore spent, say --
+			// would otherwise leave its final row on screen indefinitely.
+			GEngine->RemoveOnScreenDebugMessage(Key);
+
+			continue;
+		}
+
+		GEngine->AddOnScreenDebugMessage(Key, 0.0f, FColor::White, Lines[Line]);
+	}
+}
+
+FString ASpaceMMOPlayerController::GroupDigits(const int64 Value)
+{
+	const FString Digits = FString::Printf(TEXT("%lld"), FMath::Abs(Value));
+
+	FString Grouped;
+
+	for (int32 Index = 0; Index < Digits.Len(); ++Index)
+	{
+		// Counted from the right, so the leading group is the short one: 1234567 groups as
+		// 1,234,567 rather than 123,456,7.
+		if (Index > 0 && (Digits.Len() - Index) % 3 == 0)
+		{
+			Grouped.AppendChar(TEXT(','));
+		}
+
+		Grouped.AppendChar(Digits[Index]);
+	}
+
+	// XP is never negative today, but a formatter that silently drops a sign is a formatter that
+	// lies the first time it is reused for a balance or a delta.
+	return Value < 0 ? TEXT("-") + Grouped : Grouped;
+}
+
+TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
+	const FString& CharacterName,
+	const TArray<FBackendSkill>& Skills,
+	const TArray<FBackendInventoryItem>& Inventory)
+{
+	TArray<FString> Lines;
+
+	Lines.Add(CharacterName.IsEmpty()
+		? TEXT("Not identified")
+		: FString::Printf(TEXT("== %s =="), *CharacterName));
+
+	// Only trained skills. A character has a row for every skill in the game from creation, and
+	// listing thirty untouched zeroes would bury the one line that changed.
+	TArray<FBackendSkill> Trained = Skills.FilterByPredicate(
+		[](const FBackendSkill& Skill) { return Skill.Xp > 0; });
+
+	// Sorted here rather than trusted from the response. JSON array order is whatever the query
+	// returned, and a list that reorders itself between refreshes is unreadable precisely when it is
+	// being watched -- which, for this panel, is always.
+	Trained.Sort([](const FBackendSkill& A, const FBackendSkill& B) { return A.Name < B.Name; });
+
+	Lines.Add(TEXT("-- Skills --"));
+
+	if (Trained.Num() == 0)
+	{
+		Lines.Add(TEXT("   nothing trained yet"));
+	}
+
+	for (const FBackendSkill& Skill : Trained)
+	{
+		Lines.Add(FString::Printf(
+			TEXT("   %s  lv %d  (%s xp)"),
+			*Skill.Name,
+			Skill.Level,
+			*GroupDigits(Skill.Xp)));
+	}
+
+	TArray<FBackendInventoryItem> Held = Inventory;
+
+	Held.Sort([](const FBackendInventoryItem& A, const FBackendInventoryItem& B)
+		{ return A.Name < B.Name; });
+
+	Lines.Add(TEXT("-- Hold --"));
+
+	if (Held.Num() == 0)
+	{
+		Lines.Add(TEXT("   empty"));
+	}
+
+	for (const FBackendInventoryItem& Item : Held)
+	{
+		Lines.Add(FString::Printf(TEXT("   %s  x%d"), *Item.Name, Item.Quantity));
+	}
+
+	return Lines;
 }
 
 void ASpaceMMOPlayerController::BeginIdentifying()
@@ -283,6 +492,12 @@ void ASpaceMMOPlayerController::AdoptIdentity(
 	CharacterName = ResolvedName;
 
 	RefreshPossessedPawn();
+
+	// Also here, not only in OnRep_CharacterId. A replication callback does not fire on the machine
+	// that owns the property, so in standalone play -- where the controller is its own authority --
+	// OnRep never runs and the panel would sit empty forever. On a dedicated server this is a no-op,
+	// because the connection's controller is not local there.
+	RefreshCharacterState();
 }
 
 void ASpaceMMOPlayerController::RefreshPossessedPawn()

@@ -10,6 +10,7 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMODepositActor.h"
+#include "SpaceMMOPlayerController.h"
 
 namespace
 {
@@ -223,6 +224,23 @@ void USpaceMMOGatheringComponent::ClientGatherResult_Implementation(
 	const FString Message = FormatGatherMessage(Quantity, XpAwarded, NodeRemaining, ItemName);
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s"), *Message);
+
+	// Only when something was actually credited. A refused press changes nothing server-side, and
+	// re-fetching on every hammered key would put the panel's traffic back where the request
+	// throttle just took it from.
+	if (Quantity > 0)
+	{
+		const APawn* Pawn = Cast<APawn>(GetOwner());
+
+		if (ASpaceMMOPlayerController* Controller =
+			Pawn != nullptr ? Cast<ASpaceMMOPlayerController>(Pawn->GetController()) : nullptr)
+		{
+			// Asked for, not applied locally. The client could add the quantity to its own copy and
+			// be right nearly always -- but "nearly" is how a display starts disagreeing with the
+			// database, and the panel exists to be believed.
+			Controller->RefreshCharacterState();
+		}
+	}
 
 	if (GEngine == nullptr)
 	{
