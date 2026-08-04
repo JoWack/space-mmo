@@ -3,6 +3,13 @@
 **Status:** Accepted · 2026-08-03 · resolves open question §1 of the design bible ·
 depends on [ADR-0007](0007-one-handcrafted-system.md)
 
+> **Amended the same day, before any implementation existed**, to add the contested
+> approach around the capital and new-player protection. The README says not to edit
+> an accepted ADR and to supersede it instead; that rule protects the history of the
+> reasoning, and raising an ADR-0009 to amend an hours-old document that nothing yet
+> depends on would be ceremony rather than history. What the amendment changed is
+> recorded here instead. The rule stands for everything older than a session.
+
 ## Context
 
 The design bible assigned four races to two factions and then said, deliberately, that
@@ -27,21 +34,43 @@ Unchanged from design bible §1, now with consequences attached:
 
 Members of a faction are friendly to each other and hostile to the other faction.
 
-### Space is divided by a plane
+### Space is divided by a plane, and the capital by two radii
 
-The system is split down the middle. One half is `faction_a` space, the other is
-`faction_b` space, and the capital sits on the line inside a neutral sphere.
+The system is split down the middle: one half is `faction_a` space, the other is
+`faction_b` space, and the capital sits on the line. Around the capital are two
+concentric regions rather than one safe sphere:
 
-**PvP legality is therefore a pure function** of attacker faction, target faction, and
-a position — no regions table, no zone actors, no new state. It belongs in
-`SpaceMMO.Domain` with the rest of the rules, testable with zero I/O:
+| Region | Extent | Rule |
+|---|---|---|
+| **Anchorage** | `d ≤ R_safe` | No PvP. Landing, docking, and the global market. |
+| **Approach** | `R_safe < d ≤ R_contested` | PvP against the opposing faction, **on both sides of the plane**. |
+| **Faction space** | `d > R_contested` | PvP against the opposing faction, in their half only. |
+
+The contested approach is the load-bearing part. Without it, every route from a
+homeworld to the capital stays inside friendly space, so reaching the only global
+market is risk-free and the war zone has no bearing on the economy.
+
+**PvP legality is therefore a pure function** of attacker faction, target faction, a
+position, and whether the attacker's target is still under new-player protection — no
+regions table, no zone actors, no new state. It belongs in `SpaceMMO.Domain` with the
+rest of the rules, testable with zero I/O:
 
 ```
-CanAttack(attacker, target, positionInSystem) -> bool
+CanAttack(attackerFaction, targetFaction, targetIsProtected, positionInSystem) -> bool
 ```
 
-The capital's neutral sphere is expressed the same way. `security_level` already
-exists on bodies and does not need extending for this.
+`security_level` already exists on bodies and does not need extending for this.
+
+### New characters are immune until onboarding completes
+
+The onboarding questline ends at the capital, so a new player's final tutorial leg
+crosses the contested approach — flying the shuttle they just built, which is both
+their most valuable possession and the payoff of the entire new-player experience.
+Losing it to a gank there is a first hour people quit over.
+
+Protection therefore lasts until the `main_story` chain completes, and it is a
+property of the target rather than a property of a region, which is why it is an
+argument to `CanAttack` rather than another radius.
 
 ### Materials are planet-locked; markets are stratified by geography
 
@@ -89,11 +118,16 @@ Positive:
 
 Negative, and accepted:
 
-- **The capital is on the border, so the route from any homeworld to the capital stays
-  inside friendly space.** Hauling to the global market is therefore risk-free by
-  default. The stakes come entirely from *needing* foreign materials — which means if
-  cross-faction demand is ever tuned out of the recipe graph, the PvP zone silently
-  becomes decoration. This is the invariant to watch, and EconSim should assert it.
+- **Every player must cross the contested approach to reach the only global market.**
+  That is the point of it, and it is also a funnel: one ring, one destination, no
+  alternate route. The mitigation is geometric rather than designed — a sphere is the
+  opposite of a stargate, with infinite approach vectors and a large surface, so
+  holding it requires spreading thin or guessing. If it turns out to be campable
+  anyway, widening `R_safe` shrinks the exposure without changing any rule.
+- Cross-faction demand in the recipe graph is still what makes the *war* worth
+  fighting rather than merely dangerous, so EconSim should still assert it exists.
+  The contested approach means that if it ever tunes to zero the failure is a duller
+  economy rather than a dead PvP zone — the shell keeps hauling risky on its own.
 - **A style tag changes the inventory stack key.** `inventory_items` is currently keyed
   by `(inventory_id, item_def_id)`; it becomes `(inventory_id, item_def_id, style)`.
   That is a migration, and it touches `InventoryService` stacking and cost-basis

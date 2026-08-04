@@ -38,10 +38,16 @@ Decided in [ADR-0008](adr/0008-factions-pvp-and-markets.md); this section previo
 deferred them.
 
 - **Space is split down the middle.** One half belongs to `faction_a`, the other to
-  `faction_b`, and PvP is enabled against the opposing faction in their space. The
-  capital sits on the line inside a neutral safe sphere.
-- **Legality is a pure function** of the two characters' factions and a position —
-  no zone actors, no regions table. It lives in `SpaceMMO.Domain`.
+  `faction_b`, and PvP is enabled against the opposing faction in their space.
+- **The capital has a safe anchorage inside a contested approach.** You can be
+  attacked on the way in from either side of the line, and not once you are docked.
+  Without that shell, reaching the only global market would be risk-free from every
+  homeworld, and the war zone would have no bearing on the economy.
+- **New characters cannot be attacked until the onboarding questline completes** —
+  its final leg crosses the contested approach carrying the ship they just built.
+- **Legality is a pure function** of the two characters' factions, whether the target
+  is still protected, and a position — no zone actors, no regions table. It lives in
+  `SpaceMMO.Domain`.
 - **Raw materials are planet-locked.** Each homeworld yields ores that exist nowhere
   else, which is what makes hauling a profession and gives the line something to
   divide.
