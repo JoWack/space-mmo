@@ -88,23 +88,6 @@ private:
 	UFUNCTION()
 	void HandleBackendFailed(const FBackendFailure& Failure);
 
-	/**
-	 * Gives keyboard focus back to the game viewport when this window is reactivated.
-	 *
-	 * <strong>Without this, a client that loses focus never gets input again.</strong> Launching a
-	 * second client takes focus from the first; the first regains OS focus perfectly well when you
-	 * click it — GetForegroundWindow confirms it — but Slate does not hand focus back to the game
-	 * viewport, so every key press is dropped before it reaches a pawn. It reads as "only the window
-	 * opened last responds", and it survives alt-tabbing and clicking alike.
-	 *
-	 * Measured, not assumed: with two clients up, four gather presses into the first window produced
-	 * zero server-side attempts and four into the second produced four.
-	 */
-	void EnsureViewportFocus();
-
-	/** Handle for the focus guard, so it stops with the controller. */
-	FTimerHandle FocusGuardTimer;
-
 	UFUNCTION()
 	void HandleCharactersLoaded();
 
