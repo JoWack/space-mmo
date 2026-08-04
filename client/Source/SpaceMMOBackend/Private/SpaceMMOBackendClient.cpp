@@ -488,6 +488,94 @@ void USpaceMMOBackendClient::SelectCharacter(const int32 CharacterId)
 		});
 }
 
+void USpaceMMOBackendClient::FetchRecipes()
+{
+	Send(
+		TEXT("GET"),
+		TEXT("/industry/recipes"),
+		FString(),
+		false,
+		[this](const FString& Body)
+		{
+			TArray<FBackendRecipe> Parsed;
+
+			FSpaceMMOBackendProtocol::ParseRecipes(Body, Parsed);
+
+			Recipes = MoveTemp(Parsed);
+
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Loaded %d recipe(s)."), Recipes.Num());
+
+			OnIndustryChanged.Broadcast();
+		});
+}
+
+void USpaceMMOBackendClient::FetchJobs(const int32 CharacterId)
+{
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/industry/jobs?characterId=%d"), CharacterId),
+		FString(),
+		true,
+		[this](const FString& Body)
+		{
+			// Swapped in whole rather than parsed into the live array, matching skills and
+			// inventory: a half-filled list is a flicker, and this one refreshes on a timer.
+			TArray<FBackendIndustryJob> Parsed;
+
+			FSpaceMMOBackendProtocol::ParseIndustryJobs(Body, Parsed);
+
+			Jobs = MoveTemp(Parsed);
+
+			OnIndustryChanged.Broadcast();
+		});
+}
+
+void USpaceMMOBackendClient::StartJob(
+	const int32 CharacterId, const int32 RecipeId, const int32 StationId, const int32 Runs)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/industry/jobs"),
+		FSpaceMMOBackendProtocol::MakeStartJobBody(CharacterId, RecipeId, StationId, Runs),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				Self->OnIndustryMessage.Broadcast(TEXT("Job started"), true);
+
+				// Refetched rather than assumed. The server decided when this finishes, and its
+				// answer is the only one the claim will be judged against.
+				Self->FetchJobs(CharacterId);
+			}
+		});
+}
+
+void USpaceMMOBackendClient::ClaimJob(const int32 CharacterId, const int64 JobId)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/industry/jobs/claim"),
+		FSpaceMMOBackendProtocol::MakeClaimJobBody(CharacterId, JobId),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				Self->OnIndustryMessage.Broadcast(TEXT("Job claimed"), true);
+
+				Self->FetchJobs(CharacterId);
+
+				// The outputs landed in the hangar, so the panel's holdings are now stale.
+				Self->SelectCharacter(CharacterId);
+			}
+		});
+}
+
 void USpaceMMOBackendClient::ResolveCharacterAsServer(
 	const FString& Token, const int32 ClaimedCharacterId, FOnCharacterResolved OnResolved)
 {

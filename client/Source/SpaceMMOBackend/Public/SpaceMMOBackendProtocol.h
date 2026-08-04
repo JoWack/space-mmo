@@ -56,6 +56,24 @@ public:
 	static bool ParseBodies(const FString& Json, TArray<FBackendBody>& OutBodies);
 
 	/**
+	 * Parses the recipe catalog.
+	 *
+	 * A recipe with no key is dropped. The key is how the client refers to a recipe across two
+	 * differently-seeded databases, and one without it could only be named by an id that means
+	 * nothing anywhere else.
+	 */
+	static bool ParseRecipes(const FString& Json, TArray<FBackendRecipe>& OutRecipes);
+
+	/** Parses a JSON array of industry jobs. */
+	static bool ParseIndustryJobs(const FString& Json, TArray<FBackendIndustryJob>& OutJobs);
+
+	/** JSON body for starting a job. */
+	static FString MakeStartJobBody(int32 CharacterId, int32 RecipeId, int32 StationId, int32 Runs);
+
+	/** JSON body for claiming a job. */
+	static FString MakeClaimJobBody(int32 CharacterId, int64 JobId);
+
+	/**
 	 * Parses a JSON array of resource deposits.
 	 *
 	 * A deposit whose direction is missing, unparseable, or the zero vector is dropped rather than

@@ -13,6 +13,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendDepositsLoaded, int32, Bod
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendBodiesLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnBackendGathered, int32, CharacterId, const FBackendGatherResult&, Result);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendIndustryChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnBackendIndustryMessage, const FString&, Message, bool, bSucceeded);
 
 /**
  * The client's connection to the game server.
@@ -151,6 +154,51 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	const TArray<FBackendResourceNode>& GetDeposits() const { return Deposits; }
 
+	/**
+	 * Loads the recipe catalog. Unauthenticated, like bodies and deposits.
+	 *
+	 * What can be built is authored content, identical for everyone, so requiring a token would
+	 * only mean everyone reads it with one.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
+	void FetchRecipes();
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Industry")
+	const TArray<FBackendRecipe>& GetRecipes() const { return Recipes; }
+
+	/** Loads this character's running jobs. Needs the player's own token. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
+	void FetchJobs(int32 CharacterId);
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Industry")
+	const TArray<FBackendIndustryJob>& GetJobs() const { return Jobs; }
+
+	/**
+	 * Starts a job, as the player rather than as the game server.
+	 *
+	 * <strong>Unlike gathering, this needs no help from the game server.</strong> Gathering had to
+	 * be relayed because "is this player standing next to that deposit" is a fact only the game
+	 * server knows. Crafting has no such precondition today: the backend already checks ownership,
+	 * skill, tools, materials and funds, and it checks them against its own state rather than
+	 * against anything the client says.
+	 *
+	 * That changes the day docking exists. The station should then come from the server's view of
+	 * where the player is, not from this call.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
+	void StartJob(int32 CharacterId, int32 RecipeId, int32 StationId, int32 Runs);
+
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
+	void ClaimJob(int32 CharacterId, int64 JobId);
+
+	/** Fires when the catalog or the job list changes. */
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Industry")
+	FOnBackendIndustryChanged OnIndustryChanged;
+
+	/** Carries a line worth showing the player: what was started, claimed, or refused. */
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Industry")
+	FOnBackendIndustryMessage OnIndustryMessage;
+
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
 	FOnBackendSessionChanged OnSessionChanged;
 
@@ -261,6 +309,12 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendBody> Bodies;
+
+	UPROPERTY()
+	TArray<FBackendRecipe> Recipes;
+
+	UPROPERTY()
+	TArray<FBackendIndustryJob> Jobs;
 
 	int32 SelectedCharacterId = 0;
 };

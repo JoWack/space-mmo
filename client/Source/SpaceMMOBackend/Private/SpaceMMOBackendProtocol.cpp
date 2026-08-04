@@ -336,6 +336,180 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 	return true;
 }
 
+bool FSpaceMMOBackendProtocol::ParseRecipes(
+	const FString& Json, TArray<FBackendRecipe>& OutRecipes)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutRecipes.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		if (!Value.IsValid())
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> Object = Value->AsObject();
+
+		FBackendRecipe Recipe;
+
+		// Dropped rather than defaulted. The key is the only name for a recipe that means the same
+		// thing in two differently-seeded databases; without it there is nothing to refer to.
+		if (!Object.IsValid() || !Object->TryGetStringField(TEXT("key"), Recipe.Key))
+		{
+			continue;
+		}
+
+		Object->TryGetStringField(TEXT("outputItemKey"), Recipe.OutputItemKey);
+		Object->TryGetStringField(TEXT("outputName"), Recipe.OutputName);
+		Object->TryGetStringField(TEXT("skillKey"), Recipe.SkillKey);
+		Object->TryGetStringField(TEXT("skillName"), Recipe.SkillName);
+
+		// Absent when the recipe needs no tool, which is the ordinary case rather than an error.
+		Object->TryGetStringField(TEXT("requiredToolName"), Recipe.RequiredToolName);
+
+		int64 Scratch = 0;
+
+		if (ReadInt64(Object, TEXT("id"), Scratch))
+		{
+			Recipe.Id = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("outputQuantity"), Scratch))
+		{
+			Recipe.OutputQuantity = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("requiredLevel"), Scratch))
+		{
+			Recipe.RequiredLevel = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("jobSeconds"), Scratch))
+		{
+			Recipe.JobSeconds = static_cast<int32>(Scratch);
+		}
+
+		const TArray<TSharedPtr<FJsonValue>>* Inputs = nullptr;
+
+		if (Object->TryGetArrayField(TEXT("inputs"), Inputs) && Inputs != nullptr)
+		{
+			for (const TSharedPtr<FJsonValue>& InputValue : *Inputs)
+			{
+				const TSharedPtr<FJsonObject> InputObject =
+					InputValue.IsValid() ? InputValue->AsObject() : nullptr;
+
+				FBackendRecipeInput Input;
+
+				if (!InputObject.IsValid()
+					|| !InputObject->TryGetStringField(TEXT("itemKey"), Input.ItemKey))
+				{
+					continue;
+				}
+
+				InputObject->TryGetStringField(TEXT("name"), Input.Name);
+
+				if (ReadInt64(InputObject, TEXT("itemDefId"), Scratch))
+				{
+					Input.ItemDefId = static_cast<int32>(Scratch);
+				}
+
+				if (ReadInt64(InputObject, TEXT("quantity"), Scratch))
+				{
+					Input.Quantity = static_cast<int32>(Scratch);
+				}
+
+				Recipe.Inputs.Add(Input);
+			}
+		}
+
+		OutRecipes.Add(Recipe);
+	}
+
+	return true;
+}
+
+bool FSpaceMMOBackendProtocol::ParseIndustryJobs(
+	const FString& Json, TArray<FBackendIndustryJob>& OutJobs)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutJobs.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		if (!Value.IsValid())
+		{
+			continue;
+		}
+
+		const TSharedPtr<FJsonObject> Object = Value->AsObject();
+
+		FBackendIndustryJob Job;
+
+		int64 Id = 0;
+
+		// A job with no id cannot be claimed, so it is worse than useless to display: it would
+		// show a player something to collect and then refuse every attempt.
+		if (!Object.IsValid() || !ReadInt64(Object, TEXT("id"), Id) || Id <= 0)
+		{
+			continue;
+		}
+
+		Job.Id = Id;
+
+		Object->TryGetStringField(TEXT("recipeKey"), Job.RecipeKey);
+		Object->TryGetStringField(TEXT("outputName"), Job.OutputName);
+		Object->TryGetBoolField(TEXT("isClaimable"), Job.bIsClaimable);
+
+		int64 Scratch = 0;
+
+		if (ReadInt64(Object, TEXT("outputQuantityTotal"), Scratch))
+		{
+			Job.OutputQuantityTotal = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("runs"), Scratch))
+		{
+			Job.Runs = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("secondsRemaining"), Scratch))
+		{
+			Job.SecondsRemaining = static_cast<int32>(Scratch);
+		}
+
+		OutJobs.Add(Job);
+	}
+
+	return true;
+}
+
+FString FSpaceMMOBackendProtocol::MakeStartJobBody(
+	const int32 CharacterId, const int32 RecipeId, const int32 StationId, const int32 Runs)
+{
+	return FString::Printf(
+		TEXT("{\"characterId\":%d,\"recipeId\":%d,\"stationId\":%d,\"runs\":%d}"),
+		CharacterId, RecipeId, StationId, Runs);
+}
+
+FString FSpaceMMOBackendProtocol::MakeClaimJobBody(const int32 CharacterId, const int64 JobId)
+{
+	return FString::Printf(
+		TEXT("{\"characterId\":%d,\"jobId\":%lld}"), CharacterId, JobId);
+}
+
 bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(
 	const FString& Json, FBackendResolvedCharacter& OutResolved)
 {

@@ -59,6 +59,116 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			IE_Pressed,
 			this,
 			&ASpaceMMOPlayerController::ToggleCharacterPanel);
+
+		InputComponent->BindAction(
+			TEXT("CycleRecipe"), IE_Pressed, this, &ASpaceMMOPlayerController::CycleRecipe);
+
+		InputComponent->BindAction(
+			TEXT("StartJob"), IE_Pressed, this, &ASpaceMMOPlayerController::StartSelectedJob);
+
+		InputComponent->BindAction(
+			TEXT("ClaimJob"), IE_Pressed, this, &ASpaceMMOPlayerController::ClaimReadyJob);
+	}
+}
+
+USpaceMMOBackendClient* ASpaceMMOPlayerController::Backend() const
+{
+	const UWorld* World = GetWorld();
+
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+
+	return GameInstance != nullptr
+		? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
+		: nullptr;
+}
+
+void ASpaceMMOPlayerController::CycleRecipe()
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || Client->GetRecipes().Num() == 0)
+	{
+		return;
+	}
+
+	SelectedRecipeIndex = (SelectedRecipeIndex + 1) % Client->GetRecipes().Num();
+}
+
+void ASpaceMMOPlayerController::StartSelectedJob()
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || CharacterId == 0)
+	{
+		return;
+	}
+
+	const TArray<FBackendRecipe>& Available = Client->GetRecipes();
+
+	if (!Available.IsValidIndex(SelectedRecipeIndex))
+	{
+		return;
+	}
+
+	// One run. Batching is a real feature — it is how a player makes forty plates without forty
+	// keypresses — but it needs a way to choose a count, and there is no UI to choose one in.
+	Client->StartJob(CharacterId, Available[SelectedRecipeIndex].Id, StationId, 1);
+}
+
+void ASpaceMMOPlayerController::ClaimReadyJob()
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || CharacterId == 0)
+	{
+		return;
+	}
+
+	// The server's flag, not a comparison done here. Claiming the first ready one rather than all
+	// of them keeps each press to a single answer the player can read.
+	for (const FBackendIndustryJob& Job : Client->GetJobs())
+	{
+		if (Job.bIsClaimable)
+		{
+			Client->ClaimJob(CharacterId, Job.Id);
+
+			return;
+		}
+	}
+
+	ShowNotice(TEXT("Nothing ready to claim"), false);
+}
+
+void ASpaceMMOPlayerController::RefreshJobs()
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client != nullptr && CharacterId != 0 && Client->IsSignedIn())
+	{
+		Client->FetchJobs(CharacterId);
+	}
+}
+
+void ASpaceMMOPlayerController::HandleIndustryChanged()
+{
+	// Nothing to do but let the next frame draw. The panel reads current state rather than caching
+	// its own copy, which is what keeps it from ever showing something the backend has replaced.
+}
+
+void ASpaceMMOPlayerController::HandleIndustryMessage(
+	const FString& Message, const bool bSucceeded)
+{
+	ShowNotice(Message, bSucceeded);
+}
+
+void ASpaceMMOPlayerController::ShowNotice(const FString& Message, const bool bSucceeded)
+{
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s"), *Message);
+
+	if (GEngine != nullptr)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			NoticeMessageKey, 4.0f, bSucceeded ? FColor::Green : FColor::Orange, Message);
 	}
 }
 
@@ -102,21 +212,34 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 		return;
 	}
 
-	const UWorld* World = GetWorld();
+	USpaceMMOBackendClient* Client = Backend();
 
-	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
-
-	USpaceMMOBackendClient* Backend =
-		GameInstance != nullptr
-			? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
-			: nullptr;
-
-	if (Backend == nullptr || !Backend->IsSignedIn())
+	if (Client == nullptr || !Client->IsSignedIn())
 	{
 		return;
 	}
 
-	Backend->SelectCharacter(CharacterId);
+	Client->SelectCharacter(CharacterId);
+
+	if (!bIndustryBound)
+	{
+		bIndustryBound = true;
+
+		Client->OnIndustryChanged.AddDynamic(
+			this, &ASpaceMMOPlayerController::HandleIndustryChanged);
+		Client->OnIndustryMessage.AddDynamic(
+			this, &ASpaceMMOPlayerController::HandleIndustryMessage);
+
+		Client->FetchRecipes();
+
+		// Polled, because nothing pushes a countdown. Two seconds is far coarser than the display,
+		// which is deliberate: the panel renders the server's last answer plus nothing, so a stale
+		// second is honest where a locally-decremented one would eventually be wrong.
+		GetWorldTimerManager().SetTimer(
+			JobRefreshTimer, this, &ASpaceMMOPlayerController::RefreshJobs, 2.0f, true);
+	}
+
+	Client->FetchJobs(CharacterId);
 }
 
 void ASpaceMMOPlayerController::DrawCharacterPanel()
@@ -126,22 +249,18 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 		return;
 	}
 
-	const UWorld* World = GetWorld();
+	const USpaceMMOBackendClient* Client = Backend();
 
-	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
-
-	const USpaceMMOBackendClient* Backend =
-		GameInstance != nullptr
-			? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
-			: nullptr;
-
-	if (Backend == nullptr)
+	if (Client == nullptr)
 	{
 		return;
 	}
 
 	TArray<FString> Lines = BuildCharacterPanel(
-		CharacterName, Backend->GetSkills(), Backend->GetInventory());
+		CharacterName, Client->GetSkills(), Client->GetInventory());
+
+	Lines.Append(BuildIndustryPanel(
+		Client->GetRecipes(), Client->GetJobs(), Client->GetInventory(), SelectedRecipeIndex));
 
 	// Says so rather than silently dropping the tail. A panel that quietly stops listing at forty
 	// rows would read as "I do not own that", which is the one thing an inventory display must never
@@ -169,6 +288,93 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 
 		GEngine->AddOnScreenDebugMessage(Key, 0.0f, FColor::White, Lines[Line]);
 	}
+}
+
+TArray<FString> ASpaceMMOPlayerController::BuildIndustryPanel(
+	const TArray<FBackendRecipe>& Recipes,
+	const TArray<FBackendIndustryJob>& Jobs,
+	const TArray<FBackendInventoryItem>& Inventory,
+	const int32 SelectedIndex)
+{
+	TArray<FString> Lines;
+
+	Lines.Add(TEXT("-- Industry --  R select  X start  Z claim"));
+
+	if (Recipes.Num() == 0)
+	{
+		Lines.Add(TEXT("   no recipes loaded"));
+	}
+
+	// Clamped rather than trusted. The catalog can be re-fetched at any time, and a selection left
+	// pointing past the end would read as "nothing is selected" while the start key silently did
+	// nothing.
+	const int32 Selected = Recipes.Num() > 0
+		? FMath::Clamp(SelectedIndex, 0, Recipes.Num() - 1)
+		: INDEX_NONE;
+
+	for (int32 Index = 0; Index < Recipes.Num(); ++Index)
+	{
+		const FBackendRecipe& Recipe = Recipes[Index];
+
+		Lines.Add(FString::Printf(
+			TEXT(" %s %s x%d  %ds  %s %d"),
+			Index == Selected ? TEXT(">") : TEXT(" "),
+			*Recipe.OutputName,
+			Recipe.OutputQuantity,
+			Recipe.JobSeconds,
+			*Recipe.SkillName,
+			Recipe.RequiredLevel));
+
+		// Materials only for the selected recipe. Listing every input of every recipe would be a
+		// wall of text on a display that has to be read at a glance.
+		if (Index != Selected)
+		{
+			continue;
+		}
+
+		if (!Recipe.RequiredToolName.IsEmpty())
+		{
+			Lines.Add(FString::Printf(TEXT("      tool: %s"), *Recipe.RequiredToolName));
+		}
+
+		for (const FBackendRecipeInput& Input : Recipe.Inputs)
+		{
+			int32 Held = 0;
+
+			for (const FBackendInventoryItem& Item : Inventory)
+			{
+				if (Item.ItemKey == Input.ItemKey)
+				{
+					Held += Item.Quantity;
+				}
+			}
+
+			// Two numbers the server already sent, shown side by side. Deliberately not turned into
+			// a verdict: deciding "you cannot build this" here would be a second copy of the gates.
+			Lines.Add(FString::Printf(
+				TEXT("      %s  %d/%d"), *Input.Name, Held, Input.Quantity));
+		}
+	}
+
+	Lines.Add(TEXT("-- Jobs --"));
+
+	if (Jobs.Num() == 0)
+	{
+		Lines.Add(TEXT("   none running"));
+	}
+
+	for (const FBackendIndustryJob& Job : Jobs)
+	{
+		Lines.Add(FString::Printf(
+			TEXT("   %s x%d  %s"),
+			*Job.OutputName,
+			Job.OutputQuantityTotal,
+			Job.bIsClaimable
+				? TEXT("READY")
+				: *FString::Printf(TEXT("%ds"), Job.SecondsRemaining)));
+	}
+
+	return Lines;
 }
 
 FString ASpaceMMOPlayerController::GroupDigits(const int64 Value)
@@ -343,9 +549,18 @@ bool ASpaceMMOPlayerController::FindCredentials(FString& OutEmail, FString& OutP
 
 void ASpaceMMOPlayerController::HandleBackendFailed(const FBackendFailure& Failure)
 {
-	// Only worth reporting while still trying to sign in. Later failures belong to whatever asked.
+	// After sign-in, failures belong to whatever the player just did — a refused craft, most often —
+	// and they are the only explanation available. Until this was here, every post-login failure was
+	// discarded, so pressing a key with too little ore produced no message, no log line, and nothing
+	// on screen: identical to the key not being bound.
 	if (bPresented)
 	{
+		ShowNotice(
+			Failure.Message.IsEmpty()
+				? FString::Printf(TEXT("Refused (%d)"), Failure.HttpStatus)
+				: Failure.Message,
+			false);
+
 		return;
 	}
 

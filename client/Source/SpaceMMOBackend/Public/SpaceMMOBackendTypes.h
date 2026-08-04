@@ -144,6 +144,108 @@ struct SPACEMMOBACKEND_API FBackendInventoryItem
 	int32 Quantity = 0;
 };
 
+/** One material a recipe consumes, per run. */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendRecipeInput
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 ItemDefId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString ItemKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Name;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Quantity = 0;
+};
+
+/**
+ * A recipe as the server describes it.
+ *
+ * <strong>Carries keys as well as ids.</strong> Ids are assigned by the database and differ between
+ * any two seeded environments, so a client that remembered one would break the day the database was
+ * rebuilt in a different order — and it would break by quietly building something else rather than
+ * by failing. Same reasoning as looking bodies up by content key.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendRecipe
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Id = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Key;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString OutputItemKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString OutputName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 OutputQuantity = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString SkillKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString SkillName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 RequiredLevel = 1;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 JobSeconds = 0;
+
+	/** Empty when the recipe needs no tool. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString RequiredToolName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	TArray<FBackendRecipeInput> Inputs;
+};
+
+/**
+ * A job in progress.
+ *
+ * <strong>Whether it is finished is the server's answer, not a subtraction done here.</strong>
+ * <c>bIsClaimable</c> and <c>SecondsRemaining</c> both arrive computed against the server clock. A
+ * client that worked them out locally would disagree the moment the two clocks drifted, and it is
+ * the server that decides — so the disagreement would show up as a claim button that does nothing.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendIndustryJob
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 Id = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString RecipeKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString OutputName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 OutputQuantityTotal = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Runs = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bIsClaimable = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 SecondsRemaining = 0;
+};
+
 /** Who the backend says a connecting player is entitled to be. */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendResolvedCharacter

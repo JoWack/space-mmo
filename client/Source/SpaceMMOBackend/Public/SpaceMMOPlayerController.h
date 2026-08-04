@@ -73,6 +73,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
 	static FString GroupDigits(int64 Value);
 
+	/**
+	 * Builds the industry panel's lines: what can be built, and what is cooking.
+	 *
+	 * Pure and static, like <see cref="BuildCharacterPanel"/>, so the selection arithmetic and the
+	 * have-versus-need arithmetic can be tested without a backend.
+	 *
+	 * <strong>It reports quantities but never decides eligibility.</strong> Showing "20/8" is
+	 * arithmetic over two numbers the server already sent. Concluding "you cannot build this" would
+	 * be a second implementation of the skill, tool, material and fee gates, free to disagree with
+	 * the real ones — so the player is always allowed to press, and the server answers.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Industry")
+	static TArray<FString> BuildIndustryPanel(
+		const TArray<FBackendRecipe>& Recipes,
+		const TArray<FBackendIndustryJob>& Jobs,
+		const TArray<FBackendInventoryItem>& Inventory,
+		int32 SelectedIndex);
+
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -157,6 +175,36 @@ private:
 
 	void ToggleCharacterPanel();
 
+	void CycleRecipe();
+
+	void StartSelectedJob();
+
+	/** Claims the first job the server says is ready. */
+	void ClaimReadyJob();
+
+	UFUNCTION()
+	void HandleIndustryChanged();
+
+	UFUNCTION()
+	void HandleIndustryMessage(const FString& Message, bool bSucceeded);
+
+	/** Puts a short-lived line under the panel, in the same place gather results appear. */
+	void ShowNotice(const FString& Message, bool bSucceeded);
+
+	/** Polls running jobs, since nothing pushes their remaining time to the client. */
+	void RefreshJobs();
+
+	FTimerHandle JobRefreshTimer;
+
+	/** Which recipe the R key has landed on. Wraps, and survives the list being re-fetched. */
+	int32 SelectedRecipeIndex = 0;
+
+	/** Guards against subscribing twice, since identity can resolve more than once. */
+	bool bIndustryBound = false;
+
+	/** The backend subsystem, or null. */
+	class USpaceMMOBackendClient* Backend() const;
+
 	/**
 	 * Base key for the panel's on-screen messages.
 	 *
@@ -173,6 +221,17 @@ private:
 	 * previously-longer panel would otherwise leave orphans on screen with nothing tracking them.
 	 */
 	static constexpr int32 PanelMaxLines = 40;
+
+	/**
+	 * Key for the transient notice line.
+	 *
+	 * Declared after the two it is built from: a static member's initializer is parsed where it
+	 * appears, so referring to a constant further down the class does not compile.
+	 *
+	 * Past the panel's range so a notice never overwrites a row, and fixed so repeated presses
+	 * replace the last notice rather than stacking a column of them.
+	 */
+	static constexpr int32 NoticeMessageKey = PanelMessageKey + PanelMaxLines + 1;
 
 	/**
 	 * The client's cue that the server has agreed who it is.
