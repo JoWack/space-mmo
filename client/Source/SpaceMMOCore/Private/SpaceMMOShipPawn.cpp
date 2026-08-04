@@ -83,7 +83,24 @@ ASpaceMMOShipPawn::ASpaceMMOShipPawn()
 	FirstPersonCamera->SetRelativeLocation(FVector(200.0, 0.0, 60.0));
 	FirstPersonCamera->SetActive(false);
 
-	AutoPossessPlayer = EAutoReceiveInput::Player0;
+	// Deliberately NOT AutoPossessPlayer = Player0.
+	//
+	// That setting is for a pawn placed in a level in single player, and it is actively destructive
+	// on a dedicated server. The engine's guard is GetNetMode() != NM_Client, which a dedicated
+	// server passes — and "player 0" there resolves to the FIRST CONNECTED PLAYER's controller. So
+	// every ship spawned for a joining player seized the controller of whoever joined first,
+	// unpossessing their ship out from under them.
+	//
+	// The symptom was that the first client froze the instant a second one connected: its flight HUD
+	// vanished and it ignored input, while the window still rendered and answered Windows. It looked
+	// for all the world like an input or focus fault, and three plausible guesses at that were wrong.
+	// A tick heartbeat found it in one run — the ship was still ticking and the world was not paused,
+	// but "locally controlled" had flipped to 0, eleven milliseconds before the server logged the
+	// second player's ship being spawned.
+	//
+	// Possession belongs to the game mode, which does it per connection through DefaultPawnClass and
+	// RestartPlayer. That already worked in single player; this line was redundant there and wrong
+	// everywhere else.
 }
 
 void ASpaceMMOShipPawn::BeginPlay()
