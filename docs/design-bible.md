@@ -211,15 +211,45 @@ each gate — quest 4 grants enough `shipcrafting` XP context to reach level 5, 
 on. **These numbers are first-draft and expected to change once EconSim runs.** They
 live in JSON precisely so that changing them is not a deploy.
 
-### Resource nodes (starting system)
+### Resource nodes
 
-| Body | Item | Qty per node | Respawn |
-|---|---|---|---|
-| All four starting planets | `scrap_alloy` | 25 | 5 min |
-| All four starting planets | `ferrite_ore` | 200 | 20 min |
+Every homeworld yields a hand-gathered scrap and a tool-gated ore, and **each of those
+is a material that exists on that planet and nowhere else**
+([ADR-0008](adr/0008-factions-pvp-and-markets.md)). Keys below are proposed, and are
+authored as part of the per-planet material work.
 
-Identical distributions across the four starting planets, so no race has an economic
-advantage at creation. Regional scarcity begins outside the starting system.
+| Body | Hand-gathered | Tool-gated ore | Qty per node | Respawn |
+|---|---|---|---|---|
+| Terra | `terra_scrap` | `ferrite_ore` | 25 / 200 | 5 / 20 min |
+| Ares | `ares_scrap` | `oxide_salt` | 25 / 200 | 5 / 20 min |
+| Verdance | `verdance_scrap` | `heartwood_amber` | 25 / 200 | 5 / 20 min |
+| Grimhold | `grimhold_scrap` | `blackslag` | 25 / 200 | 5 / 20 min |
+
+**Mechanically equivalent, materially distinct.** The four sets have identical
+quantities, respawn timers and recipe roles, so no race has an economic advantage at
+creation — which was the original reason for making distributions identical, and it
+survives intact. What changed is that they are no longer the *same item*.
+
+Terra keeps `ferrite_ore` because it is the familiar world and should have the
+familiar metal. That also leaves three new ores to author rather than four.
+
+**Scrap is per-planet too, and that follows from a decision made elsewhere.** A
+finished item's style is inherited from the components that went into it, so a Terran
+crude tool can only look Terran if the scrap it was built from remembers where it came
+from. A single shared `scrap_alloy` would make every race's first craft identical.
+
+**What is actually seeded today is two ferrite nodes on the capital**, which is what the
+mining loop has been developed and tested against. The table above is the target, not
+the current state of `data/universe/origin.json`, and whether the capital keeps
+deposits of its own is an open question — a pure trade hub arguably should not have
+any.
+
+Scarcity no longer "begins outside the starting system" — there is no outside
+([ADR-0007](adr/0007-one-handcrafted-system.md)). It begins at the point in the
+crafting tree where recipes stop being satisfiable from one planet: early and mid-tier
+chains are self-sufficient within a race, and high-tier recipes require materials from
+all four. That threshold is the whole reason the capital's global market and the
+contested approach exist, and EconSim asserts it has not been tuned away.
 
 ---
 

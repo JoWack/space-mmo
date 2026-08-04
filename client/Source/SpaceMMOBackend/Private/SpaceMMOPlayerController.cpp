@@ -236,7 +236,11 @@ TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
 	Held.Sort([](const FBackendInventoryItem& A, const FBackendInventoryItem& B)
 		{ return A.Name < B.Name; });
 
-	Lines.Add(TEXT("-- Hold --"));
+	// "Holdings", not "Hold". The endpoint returns every stack the character owns across every
+	// inventory -- ship holds and station hangars alike -- and gathered ore lands in a hangar. A
+	// panel headed "Hold" would have a player looking in their cargo bay for ore that is on a
+	// different planet.
+	Lines.Add(TEXT("-- Holdings --"));
 
 	if (Held.Num() == 0)
 	{
