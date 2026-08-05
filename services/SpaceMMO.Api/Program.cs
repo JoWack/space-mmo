@@ -28,6 +28,7 @@ builder.Services.AddDbContext<SpaceMmoDbContext>(options =>
 // Scoped, matching the DbContext they wrap: these services run multi-statement transactions with
 // row locks, and sharing one across requests would interleave two players' transactions.
 builder.Services.AddScoped<MarketService>();
+builder.Services.AddScoped<FactionOrderService>();
 builder.Services.AddScoped<IndustryService>();
 builder.Services.AddScoped<GatheringService>();
 builder.Services.AddScoped<QuestService>();

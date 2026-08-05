@@ -22,8 +22,11 @@ public sealed class ContentValidatorTests
         new(key, "Refining", SkillCategory.Life);
 
     private static ItemContent Item(
-        string key, ItemCategory category = ItemCategory.Raw, double volume = 1.0) =>
-        new(key, key, category, volume);
+        string key,
+        ItemCategory category = ItemCategory.Raw,
+        double volume = 1.0,
+        long? factionBuyPrice = null) =>
+        new(key, key, category, volume, factionBuyPrice);
 
     private static RecipeContent Recipe(
         string key = "r1",
@@ -301,6 +304,39 @@ public sealed class ContentValidatorTests
         var quest = new QuestContent("q1", "q1", QuestKind.MainStory, null, 100, null, 0, null, []);
 
         Assert.True(HasError(ContentValidator.Validate(Pack(quests: [quest])), "no steps"));
+    }
+
+    [Fact]
+    public void AFactionBuyPriceOnAManufacturedGood_IsRejected()
+    {
+        // A standing bid on a crafted item puts a price floor under exactly the thing players are
+        // supposed to compete on. Nobody would notice until the market for it quietly stopped
+        // forming, which is far too late and very hard to attribute.
+        IReadOnlyList<ContentError> errors = ContentValidator.Validate(
+            Pack(items: [Item("plate", ItemCategory.Refined, factionBuyPrice: 5)]));
+
+        Assert.True(HasError(errors, "Only Raw items"));
+    }
+
+    [Fact]
+    public void ANonPositiveFactionBuyPrice_IsRejected()
+    {
+        // Not a cheap floor but a broken one: the player hands over material and receives nothing,
+        // which reads as theft rather than as a bad deal they chose.
+        IReadOnlyList<ContentError> errors = ContentValidator.Validate(
+            Pack(items: [Item("ore", ItemCategory.Raw, factionBuyPrice: 0)]));
+
+        Assert.True(HasError(errors, "must be positive"));
+    }
+
+    [Fact]
+    public void ARawItemWithAFactionBuyPrice_IsAccepted()
+    {
+        IReadOnlyList<ContentError> errors = ContentValidator.Validate(
+            Pack(items: [Item("ore", ItemCategory.Raw, factionBuyPrice: 2)]));
+
+        Assert.False(HasError(errors, "faction buy price"));
+        Assert.False(HasError(errors, "Only Raw items"));
     }
 
     [Fact]

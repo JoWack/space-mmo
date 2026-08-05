@@ -33,6 +33,19 @@ public class ItemDef
     /// category, and a <c>Hull</c> marked stackable would be a duplication exploit.
     /// </summary>
     public bool IsStackable => Category.IsStackable();
+
+    /// <summary>
+    /// What a faction standing order pays per unit, or null if no faction buys this.
+    /// </summary>
+    /// <remarks>
+    /// A price floor so a player at zero credits is never stuck — they can neither start a job nor
+    /// place a sell order, both of which charge up front, so ore would otherwise be unsellable
+    /// precisely when it is the only thing they own. Deliberately low: if selling to the faction is
+    /// ever better than selling to a player, the player market stops forming.
+    ///
+    /// Content restricts this to Raw items; see the validator.
+    /// </remarks>
+    public Credits? FactionBuyPrice { get; set; }
 }
 
 /// <summary>A crafting recipe, loaded from <c>data/recipes/</c>.</summary>

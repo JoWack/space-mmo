@@ -173,6 +173,11 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         Dictionary<string, ItemDef> existing = await _database.ItemDefs
             .ToDictionaryAsync(i => i.Key, StringComparer.Ordinal, cancellationToken);
 
+        // Content authors in whole credits, the database stores minor units. Converting in one place
+        // is what stops a hundredfold error from reaching a price.
+        static Credits? FactionPriceOf(ItemContent content) =>
+            content.FactionBuyPrice is long whole ? Credits.FromWholeCredits(whole) : null;
+
         foreach (ItemContent content in pack.Items)
         {
             if (existing.TryGetValue(content.Key, out ItemDef? item))
@@ -180,6 +185,11 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 item.Name = content.Name;
                 item.Category = content.Category;
                 item.VolumeM3 = content.VolumeM3;
+
+                // Assigned rather than merged, so removing a price from content actually removes it.
+                // A one-way update would leave a standing bid running on an item somebody had
+                // deliberately delisted, with nothing in the file to explain why.
+                item.FactionBuyPrice = FactionPriceOf(content);
                 continue;
             }
 
@@ -189,6 +199,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 Name = content.Name,
                 Category = content.Category,
                 VolumeM3 = content.VolumeM3,
+                FactionBuyPrice = FactionPriceOf(content),
             };
 
             _database.ItemDefs.Add(created);

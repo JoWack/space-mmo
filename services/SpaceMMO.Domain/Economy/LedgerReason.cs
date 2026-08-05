@@ -79,6 +79,29 @@ public enum LedgerReason
     /// </remarks>
     StartingStake = 4,
 
+    /// <summary>
+    /// A faction standing order buying raw material off a player — the faucet of last resort.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Exists so that no character can ever be stuck. At zero credits a player cannot start a job,
+    /// because jobs charge a fee, and could not even list ore for sale, because placing an order
+    /// charges a broker fee up front. Gathering was the only action left and it produced no money.
+    /// This is the standing bid that turns gathered material into credits with nothing paid first.
+    /// </para>
+    /// <para>
+    /// <strong>Capped, and sharing the same daily budget as sidequests.</strong> It is farmable by
+    /// construction — ore regrows — so leaving it uncapped would make it an income limited only by
+    /// how fast someone can mine. Routing it through the existing budget is what
+    /// <see cref="FaucetBudget"/> was built for, and means adding it costs no rebalancing.
+    /// </para>
+    /// <para>
+    /// It is also a material sink: what the faction buys leaves the economy. That matters as much
+    /// as the credits, because raw material otherwise only ever accumulates.
+    /// </para>
+    /// </remarks>
+    FactionPurchase = 5,
+
     // ── Sinks: these destroy credits ─────────────────────────────────────────
 
     /// <summary>Charged on placing a market order. Discourages order spam.</summary>
@@ -167,6 +190,7 @@ public static class LedgerReasons
         LedgerReason.QuestReward or
         LedgerReason.StoryReward or
         LedgerReason.StartingStake or
+        LedgerReason.FactionPurchase or
         LedgerReason.InsurancePayout or
         LedgerReason.AdminAdjustment => LedgerReasonKind.Faucet,
 
@@ -192,14 +216,24 @@ public static class LedgerReasons
     /// True if this reason is subject to the daily faucet cap.
     /// </summary>
     /// <remarks>
-    /// Only <see cref="LedgerReason.QuestReward"/> — repeatable sidequests — is capped, because it
-    /// is the only faucet a player can farm indefinitely. The other three faucets are each bounded
-    /// by something other than a budget: <see cref="LedgerReason.StoryReward"/> by each quest
-    /// completing once per character, <see cref="LedgerReason.InsurancePayout"/> by how many ships
-    /// players can actually build, and <see cref="LedgerReason.AdminAdjustment"/> by an operator
-    /// deliberately doing it.
+    /// <para>
+    /// The capped faucets are the farmable ones: repeatable sidequests
+    /// (<see cref="LedgerReason.QuestReward"/>) and faction standing orders
+    /// (<see cref="LedgerReason.FactionPurchase"/>), which a player can feed indefinitely because
+    /// deposits respawn. They share one budget rather than getting one each, so a character's total
+    /// daily intake is bounded no matter which they use — splitting the budget would let someone
+    /// take both in full and double the rate the economy was balanced for.
+    /// </para>
+    /// <para>
+    /// The rest are each bounded by something other than a budget:
+    /// <see cref="LedgerReason.StoryReward"/> by each quest completing once per character,
+    /// <see cref="LedgerReason.StartingStake"/> by being paid once at creation,
+    /// <see cref="LedgerReason.InsurancePayout"/> by how many ships players can actually build, and
+    /// <see cref="LedgerReason.AdminAdjustment"/> by an operator deliberately doing it.
+    /// </para>
     /// </remarks>
-    public static bool IsCappedFaucet(LedgerReason reason) => reason == LedgerReason.QuestReward;
+    public static bool IsCappedFaucet(LedgerReason reason) =>
+        reason is LedgerReason.QuestReward or LedgerReason.FactionPurchase;
 }
 
 /// <summary>Which side of the order book an order sits on.</summary>

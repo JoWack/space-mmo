@@ -19,6 +19,22 @@ public sealed record PlaceOrderBody(
 
 public sealed record CancelOrderBody(int CharacterId, long OrderId);
 
+public sealed record SellToFactionBody(int CharacterId, int StationId, int ItemDefId, int Quantity);
+
+/// <summary>
+/// What a faction standing order actually took and paid.
+/// </summary>
+/// <param name="QuantitySold">
+/// Units taken, which may be fewer than asked for. The daily faucet budget reduces the sale rather
+/// than refusing it, so a player at the cap can still sell the one unit they need.
+/// </param>
+/// <param name="WithheldMinorUnits">
+/// What the cap refused. Nonzero means the material is still in the hangar, not that it was taken
+/// unpaid.
+/// </param>
+public sealed record FactionSaleResponse(
+    int QuantitySold, long PaidMinorUnits, long WithheldMinorUnits, bool WasCapped);
+
 public sealed record BookEntryResponse(long OrderId, OrderSide Side, long PriceMinorUnits, int QuantityRemaining);
 
 /// <summary>
@@ -38,6 +54,59 @@ public static class MarketEndpoints
         group.MapPost("/orders", PlaceAsync);
         group.MapPost("/orders/cancel", CancelAsync);
         group.MapGet("/book", BookAsync);
+
+        // Separate from /orders because it is not an order. There is no book, no counterparty and
+        // no matching: the faction takes the material at a fixed price and the credits are created
+        // rather than moved. Folding it into order placement would hide a faucet inside a transfer.
+        group.MapPost("/faction-orders/sell", SellToFactionAsync);
+    }
+
+    private static async Task<IResult> SellToFactionAsync(
+        SellToFactionBody request,
+        HttpContext context,
+        Caller caller,
+        FactionOrderService factionOrders,
+        CancellationToken cancellation)
+    {
+        OwnershipResult owned =
+            await caller.OwnedCharacterAsync(context, request.CharacterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        if (request.Quantity <= 0)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["quantity"] = ["Quantity must be positive."],
+            });
+        }
+
+        try
+        {
+            FactionSaleResult result = await factionOrders.SellAsync(
+                request.CharacterId,
+                request.StationId,
+                request.ItemDefId,
+                request.Quantity,
+                cancellation);
+
+            return Results.Ok(new FactionSaleResponse(
+                result.QuantitySold,
+                result.Paid.MinorUnits,
+                result.Withheld.MinorUnits,
+                result.WasCapped));
+        }
+        catch (NotBoughtByFactionException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = "not_bought" });
+        }
+        catch (InsufficientItemsException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = "insufficient_items" });
+        }
     }
 
     private static async Task<IResult> PlaceAsync(

@@ -1,3 +1,4 @@
+using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
 using SpaceMMO.Domain.Quests;
@@ -9,7 +10,30 @@ namespace SpaceMMO.Domain.Content;
 public sealed record SkillContent(string Key, string Name, SkillCategory Category);
 
 /// <summary>An item definition, as authored in <c>data/items/</c>.</summary>
-public sealed record ItemContent(string Key, string Name, ItemCategory Category, double VolumeM3);
+/// <param name="FactionBuyPrice">
+/// Whole credits a faction standing order pays per unit, or null if no faction buys this.
+/// Whole credits, not minor units, matching <see cref="QuestContent.RewardCredits"/> — authored
+/// content speaks in the units a designer thinks in.
+/// </param>
+/// <remarks>
+/// <para>
+/// <strong>The faction price is a floor, not a valuation.</strong> It exists so a player holding
+/// nothing but ore can always turn some of it into credits — at zero balance they can neither start
+/// a job nor place a sell order, both of which charge up front. It must therefore be low enough that
+/// selling to the faction is always the worst available option, or players will sell to it instead
+/// of to each other and the player market never forms.
+/// </para>
+/// <para>
+/// Priced on raw materials only. A standing bid on manufactured goods would put a floor under the
+/// things players are supposed to compete on, which is the opposite of the point.
+/// </para>
+/// </remarks>
+public sealed record ItemContent(
+    string Key,
+    string Name,
+    ItemCategory Category,
+    double VolumeM3,
+    long? FactionBuyPrice = null);
 
 /// <summary>One material a recipe consumes.</summary>
 public sealed record RecipeInputContent(string Item, int Quantity);

@@ -51,17 +51,42 @@ public sealed class LedgerReasonTests
     }
 
     [Fact]
-    public void OnlyQuestRewards_AreSubjectToTheDailyCap()
+    public void OnlyTheFarmableFaucets_AreSubjectToTheDailyCap()
     {
-        // Insurance payouts are exempt on purpose — losing a capital ship must not be
-        // throttled by a daily budget (ADR-0006) — and admin adjustments bypass the cap
-        // because bypassing it is the point of them.
+        // Exactly the two a player can repeat forever: sidequests, and selling ore to a faction
+        // standing order against deposits that respawn.
+        //
+        // The rest are bounded by something other than a budget. Story rewards complete once per
+        // character, the starting stake is paid once at creation, insurance payouts are exempt on
+        // purpose — losing a capital ship must not be throttled by a daily budget (ADR-0006) — and
+        // admin adjustments bypass the cap because bypassing it is the point of them.
         foreach (LedgerReason reason in AllReasons)
         {
-            bool expected = reason == LedgerReason.QuestReward;
+            bool expected =
+                reason is LedgerReason.QuestReward or LedgerReason.FactionPurchase;
 
             Assert.Equal(expected, LedgerReasons.IsCappedFaucet(reason));
         }
+    }
+
+    [Fact]
+    public void TheCappedFaucets_ShareOneBudget()
+    {
+        // Not a per-reason budget. If sidequests and faction sales each had their own 5,000, a
+        // character could take both in full and the economy would see twice the daily faucet rate
+        // it was balanced for. This test exists because that mistake is invisible until EconSim
+        // runs long enough to show the drift.
+        Credits cap = FaucetBudget.DefaultDailyCap;
+
+        FaucetGrant fromQuests = FaucetBudget.Evaluate(cap, Credits.Zero);
+
+        Assert.Equal(cap, fromQuests.Granted);
+
+        // Having taken the whole budget on quests, a faction sale the same day gets nothing.
+        FaucetGrant fromFaction = FaucetBudget.Evaluate(Credits.FromWholeCredits(100), cap);
+
+        Assert.Equal(Credits.Zero, fromFaction.Granted);
+        Assert.True(fromFaction.WasCapped);
     }
 
     [Fact]

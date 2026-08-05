@@ -6,14 +6,18 @@
       "name": "Scrap Alloy",
       "category": "Raw",
       "volumeM3": 0.1,
-      "$comment": "Hand-gatherable with no tool, so a brand-new character always has somewhere to start."
+      "$comment": "Hand-gatherable with no tool, so a brand-new character always has somewhere to start.",
+      "$priceComment": "Whole credits per unit, like quest rewards. This is the floor that guarantees nobody is ever stuck: at zero credits a player can neither start a job nor place a sell order, since both charge up front, so ore would be unsellable exactly when it is all they own. Priced to be the worst option available -- selling to another player must always beat it, or the player market never forms. One credit against a 15 cr job fee means a few minutes of gathering unsticks you and nothing more.",
+      "factionBuyPrice": 1
     },
     {
       "key": "ferrite_ore",
       "name": "Ferrite Ore",
       "category": "Raw",
       "volumeM3": 0.4,
-      "$comment": "Tool-gated behind crude_mining_laser."
+      "$comment": "Tool-gated behind crude_mining_laser.",
+      "$priceComment": "Twice scrap because it is tool-gated and slower to gather, but still a floor rather than a valuation. Twenty ore refines into four plates; if four plates ever sell for less than the 40 cr this pays, the floor has been set too high and the refining chain is pointless.",
+      "factionBuyPrice": 2
     },
     {
       "key": "ferrite_plate",

@@ -236,6 +236,31 @@ public static class ContentValidator
                 errors.Add(new ContentError(
                     "item", item.Key, $"Volume must be positive, got {item.VolumeM3}."));
             }
+
+            if (item.FactionBuyPrice is not { } price)
+            {
+                continue;
+            }
+
+            if (price <= 0)
+            {
+                // A zero or negative standing bid is not a cheap floor, it is a broken one: the
+                // player hands over material and receives nothing, which reads as theft.
+                errors.Add(new ContentError(
+                    "item", item.Key, $"Faction buy price must be positive, got {price}."));
+            }
+
+            if (item.Category != ItemCategory.Raw)
+            {
+                // Raw material only, enforced here rather than trusted to whoever authors the file.
+                // A standing bid on a manufactured good puts a price floor under exactly the things
+                // players are meant to compete on, and nobody would notice until the market for that
+                // item quietly stopped forming.
+                errors.Add(new ContentError(
+                    "item",
+                    item.Key,
+                    $"Only Raw items may have a faction buy price; this is {item.Category}."));
+            }
         }
     }
 
