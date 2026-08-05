@@ -31,6 +31,10 @@ public class SpaceMMOBackend : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			// UDeveloperSettings, which is how the deposit mesh mapping reaches Project Settings
+			// and DefaultGame.ini rather than being compiled into a header.
+			"DeveloperSettings",
+
 			// Private: callers get the subsystem's API, not the transport. Nothing outside this
 			// module should be constructing an HTTP request against the game server.
 			"HTTP",

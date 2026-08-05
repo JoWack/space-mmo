@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMODepositSettings.h"
 #include "SpaceMMORenderOrigin.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -63,11 +64,52 @@ void ASpaceMMODepositActor::Configure(
 	Planet = InPlanet;
 	Terrain = InTerrain;
 
+	ApplyConfiguredMesh();
+
 	// The one place a direction becomes a position. Both machines run this same call on the same
 	// inputs, which is why neither has to be told the answer.
 	SurfacePosition = FPlanetTerrain::SurfacePosition(Planet, Terrain, Node.Direction);
 
 	ApplyRenderTransform();
+}
+
+void ASpaceMMODepositActor::ApplyConfiguredMesh()
+{
+	const USpaceMMODepositSettings* Settings = GetDefault<USpaceMMODepositSettings>();
+
+	if (Settings == nullptr || Marker == nullptr)
+	{
+		return;
+	}
+
+	const TSoftObjectPtr<UStaticMesh>* Configured = Settings->Meshes.Find(Node.ItemKey);
+
+	if (Configured == nullptr || Configured->IsNull())
+	{
+		// Keeps the cylinder the constructor attached. An unmapped ore is still minable, and a
+		// deposit that rendered as nothing would look exactly like one that was never placed.
+		return;
+	}
+
+	// Loaded synchronously, and deliberately: deposits are placed once when the world is built,
+	// not per frame, and a rock that popped in a second late would have players walking through
+	// the space where it was about to be.
+	UStaticMesh* Mesh = Configured->LoadSynchronous();
+
+	if (Mesh == nullptr)
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Deposit mesh for '%s' is configured but failed to load; using the placeholder."),
+			*Node.ItemKey);
+
+		return;
+	}
+
+	Marker->SetStaticMesh(Mesh);
+
+	// The mesh brings its own materials. The placeholder material the constructor set is for the
+	// engine cylinder, and leaving it on would repaint an authored model in flat grey.
+	Marker->EmptyOverrideMaterials();
 }
 
 void ASpaceMMODepositActor::BeginPlay()
@@ -125,20 +167,25 @@ void ASpaceMMODepositActor::ApplyRenderTransform()
 	// about that axis is as good as any other for a rock.
 	const FQuat Rotation = FQuat::FindBetweenNormals(FVector::UpVector, Up);
 
-	const double Width =
-		(SpaceMMODeposit::WidthMetres * 100.0) / SpaceMMODeposit::EngineCylinderSizeCentimetres;
+	// Measured from whatever mesh is actually attached rather than assumed from the engine
+	// cylinder's dimensions. A model authored at any size, with its pivot at either its base or its
+	// middle, lands the same way -- and neither of those is something an artist should have to know
+	// about the code to get right.
+	double Scale = 1.0;
+	double Lift = 0.0;
 
-	const double Height =
-		(SpaceMMODeposit::HeightMetres * 100.0) / SpaceMMODeposit::EngineCylinderSizeCentimetres;
+	if (const UStaticMesh* Mesh = Marker->GetStaticMesh())
+	{
+		const FBoxSphereBounds MeshBounds = Mesh->GetBounds();
 
-	// The engine cylinder is centred on its origin, so half of it would be underground. Lifting by
-	// half its height puts its base on the surface point rather than its middle.
-	const FVector BaseOffset = Up * (SpaceMMODeposit::HeightMetres * 100.0 * 0.5);
+		Scale = FDepositPlacement::UniformScale(MeshBounds.BoxExtent);
+		Lift = FDepositPlacement::BaseLift(MeshBounds.Origin, MeshBounds.BoxExtent, Scale);
+	}
 
-	SetActorLocation(Origin->ToWorldLocation(SurfacePosition) + BaseOffset);
+	SetActorLocation(Origin->ToWorldLocation(SurfacePosition) + (Up * Lift));
 	SetActorRotation(Rotation);
 
-	Marker->SetWorldScale3D(FVector(Width, Width, Height));
+	Marker->SetWorldScale3D(FVector(Scale));
 
 	BuiltAtRevision = Origin->GetRevision();
 }

@@ -56,6 +56,14 @@ private:
 	/** Recomputes the Unreal transform from the system position and the current render origin. */
 	void ApplyRenderTransform();
 
+	/**
+	 * Swaps in the mesh configured for this deposit's material, if there is one.
+	 *
+	 * Called from Configure, because the item key arrives with the node and the constructor has no
+	 * way to know what this deposit will turn out to be.
+	 */
+	void ApplyConfiguredMesh();
+
 	UPROPERTY()
 	TObjectPtr<class UStaticMeshComponent> Marker;
 
