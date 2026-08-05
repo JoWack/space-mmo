@@ -549,6 +549,12 @@ void USpaceMMOBackendClient::StartJob(
 				// Refetched rather than assumed. The server decided when this finishes, and its
 				// answer is the only one the claim will be judged against.
 				Self->FetchJobs(CharacterId);
+
+				// The fee comes out of the balance at start, so the wallet is stale the instant this
+				// succeeds. Without this the displayed credits only moved when something else
+				// happened to refresh them -- gathering did, crafting did not -- so the number drifted
+				// further from the truth with every job and looked frozen rather than wrong.
+				Self->FetchCharacters();
 			}
 		});
 }
@@ -572,6 +578,12 @@ void USpaceMMOBackendClient::ClaimJob(const int32 CharacterId, const int64 JobId
 
 				// The outputs landed in the hangar, so the panel's holdings are now stale.
 				Self->SelectCharacter(CharacterId);
+
+				// Claiming does not move credits today. Refreshed anyway, because the rule worth
+				// following is that anything which *might* touch the wallet refreshes it: a stale
+				// balance is invisible until a refusal contradicts it, which is far too late to
+				// work out which action forgot.
+				Self->FetchCharacters();
 			}
 		});
 }
