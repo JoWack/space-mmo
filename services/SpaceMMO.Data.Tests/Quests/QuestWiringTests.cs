@@ -40,6 +40,7 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
     private int _stationId;
     private int _oreId;
     private int _plateId;
+    private int _miningId;
     private int _refiningId;
     private long _nodeId;
     private int _refineRecipeId;
@@ -72,6 +73,78 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
         // The seam. Before this was wired, mining moved ore into a hangar and left the quest at
         // zero forever, with nothing anywhere saying why.
         Assert.Equal(result.Quantity, quest.StepProgress);
+    }
+
+    [Fact]
+    public async Task A_gather_that_completes_a_quest_rewarding_the_same_skill_succeeds()
+    {
+        // The bug this pins down returned a 500 on every attempt and was invisible from either
+        // service alone.
+        //
+        // Gathering awards XP for the node's skill; completing a quest awards XP for the quest's
+        // reward skill. When those are the same skill and the character has no row for it yet, both
+        // sides looked for one, neither found it -- because a query cannot see an insert still
+        // sitting in the change tracker -- and both added one. The save then died on a duplicate
+        // primary key.
+        //
+        // Mining ore never hit it: the node awards mining while the quest rewarded gathering, two
+        // different rows. Gathering scrap did, every time.
+        await SeedRewardingQuestAsync("salvage", ObjectiveType.Gather, "ferrite_ore", 1, _miningId);
+
+        await using SpaceMmoDbContext accept = _fixture.CreateContext();
+        await new QuestService(accept).AcceptAsync(_characterId, "salvage");
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        GatherResult result = await new GatheringService(context)
+            .GatherAsync(_characterId, _nodeId, _stationId);
+
+        Assert.True(result.Quantity > 0);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        // One row, holding both awards. Two rows would not have got this far -- the save throws --
+        // but asserting the sum catches a fix that deduplicated by dropping one of them.
+        CharacterSkill skill = await verify.CharacterSkills
+            .SingleAsync(s => s.CharacterId == _characterId && s.SkillId == _miningId);
+
+        Assert.Equal(result.XpAwarded + 250, skill.Xp);
+
+        Assert.Equal(
+            QuestState.Completed,
+            (await verify.CharacterQuests.SingleAsync(q => q.QuestDef!.Key == "salvage")).State);
+    }
+
+    /// <summary>A one-step quest that pays XP into a named skill on completion.</summary>
+    private async Task SeedRewardingQuestAsync(
+        string key, ObjectiveType objective, string target, int quantity, int rewardSkillId)
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        var quest = new QuestDef
+        {
+            Key = key,
+            Name = key,
+            Kind = QuestKind.MainStory,
+            RewardCredits = Credits.Zero,
+            RewardSkillId = rewardSkillId,
+            RewardXp = 250,
+        };
+
+        context.QuestDefs.Add(quest);
+        await context.SaveChangesAsync();
+
+        context.QuestSteps.Add(new QuestStep
+        {
+            QuestDefId = quest.Id,
+            Ordinal = 1,
+            ObjectiveType = objective,
+            TargetKey = target,
+            Quantity = quantity,
+            Description = key,
+        });
+
+        await context.SaveChangesAsync();
     }
 
     [Fact]
@@ -337,6 +410,7 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
         _stationId = station.Id;
         _oreId = ore.Id;
         _plateId = plate.Id;
+        _miningId = mining.Id;
         _refiningId = refining.Id;
         _nodeId = node.Id;
         _refineRecipeId = recipe.Id;

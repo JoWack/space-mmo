@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using SpaceMMO.Data.Entities;
+using SpaceMMO.Data.Progression;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Quests;
 
@@ -426,26 +427,9 @@ public sealed class QuestService(SpaceMmoDbContext database)
         }
     }
 
-    private async Task AwardXpAsync(
-        int characterId, int skillId, long xp, CancellationToken cancellationToken)
-    {
-        CharacterSkill? skill = await _database.CharacterSkills.FirstOrDefaultAsync(
-            s => s.CharacterId == characterId && s.SkillId == skillId, cancellationToken);
-
-        if (skill is null)
-        {
-            _database.CharacterSkills.Add(new CharacterSkill
-            {
-                CharacterId = characterId,
-                SkillId = skillId,
-                Xp = xp,
-            });
-
-            return;
-        }
-
-        skill.Xp += xp;
-    }
+    private Task AwardXpAsync(
+        int characterId, int skillId, long xp, CancellationToken cancellationToken) =>
+        SkillAwards.AwardAsync(_database, characterId, skillId, xp, cancellationToken);
 
     private async Task AdjustBalanceAsync(
         int characterId,

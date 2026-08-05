@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Entities;
+using SpaceMMO.Data.Progression;
 using SpaceMMO.Data.Industry;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Domain.Economy;
@@ -339,31 +340,9 @@ public sealed class GatheringService(SpaceMmoDbContext database)
         return SkillCurve.LevelForXp(xp);
     }
 
-    private async Task AwardXpAsync(
-        int characterId, int skillId, long xp, CancellationToken cancellationToken)
-    {
-        if (xp <= 0)
-        {
-            return;
-        }
-
-        CharacterSkill? skill = await _database.CharacterSkills.FirstOrDefaultAsync(
-            s => s.CharacterId == characterId && s.SkillId == skillId, cancellationToken);
-
-        if (skill is null)
-        {
-            _database.CharacterSkills.Add(new CharacterSkill
-            {
-                CharacterId = characterId,
-                SkillId = skillId,
-                Xp = xp,
-            });
-
-            return;
-        }
-
-        skill.Xp += xp;
-    }
+    private Task AwardXpAsync(
+        int characterId, int skillId, long xp, CancellationToken cancellationToken) =>
+        SkillAwards.AwardAsync(_database, characterId, skillId, xp, cancellationToken);
 
     private async Task<Character> LockCharacterAsync(
         int characterId, CancellationToken cancellationToken)
