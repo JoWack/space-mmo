@@ -85,6 +85,29 @@
       "quantityMax": 200,
       "respawnSeconds": 1200,
       "direction": [-1.0, -0.015, 0.025]
+    },
+
+    {
+      "$comment": "Scrap, and the reason the onboarding questline was unplayable: its first step asks for 8 scrap_alloy and nothing in the world produced any. Gathering rather than mining, and requiredLevel 1 with no tool, because this is the first thing a brand-new character does and every gate after it depends on getting through this one.",
+      "key": "node_capital_scrap_a",
+      "body": "body_capital",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "$directionComment": "Close to the ferrite nodes on the same approach face. A new player should not have to circumnavigate a planet to find step one, and a deposit they cannot find is indistinguishable from one that does not exist.",
+      "direction": [-1.0, 0.04, -0.012]
+    },
+    {
+      "key": "node_capital_scrap_b",
+      "body": "body_capital",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-1.0, -0.032, -0.021]
     }
   ],
 
