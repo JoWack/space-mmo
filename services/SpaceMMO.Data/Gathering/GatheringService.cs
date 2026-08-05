@@ -4,7 +4,9 @@ using SpaceMMO.Data.Industry;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Gathering;
+using SpaceMMO.Data.Quests;
 using SpaceMMO.Domain.Progression;
+using SpaceMMO.Domain.Quests;
 
 namespace SpaceMMO.Data.Gathering;
 
@@ -154,6 +156,22 @@ public sealed class GatheringService(SpaceMmoDbContext database)
         // Advanced to now rather than by the ticks consumed, so banked time cannot be spent twice
         // by calling repeatedly.
         character.LastGatheredAt = now;
+
+        // Reported from inside this transaction, not after it. A gather that committed while its
+        // quest update failed would leave a player holding ore no quest ever counted, and the only
+        // symptom would be a step that refuses to advance for reasons nothing logs.
+        //
+        // The item's key rather than its id, because that is what content authored the objective
+        // against and ids differ between any two seeded databases.
+        string itemKey = await _database.ItemDefs
+            .Where(d => d.Id == node.ItemDefId)
+            .Select(d => d.Key)
+            .SingleAsync(cancellationToken);
+
+        await new QuestService(_database).RecordProgressAsync(
+            characterId,
+            new ObjectiveEvent(ObjectiveType.Gather, itemKey, quantity),
+            cancellationToken);
 
         await _database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

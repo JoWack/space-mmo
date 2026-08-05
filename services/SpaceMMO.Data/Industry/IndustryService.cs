@@ -2,10 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Data.Market;
+using SpaceMMO.Data.Quests;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Industry;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
+using SpaceMMO.Domain.Quests;
 
 namespace SpaceMMO.Data.Industry;
 
@@ -279,6 +281,31 @@ public sealed class IndustryService(SpaceMmoDbContext database)
 
         job.State = IndustryJobState.Claimed;
         job.ClaimedAt = now;
+
+        // Reported at claim, not at start. Inputs are consumed when a job begins but nothing has
+        // been produced yet, and a quest that counted the start would credit a player for output
+        // they could still cancel out from under.
+        //
+        // Refine and Craft are the same operation with different words for the player — the
+        // objective enum says so — but they are matched exactly, so reporting the wrong verb makes
+        // a step silently refuse to advance. The recipe's skill decides which, because that is what
+        // content already uses to distinguish them.
+        string outputKey = await _database.ItemDefs
+            .Where(d => d.Id == recipe.OutputItemDefId)
+            .Select(d => d.Key)
+            .SingleAsync(cancellationToken);
+
+        string skillKey = await _database.Skills
+            .Where(s => s.Id == recipe.SkillId)
+            .Select(s => s.Key)
+            .SingleAsync(cancellationToken);
+
+        ObjectiveType verb = string.Equals(skillKey, "refining", StringComparison.Ordinal)
+            ? ObjectiveType.Refine
+            : ObjectiveType.Craft;
+
+        await new QuestService(_database).RecordProgressAsync(
+            characterId, new ObjectiveEvent(verb, outputKey, quantity), cancellationToken);
 
         await _database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

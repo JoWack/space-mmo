@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Quests;
@@ -124,8 +125,23 @@ public sealed class QuestService(SpaceMmoDbContext database)
                 nameof(objectiveEvent), objectiveEvent.Quantity, "Event quantity must be positive.");
         }
 
-        await using var transaction =
-            await _database.Database.BeginTransactionAsync(cancellationToken);
+        // Joins the caller's transaction when there is one, and opens its own otherwise.
+        //
+        // Gathering and industry report progress from inside the transaction that recorded the
+        // action, which is the only way the two can agree: a gather that committed while its quest
+        // update rolled back would leave a player holding ore no quest ever saw, and the reverse
+        // would credit a step for ore they never received. EF refuses a nested transaction, so this
+        // enlists rather than starting a second one — and the caller commits, because the caller
+        // owns the wider unit of work.
+        //
+        // character_quests is always locked last, after the character and whatever the action
+        // touched, which is what keeps this out of the lock-ordering deadlocks the market code
+        // documents.
+        IDbContextTransaction? ownTransaction = _database.Database.CurrentTransaction is null
+            ? await _database.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        await using var transaction = ownTransaction;
 
         // Locked so two concurrent events cannot both advance the same step from the same
         // starting progress and double-count it.
@@ -208,7 +224,11 @@ public sealed class QuestService(SpaceMmoDbContext database)
         }
 
         await _database.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
 
         return new RecordProgressResult(advanced, completed, granted, withheld);
     }
