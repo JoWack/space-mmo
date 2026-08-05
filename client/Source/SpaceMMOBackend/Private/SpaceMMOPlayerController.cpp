@@ -275,7 +275,10 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 
 	for (int32 Line = 0; Line < PanelMaxLines; ++Line)
 	{
-		const int32 Key = PanelMessageKey + Line;
+		// Keys descend as lines advance, because the engine draws a higher key higher up the
+		// screen. Numbering these in the obvious direction printed the whole panel upside down --
+		// the character's name at the bottom, the jobs list above the skills that feed it.
+		const int32 Key = PanelMessageKey + (PanelMaxLines - 1 - Line);
 
 		if (Line >= Lines.Num())
 		{

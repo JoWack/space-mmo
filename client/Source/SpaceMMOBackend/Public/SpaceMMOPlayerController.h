@@ -228,10 +228,11 @@ private:
 	 * Declared after the two it is built from: a static member's initializer is parsed where it
 	 * appears, so referring to a constant further down the class does not compile.
 	 *
-	 * Past the panel's range so a notice never overwrites a row, and fixed so repeated presses
-	 * replace the last notice rather than stacking a column of them.
+	 * Below the panel's range, and a higher key draws higher up, so a notice appears under the
+	 * panel rather than shunting it down the screen every time one arrives. Fixed, so repeated
+	 * presses replace the last notice instead of stacking a column of them.
 	 */
-	static constexpr int32 NoticeMessageKey = PanelMessageKey + PanelMaxLines + 1;
+	static constexpr int32 NoticeMessageKey = PanelMessageKey - 1;
 
 	/**
 	 * The client's cue that the server has agreed who it is.
