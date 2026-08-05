@@ -140,6 +140,23 @@ public sealed class IndustryEndpointTests(ApiDatabaseFixture fixture) : IAsyncLi
     }
 
     [Fact]
+    public async Task A_brand_new_character_can_afford_its_first_job()
+    {
+        // The bug this pins down was reachable by simply playing: creation left the balance at
+        // zero, every job charges a fee, and the only faucet was a questline the client could not
+        // yet reach. A player could mine ore indefinitely and never refine any of it, with the
+        // refusal naming a sum they had no way to earn.
+        (string token, int characterId) = await SignedInCharacterAsync("newcomer@example.com");
+
+        // Ore, and deliberately no credits. The stake granted at creation is the whole point.
+        await StockCharacterAsync(characterId, 40, grantCredits: false);
+
+        await StartJobAsync(characterId, token);
+
+        Assert.Single(await JobsAsync(characterId, token));
+    }
+
+    [Fact]
     public async Task Listing_another_accounts_jobs_reports_not_found()
     {
         (_, int characterId) = await SignedInCharacterAsync("owner@example.com");
@@ -225,12 +242,16 @@ public sealed class IndustryEndpointTests(ApiDatabaseFixture fixture) : IAsyncLi
     /// That the tutorial does not soft-lock is a consequence of quest ordering rather than of
     /// anything enforcing it.
     /// </remarks>
-    private async Task StockCharacterAsync(int characterId, int oreQuantity)
+    private async Task StockCharacterAsync(
+        int characterId, int oreQuantity, bool grantCredits = true)
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
-        Character character = context.Characters.Single(c => c.Id == characterId);
-        character.Balance = Credits.FromMinorUnits(100_00);
+        if (grantCredits)
+        {
+            Character character = context.Characters.Single(c => c.Id == characterId);
+            character.Balance = Credits.FromMinorUnits(100_00);
+        }
 
         var hangar = new Inventory
         {

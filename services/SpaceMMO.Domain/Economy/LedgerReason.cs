@@ -60,6 +60,25 @@ public enum LedgerReason
     /// </summary>
     AdminAdjustment = 2,
 
+    /// <summary>
+    /// The stake a character is created with.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Exists because every industry job charges a fee and a new character had nothing to pay it
+    /// with. The onboarding questline was meant to cover that, and does — but only by ordering, and
+    /// only for a player who actually follows it. Anyone who skipped the tutorial could gather ore
+    /// forever and never craft.
+    /// </para>
+    /// <para>
+    /// Its own reason rather than folded into <see cref="StoryReward"/> so EconSim can measure it
+    /// separately. It scales with signups rather than with play, which is a different shape of
+    /// faucet, and a bootstrap number hidden inside the quest total would be invisible exactly when
+    /// someone is trying to work out where the money came from.
+    /// </para>
+    /// </remarks>
+    StartingStake = 4,
+
     // ── Sinks: these destroy credits ─────────────────────────────────────────
 
     /// <summary>Charged on placing a market order. Discourages order spam.</summary>
@@ -147,6 +166,7 @@ public static class LedgerReasons
     {
         LedgerReason.QuestReward or
         LedgerReason.StoryReward or
+        LedgerReason.StartingStake or
         LedgerReason.InsurancePayout or
         LedgerReason.AdminAdjustment => LedgerReasonKind.Faucet,
 

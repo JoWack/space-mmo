@@ -3,6 +3,7 @@ using SpaceMMO.Api.Auth;
 using SpaceMMO.Data;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Domain.Characters;
+using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Progression;
 
 namespace SpaceMMO.Api.Endpoints;
@@ -93,16 +94,32 @@ public static class CharacterEndpoints
                 $"Starting body '{homeBodyKey}' is not seeded.", statusCode: StatusCodes.Status500InternalServerError);
         }
 
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
         var character = new Character
         {
             AccountId = accountId.Value,
             Name = name,
             Race = request.Race,
             HomeBodyId = home.Id,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
+            Balance = Economy.StartingStake,
         };
 
         database.Characters.Add(character);
+        await database.SaveChangesAsync(cancellation);
+
+        // Written through the ledger like every other credit movement (ADR-0005). A balance that
+        // appeared without an entry would make the books irreconcilable from the very first row,
+        // and reconciliation is the one property that catches a dupe before players do.
+        database.LedgerEntries.Add(new LedgerEntry
+        {
+            CharacterId = character.Id,
+            DeltaCredits = Economy.StartingStake,
+            Reason = LedgerReason.StartingStake,
+            CreatedAt = now,
+        });
+
         await database.SaveChangesAsync(cancellation);
 
         return Results.Created($"/characters/{character.Id}", ToResponse(character));
