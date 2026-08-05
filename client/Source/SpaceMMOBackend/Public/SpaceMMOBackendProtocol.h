@@ -74,6 +74,18 @@ public:
 	static FString MakeClaimJobBody(int32 CharacterId, int64 JobId);
 
 	/**
+	 * Reads what a faction standing order actually took and paid.
+	 *
+	 * Both out-parameters are the server's answer, not the request. The daily faucet budget can cut
+	 * a sale short, so a client that assumed it sold what it asked to sell would tell the player
+	 * they had parted with material still sitting in their hangar.
+	 */
+	static bool ParseFactionSale(const FString& Json, int32& OutQuantitySold, int64& OutPaidMinorUnits);
+
+	/** Renders int64 minor units as credits, e.g. 123456 as "1,234.56". */
+	static FString FormatCredits(int64 MinorUnits);
+
+	/**
 	 * Parses a JSON array of resource deposits.
 	 *
 	 * A deposit whose direction is missing, unparseable, or the zero vector is dropped rather than

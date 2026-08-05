@@ -126,7 +126,13 @@ public sealed class MarketService(SpaceMmoDbContext database)
         Inventory hangar = await _inventories.GetOrCreateStationHangarAsync(
             request.CharacterId, request.StationId, cancellationToken);
 
-        Credits brokerFee = MarketFees.BrokerFee(request.LimitPrice, request.Quantity);
+        // Waived only when a seller genuinely cannot pay it, and only up to a credit. Placing a
+        // sell order charges its fee before anything is sold, so without this a player holding
+        // nothing but goods could not turn them into money -- the one thing they needed to do.
+        Credits brokerFee = MarketFees.EffectiveBrokerFee(
+            MarketFees.BrokerFee(request.LimitPrice, request.Quantity),
+            balance,
+            request.Side);
         Credits escrowRequired = request.Side == OrderSide.Buy
             ? Settlement.EscrowRequired(request.LimitPrice, request.Quantity)
             : Credits.Zero;

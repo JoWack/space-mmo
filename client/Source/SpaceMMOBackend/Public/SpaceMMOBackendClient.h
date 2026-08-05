@@ -191,6 +191,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
 	void ClaimJob(int32 CharacterId, int64 JobId);
 
+	/**
+	 * Sells raw material to a faction standing order — the way back from an empty balance.
+	 *
+	 * Deliberately the worst deal available. It exists so that a player holding nothing but ore is
+	 * never stuck, not as a way to make money: selling to another player should always beat it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
+	void SellToFaction(int32 CharacterId, int32 StationId, int32 ItemDefId, int32 Quantity);
+
 	/** Fires when the catalog or the job list changes. */
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Industry")
 	FOnBackendIndustryChanged OnIndustryChanged;

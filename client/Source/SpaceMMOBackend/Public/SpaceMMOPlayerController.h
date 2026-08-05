@@ -204,6 +204,18 @@ private:
 	/** Claims the first job the server says is ready. */
 	void ClaimReadyJob();
 
+	/** Sells a parcel of the first faction-bought stack in the hold. */
+	void SellToFaction();
+
+	/**
+	 * Units sold per press. Deliberately small.
+	 *
+	 * A faction standing order is the worst price in the game by design, so a key that emptied a
+	 * hangar into it in one press would be a way to lose a lot of value very quickly. Small parcels
+	 * make it a way out of being stuck rather than a way to sell.
+	 */
+	static constexpr int32 FactionSaleParcel = 10;
+
 	UFUNCTION()
 	void HandleIndustryChanged();
 

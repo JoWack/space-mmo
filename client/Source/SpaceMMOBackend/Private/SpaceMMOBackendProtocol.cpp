@@ -330,6 +330,16 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 			Item.Quantity = static_cast<int32>(Quantity);
 		}
 
+		// Absent or null for anything no faction buys, which is most of the catalog. Left at zero,
+		// which the client reads as "not sellable" — content forbids a zero price on an item that is
+		// bought, so nothing real is hidden by the collapse.
+		int64 FactionPrice = 0;
+
+		if (ReadInt64(Object, TEXT("factionBuyPriceMinorUnits"), FactionPrice))
+		{
+			Item.FactionBuyPriceMinorUnits = FactionPrice;
+		}
+
 		OutItems.Add(Item);
 	}
 
@@ -508,6 +518,57 @@ FString FSpaceMMOBackendProtocol::MakeClaimJobBody(const int32 CharacterId, cons
 {
 	return FString::Printf(
 		TEXT("{\"characterId\":%d,\"jobId\":%lld}"), CharacterId, JobId);
+}
+
+bool FSpaceMMOBackendProtocol::ParseFactionSale(
+	const FString& Json, int32& OutQuantitySold, int64& OutPaidMinorUnits)
+{
+	OutQuantitySold = 0;
+	OutPaidMinorUnits = 0;
+
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	if (!Object.IsValid())
+	{
+		return false;
+	}
+
+	int64 Sold = 0;
+
+	if (ReadInt64(Object, TEXT("quantitySold"), Sold))
+	{
+		OutQuantitySold = static_cast<int32>(Sold);
+	}
+
+	ReadInt64(Object, TEXT("paidMinorUnits"), OutPaidMinorUnits);
+
+	return true;
+}
+
+FString FSpaceMMOBackendProtocol::FormatCredits(const int64 MinorUnits)
+{
+	// Minor units are hundredths, so the split is exact rather than a division that loses a
+	// fraction. Formatting a balance through a double is how a credit goes missing.
+	const int64 Whole = MinorUnits / 100;
+	const int64 Fraction = FMath::Abs(MinorUnits % 100);
+
+	FString Digits = FString::Printf(TEXT("%lld"), FMath::Abs(Whole));
+
+	FString Grouped;
+
+	for (int32 Index = 0; Index < Digits.Len(); ++Index)
+	{
+		if (Index > 0 && (Digits.Len() - Index) % 3 == 0)
+		{
+			Grouped.AppendChar(TEXT(','));
+		}
+
+		Grouped.AppendChar(Digits[Index]);
+	}
+
+	const FString Sign = MinorUnits < 0 ? TEXT("-") : TEXT("");
+
+	return FString::Printf(TEXT("%s%s.%02lld"), *Sign, *Grouped, Fraction);
 }
 
 bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(

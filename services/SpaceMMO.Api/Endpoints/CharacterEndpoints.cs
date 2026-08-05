@@ -20,7 +20,16 @@ public sealed record CharacterResponse(
 
 public sealed record SkillResponse(string Key, string Name, SkillCategory Category, long Xp, int Level);
 
-public sealed record InventoryItemResponse(int ItemDefId, string ItemKey, string Name, int Quantity);
+/// <param name="FactionBuyPriceMinorUnits">
+/// What a faction standing order pays per unit, or null if none buys it. Carried on the stack so a
+/// client can tell at a glance what it could turn into credits without a second request per item.
+/// </param>
+public sealed record InventoryItemResponse(
+    int ItemDefId,
+    string ItemKey,
+    string Name,
+    int Quantity,
+    long? FactionBuyPriceMinorUnits);
 
 /// <summary>
 /// Character creation and read-only views of a character's progression and holdings.
@@ -224,7 +233,13 @@ public static class CharacterEndpoints
             .Include(ii => ii.ItemDef)
             .OrderBy(ii => ii.ItemDef!.Key)
             .Select(ii => new InventoryItemResponse(
-                ii.ItemDefId, ii.ItemDef!.Key, ii.ItemDef.Name, ii.Quantity))
+                ii.ItemDefId,
+                ii.ItemDef!.Key,
+                ii.ItemDef.Name,
+                ii.Quantity,
+                ii.ItemDef.FactionBuyPrice != null
+                    ? ii.ItemDef.FactionBuyPrice!.Value.MinorUnits
+                    : null))
             .ToListAsync(cancellation);
 
         return Results.Ok(items);

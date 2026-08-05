@@ -588,6 +588,47 @@ void USpaceMMOBackendClient::ClaimJob(const int32 CharacterId, const int64 JobId
 		});
 }
 
+void USpaceMMOBackendClient::SellToFaction(
+	const int32 CharacterId, const int32 StationId, const int32 ItemDefId, const int32 Quantity)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/market/faction-orders/sell"),
+		FString::Printf(
+			TEXT("{\"characterId\":%d,\"stationId\":%d,\"itemDefId\":%d,\"quantity\":%d}"),
+			CharacterId, StationId, ItemDefId, Quantity),
+		true,
+		[WeakThis, CharacterId](const FString& Body)
+		{
+			USpaceMMOBackendClient* Self = WeakThis.Get();
+
+			if (Self == nullptr)
+			{
+				return;
+			}
+
+			int32 Sold = 0;
+			int64 Paid = 0;
+
+			FSpaceMMOBackendProtocol::ParseFactionSale(Body, Sold, Paid);
+
+			// Reports what the server did, not what was asked for. The daily faucet budget can cut
+			// a sale short, and a message that echoed the request would tell a player they had sold
+			// material that is still sitting in their hangar.
+			Self->OnIndustryMessage.Broadcast(
+				Sold > 0
+					? FString::Printf(
+						TEXT("Sold %d for %s cr"), Sold, *FSpaceMMOBackendProtocol::FormatCredits(Paid))
+					: FString(TEXT("Faction bought nothing - daily limit reached")),
+				Sold > 0);
+
+			Self->SelectCharacter(CharacterId);
+			Self->FetchCharacters();
+		});
+}
+
 void USpaceMMOBackendClient::ResolveCharacterAsServer(
 	const FString& Token, const int32 ClaimedCharacterId, FOnCharacterResolved OnResolved)
 {

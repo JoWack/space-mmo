@@ -142,6 +142,16 @@ struct SPACEMMOBACKEND_API FBackendInventoryItem
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 Quantity = 0;
+
+	/**
+	 * Minor units a faction standing order pays per unit, or zero if none buys it.
+	 *
+	 * Zero rather than an optional, because "nobody buys this" and "this is worth nothing" are the
+	 * same instruction to a client deciding whether to offer the sale — and content forbids a zero
+	 * price on anything a faction does buy, so the two cannot be confused.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 FactionBuyPriceMinorUnits = 0;
 };
 
 /** One material a recipe consumes, per run. */

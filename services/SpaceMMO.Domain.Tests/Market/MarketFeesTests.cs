@@ -12,6 +12,66 @@ public sealed class MarketFeesTests
     private static Credits Cr(long whole) => Credits.FromWholeCredits(whole);
 
     [Fact]
+    public void ASellerWhoCannotAffordASmallFee_PaysNothing()
+    {
+        // The lockout this closes: placing a sell order charges its fee before anything sells, so a
+        // player holding goods and no credits could not convert the one into the other.
+        Credits fee = MarketFees.EffectiveBrokerFee(Cr(1), Credits.Zero, OrderSide.Sell);
+
+        Assert.Equal(Credits.Zero, fee);
+    }
+
+    [Fact]
+    public void ASellerWhoCanAffordTheFee_PaysIt()
+    {
+        // Never a discount for the solvent. The waiver is about being able to act at all.
+        Credits fee = MarketFees.EffectiveBrokerFee(Cr(1), Cr(500), OrderSide.Sell);
+
+        Assert.Equal(Cr(1), fee);
+    }
+
+    [Fact]
+    public void ALargeFeeIsNeverWaived_HoweverBrokeTheSellerIs()
+    {
+        // The exploit this exists to prevent, and the reason the waiver is capped rather than
+        // conditioned on affordability alone.
+        //
+        // The broker fee is a percentage of order value, so a larger order owes a larger fee. A rule
+        // of the form "waive it when they cannot pay" therefore fires more readily the more valuable
+        // the order: spend down to zero, list a fortune, dodge the whole fee. It would scale exactly
+        // backwards from its intent.
+        Credits fee = MarketFees.EffectiveBrokerFee(Cr(10_000), Credits.Zero, OrderSide.Sell);
+
+        Assert.Equal(Cr(10_000), fee);
+    }
+
+    [Fact]
+    public void TheWaiverStopsExactlyAtItsCeiling()
+    {
+        // A boundary worth pinning: one minor unit over the ceiling and the whole fee is due, so
+        // the most anyone can ever avoid is MaxWaivedBrokerFee.
+        Credits justOver = MarketFees.MaxWaivedBrokerFee + Credits.FromMinorUnits(1);
+
+        Assert.Equal(
+            Credits.Zero,
+            MarketFees.EffectiveBrokerFee(MarketFees.MaxWaivedBrokerFee, Credits.Zero, OrderSide.Sell));
+
+        Assert.Equal(
+            justOver,
+            MarketFees.EffectiveBrokerFee(justOver, Credits.Zero, OrderSide.Sell));
+    }
+
+    [Fact]
+    public void ABuyOrderIsNeverWaived()
+    {
+        // A buyer with no credits is not locked out of anything — they have nothing to convert, and
+        // escrow is money held rather than money spent. Waiving here would just be a free option.
+        Credits fee = MarketFees.EffectiveBrokerFee(Cr(1), Credits.Zero, OrderSide.Buy);
+
+        Assert.Equal(Cr(1), fee);
+    }
+
+    [Fact]
     public void GrossValue_MultipliesPriceByQuantity()
     {
         Assert.Equal(Cr(2_500), MarketFees.GrossValue(Cr(250), 10));

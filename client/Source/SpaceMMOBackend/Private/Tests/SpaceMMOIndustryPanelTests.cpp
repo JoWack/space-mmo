@@ -244,6 +244,71 @@ bool FSpaceMMOIndustryParsesJobsTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOIndustryFormatsCreditsTest,
+	"SpaceMMO.Industry.FormatsCredits",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOIndustryFormatsCreditsTest::RunTest(const FString& Parameters)
+{
+	// Minor units are hundredths and the split is integer arithmetic. Routing a balance through a
+	// double is how a credit goes missing, which in a player-driven economy is not a rounding
+	// detail but a dupe.
+	TestEqual(TEXT("Zero"), FSpaceMMOBackendProtocol::FormatCredits(0), FString(TEXT("0.00")));
+	TestEqual(TEXT("Two credits"), FSpaceMMOBackendProtocol::FormatCredits(200), FString(TEXT("2.00")));
+
+	// The case a naive divide gets wrong: a fraction below ten needs its leading zero.
+	TestEqual(TEXT("Small fraction"), FSpaceMMOBackendProtocol::FormatCredits(105), FString(TEXT("1.05")));
+
+	TestEqual(
+		TEXT("Grouped"),
+		FSpaceMMOBackendProtocol::FormatCredits(123456789),
+		FString(TEXT("1,234,567.89")));
+
+	TestEqual(
+		TEXT("Negative keeps its sign and fraction"),
+		FSpaceMMOBackendProtocol::FormatCredits(-1550),
+		FString(TEXT("-15.50")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOIndustryParsesAFactionSaleTest,
+	"SpaceMMO.Industry.ParsesAFactionSale",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOIndustryParsesAFactionSaleTest::RunTest(const FString& Parameters)
+{
+	// The daily faucet budget can cut a sale short, so what came back is not what was asked for. A
+	// client that echoed its own request would tell a player they had parted with material still
+	// sitting in their hangar.
+	const FString Json = TEXT(
+		R"({"quantitySold":5,"paidMinorUnits":1000,"withheldMinorUnits":3000,"wasCapped":true})");
+
+	int32 Sold = 0;
+	int64 Paid = 0;
+
+	TestTrue(TEXT("Parsed"), FSpaceMMOBackendProtocol::ParseFactionSale(Json, Sold, Paid));
+
+	TestEqual(TEXT("Sold what the server took"), Sold, 5);
+	TestEqual(TEXT("Paid what the server paid"), Paid, static_cast<int64>(1000));
+
+	// A refused sale reads as zero rather than as a parse failure: nothing sold is an ordinary
+	// answer, not an error.
+	int32 NoneSold = -1;
+	int64 NonePaid = -1;
+
+	TestTrue(
+		TEXT("Parsed a refusal"),
+		FSpaceMMOBackendProtocol::ParseFactionSale(
+			TEXT(R"({"quantitySold":0,"paidMinorUnits":0,"wasCapped":true})"), NoneSold, NonePaid));
+
+	TestEqual(TEXT("Nothing sold"), NoneSold, 0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOIndustryBuildsRequestBodiesTest,
 	"SpaceMMO.Industry.BuildsRequestBodies",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

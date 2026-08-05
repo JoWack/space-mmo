@@ -7,6 +7,7 @@
 #include "Net/UnrealNetwork.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMOBackendProtocol.h"
 #include "SpaceMMOGatheringComponent.h"
 
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
@@ -110,6 +111,9 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			TEXT("ClaimJob"), IE_Pressed, this, &ASpaceMMOPlayerController::ClaimReadyJob);
 
 		InputComponent->BindAction(
+			TEXT("SellToFaction"), IE_Pressed, this, &ASpaceMMOPlayerController::SellToFaction);
+
+		InputComponent->BindAction(
 			TEXT("ToggleMouseCapture"),
 			IE_Pressed,
 			this,
@@ -183,6 +187,42 @@ void ASpaceMMOPlayerController::ClaimReadyJob()
 	}
 
 	ShowNotice(TEXT("Nothing ready to claim"), false);
+}
+
+void ASpaceMMOPlayerController::SellToFaction()
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || CharacterId == 0)
+	{
+		return;
+	}
+
+	// The first stack anything buys, sorted the same way the panel lists them, so what the key does
+	// matches what the player is reading. A selection cursor would be better and belongs with a real
+	// inventory screen rather than a debug panel.
+	TArray<FBackendInventoryItem> Held = Client->GetInventory();
+
+	Held.Sort([](const FBackendInventoryItem& A, const FBackendInventoryItem& B)
+		{ return A.Name < B.Name; });
+
+	for (const FBackendInventoryItem& Item : Held)
+	{
+		if (Item.FactionBuyPriceMinorUnits <= 0 || Item.Quantity <= 0)
+		{
+			continue;
+		}
+
+		// A fixed parcel rather than the whole stack. This exists to get a stranded player moving
+		// again, and one keypress that empties a hangar into the worst price in the game is a
+		// mistake nobody would make deliberately.
+		Client->SellToFaction(
+			CharacterId, StationId, Item.ItemDefId, FMath::Min(Item.Quantity, FactionSaleParcel));
+
+		return;
+	}
+
+	ShowNotice(TEXT("Nothing here a faction buys"), false);
 }
 
 void ASpaceMMOPlayerController::RefreshJobs()
@@ -520,7 +560,16 @@ TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
 
 	for (const FBackendInventoryItem& Item : Held)
 	{
-		Lines.Add(FString::Printf(TEXT("   %s  x%d"), *Item.Name, Item.Quantity));
+		// The faction price is shown on the stack rather than hidden behind a menu, because the
+		// moment it matters is the moment a player is broke and looking for anything they can turn
+		// into credits. It is marked as a floor so nobody mistakes it for what the thing is worth.
+		Lines.Add(Item.FactionBuyPriceMinorUnits > 0
+			? FString::Printf(
+				TEXT("   %s  x%d   V sells @ %s cr"),
+				*Item.Name,
+				Item.Quantity,
+				*FSpaceMMOBackendProtocol::FormatCredits(Item.FactionBuyPriceMinorUnits))
+			: FString::Printf(TEXT("   %s  x%d"), *Item.Name, Item.Quantity));
 	}
 
 	return Lines;
