@@ -206,31 +206,27 @@ private:
 	class USpaceMMOBackendClient* Backend() const;
 
 	/**
-	 * Base key for the panel's on-screen messages.
+	 * Key for the panel, which is drawn as one multi-line message rather than one message per row.
 	 *
-	 * Well clear of the navigation readouts the pawns draw, which use 1 through 11. Two writers
-	 * sharing a key overwrite each other, and the symptom is a line that flickers between two
-	 * unrelated pieces of text.
+	 * Well clear of the navigation readouts the pawns draw, which use 1 through 11: two writers
+	 * sharing a key overwrite each other, and the symptom is a line flickering between two unrelated
+	 * pieces of text.
+	 *
+	 * The engine offers no way to order separate messages. It iterates its message map by slot, and
+	 * a zero display time makes it delete and re-add every message each frame, so slots come back
+	 * from a free list in an order nothing here decides.
 	 */
 	static constexpr int32 PanelMessageKey = 200;
 
-	/**
-	 * Rows the panel will draw, and the range of keys it therefore owns.
-	 *
-	 * A cap rather than a growing set, because keys have to be removed to clear a line and a
-	 * previously-longer panel would otherwise leave orphans on screen with nothing tracking them.
-	 */
+	/** Rows the panel will draw before it starts saying how many it is hiding. */
 	static constexpr int32 PanelMaxLines = 40;
 
 	/**
 	 * Key for the transient notice line.
 	 *
-	 * Declared after the two it is built from: a static member's initializer is parsed where it
-	 * appears, so referring to a constant further down the class does not compile.
-	 *
-	 * Below the panel's range, and a higher key draws higher up, so a notice appears under the
-	 * panel rather than shunting it down the screen every time one arrives. Fixed, so repeated
-	 * presses replace the last notice instead of stacking a column of them.
+	 * Separate from the panel so a refusal does not have to be rebuilt into it, and fixed so
+	 * repeated presses replace the last notice rather than stacking a column of them. Where it lands
+	 * relative to the panel is up to the engine, for the reason above.
 	 */
 	static constexpr int32 NoticeMessageKey = PanelMessageKey - 1;
 

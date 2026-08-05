@@ -178,13 +178,7 @@ void ASpaceMMOPlayerController::ToggleCharacterPanel()
 
 	if (!bShowCharacterPanel && GEngine != nullptr)
 	{
-		// Cleared explicitly. On-screen messages persist until they expire or are overwritten, and
-		// these are drawn with an infinite lifetime, so simply not drawing them leaves the last frame
-		// on screen forever.
-		for (int32 Line = 0; Line < PanelMaxLines; ++Line)
-		{
-			GEngine->RemoveOnScreenDebugMessage(PanelMessageKey + Line);
-		}
+		GEngine->RemoveOnScreenDebugMessage(PanelMessageKey);
 	}
 }
 
@@ -273,24 +267,19 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 		Lines[PanelMaxLines - 1] = FString::Printf(TEXT("   ... and %d more"), Hidden);
 	}
 
-	for (int32 Line = 0; Line < PanelMaxLines; ++Line)
-	{
-		// Keys descend as lines advance, because the engine draws a higher key higher up the
-		// screen. Numbering these in the obvious direction printed the whole panel upside down --
-		// the character's name at the bottom, the jobs list above the skills that feed it.
-		const int32 Key = PanelMessageKey + (PanelMaxLines - 1 - Line);
-
-		if (Line >= Lines.Num())
-		{
-			// Removed rather than blanked. A shrinking list -- the last of an ore spent, say --
-			// would otherwise leave its final row on screen indefinitely.
-			GEngine->RemoveOnScreenDebugMessage(Key);
-
-			continue;
-		}
-
-		GEngine->AddOnScreenDebugMessage(Key, 0.0f, FColor::White, Lines[Line]);
-	}
+	// One message carrying every line, not one message per line.
+	//
+	// UEngine::DrawOnscreenDebugMessages walks its message map with a plain TMap iterator, so the
+	// order on screen is slot order rather than key order. That would be survivable if slots were
+	// stable, but these are drawn with a zero display time, which means the engine deletes every one
+	// of them at the end of each frame and the next frame re-adds them into whatever slots the free
+	// list hands back. The result is an order nothing here can influence -- the ship's own readouts
+	// use keys 1, 3 and 2 and render as 2, 3, 1.
+	//
+	// Joining the lines makes the whole panel a single entry, so its internal order is simply string
+	// order and cannot be shuffled. It also removes the need to clear unused rows.
+	GEngine->AddOnScreenDebugMessage(
+		PanelMessageKey, 0.0f, FColor::White, FString::Join(Lines, TEXT("\n")));
 }
 
 TArray<FString> ASpaceMMOPlayerController::BuildIndustryPanel(
