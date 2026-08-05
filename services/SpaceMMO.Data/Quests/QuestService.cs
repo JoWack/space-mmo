@@ -185,6 +185,21 @@ public sealed class QuestService(SpaceMmoDbContext database)
                 continue;
             }
 
+            // Objectives done. Whether that means paid depends on the quest.
+            characterQuest.State = QuestState.ReadyToTurnIn;
+
+            QuestDef definitionOf = await _database.QuestDefs.SingleAsync(
+                q => q.Id == characterQuest.QuestDefId, cancellationToken);
+
+            if (definitionOf.RequiresTurnIn)
+            {
+                // Stops here. The player has finished the work and has not been paid for it, which
+                // is the entire point of the state: they owe somebody a visit.
+                completed.Add(characterQuest.Id);
+
+                continue;
+            }
+
             FaucetGrant reward = await CompleteAsync(characterQuest, cancellationToken);
 
             granted += reward.Granted;
@@ -196,6 +211,54 @@ public sealed class QuestService(SpaceMmoDbContext database)
         await transaction.CommitAsync(cancellationToken);
 
         return new RecordProgressResult(advanced, completed, granted, withheld);
+    }
+
+    /// <summary>
+    /// Hands in a quest whose objectives are already satisfied, and pays out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is not a "complete this quest" endpoint in disguise.</strong> The client is
+    /// choosing to hand in, the same way it chooses to accept — and the server independently checks
+    /// that the work was actually done, because only a quest the server already moved to
+    /// <see cref="QuestState.ReadyToTurnIn"/> can be turned in at all. What stays forbidden is a
+    /// client asserting that a step is finished; that remains a consequence of what the character
+    /// did, recorded by whichever service did it.
+    /// </para>
+    /// <para>
+    /// Idempotent by refusal rather than by silence: turning in twice throws, because the second
+    /// call means something upstream thinks it is owed a second payment.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// If the quest is not in <see cref="QuestState.ReadyToTurnIn"/>.
+    /// </exception>
+    public async Task<FaucetGrant> TurnInAsync(
+        int characterId, string questKey, CancellationToken cancellationToken = default)
+    {
+        await using var transaction =
+            await _database.Database.BeginTransactionAsync(cancellationToken);
+
+        CharacterQuest? characterQuest = await _database.CharacterQuests
+            .Include(cq => cq.QuestDef)
+            .FirstOrDefaultAsync(
+                cq => cq.CharacterId == characterId
+                    && cq.QuestDef!.Key == questKey
+                    && cq.State == QuestState.ReadyToTurnIn,
+                cancellationToken);
+
+        if (characterQuest is null)
+        {
+            throw new InvalidOperationException(
+                $"Character {characterId} has no quest '{questKey}' waiting to be turned in.");
+        }
+
+        FaucetGrant reward = await CompleteAsync(characterQuest, cancellationToken);
+
+        await _database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return reward;
     }
 
     /// <summary>

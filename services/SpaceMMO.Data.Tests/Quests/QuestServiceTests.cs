@@ -113,6 +113,137 @@ public sealed class QuestServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.Equal(4, (await verify.CharacterQuests.SingleAsync(q => q.Id == id)).StepProgress);
     }
 
+    // ── Turn-in ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task AQuestRequiringTurnIn_FinishesUnpaid()
+    {
+        long id = await SeedTurnInQuestAsync();
+
+        await using SpaceMmoDbContext accept = _fixture.CreateContext();
+        await new QuestService(accept).AcceptAsync(_characterId, "npc_errand");
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        RecordProgressResult result = await new QuestService(context)
+            .RecordProgressAsync(_characterId, Gathered("scrap_alloy", 5));
+
+        // The work is done and the money is not paid. That gap is the whole point: an NPC quest
+        // has to survive the walk back to whoever gave it.
+        Assert.True(result.CreditsGranted.IsZero);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        CharacterQuest stored = await verify.CharacterQuests.SingleAsync(q => q.QuestDefId == id);
+
+        Assert.Equal(QuestState.ReadyToTurnIn, stored.State);
+        Assert.True((await verify.Characters.SingleAsync(c => c.Id == _characterId)).Balance.IsZero);
+    }
+
+    [Fact]
+    public async Task TurningIn_PaysTheReward()
+    {
+        await SeedTurnInQuestAsync();
+
+        await using SpaceMmoDbContext accept = _fixture.CreateContext();
+        await new QuestService(accept).AcceptAsync(_characterId, "npc_errand");
+
+        await using SpaceMmoDbContext progress = _fixture.CreateContext();
+        await new QuestService(progress)
+            .RecordProgressAsync(_characterId, Gathered("scrap_alloy", 5));
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        FaucetGrant reward = await new QuestService(context).TurnInAsync(_characterId, "npc_errand");
+
+        Assert.Equal(Credits.FromWholeCredits(300), reward.Granted);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.Equal(
+            QuestState.Completed,
+            (await verify.CharacterQuests.SingleAsync(q => q.QuestDef!.Key == "npc_errand")).State);
+
+        Assert.Equal(
+            Credits.FromWholeCredits(300),
+            (await verify.Characters.SingleAsync(c => c.Id == _characterId)).Balance);
+    }
+
+    [Fact]
+    public async Task TurningInTwice_IsRefused()
+    {
+        await SeedTurnInQuestAsync();
+
+        await using SpaceMmoDbContext accept = _fixture.CreateContext();
+        await new QuestService(accept).AcceptAsync(_characterId, "npc_errand");
+
+        await using SpaceMmoDbContext progress = _fixture.CreateContext();
+        await new QuestService(progress)
+            .RecordProgressAsync(_characterId, Gathered("scrap_alloy", 5));
+
+        await using SpaceMmoDbContext first = _fixture.CreateContext();
+        await new QuestService(first).TurnInAsync(_characterId, "npc_errand");
+
+        // Refused rather than silently ignored. A second turn-in means something upstream believes
+        // it is owed a second payment, and paying it twice is the kind of bug a player finds first.
+        await using SpaceMmoDbContext second = _fixture.CreateContext();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new QuestService(second).TurnInAsync(_characterId, "npc_errand"));
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.Equal(
+            Credits.FromWholeCredits(300),
+            (await verify.Characters.SingleAsync(c => c.Id == _characterId)).Balance);
+    }
+
+    [Fact]
+    public async Task TurningInAnUnfinishedQuest_IsRefused()
+    {
+        await SeedTurnInQuestAsync();
+
+        await using SpaceMmoDbContext accept = _fixture.CreateContext();
+        await new QuestService(accept).AcceptAsync(_characterId, "npc_errand");
+
+        // Only a quest the server itself moved to ReadyToTurnIn can be handed in, which is what
+        // keeps this from becoming the "complete this quest" call the design forbids.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => new QuestService(context).TurnInAsync(_characterId, "npc_errand"));
+    }
+
+    /// <summary>A one-step quest that must be handed in, paying 300 credits.</summary>
+    private async Task<int> SeedTurnInQuestAsync()
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        var quest = new QuestDef
+        {
+            Key = "npc_errand",
+            Name = "An Errand",
+            Kind = QuestKind.MainStory,
+            RewardCredits = Credits.FromWholeCredits(300),
+            RequiresTurnIn = true,
+        };
+
+        context.QuestDefs.Add(quest);
+        await context.SaveChangesAsync();
+
+        context.QuestSteps.Add(new QuestStep
+        {
+            QuestDefId = quest.Id,
+            Ordinal = 1,
+            ObjectiveType = ObjectiveType.Gather,
+            TargetKey = "scrap_alloy",
+            Quantity = 5,
+            Description = "Collect scrap.",
+        });
+
+        await context.SaveChangesAsync();
+
+        return quest.Id;
+    }
+
     [Fact]
     public async Task UnrelatedProgress_IsIgnored()
     {

@@ -42,6 +42,28 @@ public enum QuestState
 
     /// <summary>Abandoned by the player. Repeatable quests may be retaken after cooldown.</summary>
     Abandoned = 2,
+
+    /// <summary>
+    /// Every objective is satisfied, and the reward has not been paid yet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The gap between doing the work and being paid for it. A quest with a giver stays here until
+    /// the player returns and hands it in; one without a giver passes straight through, so today
+    /// this state is transient for every authored quest.
+    /// </para>
+    /// <para>
+    /// <strong>It exists now because it is cheap now and expensive later.</strong> Fusing "finished"
+    /// with "rewarded" entangles the completion path with the ledger and the daily faucet cap, and
+    /// prising them apart afterwards means editing money-handling code that already works. Adding a
+    /// pause to a state machine that already has the state is a content change.
+    /// </para>
+    /// <para>
+    /// It earns its keep immediately too: a journal wants to say "ready to hand in" rather than
+    /// leaving a finished quest looking identical to an unfinished one.
+    /// </para>
+    /// </remarks>
+    ReadyToTurnIn = 3,
 }
 
 /// <summary>

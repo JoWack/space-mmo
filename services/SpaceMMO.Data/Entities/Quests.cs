@@ -47,6 +47,24 @@ public class QuestDef
     /// </remarks>
     public int? CooldownSeconds { get; set; }
 
+    /// <summary>
+    /// Whether the player must hand this quest in before being paid.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// False for every quest authored so far, which pass straight from their last objective to
+    /// rewarded. True is what an NPC-given quest sets: the character sits in
+    /// <see cref="QuestState.ReadyToTurnIn"/> until they go back and hand it in.
+    /// </para>
+    /// <para>
+    /// A flag rather than an inference from having a giver, because the two are genuinely separate:
+    /// a quest can be posted on a board and collected anywhere, or given face to face and reported
+    /// by radio. Tying the payment moment to the giver would make one of those impossible to
+    /// author.
+    /// </para>
+    /// </remarks>
+    public bool RequiresTurnIn { get; set; }
+
     public ICollection<QuestStep> Steps { get; } = [];
 }
 
