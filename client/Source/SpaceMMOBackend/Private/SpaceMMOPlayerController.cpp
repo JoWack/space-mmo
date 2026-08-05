@@ -38,7 +38,47 @@ void ASpaceMMOPlayerController::BeginPlay()
 	if (IsLocalController())
 	{
 		BeginIdentifying();
+
+		ApplyMouseCapture();
 	}
+}
+
+void ASpaceMMOPlayerController::ApplyMouseCapture()
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	if (bMouseCaptured)
+	{
+		// Set in code as well as in DefaultInput.ini. The ini values are defaults for a viewport,
+		// and anything that changes input mode later -- a menu, a level transition, the editor's
+		// own play-in-window handling -- leaves them behind. Asserting it here means the game window
+		// owns the mouse whenever this controller is the one being played.
+		SetInputMode(FInputModeGameOnly());
+
+		bShowMouseCursor = false;
+
+		return;
+	}
+
+	SetInputMode(FInputModeGameAndUI()
+		.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock)
+		.SetHideCursorDuringCapture(false));
+
+	bShowMouseCursor = true;
+}
+
+void ASpaceMMOPlayerController::ToggleMouseCapture()
+{
+	bMouseCaptured = !bMouseCaptured;
+
+	ApplyMouseCapture();
+
+	ShowNotice(
+		bMouseCaptured ? TEXT("Mouse captured") : TEXT("Mouse released - M to recapture"),
+		bMouseCaptured);
 }
 
 void ASpaceMMOPlayerController::OnPossess(APawn* InPawn)
@@ -68,6 +108,12 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 
 		InputComponent->BindAction(
 			TEXT("ClaimJob"), IE_Pressed, this, &ASpaceMMOPlayerController::ClaimReadyJob);
+
+		InputComponent->BindAction(
+			TEXT("ToggleMouseCapture"),
+			IE_Pressed,
+			this,
+			&ASpaceMMOPlayerController::ToggleMouseCapture);
 	}
 }
 
@@ -215,6 +261,12 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 
 	Client->SelectCharacter(CharacterId);
 
+	// The balance lives on the character list, which is otherwise only read once at sign-in. Without
+	// this it would be correct exactly until the first job fee and wrong from then on -- and a wrong
+	// number displayed confidently is worse than no number, because the refusal that eventually
+	// follows makes no sense next to it.
+	Client->FetchCharacters();
+
 	if (!bIndustryBound)
 	{
 		bIndustryBound = true;
@@ -250,8 +302,24 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 		return;
 	}
 
+	// Empty until the character list has been read, and the panel says so rather than printing a
+	// confident zero -- which is indistinguishable from being broke.
+	FString Balance;
+
+	// Not named Character: AController already has a member by that name, and shadowing it is a
+	// warning this project treats as an error.
+	for (const FBackendCharacter& Owned : Client->GetCharacters())
+	{
+		if (Owned.Id == CharacterId)
+		{
+			Balance = Owned.FormatBalance();
+
+			break;
+		}
+	}
+
 	TArray<FString> Lines = BuildCharacterPanel(
-		CharacterName, Client->GetSkills(), Client->GetInventory());
+		CharacterName, Balance, Client->GetSkills(), Client->GetInventory());
 
 	Lines.Append(BuildIndustryPanel(
 		Client->GetRecipes(), Client->GetJobs(), Client->GetInventory(), SelectedRecipeIndex));
@@ -394,6 +462,7 @@ FString ASpaceMMOPlayerController::GroupDigits(const int64 Value)
 
 TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
 	const FString& CharacterName,
+	const FString& Balance,
 	const TArray<FBackendSkill>& Skills,
 	const TArray<FBackendInventoryItem>& Inventory)
 {
@@ -438,7 +507,11 @@ TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
 	// inventory -- ship holds and station hangars alike -- and gathered ore lands in a hangar. A
 	// panel headed "Hold" would have a player looking in their cargo bay for ore that is on a
 	// different planet.
-	Lines.Add(TEXT("-- Holdings --"));
+	// Credits sit with the holdings rather than in the header, because that is where a player looks
+	// when deciding whether they can afford to do the thing they are looking at.
+	Lines.Add(Balance.IsEmpty()
+		? TEXT("-- Holdings --")
+		: FString::Printf(TEXT("-- Holdings --  %s cr"), *Balance));
 
 	if (Held.Num() == 0)
 	{

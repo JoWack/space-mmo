@@ -59,6 +59,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
 	static TArray<FString> BuildCharacterPanel(
 		const FString& CharacterName,
+		const FString& Balance,
 		const TArray<FBackendSkill>& Skills,
 		const TArray<FBackendInventoryItem>& Inventory);
 
@@ -174,6 +175,27 @@ private:
 	void DrawCharacterPanel();
 
 	void ToggleCharacterPanel();
+
+	/**
+	 * Confines the mouse to the game window, or hands it back.
+	 *
+	 * <strong>Asserted in code rather than left to DefaultInput.ini.</strong> Those values are a
+	 * viewport's starting state, and anything that changes input mode afterwards leaves them behind.
+	 * Setting it here means the window owns the mouse whenever this controller is the one being
+	 * played, however it got there.
+	 */
+	void ApplyMouseCapture();
+
+	void ToggleMouseCapture();
+
+	/**
+	 * Whether the game currently owns the mouse. On by default.
+	 *
+	 * The release key exists because two clients share one desktop during testing, and a captured
+	 * cursor cannot reach the other window. Alt-tab also works; this is the version that does not
+	 * make the first client lose focus.
+	 */
+	bool bMouseCaptured = true;
 
 	void CycleRecipe();
 

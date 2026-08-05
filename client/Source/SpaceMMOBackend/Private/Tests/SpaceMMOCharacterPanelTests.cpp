@@ -51,9 +51,11 @@ bool FSpaceMMOPanelShowsTrainedSkillsAndHeldItemsTest::RunTest(const FString& Pa
 	const TArray<FBackendInventoryItem> Inventory{ MakeItem(TEXT("Ferrite Ore"), 128) };
 
 	const TArray<FString> Lines =
-		ASpaceMMOPlayerController::BuildCharacterPanel(TEXT("Ayla"), Skills, Inventory);
+		ASpaceMMOPlayerController::BuildCharacterPanel(
+			TEXT("Ayla"), TEXT("1,234.56"), Skills, Inventory);
 
 	TestTrue(TEXT("Names the character"), AnyLineContains(Lines, TEXT("Ayla")));
+	TestTrue(TEXT("Shows the balance"), AnyLineContains(Lines, TEXT("1,234.56 cr")));
 	TestTrue(TEXT("Names the skill"), AnyLineContains(Lines, TEXT("Mining")));
 	TestTrue(TEXT("Shows the level"), AnyLineContains(Lines, TEXT("4")));
 	TestTrue(TEXT("Shows the xp"), AnyLineContains(Lines, TEXT("1,234")));
@@ -73,10 +75,15 @@ bool FSpaceMMOPanelSpeaksForANewCharacterTest::RunTest(const FString& Parameters
 	// The state every player is in for their first few minutes. A panel that renders as blank space
 	// here reads as broken, and the player has no way to tell that from "you own nothing yet".
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildCharacterPanel(
-		TEXT("Boreth"), TArray<FBackendSkill>(), TArray<FBackendInventoryItem>());
+		TEXT("Boreth"), FString(), TArray<FBackendSkill>(), TArray<FBackendInventoryItem>());
 
 	TestTrue(TEXT("Says nothing is trained"), AnyLineContains(Lines, TEXT("nothing trained")));
 	TestTrue(TEXT("Says the hold is empty"), AnyLineContains(Lines, TEXT("empty")));
+
+	// No balance yet, because the character list has not come back. Printing a confident "0.00 cr"
+	// here would be indistinguishable from being broke, and being broke is a state this game
+	// specifically punishes -- a player would go looking for money they already had.
+	TestFalse(TEXT("Invents no balance"), AnyLineContains(Lines, TEXT("cr")));
 
 	return true;
 }
@@ -97,7 +104,7 @@ bool FSpaceMMOPanelHidesUntrainedSkillsTest::RunTest(const FString& Parameters)
 	};
 
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildCharacterPanel(
-		TEXT("Ayla"), Skills, TArray<FBackendInventoryItem>());
+		TEXT("Ayla"), TEXT("500.00"), Skills, TArray<FBackendInventoryItem>());
 
 	TestTrue(TEXT("Keeps the trained one"), AnyLineContains(Lines, TEXT("Mining")));
 	TestFalse(TEXT("Drops an untrained one"), AnyLineContains(Lines, TEXT("Refining")));
@@ -121,7 +128,7 @@ bool FSpaceMMOPanelOrdersByNameTest::RunTest(const FString& Parameters)
 	};
 
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildCharacterPanel(
-		TEXT("Ayla"), TArray<FBackendSkill>(), Inventory);
+		TEXT("Ayla"), TEXT("500.00"), TArray<FBackendSkill>(), Inventory);
 
 	const int32 Ferrite = IndexOfLineContaining(Lines, TEXT("Ferrite Ore"));
 	const int32 Scrap = IndexOfLineContaining(Lines, TEXT("Scrap Alloy"));
