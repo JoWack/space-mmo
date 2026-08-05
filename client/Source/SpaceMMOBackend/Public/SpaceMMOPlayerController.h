@@ -85,6 +85,18 @@ public:
 	 * be a second implementation of the skill, tool, material and fee gates, free to disagree with
 	 * the real ones — so the player is always allowed to press, and the server answers.
 	 */
+	/**
+	 * Builds the quest panel's lines.
+	 *
+	 * Pure and static like the others, so the filtering can be tested without a backend. Finished
+	 * quests are deliberately dropped: a journal listing everything ever completed buries the one
+	 * line saying what to do next, which is the only line anybody is looking for.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Quests")
+	static TArray<FString> BuildQuestPanel(
+		const TArray<FBackendJournalEntry>& Journal,
+		const TArray<FBackendAvailableQuest>& Available);
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Industry")
 	static TArray<FString> BuildIndustryPanel(
 		const TArray<FBackendRecipe>& Recipes,
@@ -206,6 +218,9 @@ private:
 
 	/** Sells a parcel of the first faction-bought stack in the hold. */
 	void SellToFaction();
+
+	/** Accepts the first quest the server says is available. */
+	void AcceptNextQuest();
 
 	/**
 	 * Units sold per press. Deliberately small.

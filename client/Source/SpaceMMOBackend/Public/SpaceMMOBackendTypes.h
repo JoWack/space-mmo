@@ -256,6 +256,85 @@ struct SPACEMMOBACKEND_API FBackendIndustryJob
 	int32 SecondsRemaining = 0;
 };
 
+/**
+ * Where a quest has got to, mirroring the server.
+ *
+ * <strong>The numeric values are the contract</strong>, as with races: they are persisted and sent
+ * as integers, so reordering these silently turns finished quests into abandoned ones.
+ */
+UENUM(BlueprintType)
+enum class EBackendQuestState : uint8
+{
+	InProgress = 0,
+	Completed = 1,
+	Abandoned = 2,
+
+	/** Every objective met, reward not yet collected. */
+	ReadyToTurnIn = 3,
+};
+
+/** What a quest step asks for, mirroring the server. */
+UENUM(BlueprintType)
+enum class EBackendObjective : uint8
+{
+	Gather = 0,
+	Craft = 1,
+	Refine = 2,
+	Travel = 3,
+	Dock = 4,
+	Talk = 5,
+};
+
+/**
+ * One quest in the journal, including what it currently wants.
+ *
+ * The step fields are empty on a quest with no active step — finished, or waiting to be handed in.
+ * A journal that carried only a step number would tell a player which numbered step they were on
+ * and nothing about what it asked of them.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendJournalEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	FString QuestKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	FString Name;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	EBackendQuestState State = EBackendQuestState::InProgress;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	FString StepDescription;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	EBackendObjective StepObjective = EBackendObjective::Gather;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	FString StepTargetKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	int32 StepProgress = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	int32 StepRequired = 0;
+};
+
+/** A quest the character could accept now. */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendAvailableQuest
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	FString QuestKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	FString Name;
+};
+
 /** Who the backend says a connecting player is entitled to be. */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendResolvedCharacter

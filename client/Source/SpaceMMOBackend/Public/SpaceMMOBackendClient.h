@@ -200,6 +200,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
 	void SellToFaction(int32 CharacterId, int32 StationId, int32 ItemDefId, int32 Quantity);
 
+	/** Loads the journal and the list of quests that could be taken. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Quests")
+	void FetchQuests(int32 CharacterId);
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Quests")
+	const TArray<FBackendJournalEntry>& GetJournal() const { return Journal; }
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Quests")
+	const TArray<FBackendAvailableQuest>& GetAvailableQuests() const { return AvailableQuests; }
+
+	/**
+	 * Accepts a quest.
+	 *
+	 * <strong>The only thing about a quest a player gets to assert.</strong> Progress is a
+	 * consequence of what they actually did, recorded by whichever service did it; there is no way
+	 * from here to claim a step is finished, and there should never be one.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Quests")
+	void AcceptQuest(int32 CharacterId, const FString& QuestKey);
+
 	/** Fires when the catalog or the job list changes. */
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Industry")
 	FOnBackendIndustryChanged OnIndustryChanged;
@@ -324,6 +344,12 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendIndustryJob> Jobs;
+
+	UPROPERTY()
+	TArray<FBackendJournalEntry> Journal;
+
+	UPROPERTY()
+	TArray<FBackendAvailableQuest> AvailableQuests;
 
 	int32 SelectedCharacterId = 0;
 };

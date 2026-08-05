@@ -114,6 +114,9 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			TEXT("SellToFaction"), IE_Pressed, this, &ASpaceMMOPlayerController::SellToFaction);
 
 		InputComponent->BindAction(
+			TEXT("AcceptQuest"), IE_Pressed, this, &ASpaceMMOPlayerController::AcceptNextQuest);
+
+		InputComponent->BindAction(
 			TEXT("ToggleMouseCapture"),
 			IE_Pressed,
 			this,
@@ -187,6 +190,29 @@ void ASpaceMMOPlayerController::ClaimReadyJob()
 	}
 
 	ShowNotice(TEXT("Nothing ready to claim"), false);
+}
+
+void ASpaceMMOPlayerController::AcceptNextQuest()
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || CharacterId == 0)
+	{
+		return;
+	}
+
+	const TArray<FBackendAvailableQuest>& Available = Client->GetAvailableQuests();
+
+	if (Available.Num() == 0)
+	{
+		ShowNotice(TEXT("Nothing to accept"), false);
+
+		return;
+	}
+
+	// The first one, which for an ordered chain is the next link. A picker belongs with a real
+	// journal screen; this is enough to walk the onboarding line, which is what it is for.
+	Client->AcceptQuest(CharacterId, Available[0].QuestKey);
 }
 
 void ASpaceMMOPlayerController::SellToFaction()
@@ -307,6 +333,12 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 	// follows makes no sense next to it.
 	Client->FetchCharacters();
 
+	// Quests advance as a consequence of gathering and crafting, both of which route through here,
+	// so refreshing alongside skills and inventory keeps the journal honest without a poll of its
+	// own. A step that had quietly advanced and a panel that still showed the old count would be
+	// the same class of bug as the frozen balance.
+	Client->FetchQuests(CharacterId);
+
 	if (!bIndustryBound)
 	{
 		bIndustryBound = true;
@@ -361,6 +393,8 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 	TArray<FString> Lines = BuildCharacterPanel(
 		CharacterName, Balance, Client->GetSkills(), Client->GetInventory());
 
+	Lines.Append(BuildQuestPanel(Client->GetJournal(), Client->GetAvailableQuests()));
+
 	Lines.Append(BuildIndustryPanel(
 		Client->GetRecipes(), Client->GetJobs(), Client->GetInventory(), SelectedRecipeIndex));
 
@@ -388,6 +422,64 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 	// order and cannot be shuffled. It also removes the need to clear unused rows.
 	GEngine->AddOnScreenDebugMessage(
 		PanelMessageKey, 0.0f, FColor::White, FString::Join(Lines, TEXT("\n")));
+}
+
+TArray<FString> ASpaceMMOPlayerController::BuildQuestPanel(
+	const TArray<FBackendJournalEntry>& Journal,
+	const TArray<FBackendAvailableQuest>& Available)
+{
+	TArray<FString> Lines;
+
+	Lines.Add(TEXT("-- Quests --  J accepts the next one"));
+
+	bool bAnyActive = false;
+
+	for (const FBackendJournalEntry& Entry : Journal)
+	{
+		if (Entry.State == EBackendQuestState::Completed
+			|| Entry.State == EBackendQuestState::Abandoned)
+		{
+			// Finished quests are history. A journal that lists everything ever done buries the one
+			// line saying what to do next, which is the only line being looked for.
+			continue;
+		}
+
+		bAnyActive = true;
+
+		if (Entry.State == EBackendQuestState::ReadyToTurnIn)
+		{
+			Lines.Add(FString::Printf(TEXT("   %s  READY TO HAND IN"), *Entry.Name));
+
+			continue;
+		}
+
+		Lines.Add(FString::Printf(
+			TEXT("   %s  %d/%d"), *Entry.Name, Entry.StepProgress, Entry.StepRequired));
+
+		if (!Entry.StepDescription.IsEmpty())
+		{
+			Lines.Add(FString::Printf(TEXT("      %s"), *Entry.StepDescription));
+		}
+	}
+
+	if (!bAnyActive)
+	{
+		Lines.Add(TEXT("   none active"));
+	}
+
+	// Only worth naming when there is something to take. A permanent empty heading is noise on a
+	// display that has to be readable at a glance.
+	if (Available.Num() > 0)
+	{
+		Lines.Add(FString::Printf(TEXT("   available: %s"), *Available[0].Name));
+
+		if (Available.Num() > 1)
+		{
+			Lines.Add(FString::Printf(TEXT("   ... and %d more"), Available.Num() - 1));
+		}
+	}
+
+	return Lines;
 }
 
 TArray<FString> ASpaceMMOPlayerController::BuildIndustryPanel(

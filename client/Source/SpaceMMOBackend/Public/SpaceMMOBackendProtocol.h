@@ -67,6 +67,15 @@ public:
 	/** Parses a JSON array of industry jobs. */
 	static bool ParseIndustryJobs(const FString& Json, TArray<FBackendIndustryJob>& OutJobs);
 
+	/** Parses the quest journal, including each quest's active step. */
+	static bool ParseJournal(const FString& Json, TArray<FBackendJournalEntry>& OutEntries);
+
+	/** Parses the list of quests a character could accept. */
+	static bool ParseAvailableQuests(const FString& Json, TArray<FBackendAvailableQuest>& OutQuests);
+
+	/** JSON body for accepting a quest. */
+	static FString MakeAcceptQuestBody(int32 CharacterId, const FString& QuestKey);
+
 	/** JSON body for starting a job. */
 	static FString MakeStartJobBody(int32 CharacterId, int32 RecipeId, int32 StationId, int32 Runs);
 

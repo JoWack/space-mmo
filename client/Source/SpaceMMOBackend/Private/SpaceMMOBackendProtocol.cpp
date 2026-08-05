@@ -506,6 +506,103 @@ bool FSpaceMMOBackendProtocol::ParseIndustryJobs(
 	return true;
 }
 
+bool FSpaceMMOBackendProtocol::ParseJournal(
+	const FString& Json, TArray<FBackendJournalEntry>& OutEntries)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutEntries.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+		FBackendJournalEntry Entry;
+
+		if (!Object.IsValid() || !Object->TryGetStringField(TEXT("questKey"), Entry.QuestKey))
+		{
+			continue;
+		}
+
+		Object->TryGetStringField(TEXT("name"), Entry.Name);
+
+		// Absent on a quest with no active step, which is an ordinary state rather than a gap.
+		Object->TryGetStringField(TEXT("stepDescription"), Entry.StepDescription);
+		Object->TryGetStringField(TEXT("stepTargetKey"), Entry.StepTargetKey);
+
+		int64 Scratch = 0;
+
+		if (ReadInt64(Object, TEXT("state"), Scratch))
+		{
+			Entry.State = ToEnum(Scratch, EBackendQuestState::InProgress, 3);
+		}
+
+		if (ReadInt64(Object, TEXT("stepObjective"), Scratch))
+		{
+			Entry.StepObjective = ToEnum(Scratch, EBackendObjective::Gather, 5);
+		}
+
+		if (ReadInt64(Object, TEXT("stepProgress"), Scratch))
+		{
+			Entry.StepProgress = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("stepRequired"), Scratch))
+		{
+			Entry.StepRequired = static_cast<int32>(Scratch);
+		}
+
+		OutEntries.Add(Entry);
+	}
+
+	return true;
+}
+
+bool FSpaceMMOBackendProtocol::ParseAvailableQuests(
+	const FString& Json, TArray<FBackendAvailableQuest>& OutQuests)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutQuests.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+		FBackendAvailableQuest Quest;
+
+		// Dropped without a key, because the key is what accepting names. An entry that can be
+		// listed but never taken is worse than one that is missing.
+		if (!Object.IsValid() || !Object->TryGetStringField(TEXT("questKey"), Quest.QuestKey))
+		{
+			continue;
+		}
+
+		Object->TryGetStringField(TEXT("name"), Quest.Name);
+
+		OutQuests.Add(Quest);
+	}
+
+	return true;
+}
+
+FString FSpaceMMOBackendProtocol::MakeAcceptQuestBody(
+	const int32 CharacterId, const FString& QuestKey)
+{
+	return FString::Printf(
+		TEXT("{\"characterId\":%d,\"questKey\":\"%s\"}"), CharacterId, *QuestKey);
+}
+
 FString FSpaceMMOBackendProtocol::MakeStartJobBody(
 	const int32 CharacterId, const int32 RecipeId, const int32 StationId, const int32 Runs)
 {

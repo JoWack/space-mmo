@@ -576,8 +576,10 @@ void USpaceMMOBackendClient::ClaimJob(const int32 CharacterId, const int64 JobId
 
 				Self->FetchJobs(CharacterId);
 
-				// The outputs landed in the hangar, so the panel's holdings are now stale.
+				// The outputs landed in the hangar, so the panel's holdings are now stale — and a
+				// craft objective may have advanced on the server without anything here noticing.
 				Self->SelectCharacter(CharacterId);
+				Self->FetchQuests(CharacterId);
 
 				// Claiming does not move credits today. Refreshed anyway, because the rule worth
 				// following is that anything which *might* touch the wallet refreshes it: a stale
@@ -626,6 +628,63 @@ void USpaceMMOBackendClient::SellToFaction(
 
 			Self->SelectCharacter(CharacterId);
 			Self->FetchCharacters();
+		});
+}
+
+void USpaceMMOBackendClient::FetchQuests(const int32 CharacterId)
+{
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/quests/journal/%d"), CharacterId),
+		FString(),
+		true,
+		[this](const FString& Body)
+		{
+			TArray<FBackendJournalEntry> Parsed;
+
+			FSpaceMMOBackendProtocol::ParseJournal(Body, Parsed);
+
+			Journal = MoveTemp(Parsed);
+
+			OnIndustryChanged.Broadcast();
+		});
+
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/quests/available/%d"), CharacterId),
+		FString(),
+		true,
+		[this](const FString& Body)
+		{
+			TArray<FBackendAvailableQuest> Parsed;
+
+			FSpaceMMOBackendProtocol::ParseAvailableQuests(Body, Parsed);
+
+			AvailableQuests = MoveTemp(Parsed);
+
+			OnIndustryChanged.Broadcast();
+		});
+}
+
+void USpaceMMOBackendClient::AcceptQuest(const int32 CharacterId, const FString& QuestKey)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/quests/accept"),
+		FSpaceMMOBackendProtocol::MakeAcceptQuestBody(CharacterId, QuestKey),
+		true,
+		[WeakThis, CharacterId, QuestKey](const FString&)
+		{
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				Self->OnIndustryMessage.Broadcast(
+					FString::Printf(TEXT("Accepted %s"), *QuestKey), true);
+
+				// Both lists change: the quest leaves the available list and joins the journal.
+				Self->FetchQuests(CharacterId);
+			}
 		});
 }
 
