@@ -144,6 +144,24 @@ That message is misleading: the module exists and is compiled, just against a di
 all of it. Mixing the two engines was never going to work for networking anyway, since a client
 and server built from different engines disagree on the network version.
 
+### The project is pinned to the source build by GUID
+
+`SpaceMMO.uproject` names its engine as `{76471CDA-4509-21F4-9199-24965F66CD1C}`, which is the
+source tree's entry under `HKCU\Software\Epic Games\Unreal Engine\Builds`.
+
+It used to say `"5.8"`. That is a *version* rather than a build, so the project resolved to
+whichever 5.8 engine was registered — and the Epic launcher registers itself as one. Both engines
+are 5.8.1, so this never looked like a version problem: what differed was the build. UBT stamps a
+build id into `Binaries/Win64/*.modules` recording which engine compiled the DLLs, so each engine
+found the other's binaries foreign and offered to rebuild. Accepting invalidated them for the
+other one, and the two ping-ponged forever.
+
+**The GUID is specific to this machine.** A fresh clone, a reinstalled source build, or a second
+computer will have a different one, and the project will refuse to open until it is updated —
+right-click the `.uproject`, *Switch Unreal Engine version*, pick the source build. Pinning is
+still worth it: the alternative relies on remembering never to open the project from the launcher,
+and this rule is load-bearing enough that it should be enforced rather than recalled.
+
 ### Two clients on the dedicated server
 
 ```bash

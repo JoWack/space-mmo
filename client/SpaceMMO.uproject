@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.8",
+	"EngineAssociation": "{76471CDA-4509-21F4-9199-24965F66CD1C}",
 	"Category": "",
 	"Description": "Space MMO client and dedicated server.",
 	"Modules": [
