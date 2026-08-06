@@ -290,8 +290,13 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 	// ClassifyProximity has something to work against.
 	for (TActorIterator<ASpaceMMOPlanetActor> It(GetWorld()); It; ++It)
 	{
-		Proximity = FPlanetPhysics::ClassifyProximity(
-			It->GetPlanetConfig(), Navigation.SystemPosition, Proximity);
+		// Height above the ground, not above the nominal sphere. A ship parked on three hundred
+		// metres of terrain is landed, and measuring against the sphere called it airborne.
+		GroundAltitudeKilometres = FPlanetTerrain::AltitudeAboveGroundKilometres(
+			It->GetPlanetConfig(), It->GetTerrainConfig(), Navigation.SystemPosition);
+
+		Proximity = FPlanetPhysics::ClassifyProximityAtAltitude(
+			It->GetPlanetConfig(), GroundAltitudeKilometres, Proximity);
 
 		break;
 	}
@@ -316,10 +321,16 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 			: Proximity == EPlanetProximity::Atmospheric ? TEXT("ATMOSPHERE")
 			: TEXT("ORBIT");
 
+		// Both altitudes, because they disagree by however tall the ground is and the label keys
+		// off the second one. Showing only the first is what made "Altitude 0.34 km | ATMOSPHERE"
+		// look like a contradiction while both halves were telling the truth.
 		GEngine->AddOnScreenDebugMessage(
 			3, 0.0f, FColor::Yellow,
 			FString::Printf(
-				TEXT("Altitude %.2f km | %s"), GetAltitudeKilometres(), ProximityName));
+				TEXT("Altitude %.2f km sphere / %.2f km ground | %s"),
+				GetAltitudeKilometres(),
+				GroundAltitudeKilometres,
+				ProximityName));
 
 		GEngine->AddOnScreenDebugMessage(
 			2, 0.0f, FColor::Silver,

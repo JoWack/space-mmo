@@ -257,6 +257,9 @@ private:
 
 	EPlanetProximity Proximity = EPlanetProximity::Orbital;
 
+	/** Height above the ground beneath, which is what the proximity above is classified from. */
+	double GroundAltitudeKilometres = 0.0;
+
 	bool bOnGround = false;
 
 	/** Guards the -AutoDisembark affordance, so it fires once rather than on every landing. */

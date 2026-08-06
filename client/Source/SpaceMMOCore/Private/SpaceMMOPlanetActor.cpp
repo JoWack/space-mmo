@@ -31,6 +31,25 @@ namespace
 	 */
 	float GHideGlobeUnderPatch = 0.0f;
 
+	/**
+	 * Puts the patch's mesh into the globe's own component instead of its own.
+	 *
+	 * The last bisect available. The patch has now failed to draw as its own actor and as a second
+	 * component on this one, so how it is built is not the fault. That leaves the mesh and the
+	 * component, and this separates them: the globe's component provably draws, so if the patch's
+	 * vertices do not draw inside it either, the fault is in the vertices.
+	 *
+	 * Destructive on purpose — it replaces the globe while it is on.
+	 */
+	float GPatchIntoGlobe = 0.0f;
+
+	FAutoConsoleVariableRef CVarPatchIntoGlobe(
+		TEXT("SpaceMMO.PatchIntoGlobe"),
+		GPatchIntoGlobe,
+		TEXT("1 puts the patch mesh into the globe's component, replacing the globe. Ground that "
+			"appears means the component was at fault; ground that does not means the mesh is."),
+		ECVF_Default);
+
 	FAutoConsoleVariableRef CVarHideGlobeUnderPatch(
 		TEXT("SpaceMMO.HideGlobeUnderPatch"),
 		GHideGlobeUnderPatch,
@@ -419,20 +438,25 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		}
 	}
 
-	GroundPatch->SetMesh(MoveTemp(Mesh));
-	GroundPatch->NotifyMeshUpdated();
-	GroundPatch->SetVisibility(true);
+	bPatchInGlobeComponent = GPatchIntoGlobe > 0.5f;
+
+	UDynamicMeshComponent* const Target = bPatchInGlobeComponent ? Surface : GroundPatch;
+
+	Target->SetMesh(MoveTemp(Mesh));
+	Target->NotifyMeshUpdated();
+	Target->SetVisibility(true);
 
 	bHasPatch = true;
 
 	ApplyRenderTransform();
 
 	UE_LOG(LogSpaceMMO, Log,
-		TEXT("Terrain patch at %s: %d triangles across %.1f degrees, component at %s."),
+		TEXT("Terrain patch at %s: %d triangles across %.1f degrees, in %s at %s."),
 		*PatchOrigin.ToString(),
 		Patch.Triangles.Num() / 3,
 		PatchAngularRadiusDegrees,
-		*GroundPatch->GetComponentLocation().ToCompactString());
+		bPatchInGlobeComponent ? TEXT("the globe's component") : TEXT("its own component"),
+		*Target->GetComponentLocation().ToCompactString());
 }
 
 void ASpaceMMOPlanetActor::SetPlanetConfig(const FPlanetConfig& NewConfig)
@@ -468,11 +492,15 @@ void ASpaceMMOPlanetActor::ApplyRenderTransform()
 	// The globe's vertices are already at planet scale in centimetres from its centre, so placing
 	// the actor is the whole transform. The engine sphere needed scaling because it was a 100 cm
 	// ball standing in for a 20 km planet, which is also why it was a polyhedron.
-	SetActorLocation(Origin->ToWorldLocation(Planet.Centre));
+	// While the patch is borrowing the globe's component, the actor has to stand at the patch's
+	// anchor instead of the planet's centre — the component is the root, so its transform is the
+	// actor's.
+	SetActorLocation(Origin->ToWorldLocation(
+		bPatchInGlobeComponent && bHasPatch ? PatchOrigin : Planet.Centre));
 
 	// The patch keeps its own absolute position: its vertices are relative to the ground beneath
 	// the viewer, which is twenty kilometres from the planet's centre and moves independently.
-	if (GroundPatch != nullptr && bHasPatch)
+	if (GroundPatch != nullptr && bHasPatch && !bPatchInGlobeComponent)
 	{
 		GroundPatch->SetWorldLocation(Origin->ToWorldLocation(PatchOrigin));
 	}

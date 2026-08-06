@@ -128,8 +128,11 @@ private:
 	/** Anchor the patch's vertices are relative to. */
 	FSystemCoordinate PatchOrigin;
 
-	/** True once GroundPatch holds a mesh worth drawing. */
+	/** True once a patch mesh has been built and is worth drawing. */
 	bool bHasPatch = false;
+
+	/** True while the patch is borrowing the globe's component, for SpaceMMO.PatchIntoGlobe. */
+	bool bPatchInGlobeComponent = false;
 
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;
