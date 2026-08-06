@@ -121,6 +121,44 @@ void ASpaceMMOTerrainPatchActor::BuildPatch(
 		*PatchOrigin.ToString(),
 		TriangleCount,
 		PatchConfig.AngularRadiusDegrees);
+
+	// Where the mesh physically ended up, in the space the renderer works in.
+	//
+	// Every check so far said this patch is under the viewer's feet, and the viewer reports no
+	// ground there. One of those is wrong, and arithmetic done away from the running game has not
+	// been able to say which. These are the numbers the renderer actually gets.
+	const FVector ActorLocation = GetActorLocation();
+	const FBoxSphereBounds MeshBounds = Ground->Bounds;
+
+	const int32 Centre = (PatchConfig.Resolution * PatchConfig.Resolution) / 2;
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  patch actor at %s, mesh centre vertex local %s, bounds origin %s radius %.0f cm."),
+		*ActorLocation.ToCompactString(),
+		Patch.Positions.IsValidIndex(Centre)
+			? *Patch.Positions[Centre].ToCompactString()
+			: TEXT("none"),
+		*MeshBounds.Origin.ToCompactString(),
+		MeshBounds.SphereRadius);
+
+	if (const APlayerController* Controller =
+		GetWorld() != nullptr ? GetWorld()->GetFirstPlayerController() : nullptr)
+	{
+		FVector ViewLocation = FVector::ZeroVector;
+		FRotator ViewRotation = FRotator::ZeroRotator;
+
+		const_cast<APlayerController*>(Controller)->GetPlayerViewPoint(ViewLocation, ViewRotation);
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("  camera at %s, %.0f cm from the patch's centre vertex."),
+			*ViewLocation.ToCompactString(),
+			FVector::Dist(
+				ViewLocation,
+				ActorLocation
+					+ (Patch.Positions.IsValidIndex(Centre)
+						? Patch.Positions[Centre]
+						: FVector::ZeroVector)));
+	}
 }
 
 void ASpaceMMOTerrainPatchActor::Tick(const float DeltaSeconds)

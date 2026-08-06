@@ -203,6 +203,16 @@ bool ASpaceMMOPlanetActor::TryGetViewerPosition(FSystemCoordinate& OutPosition) 
 		return false;
 	}
 
+	// A controller with no pawn has no view worth reading. On the frame a pawn is possessed it is
+	// still at the world origin, so the view point reports the render origin — which on a planet
+	// forty kilometres away classifies as orbital and throws away the terrain the player is
+	// standing on. The log shows it happening on exactly the frames "Ship ready" and
+	// "Character ready" are printed.
+	if (Controller->GetPawn() == nullptr)
+	{
+		return false;
+	}
+
 	FVector ViewLocation = FVector::ZeroVector;
 	FRotator ViewRotation = FRotator::ZeroRotator;
 
@@ -246,7 +256,20 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	// everything the viewer could see.
 	if (Surface != nullptr)
 	{
-		Surface->SetVisibility(TerrainPatch == nullptr);
+		const bool bShowGlobe = TerrainPatch == nullptr;
+
+		// Logged on change, because the two candidate explanations for missing ground differ on
+		// exactly this: either the patch is drawing and has a hole in it, or the patch is not
+		// drawing and what remains on screen is the globe. They look identical from the outside.
+		if (Surface->IsVisible() != bShowGlobe)
+		{
+			UE_LOG(LogSpaceMMO, Log,
+				TEXT("Globe %s (terrain patch %s)."),
+				bShowGlobe ? TEXT("shown") : TEXT("hidden"),
+				TerrainPatch == nullptr ? TEXT("absent") : TEXT("present"));
+		}
+
+		Surface->SetVisibility(bShowGlobe);
 	}
 
 	if (ViewerProximity == EPlanetProximity::Orbital)

@@ -60,6 +60,68 @@ bool FSpaceMMOPatchTopologyTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchNormalsMatchTheGroundTest,
+	"SpaceMMO.Patch.NormalsMatchTheGround",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchNormalsMatchTheGroundTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = PatchTestPlanet();
+	const FPlanetTerrainConfig Terrain = PatchTestTerrain();
+
+	constexpr int32 Resolution = 33;
+
+	FPlanetPatchConfig Config;
+	Config.Resolution = Resolution;
+	Config.AngularRadiusDegrees = 4.0;
+
+	const FPlanetPatchMesh Mesh = FPlanetPatch::Build(Planet, Terrain, Config);
+	const FVector Centre = Config.CentreDirection.GetSafeNormal();
+
+	// Outward-facing is a weak claim: a normal ninety degrees off still satisfies it, and a surface
+	// lit by a normal ninety degrees off is black while everything standing on it is lit. So this
+	// asks the stronger question — does the drawn normal agree with the one the height function
+	// gives at the same place? Terrain here is gentle, a few degrees of slope, so any large
+	// disagreement is the mesh being wrong rather than the ground being steep.
+	double WorstDegrees = 0.0;
+	int32 WorstIndex = INDEX_NONE;
+
+	for (int32 Row = 1; Row < Resolution - 1; ++Row)
+	{
+		for (int32 Column = 1; Column < Resolution - 1; ++Column)
+		{
+			const int32 Index = (Row * Resolution) + Column;
+
+			const double U = -1.0 + ((2.0 * Column) / (Resolution - 1));
+			const double V = -1.0 + ((2.0 * Row) / (Resolution - 1));
+
+			const FVector Direction =
+				FPlanetPatch::DirectionAt(Centre, Config.AngularRadiusDegrees, U, V);
+
+			const FVector Expected = FPlanetTerrain::SurfaceNormal(Planet, Terrain, Direction);
+
+			const double Degrees = FMath::RadiansToDegrees(FMath::Acos(
+				FMath::Clamp(FVector::DotProduct(Expected, Mesh.Normals[Index]), -1.0, 1.0)));
+
+			if (Degrees > WorstDegrees)
+			{
+				WorstDegrees = Degrees;
+				WorstIndex = Index;
+			}
+		}
+	}
+
+	TestTrue(
+		FString::Printf(
+			TEXT("Worst normal (vertex %d) is %.1f degrees from the ground it sits on"),
+			WorstIndex,
+			WorstDegrees),
+		WorstDegrees < 20.0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOPatchSurvivesBeingWideTest,
 	"SpaceMMO.Patch.SurvivesBeingWide",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
