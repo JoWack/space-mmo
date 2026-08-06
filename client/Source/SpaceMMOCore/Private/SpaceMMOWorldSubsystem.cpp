@@ -40,7 +40,7 @@ namespace
 	 * only because it was set to capture a scene that is empty black space. Given a colour to emit
 	 * rather than a scene to photograph, it does the job it was always meant to.
 	 */
-	float GAmbientLux = 1.5f;
+	float GAmbientLux = 2.0f;
 
 	FAutoConsoleVariableRef CVarExposure(
 		TEXT("SpaceMMO.Exposure"),
