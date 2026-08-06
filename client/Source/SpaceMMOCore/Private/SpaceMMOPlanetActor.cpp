@@ -272,8 +272,13 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	const FVector ViewerDirection =
 		(ViewerPosition.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
 
+	// Height above the ground, not above the sphere the ground sits on. Standing on a half-kilometre
+	// mountain is still standing: the horizon is a few hundred metres away and the patch should be
+	// narrow and detailed. Measuring against the sphere would call that an altitude of half a
+	// kilometre and spread the same vertices over five times the ground for no one's benefit.
 	const double DesiredDegrees = PatchDegreesForAltitude(
-		Planet, FPlanetPhysics::AltitudeKilometres(Planet, ViewerPosition));
+		Planet,
+		FPlanetTerrain::AltitudeAboveGroundKilometres(Planet, TerrainConfig, ViewerPosition));
 
 	// Two reasons to rebuild: the viewer has walked far enough across the patch, or climbed far
 	// enough that the patch no longer reaches their horizon.

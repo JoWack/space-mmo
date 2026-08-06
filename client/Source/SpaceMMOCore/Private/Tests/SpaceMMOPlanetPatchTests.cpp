@@ -60,6 +60,87 @@ bool FSpaceMMOPatchTopologyTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchSurvivesBeingWideTest,
+	"SpaceMMO.Patch.SurvivesBeingWide",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchSurvivesBeingWideTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = PatchTestPlanet();
+	const FPlanetTerrainConfig Terrain = PatchTestTerrain();
+
+	// Everything about this patch was written and checked at four degrees, and then a viewer high
+	// in the atmosphere started asking for sixty. The gnomonic projection stretches hard out there
+	// — the corners of a sixty-degree patch land at sixty-eight — so whether it still produces a
+	// surface facing the right way is a question, not an assumption.
+	for (const double Degrees : { 4.0, 20.0, 45.0, 60.0 })
+	{
+		FPlanetPatchConfig Config;
+		Config.Resolution = 25;
+		Config.AngularRadiusDegrees = Degrees;
+
+		const FPlanetPatchMesh Mesh = FPlanetPatch::Build(Planet, Terrain, Config);
+
+		if (!Mesh.IsValid())
+		{
+			AddError(FString::Printf(TEXT("A %.0f degree patch built nothing."), Degrees));
+
+			return false;
+		}
+
+		// Outward is away from the planet's centre. The patch's vertices are relative to the ground
+		// beneath its own middle, so the centre is that anchor's offset from the planet.
+		const FVector CentreOffset =
+			(Mesh.Origin.Kilometres - Planet.Centre.Kilometres)
+			* SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+		int32 Inward = 0;
+
+		for (int32 Index = 0; Index + 2 < Mesh.Triangles.Num(); Index += 3)
+		{
+			const FVector A = Mesh.Positions[Mesh.Triangles[Index]];
+			const FVector B = Mesh.Positions[Mesh.Triangles[Index + 1]];
+			const FVector C = Mesh.Positions[Mesh.Triangles[Index + 2]];
+
+			const FVector Outward = CentreOffset + ((A + B + C) / 3.0);
+
+			if (FVector::DotProduct(FVector::CrossProduct(B - A, C - A), Outward) <= 0.0)
+			{
+				++Inward;
+			}
+		}
+
+		if (Inward > 0)
+		{
+			AddError(FString::Printf(
+				TEXT("%d of %d triangles face inward at %.0f degrees."),
+				Inward,
+				Mesh.Triangles.Num() / 3,
+				Degrees));
+
+			return false;
+		}
+
+		// Vertex normals are what the lighting uses, and an inward one is a patch of ground lit
+		// from underneath — which is how the patch's winding bug showed up the first time.
+		for (int32 Index = 0; Index < Mesh.Normals.Num(); ++Index)
+		{
+			const FVector Outward = CentreOffset + Mesh.Positions[Index];
+
+			if (FVector::DotProduct(Mesh.Normals[Index], Outward.GetSafeNormal()) <= 0.0)
+			{
+				AddError(FString::Printf(
+					TEXT("Vertex %d has an inward normal at %.0f degrees."), Index, Degrees));
+
+				return false;
+			}
+		}
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOPatchSitsOnTheTerrainTest,
 	"SpaceMMO.Patch.SitsOnTheTerrain",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
