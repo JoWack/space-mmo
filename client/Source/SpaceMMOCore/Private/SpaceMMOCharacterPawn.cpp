@@ -332,6 +332,33 @@ void ASpaceMMOCharacterPawn::PublishRenderOrigin()
 {
 	const UWorld* World = GetWorld();
 
+	if (!IsLocallyControlled())
+	{
+		return;
+	}
+
+	// Rebase from wherever the character actually is, before publishing.
+	//
+	// The rebase test used to live only in the locally-simulated movement path, so a position that
+	// arrived any other way — a spawn, a teleport off a ship, replication from the server — left
+	// the render origin wherever it had been. On disembarking, this pawn begins play at the system
+	// origin, publishes that, and the whole world is then drawn relative to a point forty
+	// kilometres from the player. Static meshes survive it; a kilometres-wide generated mesh does
+	// not, which is what "there is no ground under me" turned out to be.
+	//
+	// Asking the question here means it is asked once per frame against the position that is
+	// actually being rendered, whatever produced it.
+	if (!Navigation.SystemPosition.IsWithinLocalSpaceOf(Navigation.RenderOrigin))
+	{
+		Navigation.RenderOrigin = Navigation.SystemPosition;
+		++Navigation.RebaseCount;
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("REBASE %d: character sys %s"),
+			Navigation.RebaseCount,
+			*Navigation.SystemPosition.ToString());
+	}
+
 	if (USpaceMMORenderOriginSubsystem* Origin =
 		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr)
 	{
