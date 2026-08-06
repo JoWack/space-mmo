@@ -54,4 +54,12 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<class UDirectionalLightComponent> FillLight;
+
+	/** Omnidirectional fill, so no normal on a sphere is ever completely unlit. */
+	UPROPERTY()
+	TObjectPtr<class USkyLightComponent> AmbientLight;
+
+	/** Owns the manual exposure. Without one the renderer uses a default nobody chose. */
+	UPROPERTY()
+	TObjectPtr<class APostProcessVolume> Exposure;
 };

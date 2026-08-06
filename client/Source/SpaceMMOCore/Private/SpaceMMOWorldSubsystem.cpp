@@ -3,6 +3,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/DirectionalLight.h"
+#include "Engine/PostProcessVolume.h"
 #include "Engine/SkyLight.h"
 #include "Engine/World.h"
 #include "SpaceMMOLog.h"
@@ -16,6 +17,42 @@ namespace
 	// Daylight is orders of magnitude higher; these are a starting point, not a physical claim.
 	float GKeyLightLux = 25.0f;
 	float GFillLightLux = 6.0f;
+
+	/**
+	 * Manual exposure, in stops.
+	 *
+	 * Auto-exposure is off (DefaultEngine.ini) and nothing replaced it, so the renderer used a
+	 * fixed default calibrated for nothing in particular. Everything brighter than it clamped to
+	 * white and everything dimmer crushed to black, which is why the ground reads as two colours
+	 * with no surface in between rather than as a lit shape.
+	 *
+	 * Negative darkens. This is the knob that decides whether 25 lux is a blown-out field or a lit
+	 * hillside, and it can only be set by looking.
+	 */
+	float GExposureBias = 0.0f;
+
+	/**
+	 * A dim omnidirectional fill, so no surface is ever unlit.
+	 *
+	 * A sphere is the awkward case: two directional lights leave every normal facing away from both
+	 * of them at exactly zero, and on a planet you are constantly walking around into those. A sky
+	 * light is the right answer because it comes from everywhere, and the earlier attempt failed
+	 * only because it was set to capture a scene that is empty black space. Given a colour to emit
+	 * rather than a scene to photograph, it does the job it was always meant to.
+	 */
+	float GAmbientLux = 1.5f;
+
+	FAutoConsoleVariableRef CVarExposure(
+		TEXT("SpaceMMO.Exposure"),
+		GExposureBias,
+		TEXT("Manual exposure bias in stops. Negative darkens. Applies immediately."),
+		ECVF_Default);
+
+	FAutoConsoleVariableRef CVarAmbient(
+		TEXT("SpaceMMO.Ambient"),
+		GAmbientLux,
+		TEXT("Omnidirectional fill so nothing is pure black. Applies immediately."),
+		ECVF_Default);
 
 	FAutoConsoleVariableRef CVarKeyLight(
 		TEXT("SpaceMMO.KeyLight"),
@@ -66,6 +103,21 @@ void USpaceMMOWorldSubsystem::Tick(const float DeltaTime)
 	if (FillLight != nullptr && !FMath::IsNearlyEqual(FillLight->Intensity, GFillLightLux))
 	{
 		FillLight->SetIntensity(GFillLightLux);
+	}
+
+	if (AmbientLight != nullptr && !FMath::IsNearlyEqual(AmbientLight->Intensity, GAmbientLux))
+	{
+		AmbientLight->SetIntensity(GAmbientLux);
+
+		// A sky light caches what it emits, so changing the intensity alone changes nothing until
+		// it is told to look again. This is the line whose absence makes a live knob appear dead.
+		AmbientLight->RecaptureSky();
+	}
+
+	if (Exposure != nullptr
+		&& !FMath::IsNearlyEqual(Exposure->Settings.AutoExposureBias, GExposureBias))
+	{
+		Exposure->Settings.AutoExposureBias = GExposureBias;
 	}
 }
 
@@ -185,6 +237,55 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 			// terminators that read as a rendering fault rather than as lighting.
 			Component->SetCastShadows(false);
 		}
+	}
+
+	// Ambient, from a sky light told what to emit rather than asked to photograph the void.
+	//
+	// The previous sky light was left on SLS_CapturedScene, which captures the surroundings — and
+	// out here the surroundings are black. It dutifully captured nothing and multiplied it, which
+	// is why removing it changed so little and why the shadows have been absolutely black ever
+	// since. SLS_SpecifiedCubemap with no cubemap falls back to the light's own colour, which is
+	// exactly the constant ambient a sphere needs: every normal gets some light, whichever way the
+	// player has walked around the planet.
+	if (ASkyLight* AmbientActor = World->SpawnActor<ASkyLight>(
+		ASkyLight::StaticClass(), FTransform::Identity, SpawnParameters))
+	{
+		if (USkyLightComponent* Component = AmbientActor->GetLightComponent())
+		{
+			Component->SetMobility(EComponentMobility::Movable);
+			Component->SourceType = ESkyLightSourceType::SLS_SpecifiedCubemap;
+			Component->Cubemap = nullptr;
+
+			// Cool and dim, so it reads as starlight rather than as a second sun with no source.
+			Component->SetLightColor(FLinearColor(0.35f, 0.42f, 0.6f));
+			Component->SetIntensity(GAmbientLux);
+
+			// Both hemispheres. The default blacks out everything below the horizon, which on a
+			// sphere is half of every rock.
+			Component->bLowerHemisphereIsBlack = false;
+
+			AmbientLight = Component;
+		}
+	}
+
+	// An unbound post-process volume, purely to own the exposure.
+	//
+	// Disabling auto-exposure did not set a manual one; it just stopped the renderer adapting, and
+	// left whatever fixed value it defaults to. Nothing in the project has ever chosen the exposure
+	// this scene is viewed at, which is the difference between a lit surface and a white one.
+	if (APostProcessVolume* Volume = World->SpawnActor<APostProcessVolume>(
+		APostProcessVolume::StaticClass(), FTransform::Identity, SpawnParameters))
+	{
+		Volume->bUnbound = true;
+		Volume->BlendWeight = 1.0f;
+
+		Volume->Settings.bOverride_AutoExposureMethod = true;
+		Volume->Settings.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+
+		Volume->Settings.bOverride_AutoExposureBias = true;
+		Volume->Settings.AutoExposureBias = GExposureBias;
+
+		Exposure = Volume;
 	}
 #endif
 }
