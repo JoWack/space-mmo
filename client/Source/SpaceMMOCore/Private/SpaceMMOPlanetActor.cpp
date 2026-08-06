@@ -137,6 +137,21 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	// the same patch every frame.
 	ViewerProximity = FPlanetPhysics::ClassifyProximity(Planet, ViewerPosition, ViewerProximity);
 
+	// The sphere is a stand-in for a planet seen from away, and standing on one it is actively
+	// destructive. /Engine/BasicShapes/Sphere has thirty-odd segments, which is a sphere at a metre
+	// across and a polyhedron at twenty kilometres: every flat face dips kilometres below the true
+	// surface between its vertices, so the ground came with enormous flat planes cutting through it
+	// at hard angles. That is what made the terrain unreadable, and no amount of lighting was going
+	// to fix two surfaces disagreeing about where the ground is.
+	//
+	// Hiding it costs nothing at this range. The horizon on a planet this size is a few hundred
+	// metres from eye height, and the terrain patch spans four degrees of arc — well over a
+	// kilometre — so the patch already covers everything that can be seen from the ground.
+	if (Surface != nullptr)
+	{
+		Surface->SetVisibility(ViewerProximity != EPlanetProximity::Surface);
+	}
+
 	if (ViewerProximity == EPlanetProximity::Orbital)
 	{
 		if (TerrainPatch != nullptr)

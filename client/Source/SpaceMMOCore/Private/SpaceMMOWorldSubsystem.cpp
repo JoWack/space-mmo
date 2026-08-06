@@ -29,7 +29,7 @@ namespace
 	 * Negative darkens. This is the knob that decides whether 25 lux is a blown-out field or a lit
 	 * hillside, and it can only be set by looking.
 	 */
-	float GExposureBias = 0.0f;
+	float GExposureBias = 5.0f;
 
 	/**
 	 * A dim omnidirectional fill, so no surface is ever unlit.
