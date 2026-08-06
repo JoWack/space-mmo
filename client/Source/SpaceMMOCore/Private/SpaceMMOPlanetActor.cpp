@@ -438,7 +438,20 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		}
 	}
 
-	bPatchInGlobeComponent = GPatchIntoGlobe > 0.5f;
+	const bool bWantsGlobeComponent = GPatchIntoGlobe > 0.5f;
+
+	// Turning the experiment off has to give the planet back. The globe's component is holding the
+	// patch's mesh by then, and the globe is otherwise only built once at startup — so switching
+	// the flag back left a permanently black sky, which is a diagnostic that breaks the thing it
+	// was measuring.
+	if (bPatchInGlobeComponent && !bWantsGlobeComponent)
+	{
+		bPatchInGlobeComponent = false;
+
+		BuildGlobe();
+	}
+
+	bPatchInGlobeComponent = bWantsGlobeComponent;
 
 	UDynamicMeshComponent* const Target = bPatchInGlobeComponent ? Surface : GroundPatch;
 

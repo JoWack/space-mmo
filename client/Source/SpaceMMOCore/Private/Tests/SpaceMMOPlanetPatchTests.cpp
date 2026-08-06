@@ -1,4 +1,5 @@
 #include "Misc/AutomationTest.h"
+#include "SpaceMMOPlanetGlobe.h"
 #include "SpaceMMOPlanetPatch.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -55,6 +56,192 @@ bool FSpaceMMOPatchTopologyTest::RunTest(const FString& Parameters)
 
 	TestEqual(TEXT("No index escapes the vertex array"), OutOfRange, 0);
 	TestTrue(TEXT("Mesh reports itself valid"), Mesh.IsValid());
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchAgainstTheGlobeTest,
+	"SpaceMMO.Patch.AgainstTheGlobe",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchAgainstTheGlobeTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = PatchTestPlanet();
+	const FPlanetTerrainConfig Terrain = PatchTestTerrain();
+
+	// One of these draws and one does not, from the same height function through the same
+	// component. Everything checked so far has come back identical, so this prints the two side by
+	// side and lets the difference show itself rather than being guessed at.
+	FPlanetPatchConfig PatchConfig;
+	PatchConfig.Resolution = 129;
+	PatchConfig.AngularRadiusDegrees = 4.0;
+
+	const FPlanetPatchMesh Patch = FPlanetPatch::Build(Planet, Terrain, PatchConfig);
+
+	FPlanetGlobeConfig GlobeConfig;
+	GlobeConfig.Resolution = 24;
+
+	const FPlanetGlobeMesh Globe = FPlanetGlobe::Build(Planet, Terrain, GlobeConfig);
+
+	auto Describe = [this](
+		const TCHAR* Name,
+		const TArray<FVector>& Positions,
+		const TArray<FVector>& Normals,
+		const TArray<int32>& Triangles)
+	{
+		FBox Box(ForceInit);
+		double Longest = 0.0;
+		double Shortest = TNumericLimits<double>::Max();
+
+		for (const FVector& Position : Positions)
+		{
+			Box += Position;
+			Longest = FMath::Max(Longest, Position.Size());
+			Shortest = FMath::Min(Shortest, Position.Size());
+		}
+
+		double ShortestEdge = TNumericLimits<double>::Max();
+
+		for (int32 Index = 0; Index + 2 < Triangles.Num(); Index += 3)
+		{
+			ShortestEdge = FMath::Min(
+				ShortestEdge,
+				FVector::Dist(Positions[Triangles[Index]], Positions[Triangles[Index + 1]]));
+		}
+
+		AddInfo(FString::Printf(
+			TEXT("%s: %d verts, %d normals, %d tris, extent %s, |v| %.1f..%.1f cm, "
+				"shortest edge %.3f cm"),
+			Name,
+			Positions.Num(),
+			Normals.Num(),
+			Triangles.Num() / 3,
+			*Box.GetExtent().ToCompactString(),
+			Shortest,
+			Longest,
+			ShortestEdge));
+
+		return ShortestEdge;
+	};
+
+	const double PatchEdge =
+		Describe(TEXT("patch"), Patch.Positions, Patch.Normals, Patch.Triangles);
+
+	const double GlobeEdge =
+		Describe(TEXT("globe"), Globe.Positions, Globe.Normals, Globe.Triangles);
+
+	TestTrue(TEXT("Patch has a normal per vertex"), Patch.Normals.Num() == Patch.Positions.Num());
+	TestTrue(TEXT("Globe has a normal per vertex"), Globe.Normals.Num() == Globe.Positions.Num());
+
+	// An edge measured in thousandths of a centimetre across a mesh kilometres wide is the kind of
+	// ratio that collapses in single precision once the renderer converts, whatever it looked like
+	// in double.
+	TestTrue(
+		FString::Printf(TEXT("Patch's shortest edge is %.4f cm"), PatchEdge),
+		PatchEdge > 0.01);
+
+	TestTrue(
+		FString::Printf(TEXT("Globe's shortest edge is %.4f cm"), GlobeEdge),
+		GlobeEdge > 0.01);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchMeshIsFitToRenderTest,
+	"SpaceMMO.Patch.MeshIsFitToRender",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchMeshIsFitToRenderTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = PatchTestPlanet();
+	const FPlanetTerrainConfig Terrain = PatchTestTerrain();
+
+	// The patch's vertices do not draw even inside the component that draws the globe, so the fault
+	// is in these numbers. This looks for what stops a renderer dead rather than what looks wrong:
+	// a non-finite coordinate poisons the bounds, and a zero-length normal is not a direction.
+	for (const double Degrees : { 4.0, 60.0 })
+	{
+		FPlanetPatchConfig Config;
+		Config.Resolution = 129;
+		Config.AngularRadiusDegrees = Degrees;
+
+		const FPlanetPatchMesh Mesh = FPlanetPatch::Build(Planet, Terrain, Config);
+
+		int32 BadPositions = 0;
+		int32 BadNormals = 0;
+		int32 ShortNormals = 0;
+
+		for (const FVector& Position : Mesh.Positions)
+		{
+			if (Position.ContainsNaN())
+			{
+				++BadPositions;
+			}
+		}
+
+		for (const FVector& Normal : Mesh.Normals)
+		{
+			if (Normal.ContainsNaN())
+			{
+				++BadNormals;
+			}
+			else if (!FMath::IsNearlyEqual(Normal.Size(), 1.0, 0.01))
+			{
+				++ShortNormals;
+			}
+		}
+
+		TestEqual(
+			FString::Printf(TEXT("Non-finite positions at %.0f degrees"), Degrees),
+			BadPositions, 0);
+
+		TestEqual(
+			FString::Printf(TEXT("Non-finite normals at %.0f degrees"), Degrees),
+			BadNormals, 0);
+
+		TestEqual(
+			FString::Printf(TEXT("Normals that are not unit length at %.0f degrees"), Degrees),
+			ShortNormals, 0);
+
+		// A triangle with no area has no normal and no pixels, and enough of them can make a mesh
+		// the renderer declines to build buffers for.
+		int32 Degenerate = 0;
+
+		for (int32 Index = 0; Index + 2 < Mesh.Triangles.Num(); Index += 3)
+		{
+			const FVector A = Mesh.Positions[Mesh.Triangles[Index]];
+			const FVector B = Mesh.Positions[Mesh.Triangles[Index + 1]];
+			const FVector C = Mesh.Positions[Mesh.Triangles[Index + 2]];
+
+			if (FVector::CrossProduct(B - A, C - A).IsNearlyZero())
+			{
+				++Degenerate;
+			}
+		}
+
+		TestEqual(
+			FString::Printf(TEXT("Degenerate triangles at %.0f degrees"), Degrees),
+			Degenerate, 0);
+
+		// Duplicated vertices are what makes a grid non-manifold, and a non-manifold triangle is
+		// one FDynamicMesh3 refuses to append — which would leave the component holding fewer
+		// triangles than were handed to it.
+		int32 Duplicates = 0;
+
+		for (int32 Index = 1; Index < Mesh.Positions.Num(); ++Index)
+		{
+			if (Mesh.Positions[Index].Equals(Mesh.Positions[Index - 1], 0.0001))
+			{
+				++Duplicates;
+			}
+		}
+
+		TestEqual(
+			FString::Printf(TEXT("Coincident neighbouring vertices at %.0f degrees"), Degrees),
+			Duplicates, 0);
+	}
 
 	return true;
 }
