@@ -55,9 +55,15 @@ private:
 	UPROPERTY()
 	TObjectPtr<class UDirectionalLightComponent> FillLight;
 
-	/** Omnidirectional fill, so no normal on a sphere is ever completely unlit. */
+	/**
+	 * Six dim lights along the axes, standing in for ambient.
+	 *
+	 * A sky light would be the right tool and cannot work here: it reports what a sky is doing and
+	 * there is no sky, so it emits nothing however it is configured. Six directions is an ambient
+	 * cube by hand, and every normal faces at least three of them.
+	 */
 	UPROPERTY()
-	TObjectPtr<class USkyLightComponent> AmbientLight;
+	TArray<TObjectPtr<class UDirectionalLightComponent>> AmbientLights;
 
 	/** Owns the manual exposure. Without one the renderer uses a default nobody chose. */
 	UPROPERTY()

@@ -29,7 +29,7 @@ namespace
 	 * Negative darkens. This is the knob that decides whether 25 lux is a blown-out field or a lit
 	 * hillside, and it can only be set by looking.
 	 */
-	float GExposureBias = 5.0f;
+	float GExposureBias = 8.0f;
 
 	/**
 	 * A dim omnidirectional fill, so no surface is ever unlit.
@@ -105,13 +105,12 @@ void USpaceMMOWorldSubsystem::Tick(const float DeltaTime)
 		FillLight->SetIntensity(GFillLightLux);
 	}
 
-	if (AmbientLight != nullptr && !FMath::IsNearlyEqual(AmbientLight->Intensity, GAmbientLux))
+	for (UDirectionalLightComponent* Ambient : AmbientLights)
 	{
-		AmbientLight->SetIntensity(GAmbientLux);
-
-		// A sky light caches what it emits, so changing the intensity alone changes nothing until
-		// it is told to look again. This is the line whose absence makes a live knob appear dead.
-		AmbientLight->RecaptureSky();
+		if (Ambient != nullptr && !FMath::IsNearlyEqual(Ambient->Intensity, GAmbientLux))
+		{
+			Ambient->SetIntensity(GAmbientLux);
+		}
 	}
 
 	if (Exposure != nullptr
@@ -239,32 +238,45 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 		}
 	}
 
-	// Ambient, from a sky light told what to emit rather than asked to photograph the void.
+	// Ambient, built out of directional lights pointing six ways.
 	//
-	// The previous sky light was left on SLS_CapturedScene, which captures the surroundings — and
-	// out here the surroundings are black. It dutifully captured nothing and multiplied it, which
-	// is why removing it changed so little and why the shadows have been absolutely black ever
-	// since. SLS_SpecifiedCubemap with no cubemap falls back to the light's own colour, which is
-	// exactly the constant ambient a sphere needs: every normal gets some light, whichever way the
-	// player has walked around the planet.
-	if (ASkyLight* AmbientActor = World->SpawnActor<ASkyLight>(
-		ASkyLight::StaticClass(), FTransform::Identity, SpawnParameters))
+	// Two sky lights have now failed here for the same underlying reason: a sky light reports what
+	// a sky is doing, and there is no sky. Captured mode photographed empty space and emitted
+	// nothing; specified-cubemap mode with no cubemap also emits nothing, which is the version that
+	// shipped and did nothing at any value.
+	//
+	// Six dim lights along the axes is an ambient cube by hand. Every surface normal faces towards
+	// at least three of them, so nothing is ever unlit however far around the planet somebody has
+	// walked — which is the property a sphere actually needs and the one two opposed suns cannot
+	// give. Crude, but it is light that arrives, which beats a correct-looking configuration that
+	// emits nothing.
+	//
+	// Shadows off on all six. They exist to lift black, and six shadow-casting lights would both
+	// cost a great deal and reintroduce the darkness they were added to remove.
+	static const FVector AmbientDirections[] =
 	{
-		if (USkyLightComponent* Component = AmbientActor->GetLightComponent())
+		FVector::ForwardVector, -FVector::ForwardVector,
+		FVector::RightVector, -FVector::RightVector,
+		FVector::UpVector, -FVector::UpVector,
+	};
+
+	for (const FVector& Direction : AmbientDirections)
+	{
+		if (ADirectionalLight* AmbientActor = World->SpawnActor<ADirectionalLight>(
+			ADirectionalLight::StaticClass(),
+			FTransform(Direction.Rotation()),
+			SpawnParameters))
 		{
-			Component->SetMobility(EComponentMobility::Movable);
-			Component->SourceType = ESkyLightSourceType::SLS_SpecifiedCubemap;
-			Component->Cubemap = nullptr;
+			if (UDirectionalLightComponent* Component =
+				Cast<UDirectionalLightComponent>(AmbientActor->GetLightComponent()))
+			{
+				Component->SetMobility(EComponentMobility::Movable);
+				Component->SetIntensity(GAmbientLux);
+				Component->SetLightColor(FLinearColor(0.35f, 0.42f, 0.6f));
+				Component->SetCastShadows(false);
 
-			// Cool and dim, so it reads as starlight rather than as a second sun with no source.
-			Component->SetLightColor(FLinearColor(0.35f, 0.42f, 0.6f));
-			Component->SetIntensity(GAmbientLux);
-
-			// Both hemispheres. The default blacks out everything below the horizon, which on a
-			// sphere is half of every rock.
-			Component->bLowerHemisphereIsBlack = false;
-
-			AmbientLight = Component;
+				AmbientLights.Add(Component);
+			}
 		}
 	}
 
