@@ -201,26 +201,31 @@ void ASpaceMMOPlayerController::ClaimReadyJob()
 	ShowNotice(TEXT("Nothing ready to claim"), false);
 }
 
-TArray<FBackendInventoryItem> ASpaceMMOPlayerController::SellableHoldings() const
+TArray<FBackendInventoryItem> ASpaceMMOPlayerController::FilterSellable(
+	const TArray<FBackendInventoryItem>& Holdings)
 {
-	const USpaceMMOBackendClient* Client = Backend();
-
-	if (Client == nullptr)
-	{
-		return TArray<FBackendInventoryItem>();
-	}
-
 	// Station hangars only. An order is placed against goods at a station, so cargo riding along in
 	// a ship's hold cannot back one — and offering to sell it would produce a refusal the player
 	// could not act on.
-	TArray<FBackendInventoryItem> Sellable = Client->GetInventory().FilterByPredicate(
+	TArray<FBackendInventoryItem> Sellable = Holdings.FilterByPredicate(
 		[](const FBackendInventoryItem& Item)
-		{ return Item.Kind == StationHangarKind && Item.Quantity > 0; });
+		{
+			return Item.Kind == EBackendInventoryKind::StationHangar && Item.Quantity > 0;
+		});
 
 	Sellable.Sort([](const FBackendInventoryItem& A, const FBackendInventoryItem& B)
 		{ return A.Name < B.Name; });
 
 	return Sellable;
+}
+
+TArray<FBackendInventoryItem> ASpaceMMOPlayerController::SellableHoldings() const
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	return Client != nullptr
+		? FilterSellable(Client->GetInventory())
+		: TArray<FBackendInventoryItem>();
 }
 
 bool ASpaceMMOPlayerController::TryGetSelectedHolding(FBackendInventoryItem& OutItem) const

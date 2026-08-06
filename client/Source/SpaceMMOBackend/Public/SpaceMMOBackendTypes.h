@@ -125,6 +125,26 @@ struct SPACEMMOBACKEND_API FBackendSkill
 	int32 Level = 1;
 };
 
+/**
+ * Where a stack lives, mirroring InventoryKind on the server.
+ *
+ * The numbers are the wire contract and a server-side test pins them, because nothing here can
+ * tell a wrong value from a right one — a mismatch does not fail, it just quietly matches the
+ * wrong stacks.
+ */
+UENUM(BlueprintType)
+enum class EBackendInventoryKind : uint8
+{
+	/** On the character's person, and with them when they die. */
+	CharacterCarried = 0,
+
+	/** A ship's cargo hold: with the player rather than at the market. */
+	ShipHold = 1,
+
+	/** Rented storage at a station. The only place goods can back a market order. */
+	StationHangar = 2,
+};
+
 /** One stack in a character's inventory. */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendInventoryItem
@@ -154,16 +174,16 @@ struct SPACEMMOBACKEND_API FBackendInventoryItem
 	int64 FactionBuyPriceMinorUnits = 0;
 
 	/**
-	 * Where the stack is: 0 ship hold, 1 station hangar, mirroring the server.
+	 * Where the stack is.
 	 *
 	 * A market order can only be placed against goods sitting at the station it is placed at, so a
 	 * client that could not tell a hold from a hangar would offer to sell cargo that is with the
 	 * player rather than at the market.
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
-	int32 Kind = 0;
+	EBackendInventoryKind Kind = EBackendInventoryKind::CharacterCarried;
 
-	/** Which station holds it, or zero for a ship hold. */
+	/** Which station holds it, or zero for anything not at one. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 StationId = 0;
 };

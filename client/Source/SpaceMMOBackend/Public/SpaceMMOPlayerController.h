@@ -75,24 +75,6 @@ public:
 	static FString GroupDigits(int64 Value);
 
 	/**
-	 * Builds the industry panel's lines: what can be built, and what is cooking.
-	 *
-	 * Pure and static, like <see cref="BuildCharacterPanel"/>, so the selection arithmetic and the
-	 * have-versus-need arithmetic can be tested without a backend.
-	 *
-	 * <strong>It reports quantities but never decides eligibility.</strong> Showing "20/8" is
-	 * arithmetic over two numbers the server already sent. Concluding "you cannot build this" would
-	 * be a second implementation of the skill, tool, material and fee gates, free to disagree with
-	 * the real ones — so the player is always allowed to press, and the server answers.
-	 */
-	/**
-	 * Builds the quest panel's lines.
-	 *
-	 * Pure and static like the others, so the filtering can be tested without a backend. Finished
-	 * quests are deliberately dropped: a journal listing everything ever completed buries the one
-	 * line saying what to do next, which is the only line anybody is looking for.
-	 */
-	/**
 	 * Builds the market panel: what is selected, what it would list at, and the book around it.
 	 *
 	 * Pure and static like the others. Both sides are sorted towards the spread — asks ascending,
@@ -105,11 +87,40 @@ public:
 		const TArray<FBackendBookEntry>& Book,
 		int64 ListingPriceMinorUnits);
 
+	/**
+	 * Holdings that could back a sell order here: stocked station hangars, sorted as the panel
+	 * lists them.
+	 *
+	 * An order is placed against goods at a station, so cargo riding along in a ship's hold cannot
+	 * back one, and offering to sell it would produce a refusal the player could not act on.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
+	static TArray<FBackendInventoryItem> FilterSellable(
+		const TArray<FBackendInventoryItem>& Holdings);
+
+	/**
+	 * Builds the quest panel's lines.
+	 *
+	 * Pure and static like the others, so the filtering can be tested without a backend. Finished
+	 * quests are deliberately dropped: a journal listing everything ever completed buries the one
+	 * line saying what to do next, which is the only line anybody is looking for.
+	 */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Quests")
 	static TArray<FString> BuildQuestPanel(
 		const TArray<FBackendJournalEntry>& Journal,
 		const TArray<FBackendAvailableQuest>& Available);
 
+	/**
+	 * Builds the industry panel's lines: what can be built, and what is cooking.
+	 *
+	 * Pure and static, like <see cref="BuildCharacterPanel"/>, so the selection arithmetic and the
+	 * have-versus-need arithmetic can be tested without a backend.
+	 *
+	 * <strong>It reports quantities but never decides eligibility.</strong> Showing "20/8" is
+	 * arithmetic over two numbers the server already sent. Concluding "you cannot build this" would
+	 * be a second implementation of the skill, tool, material and fee gates, free to disagree with
+	 * the real ones — so the player is always allowed to press, and the server answers.
+	 */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Industry")
 	static TArray<FString> BuildIndustryPanel(
 		const TArray<FBackendRecipe>& Recipes,
@@ -235,7 +246,7 @@ private:
 	/** Accepts the first quest the server says is available. */
 	void AcceptNextQuest();
 
-	/** Holdings that could back a sell order here: station hangars only, sorted as the panel lists. */
+	/** <see cref="FilterSellable"/> over what the backend last sent. */
 	TArray<FBackendInventoryItem> SellableHoldings() const;
 
 	bool TryGetSelectedHolding(FBackendInventoryItem& OutItem) const;
@@ -256,9 +267,6 @@ private:
 
 	/** Units per market action. Small, like the faction parcel, and for the same reason. */
 	static constexpr int32 MarketParcel = 10;
-
-	/** InventoryKind.StationHangar on the server. Goods anywhere else cannot back an order. */
-	static constexpr int32 StationHangarKind = 1;
 
 	/**
 	 * Units sold per press. Deliberately small.

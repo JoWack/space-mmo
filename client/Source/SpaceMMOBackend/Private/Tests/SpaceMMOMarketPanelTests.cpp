@@ -34,6 +34,42 @@ namespace
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOMarketOffersOnlyWhatAStationHoldsTest,
+	"SpaceMMO.Market.OffersOnlyWhatAStationHolds",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOMarketOffersOnlyWhatAStationHoldsTest::RunTest(const FString& Parameters)
+{
+	// One stack of each kind, with the real wire numbers. The first version of this filter used a
+	// made-up numbering in which a hangar was 1, so it matched ship holds, found none, and the key
+	// that cycles holdings did nothing at all. Every other test still passed, because they built
+	// their inputs by hand and never went near the value the server actually sends.
+	TArray<FBackendInventoryItem> Holdings;
+
+	auto Add = [&Holdings](const TCHAR* Name, const EBackendInventoryKind Kind, const int32 Quantity)
+	{
+		FBackendInventoryItem Item;
+		Item.Name = Name;
+		Item.Kind = Kind;
+		Item.Quantity = Quantity;
+		Holdings.Add(Item);
+	};
+
+	Add(TEXT("Pocket Lint"), EBackendInventoryKind::CharacterCarried, 5);
+	Add(TEXT("Ferrite Plate"), EBackendInventoryKind::StationHangar, 20);
+	Add(TEXT("Cargo Ore"), EBackendInventoryKind::ShipHold, 40);
+	Add(TEXT("Empty Slot"), EBackendInventoryKind::StationHangar, 0);
+
+	const TArray<FBackendInventoryItem> Sellable =
+		ASpaceMMOPlayerController::FilterSellable(Holdings);
+
+	TestEqual(TEXT("Only the stocked hangar stack"), Sellable.Num(), 1);
+	TestEqual(TEXT("And it is the right one"), Sellable[0].Name, FString(TEXT("Ferrite Plate")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOMarketSortsTowardTheSpreadTest,
 	"SpaceMMO.Market.SortsTowardTheSpread",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

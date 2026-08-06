@@ -344,7 +344,7 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 
 		if (ReadInt64(Object, TEXT("kind"), Where))
 		{
-			Item.Kind = static_cast<int32>(Where);
+			Item.Kind = ToEnum(Where, EBackendInventoryKind::CharacterCarried, 2);
 		}
 
 		// Absent for a ship hold, which has no station. Zero reads as "not at a station", which is
