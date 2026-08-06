@@ -134,6 +134,9 @@ private:
 	/** True while the patch is borrowing the globe's component, for SpaceMMO.PatchIntoGlobe. */
 	bool bPatchInGlobeComponent = false;
 
+	/** Which SpaceMMO.PatchVariant the current mesh was built with, so a change forces a rebuild. */
+	int32 AppliedPatchVariant = 0;
+
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;
 };

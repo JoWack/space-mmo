@@ -388,7 +388,20 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 		&& FMath::Abs(DesiredDegrees - PatchAngularRadiusDegrees)
 			> PatchAngularRadiusDegrees * PatchWidthDriftFraction;
 
-	if (bHasPatch && !bDrifted && !bWrongWidth)
+	// A third reason: somebody changed what the patch should be made of.
+	//
+	// Without this the diagnostic switches did nothing visible and looked like answers. A wide
+	// patch tolerates eighteen degrees of drift before it rebuilds — kilometres of walking — so
+	// setting a variant and moving a little produced no rebuild at all, and three variants were
+	// reported as "did not draw" when they had never been built.
+	const int32 WantedVariant = FMath::RoundToInt(GPatchVariant);
+	const bool bWantsGlobeComponent = GPatchIntoGlobe > 0.5f;
+
+	const bool bRecipeChanged = bHasPatch
+		&& (WantedVariant != AppliedPatchVariant
+			|| bWantsGlobeComponent != bPatchInGlobeComponent);
+
+	if (bHasPatch && !bDrifted && !bWrongWidth && !bRecipeChanged)
 	{
 		return;
 	}
@@ -442,10 +455,15 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		}
 	}
 
-	if (Variant != 0)
-	{
-		UE_LOG(LogSpaceMMO, Log, TEXT("Patch variant %d in use."), Variant);
-	}
+	AppliedPatchVariant = Variant;
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Patch variant %d: %s."),
+		Variant,
+		Variant == 1 ? TEXT("flat, no terrain")
+			: Variant == 2 ? TEXT("low resolution")
+			: Variant == 3 ? TEXT("radial normals")
+			: TEXT("as built"));
 
 	if (!Patch.IsValid())
 	{
