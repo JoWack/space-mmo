@@ -4,6 +4,7 @@ using SpaceMMO.Data;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
 
 namespace SpaceMMO.Api.Endpoints;
@@ -24,12 +25,25 @@ public sealed record SkillResponse(string Key, string Name, SkillCategory Catego
 /// What a faction standing order pays per unit, or null if none buys it. Carried on the stack so a
 /// client can tell at a glance what it could turn into credits without a second request per item.
 /// </param>
+/// <param name="Kind">Which sort of container this stack is in.</param>
+/// <param name="StationId">
+/// Where it is, for a station hangar; null for a ship hold, which is wherever the ship is.
+/// </param>
+/// <remarks>
+/// <strong>A stack now says where it is, which it did not.</strong> The query returns every
+/// inventory a character owns, so a player holding ore in a ship and more at a station got two rows
+/// that were indistinguishable — and selling needs to know, because an order can only be placed
+/// against goods at the station it is placed at. It was a latent duplicate while everything was
+/// happening at one station; the market makes it load-bearing.
+/// </remarks>
 public sealed record InventoryItemResponse(
     int ItemDefId,
     string ItemKey,
     string Name,
     int Quantity,
-    long? FactionBuyPriceMinorUnits);
+    long? FactionBuyPriceMinorUnits,
+    InventoryKind Kind,
+    int? StationId);
 
 /// <summary>
 /// Character creation and read-only views of a character's progression and holdings.
@@ -239,7 +253,9 @@ public static class CharacterEndpoints
                 ii.Quantity,
                 ii.ItemDef.FactionBuyPrice != null
                     ? ii.ItemDef.FactionBuyPrice!.Value.MinorUnits
-                    : null))
+                    : null,
+                ii.Inventory!.Kind,
+                ii.Inventory.StationId))
             .ToListAsync(cancellation);
 
         return Results.Ok(items);

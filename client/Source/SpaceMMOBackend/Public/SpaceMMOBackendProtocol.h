@@ -67,6 +67,18 @@ public:
 	/** Parses a JSON array of industry jobs. */
 	static bool ParseIndustryJobs(const FString& Json, TArray<FBackendIndustryJob>& OutJobs);
 
+	/** Parses one station's order book for one item. */
+	static bool ParseBook(const FString& Json, TArray<FBackendBookEntry>& OutEntries);
+
+	/** JSON body for placing an order. Prices are minor units, never a decimal. */
+	static FString MakePlaceOrderBody(
+		int32 CharacterId,
+		int32 StationId,
+		int32 ItemDefId,
+		EBackendOrderSide Side,
+		int64 LimitPriceMinorUnits,
+		int32 Quantity);
+
 	/** Parses the quest journal, including each quest's active step. */
 	static bool ParseJournal(const FString& Json, TArray<FBackendJournalEntry>& OutEntries);
 

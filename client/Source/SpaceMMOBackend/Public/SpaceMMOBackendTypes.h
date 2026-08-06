@@ -152,6 +152,56 @@ struct SPACEMMOBACKEND_API FBackendInventoryItem
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int64 FactionBuyPriceMinorUnits = 0;
+
+	/**
+	 * Where the stack is: 0 ship hold, 1 station hangar, mirroring the server.
+	 *
+	 * A market order can only be placed against goods sitting at the station it is placed at, so a
+	 * client that could not tell a hold from a hangar would offer to sell cargo that is with the
+	 * player rather than at the market.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Kind = 0;
+
+	/** Which station holds it, or zero for a ship hold. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 StationId = 0;
+};
+
+/** Which side of the order book, mirroring the server. */
+UENUM(BlueprintType)
+enum class EBackendOrderSide : uint8
+{
+	/** A bid: somebody wants to buy at or below their price. */
+	Buy = 0,
+
+	/** An ask: somebody wants to sell at or above their price. */
+	Sell = 1,
+};
+
+/**
+ * One resting order on the book.
+ *
+ * Prices are int64 minor units the whole way, never a float. A price that survives a round trip
+ * through JSON as 12.34 can come back as 12.339999999999999, and in a market that eventually
+ * becomes a real credit somebody is owed.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendBookEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int64 OrderId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	EBackendOrderSide Side = EBackendOrderSide::Buy;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int64 PriceMinorUnits = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int32 QuantityRemaining = 0;
 };
 
 /** One material a recipe consumes, per run. */

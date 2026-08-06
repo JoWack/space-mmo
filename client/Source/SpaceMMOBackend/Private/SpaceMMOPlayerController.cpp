@@ -117,6 +117,15 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			TEXT("AcceptQuest"), IE_Pressed, this, &ASpaceMMOPlayerController::AcceptNextQuest);
 
 		InputComponent->BindAction(
+			TEXT("CycleHolding"), IE_Pressed, this, &ASpaceMMOPlayerController::CycleHolding);
+
+		InputComponent->BindAction(
+			TEXT("ListForSale"), IE_Pressed, this, &ASpaceMMOPlayerController::ListSelectedForSale);
+
+		InputComponent->BindAction(
+			TEXT("BuyFromMarket"), IE_Pressed, this, &ASpaceMMOPlayerController::BuyBestAsk);
+
+		InputComponent->BindAction(
 			TEXT("ToggleMouseCapture"),
 			IE_Pressed,
 			this,
@@ -190,6 +199,156 @@ void ASpaceMMOPlayerController::ClaimReadyJob()
 	}
 
 	ShowNotice(TEXT("Nothing ready to claim"), false);
+}
+
+TArray<FBackendInventoryItem> ASpaceMMOPlayerController::SellableHoldings() const
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr)
+	{
+		return TArray<FBackendInventoryItem>();
+	}
+
+	// Station hangars only. An order is placed against goods at a station, so cargo riding along in
+	// a ship's hold cannot back one — and offering to sell it would produce a refusal the player
+	// could not act on.
+	TArray<FBackendInventoryItem> Sellable = Client->GetInventory().FilterByPredicate(
+		[](const FBackendInventoryItem& Item)
+		{ return Item.Kind == StationHangarKind && Item.Quantity > 0; });
+
+	Sellable.Sort([](const FBackendInventoryItem& A, const FBackendInventoryItem& B)
+		{ return A.Name < B.Name; });
+
+	return Sellable;
+}
+
+bool ASpaceMMOPlayerController::TryGetSelectedHolding(FBackendInventoryItem& OutItem) const
+{
+	const TArray<FBackendInventoryItem> Sellable = SellableHoldings();
+
+	if (Sellable.Num() == 0)
+	{
+		return false;
+	}
+
+	OutItem = Sellable[FMath::Clamp(SelectedHoldingIndex, 0, Sellable.Num() - 1)];
+
+	return true;
+}
+
+int64 ASpaceMMOPlayerController::ListingPriceFor(const FBackendInventoryItem& Item)
+{
+	// Ten times what a faction pays, or ten credits for something no faction buys.
+	//
+	// A placeholder for a price box, and deliberately well clear of the faction floor: the floor
+	// exists to be the worst deal available, so a listing at or near it would teach a player that
+	// trading with other people is not worth the trouble.
+	return Item.FactionBuyPriceMinorUnits > 0
+		? Item.FactionBuyPriceMinorUnits * 10
+		: 1000;
+}
+
+void ASpaceMMOPlayerController::CycleHolding()
+{
+	const int32 Count = SellableHoldings().Num();
+
+	if (Count == 0)
+	{
+		return;
+	}
+
+	SelectedHoldingIndex = (SelectedHoldingIndex + 1) % Count;
+
+	RefreshBook();
+}
+
+void ASpaceMMOPlayerController::RefreshBook()
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	FBackendInventoryItem Selected;
+
+	if (Client != nullptr && TryGetSelectedHolding(Selected))
+	{
+		Client->FetchBook(StationId, Selected.ItemDefId);
+	}
+}
+
+void ASpaceMMOPlayerController::ListSelectedForSale()
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	FBackendInventoryItem Selected;
+
+	if (Client == nullptr || CharacterId == 0 || !TryGetSelectedHolding(Selected))
+	{
+		ShowNotice(TEXT("Nothing at this station to sell"), false);
+
+		return;
+	}
+
+	Client->PlaceOrder(
+		CharacterId,
+		StationId,
+		Selected.ItemDefId,
+		EBackendOrderSide::Sell,
+		ListingPriceFor(Selected),
+		FMath::Min(Selected.Quantity, MarketParcel));
+}
+
+void ASpaceMMOPlayerController::BuyBestAsk()
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	FBackendInventoryItem Selected;
+
+	if (Client == nullptr || CharacterId == 0 || !TryGetSelectedHolding(Selected))
+	{
+		return;
+	}
+
+	// The book on screen might be another item's if a request is still in flight. Buying against
+	// the wrong one would spend real credits on something the player never looked at.
+	if (Client->GetBookItemDefId() != Selected.ItemDefId)
+	{
+		ShowNotice(TEXT("Book still loading"), false);
+
+		return;
+	}
+
+	const FBackendBookEntry* Best = nullptr;
+
+	for (const FBackendBookEntry& Entry : Client->GetBook())
+	{
+		if (Entry.Side != EBackendOrderSide::Sell || Entry.QuantityRemaining <= 0)
+		{
+			continue;
+		}
+
+		if (Best == nullptr || Entry.PriceMinorUnits < Best->PriceMinorUnits)
+		{
+			Best = &Entry;
+		}
+	}
+
+	if (Best == nullptr)
+	{
+		ShowNotice(TEXT("Nothing on sale here"), false);
+
+		return;
+	}
+
+	// A limit at the best ask rather than a market order. The engine crosses it immediately against
+	// that ask, and if somebody else takes it first this rests on the book instead of chasing the
+	// price upward — which is what a market order would do and is never what anybody meant.
+	Client->PlaceOrder(
+		CharacterId,
+		StationId,
+		Selected.ItemDefId,
+		EBackendOrderSide::Buy,
+		Best->PriceMinorUnits,
+		FMath::Min(Best->QuantityRemaining, MarketParcel));
 }
 
 void ASpaceMMOPlayerController::AcceptNextQuest()
@@ -339,6 +498,9 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 	// the same class of bug as the frozen balance.
 	Client->FetchQuests(CharacterId);
 
+	// The book too, since a fill by somebody else changes it without this client doing anything.
+	RefreshBook();
+
 	if (!bIndustryBound)
 	{
 		bIndustryBound = true;
@@ -395,6 +557,12 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 
 	Lines.Append(BuildQuestPanel(Client->GetJournal(), Client->GetAvailableQuests()));
 
+	FBackendInventoryItem Selling;
+
+	Lines.Append(TryGetSelectedHolding(Selling)
+		? BuildMarketPanel(Selling.Name, Client->GetBook(), ListingPriceFor(Selling))
+		: BuildMarketPanel(FString(), TArray<FBackendBookEntry>(), 0));
+
 	Lines.Append(BuildIndustryPanel(
 		Client->GetRecipes(), Client->GetJobs(), Client->GetInventory(), SelectedRecipeIndex));
 
@@ -422,6 +590,72 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 	// order and cannot be shuffled. It also removes the need to clear unused rows.
 	GEngine->AddOnScreenDebugMessage(
 		PanelMessageKey, 0.0f, FColor::White, FString::Join(Lines, TEXT("\n")));
+}
+
+TArray<FString> ASpaceMMOPlayerController::BuildMarketPanel(
+	const FString& ItemName,
+	const TArray<FBackendBookEntry>& Book,
+	const int64 ListingPriceMinorUnits)
+{
+	TArray<FString> Lines;
+
+	Lines.Add(TEXT("-- Market --  H item  N list 10  B buy"));
+
+	if (ItemName.IsEmpty())
+	{
+		Lines.Add(TEXT("   nothing here a station can sell"));
+
+		return Lines;
+	}
+
+	Lines.Add(FString::Printf(
+		TEXT("   %s   N lists @ %s cr"),
+		*ItemName,
+		*FSpaceMMOBackendProtocol::FormatCredits(ListingPriceMinorUnits)));
+
+	// Asks ascending, so the first is what a buyer would pay; bids descending, so the first is what
+	// a seller would get. Showing them in book order instead would put the least relevant price at
+	// the top of each side, which is the wrong way round for someone deciding whether to trade.
+	TArray<FBackendBookEntry> Asks = Book.FilterByPredicate(
+		[](const FBackendBookEntry& E) { return E.Side == EBackendOrderSide::Sell; });
+
+	TArray<FBackendBookEntry> Bids = Book.FilterByPredicate(
+		[](const FBackendBookEntry& E) { return E.Side == EBackendOrderSide::Buy; });
+
+	Asks.Sort([](const FBackendBookEntry& A, const FBackendBookEntry& B)
+		{ return A.PriceMinorUnits < B.PriceMinorUnits; });
+
+	Bids.Sort([](const FBackendBookEntry& A, const FBackendBookEntry& B)
+		{ return A.PriceMinorUnits > B.PriceMinorUnits; });
+
+	auto AppendSide = [&Lines](const TCHAR* Label, const TArray<FBackendBookEntry>& Side)
+	{
+		if (Side.Num() == 0)
+		{
+			Lines.Add(FString::Printf(TEXT("      %s: none"), Label));
+
+			return;
+		}
+
+		FString Row;
+
+		// Three deep. A debug panel that printed a whole book would push everything else off the
+		// screen, and the prices that matter are the ones nearest the spread.
+		for (int32 Index = 0; Index < FMath::Min(3, Side.Num()); ++Index)
+		{
+			Row += FString::Printf(
+				TEXT("  %s x%d"),
+				*FSpaceMMOBackendProtocol::FormatCredits(Side[Index].PriceMinorUnits),
+				Side[Index].QuantityRemaining);
+		}
+
+		Lines.Add(FString::Printf(TEXT("      %s:%s"), Label, *Row));
+	};
+
+	AppendSide(TEXT("asks"), Asks);
+	AppendSide(TEXT("bids"), Bids);
+
+	return Lines;
 }
 
 TArray<FString> ASpaceMMOPlayerController::BuildQuestPanel(

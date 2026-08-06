@@ -631,6 +631,77 @@ void USpaceMMOBackendClient::SellToFaction(
 		});
 }
 
+void USpaceMMOBackendClient::FetchBook(const int32 StationId, const int32 ItemDefId)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/market/book?stationId=%d&itemDefId=%d"), StationId, ItemDefId),
+		FString(),
+		false,
+		[WeakThis, ItemDefId](const FString& Body)
+		{
+			USpaceMMOBackendClient* Self = WeakThis.Get();
+
+			if (Self == nullptr)
+			{
+				return;
+			}
+
+			TArray<FBackendBookEntry> Parsed;
+
+			FSpaceMMOBackendProtocol::ParseBook(Body, Parsed);
+
+			Self->Book = MoveTemp(Parsed);
+
+			// Recorded alongside, so a book that arrives after the player has moved on is known to
+			// be for the wrong item rather than displayed as the right one's. Two requests in
+			// flight can land in either order.
+			Self->BookItemDefId = ItemDefId;
+
+			Self->OnIndustryChanged.Broadcast();
+		});
+}
+
+void USpaceMMOBackendClient::PlaceOrder(
+	const int32 CharacterId,
+	const int32 StationId,
+	const int32 ItemDefId,
+	const EBackendOrderSide Side,
+	const int64 LimitPriceMinorUnits,
+	const int32 Quantity)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/market/orders"),
+		FSpaceMMOBackendProtocol::MakePlaceOrderBody(
+			CharacterId, StationId, ItemDefId, Side, LimitPriceMinorUnits, Quantity),
+		true,
+		[WeakThis, CharacterId, StationId, ItemDefId, Side](const FString&)
+		{
+			USpaceMMOBackendClient* Self = WeakThis.Get();
+
+			if (Self == nullptr)
+			{
+				return;
+			}
+
+			Self->OnIndustryMessage.Broadcast(
+				Side == EBackendOrderSide::Sell ? TEXT("Listed for sale") : TEXT("Buy order placed"),
+				true);
+
+			// An order can match the instant it is placed, so goods, credits and the book can all
+			// have changed by the time this returns. Asking for all three is cheaper than reasoning
+			// about which of them a fill touched.
+			Self->SelectCharacter(CharacterId);
+			Self->FetchCharacters();
+			Self->FetchBook(StationId, ItemDefId);
+		});
+}
+
 void USpaceMMOBackendClient::FetchQuests(const int32 CharacterId)
 {
 	Send(

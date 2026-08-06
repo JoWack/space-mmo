@@ -92,6 +92,19 @@ public:
 	 * quests are deliberately dropped: a journal listing everything ever completed buries the one
 	 * line saying what to do next, which is the only line anybody is looking for.
 	 */
+	/**
+	 * Builds the market panel: what is selected, what it would list at, and the book around it.
+	 *
+	 * Pure and static like the others. Both sides are sorted towards the spread — asks ascending,
+	 * bids descending — because book order puts the least relevant price at the top of each side,
+	 * which is backwards for somebody deciding whether to trade.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
+	static TArray<FString> BuildMarketPanel(
+		const FString& ItemName,
+		const TArray<FBackendBookEntry>& Book,
+		int64 ListingPriceMinorUnits);
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Quests")
 	static TArray<FString> BuildQuestPanel(
 		const TArray<FBackendJournalEntry>& Journal,
@@ -221,6 +234,31 @@ private:
 
 	/** Accepts the first quest the server says is available. */
 	void AcceptNextQuest();
+
+	/** Holdings that could back a sell order here: station hangars only, sorted as the panel lists. */
+	TArray<FBackendInventoryItem> SellableHoldings() const;
+
+	bool TryGetSelectedHolding(FBackendInventoryItem& OutItem) const;
+
+	/** Stand-in for a price box. Well clear of the faction floor, which exists to be the worst deal. */
+	static int64 ListingPriceFor(const FBackendInventoryItem& Item);
+
+	void CycleHolding();
+
+	void RefreshBook();
+
+	void ListSelectedForSale();
+
+	void BuyBestAsk();
+
+	/** Which sellable holding the H key has landed on. */
+	int32 SelectedHoldingIndex = 0;
+
+	/** Units per market action. Small, like the faction parcel, and for the same reason. */
+	static constexpr int32 MarketParcel = 10;
+
+	/** InventoryKind.StationHangar on the server. Goods anywhere else cannot back an order. */
+	static constexpr int32 StationHangarKind = 1;
 
 	/**
 	 * Units sold per press. Deliberately small.

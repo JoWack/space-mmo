@@ -200,6 +200,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
 	void SellToFaction(int32 CharacterId, int32 StationId, int32 ItemDefId, int32 Quantity);
 
+	/** Loads one station's order book for one item. Unauthenticated: a book is public. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Market")
+	void FetchBook(int32 StationId, int32 ItemDefId);
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
+	const TArray<FBackendBookEntry>& GetBook() const { return Book; }
+
+	/** Which item the loaded book is for, so a stale one is not read as the wrong item's. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
+	int32 GetBookItemDefId() const { return BookItemDefId; }
+
+	/**
+	 * Places an order.
+	 *
+	 * The server escrows, matches and settles; this only asks. A sell needs the goods at that
+	 * station and a buy needs the credits, and both are checked there rather than here.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Market")
+	void PlaceOrder(
+		int32 CharacterId,
+		int32 StationId,
+		int32 ItemDefId,
+		EBackendOrderSide Side,
+		int64 LimitPriceMinorUnits,
+		int32 Quantity);
+
 	/** Loads the journal and the list of quests that could be taken. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Quests")
 	void FetchQuests(int32 CharacterId);
@@ -350,6 +376,12 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendAvailableQuest> AvailableQuests;
+
+	UPROPERTY()
+	TArray<FBackendBookEntry> Book;
+
+	/** Which item Book holds orders for. Zero until one has been read. */
+	int32 BookItemDefId = 0;
 
 	int32 SelectedCharacterId = 0;
 };

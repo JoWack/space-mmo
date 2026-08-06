@@ -340,6 +340,20 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 			Item.FactionBuyPriceMinorUnits = FactionPrice;
 		}
 
+		int64 Where = 0;
+
+		if (ReadInt64(Object, TEXT("kind"), Where))
+		{
+			Item.Kind = static_cast<int32>(Where);
+		}
+
+		// Absent for a ship hold, which has no station. Zero reads as "not at a station", which is
+		// what the market needs to know and the only distinction it acts on.
+		if (ReadInt64(Object, TEXT("stationId"), Where))
+		{
+			Item.StationId = static_cast<int32>(Where);
+		}
+
 		OutItems.Add(Item);
 	}
 
@@ -594,6 +608,73 @@ bool FSpaceMMOBackendProtocol::ParseAvailableQuests(
 	}
 
 	return true;
+}
+
+bool FSpaceMMOBackendProtocol::ParseBook(
+	const FString& Json, TArray<FBackendBookEntry>& OutEntries)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutEntries.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+		FBackendBookEntry Entry;
+
+		int64 OrderId = 0;
+
+		// An order with no id cannot be acted on, and a book is a list of things to act on.
+		if (!Object.IsValid() || !ReadInt64(Object, TEXT("orderId"), OrderId) || OrderId <= 0)
+		{
+			continue;
+		}
+
+		Entry.OrderId = OrderId;
+
+		int64 Scratch = 0;
+
+		if (ReadInt64(Object, TEXT("side"), Scratch))
+		{
+			Entry.Side = ToEnum(Scratch, EBackendOrderSide::Buy, 1);
+		}
+
+		ReadInt64(Object, TEXT("priceMinorUnits"), Entry.PriceMinorUnits);
+
+		if (ReadInt64(Object, TEXT("quantityRemaining"), Scratch))
+		{
+			Entry.QuantityRemaining = static_cast<int32>(Scratch);
+		}
+
+		OutEntries.Add(Entry);
+	}
+
+	return true;
+}
+
+FString FSpaceMMOBackendProtocol::MakePlaceOrderBody(
+	const int32 CharacterId,
+	const int32 StationId,
+	const int32 ItemDefId,
+	const EBackendOrderSide Side,
+	const int64 LimitPriceMinorUnits,
+	const int32 Quantity)
+{
+	return FString::Printf(
+		TEXT("{\"characterId\":%d,\"stationId\":%d,\"itemDefId\":%d,\"side\":%d,")
+		TEXT("\"limitPriceMinorUnits\":%lld,\"quantity\":%d}"),
+		CharacterId,
+		StationId,
+		ItemDefId,
+		static_cast<int32>(Side),
+		LimitPriceMinorUnits,
+		Quantity);
 }
 
 FString FSpaceMMOBackendProtocol::MakeAcceptQuestBody(
