@@ -56,14 +56,14 @@ private:
 	TObjectPtr<class UDirectionalLightComponent> FillLight;
 
 	/**
-	 * Six dim lights along the axes, standing in for ambient.
+	 * Omnidirectional fill, so a surface angled away from the sun is dim rather than black.
 	 *
-	 * A sky light would be the right tool and cannot work here: it reports what a sky is doing and
-	 * there is no sky, so it emits nothing however it is configured. Six directions is an ambient
-	 * cube by hand, and every normal faces at least three of them.
+	 * A sky light with an explicit cubemap rather than a captured one. Captured mode photographs
+	 * the surroundings, and out here they are empty space — which is why the first two attempts at
+	 * this emitted nothing at any intensity.
 	 */
 	UPROPERTY()
-	TArray<TObjectPtr<class UDirectionalLightComponent>> AmbientLights;
+	TObjectPtr<class USkyLightComponent> SkyLight;
 
 	/** Owns the manual exposure. Without one the renderer uses a default nobody chose. */
 	UPROPERTY()

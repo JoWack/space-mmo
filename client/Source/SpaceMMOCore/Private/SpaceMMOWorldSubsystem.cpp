@@ -5,6 +5,7 @@
 #include "Engine/DirectionalLight.h"
 #include "Engine/PostProcessVolume.h"
 #include "Engine/SkyLight.h"
+#include "Engine/TextureCube.h"
 #include "Engine/World.h"
 #include "SpaceMMOLog.h"
 #include "SpaceMMOPlanetActor.h"
@@ -54,10 +55,26 @@ namespace
 		TEXT("Omnidirectional fill so nothing is pure black. Applies immediately."),
 		ECVF_Default);
 
+	/**
+	 * Whether the key light casts shadows at all.
+	 *
+	 * A toggle rather than a decision, because "this ground is dark" has two completely different
+	 * causes — no light reaching it, or light reaching it and being shadowed out — and they are
+	 * indistinguishable by looking. One keypress separates them.
+	 */
+	float GKeyLightShadows = 1.0f;
+
 	FAutoConsoleVariableRef CVarKeyLight(
 		TEXT("SpaceMMO.KeyLight"),
 		GKeyLightLux,
 		TEXT("Key light intensity in lux. Applies immediately."),
+		ECVF_Default);
+
+	FAutoConsoleVariableRef CVarKeyLightShadows(
+		TEXT("SpaceMMO.KeyShadows"),
+		GKeyLightShadows,
+		TEXT("1 for key light shadows, 0 for none. Dark ground that lights up at 0 was shadowed, "
+			"not unlit. Applies immediately."),
 		ECVF_Default);
 
 	FAutoConsoleVariableRef CVarFillLight(
@@ -100,17 +117,24 @@ void USpaceMMOWorldSubsystem::Tick(const float DeltaTime)
 		KeyLight->SetIntensity(GKeyLightLux);
 	}
 
+	if (KeyLight != nullptr)
+	{
+		const bool bWanted = GKeyLightShadows > 0.5f;
+
+		if (KeyLight->CastShadows != bWanted)
+		{
+			KeyLight->SetCastShadows(bWanted);
+		}
+	}
+
 	if (FillLight != nullptr && !FMath::IsNearlyEqual(FillLight->Intensity, GFillLightLux))
 	{
 		FillLight->SetIntensity(GFillLightLux);
 	}
 
-	for (UDirectionalLightComponent* Ambient : AmbientLights)
+	if (SkyLight != nullptr && !FMath::IsNearlyEqual(SkyLight->Intensity, GAmbientLux))
 	{
-		if (Ambient != nullptr && !FMath::IsNearlyEqual(Ambient->Intensity, GAmbientLux))
-		{
-			Ambient->SetIntensity(GAmbientLux);
-		}
+		SkyLight->SetIntensity(GAmbientLux);
 	}
 
 	if (Exposure != nullptr
@@ -210,6 +234,28 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 			Component->SetMobility(EComponentMobility::Movable);
 			Component->SetIntensity(GKeyLightLux);
 
+			// Shadow settings for a planet rather than for a room.
+			//
+			// The defaults assume a scene a few hundred metres across: cascades stop at 200 m, and
+			// the depth bias is scaled for surfaces a few metres apart. Here a single terrain mesh
+			// spans kilometres, so within the cascade range it shadows itself — the ground goes
+			// black out to the last cascade and then snaps to fully lit beyond it, which reads as a
+			// bright band at a fixed distance from the camera rather than as light at all.
+			//
+			// Further cascades and a much larger bias trade shadow crispness, which nothing here
+			// needs, for ground that is lit where the sun is above it.
+			Component->DynamicShadowDistanceMovableLight = 400000.0f;
+			Component->DynamicShadowCascades = 4;
+			Component->ShadowBias = 3.0f;
+			Component->ShadowSlopeBias = 3.0f;
+
+			// Names this as the sun. With more than one directional light the renderer has to pick
+			// one for forward shading, translucency and fog, and it warns on screen that it is
+			// guessing by brightness — which means the choice could change when a light is dimmed.
+			Component->ForwardShadingPriority = 1;
+
+			Component->MarkRenderStateDirty();
+
 			KeyLight = Component;
 		}
 	}
@@ -244,45 +290,52 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 		}
 	}
 
-	// Ambient, built out of directional lights pointing six ways.
+	// Ambient, from a sky light that has been given something to emit.
 	//
-	// Two sky lights have now failed here for the same underlying reason: a sky light reports what
-	// a sky is doing, and there is no sky. Captured mode photographed empty space and emitted
-	// nothing; specified-cubemap mode with no cubemap also emits nothing, which is the version that
-	// shipped and did nothing at any value.
+	// Three attempts got this wrong in the same way. A sky light in captured mode photographs its
+	// surroundings, and out here the surroundings are empty black space, so it captured black.
+	// Specified-cubemap mode with no cubemap assigned emits nothing either. Six dim directional
+	// lights along the axes replaced it and looked reasonable in code, but the renderer does not
+	// treat a crowd of directional lights as an ambient cube — the engine says so on screen, and
+	// the proof was a frame with blown-out white ore sitting on black ground, which cannot happen
+	// if every normal is receiving light from three directions at once.
 	//
-	// Six dim lights along the axes is an ambient cube by hand. Every surface normal faces towards
-	// at least three of them, so nothing is ever unlit however far around the planet somebody has
-	// walked — which is the property a sphere actually needs and the one two opposed suns cannot
-	// give. Crude, but it is light that arrives, which beats a correct-looking configuration that
-	// emits nothing.
-	//
-	// Shadows off on all six. They exist to lift black, and six shadow-casting lights would both
-	// cost a great deal and reintroduce the darkness they were added to remove.
-	static const FVector AmbientDirections[] =
+	// The missing piece was never the mechanism, it was the cubemap. The engine ships one.
+	if (ASkyLight* SkyLightActor = World->SpawnActor<ASkyLight>(
+		ASkyLight::StaticClass(), FTransform::Identity, SpawnParameters))
 	{
-		FVector::ForwardVector, -FVector::ForwardVector,
-		FVector::RightVector, -FVector::RightVector,
-		FVector::UpVector, -FVector::UpVector,
-	};
-
-	for (const FVector& Direction : AmbientDirections)
-	{
-		if (ADirectionalLight* AmbientActor = World->SpawnActor<ADirectionalLight>(
-			ADirectionalLight::StaticClass(),
-			FTransform(Direction.Rotation()),
-			SpawnParameters))
+		if (USkyLightComponent* Component = SkyLightActor->GetLightComponent())
 		{
-			if (UDirectionalLightComponent* Component =
-				Cast<UDirectionalLightComponent>(AmbientActor->GetLightComponent()))
-			{
-				Component->SetMobility(EComponentMobility::Movable);
-				Component->SetIntensity(GAmbientLux);
-				Component->SetLightColor(FLinearColor(0.35f, 0.42f, 0.6f));
-				Component->SetCastShadows(false);
+			Component->SetMobility(EComponentMobility::Movable);
+			Component->SourceType = ESkyLightSourceType::SLS_SpecifiedCubemap;
 
-				AmbientLights.Add(Component);
+			// LoadObject rather than a ConstructorHelpers finder: this runs when the world starts,
+			// and a finder outside a constructor asserts.
+			UTextureCube* AmbientCubemap = LoadObject<UTextureCube>(
+				nullptr,
+				TEXT("/Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap"));
+
+			if (AmbientCubemap != nullptr)
+			{
+				Component->Cubemap = AmbientCubemap;
 			}
+			else
+			{
+				UE_LOG(LogSpaceMMO, Warning,
+					TEXT("No ambient cubemap found; the sky light will emit nothing, as before."));
+			}
+
+			// The lower hemisphere is not black, because on a sphere there is no such thing as a
+			// surface that only faces up. Walk far enough and what was the underside is the ground.
+			Component->bLowerHemisphereIsBlack = false;
+
+			Component->SetIntensity(GAmbientLux);
+			Component->SetLightColor(FLinearColor(0.55f, 0.62f, 0.85f));
+
+			// A specified cubemap still has to be processed before it lights anything.
+			Component->RecaptureSky();
+
+			SkyLight = Component;
 		}
 	}
 
