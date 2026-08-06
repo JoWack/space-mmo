@@ -60,12 +60,21 @@ ASpaceMMOPlanetActor::ASpaceMMOPlanetActor()
 	// remarkably bad thing to hand the solver.
 	Surface->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// A sibling of the globe, not a child, so hiding one never hides the other.
+	GroundPatch = CreateDefaultSubobject<UDynamicMeshComponent>(TEXT("GroundPatch"));
+	GroundPatch->SetupAttachment(Surface);
+	GroundPatch->SetUsingAbsoluteLocation(true);
+	GroundPatch->SetUsingAbsoluteRotation(true);
+	GroundPatch->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GroundPatch->SetVisibility(false);
+
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> SphereMaterial(
 		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 
 	if (SphereMaterial.Succeeded())
 	{
 		Surface->SetMaterial(0, SphereMaterial.Object);
+		GroundPatch->SetMaterial(0, SphereMaterial.Object);
 	}
 }
 
@@ -278,17 +287,14 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	// everything the viewer could see.
 	if (Surface != nullptr)
 	{
-		const bool bShowGlobe = TerrainPatch == nullptr || GHideGlobeUnderPatch <= 0.5f;
+		const bool bShowGlobe = !bHasPatch || GHideGlobeUnderPatch <= 0.5f;
 
-		// Logged on change, because the two candidate explanations for missing ground differ on
-		// exactly this: either the patch is drawing and has a hole in it, or the patch is not
-		// drawing and what remains on screen is the globe. They look identical from the outside.
 		if (Surface->IsVisible() != bShowGlobe)
 		{
 			UE_LOG(LogSpaceMMO, Log,
 				TEXT("Globe %s (terrain patch %s)."),
 				bShowGlobe ? TEXT("shown") : TEXT("hidden"),
-				TerrainPatch == nullptr ? TEXT("absent") : TEXT("present"));
+				bHasPatch ? TEXT("present") : TEXT("absent"));
 		}
 
 		Surface->SetVisibility(bShowGlobe);
@@ -296,14 +302,18 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 
 	if (ViewerProximity == EPlanetProximity::Orbital)
 	{
-		if (TerrainPatch != nullptr)
+		if (bHasPatch)
 		{
 			UE_LOG(LogSpaceMMO, Log, TEXT("Left the atmosphere; releasing terrain patch."));
 
-			TerrainPatch->Destroy();
-			TerrainPatch = nullptr;
+			bHasPatch = false;
 			PatchDirection = FVector::ZeroVector;
 			PatchAngularRadiusDegrees = 0.0;
+
+			if (GroundPatch != nullptr)
+			{
+				GroundPatch->SetVisibility(false);
+			}
 
 			if (Surface != nullptr)
 			{
@@ -327,37 +337,15 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 
 	// Two reasons to rebuild: the viewer has walked far enough across the patch, or climbed far
 	// enough that the patch no longer reaches their horizon.
-	const bool bDrifted = TerrainPatch != nullptr
+	const bool bDrifted = bHasPatch
 		&& FPlanetPatch::ShouldRebuild(PatchDirection, ViewerDirection, PatchAngularRadiusDegrees);
 
-	const bool bWrongWidth = TerrainPatch != nullptr
+	const bool bWrongWidth = bHasPatch
 		&& PatchAngularRadiusDegrees > 0.0
 		&& FMath::Abs(DesiredDegrees - PatchAngularRadiusDegrees)
 			> PatchAngularRadiusDegrees * PatchWidthDriftFraction;
 
-	if (TerrainPatch != nullptr && !bDrifted && !bWrongWidth)
-	{
-		return;
-	}
-
-	UWorld* World = GetWorld();
-
-	if (World == nullptr)
-	{
-		return;
-	}
-
-	if (TerrainPatch == nullptr)
-	{
-		FActorSpawnParameters SpawnParameters;
-		SpawnParameters.SpawnCollisionHandlingOverride =
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		TerrainPatch = World->SpawnActor<ASpaceMMOTerrainPatchActor>(
-			ASpaceMMOTerrainPatchActor::StaticClass(), FTransform::Identity, SpawnParameters);
-	}
-
-	if (TerrainPatch == nullptr)
+	if (bHasPatch && !bDrifted && !bWrongWidth)
 	{
 		return;
 	}
@@ -365,8 +353,82 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	PatchDirection = ViewerDirection;
 	PatchAngularRadiusDegrees = DesiredDegrees;
 
-	TerrainPatch->SetAngularRadiusDegrees(PatchAngularRadiusDegrees);
-	TerrainPatch->BuildPatch(Planet, TerrainConfig, ViewerDirection);
+	BuildPatch(ViewerDirection);
+}
+
+void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
+{
+	if (GroundPatch == nullptr)
+	{
+		return;
+	}
+
+	FPlanetPatchConfig Config;
+	Config.CentreDirection = Direction;
+	Config.AngularRadiusDegrees = PatchAngularRadiusDegrees;
+
+	const FPlanetPatchMesh Patch = FPlanetPatch::Build(Planet, TerrainConfig, Config);
+
+	if (!Patch.IsValid())
+	{
+		UE_LOG(LogSpaceMMO, Warning, TEXT("Terrain patch generated nothing."));
+
+		return;
+	}
+
+	PatchOrigin = Patch.Origin;
+
+	FDynamicMesh3 Mesh;
+	Mesh.EnableAttributes();
+
+	for (const FVector& Position : Patch.Positions)
+	{
+		Mesh.AppendVertex(FVector3d(Position));
+	}
+
+	for (int32 Index = 0; Index + 2 < Patch.Triangles.Num(); Index += 3)
+	{
+		Mesh.AppendTriangle(
+			Patch.Triangles[Index], Patch.Triangles[Index + 1], Patch.Triangles[Index + 2]);
+	}
+
+	if (FDynamicMeshNormalOverlay* Normals =
+		Mesh.Attributes() != nullptr ? Mesh.Attributes()->PrimaryNormals() : nullptr)
+	{
+		Normals->ClearElements();
+
+		TArray<int32> Elements;
+		Elements.Reserve(Patch.Normals.Num());
+
+		for (const FVector& Normal : Patch.Normals)
+		{
+			Elements.Add(Normals->AppendElement(FVector3f(Normal)));
+		}
+
+		for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+		{
+			const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
+
+			Normals->SetTriangle(
+				TriangleId,
+				FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
+		}
+	}
+
+	GroundPatch->SetMesh(MoveTemp(Mesh));
+	GroundPatch->NotifyMeshUpdated();
+	GroundPatch->SetVisibility(true);
+
+	bHasPatch = true;
+
+	ApplyRenderTransform();
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Terrain patch at %s: %d triangles across %.1f degrees, component at %s."),
+		*PatchOrigin.ToString(),
+		Patch.Triangles.Num() / 3,
+		PatchAngularRadiusDegrees,
+		*GroundPatch->GetComponentLocation().ToCompactString());
 }
 
 void ASpaceMMOPlanetActor::SetPlanetConfig(const FPlanetConfig& NewConfig)
@@ -403,6 +465,13 @@ void ASpaceMMOPlanetActor::ApplyRenderTransform()
 	// the actor is the whole transform. The engine sphere needed scaling because it was a 100 cm
 	// ball standing in for a 20 km planet, which is also why it was a polyhedron.
 	SetActorLocation(Origin->ToWorldLocation(Planet.Centre));
+
+	// The patch keeps its own absolute position: its vertices are relative to the ground beneath
+	// the viewer, which is twenty kilometres from the planet's centre and moves independently.
+	if (GroundPatch != nullptr && bHasPatch)
+	{
+		GroundPatch->SetWorldLocation(Origin->ToWorldLocation(PatchOrigin));
+	}
 
 	BuiltAtRevision = Origin->GetRevision();
 }

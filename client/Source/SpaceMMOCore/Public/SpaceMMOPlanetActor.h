@@ -7,7 +7,6 @@
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOPlanetActor.generated.h"
 
-class ASpaceMMOTerrainPatchActor;
 class UDynamicMeshComponent;
 
 /**
@@ -87,6 +86,9 @@ private:
 	/** Tessellates the whole planet. Once, unless the planet or its terrain is reconfigured. */
 	void BuildGlobe();
 
+	/** Tessellates the ground around a direction into <see cref="GroundPatch"/>. */
+	void BuildPatch(const FVector& Direction);
+
 	/**
 	 * Streams the landing zone in and out as the viewer approaches and leaves.
 	 *
@@ -99,9 +101,6 @@ private:
 	/** Where the local viewer is, in system space, or false if there is nobody to render for. */
 	bool TryGetViewerPosition(FSystemCoordinate& OutPosition) const;
 
-	UPROPERTY()
-	TObjectPtr<ASpaceMMOTerrainPatchActor> TerrainPatch;
-
 	/** Direction the current patch is centred on, or zero if there is no patch. */
 	FVector PatchDirection = FVector::ZeroVector;
 
@@ -112,6 +111,25 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Planet")
 	TObjectPtr<UDynamicMeshComponent> Surface;
+
+	/**
+	 * The detailed ground under the viewer.
+	 *
+	 * A component on this actor rather than an actor of its own. The separate actor version never
+	 * drew — visible, registered, holding thirty-two thousand triangles and a material, with the
+	 * camera inside its bounds, and never on screen — while this actor's globe, built by nearly
+	 * identical code into the same component type, always did. The one thing that differed was how
+	 * it came into being: spawned mid-Tick, given a mesh, then moved. So the patch now comes into
+	 * being the same way the globe does.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Planet")
+	TObjectPtr<UDynamicMeshComponent> GroundPatch;
+
+	/** Anchor the patch's vertices are relative to. */
+	FSystemCoordinate PatchOrigin;
+
+	/** True once GroundPatch holds a mesh worth drawing. */
+	bool bHasPatch = false;
 
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;

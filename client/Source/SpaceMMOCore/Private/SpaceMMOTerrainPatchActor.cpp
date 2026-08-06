@@ -135,6 +135,12 @@ void ASpaceMMOTerrainPatchActor::BuildPatch(
 	// both are already unlikely — but they are cheap to rule out and expensive to assume.
 	const UMaterialInterface* Material = Ground->GetMaterial(0);
 
+	// IsVisible() is the component's own flag and says nothing about whether the actor around it is
+	// being rendered, or whether the component was ever registered with the scene. A component can
+	// report itself visible, hold a mesh, carry a material and still never reach the renderer if
+	// its owner is hidden or it never registered — which is the remaining difference between this
+	// and the globe, since the globe's component is created on an actor that spawns deferred while
+	// this one is spawned mid-Tick and moved afterwards.
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("  component holds %d triangles, material %s, visible %d, scale %s."),
 		Ground->GetDynamicMesh() != nullptr
@@ -143,6 +149,13 @@ void ASpaceMMOTerrainPatchActor::BuildPatch(
 		Material != nullptr ? *Material->GetName() : TEXT("NONE"),
 		Ground->IsVisible() ? 1 : 0,
 		*Ground->GetComponentScale().ToCompactString());
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  actor hidden %d, component registered %d, has proxy %d, render in main pass %d."),
+		IsHidden() ? 1 : 0,
+		Ground->IsRegistered() ? 1 : 0,
+		Ground->SceneProxy != nullptr ? 1 : 0,
+		Ground->bRenderInMainPass ? 1 : 0);
 
 	const int32 Centre = (PatchConfig.Resolution * PatchConfig.Resolution) / 2;
 
