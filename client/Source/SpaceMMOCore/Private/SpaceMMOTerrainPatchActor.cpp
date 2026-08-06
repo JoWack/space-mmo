@@ -130,6 +130,20 @@ void ASpaceMMOTerrainPatchActor::BuildPatch(
 	const FVector ActorLocation = GetActorLocation();
 	const FBoxSphereBounds MeshBounds = Ground->Bounds;
 
+	// What the component is actually holding, as opposed to what was handed to it. A null material
+	// draws as engine grey rather than as nothing, and an empty mesh would have zero bounds, so
+	// both are already unlikely — but they are cheap to rule out and expensive to assume.
+	const UMaterialInterface* Material = Ground->GetMaterial(0);
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  component holds %d triangles, material %s, visible %d, scale %s."),
+		Ground->GetDynamicMesh() != nullptr
+			? Ground->GetDynamicMesh()->GetTriangleCount()
+			: -1,
+		Material != nullptr ? *Material->GetName() : TEXT("NONE"),
+		Ground->IsVisible() ? 1 : 0,
+		*Ground->GetComponentScale().ToCompactString());
+
 	const int32 Centre = (PatchConfig.Resolution * PatchConfig.Resolution) / 2;
 
 	UE_LOG(LogSpaceMMO, Log,

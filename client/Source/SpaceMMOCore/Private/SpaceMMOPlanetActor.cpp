@@ -17,6 +17,23 @@ using namespace UE::Geometry;
 namespace
 {
 	/**
+	 * Whether the globe hides while a terrain patch exists.
+	 *
+	 * A switch rather than a rule, because the two are now the open question. The black appears at
+	 * exactly the altitude the globe hides and the patch takes over, and every measurable property
+	 * of that patch — position, bounds, winding, normals, material — checks out. Turning this off
+	 * puts the globe back underneath and answers which of the two is actually drawing.
+	 */
+	float GHideGlobeUnderPatch = 1.0f;
+
+	FAutoConsoleVariableRef CVarHideGlobeUnderPatch(
+		TEXT("SpaceMMO.HideGlobeUnderPatch"),
+		GHideGlobeUnderPatch,
+		TEXT("1 hides the whole-planet mesh while a terrain patch exists, 0 always draws it. "
+			"If ground appears at 0, the patch is what is not drawing."),
+		ECVF_Default);
+
+	/**
 	 * How much the patch's width may drift from what the altitude asks for before it is rebuilt.
 	 *
 	 * Without a threshold the patch would regenerate every frame of a descent, since the ideal
@@ -256,7 +273,7 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	// everything the viewer could see.
 	if (Surface != nullptr)
 	{
-		const bool bShowGlobe = TerrainPatch == nullptr;
+		const bool bShowGlobe = TerrainPatch == nullptr || GHideGlobeUnderPatch <= 0.5f;
 
 		// Logged on change, because the two candidate explanations for missing ground differ on
 		// exactly this: either the patch is drawing and has a hole in it, or the patch is not
