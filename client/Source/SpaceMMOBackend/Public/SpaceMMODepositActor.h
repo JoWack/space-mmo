@@ -81,4 +81,10 @@ private:
 
 	/** Render-origin revision this transform was built for, so rebases are detected. */
 	int32 BuiltAtRevision = -1;
+
+	/** Where the height function put the ground, in world space. For -ShowDepositAnchors. */
+	FVector AnchorWorldLocation = FVector::ZeroVector;
+
+	/** The surface normal there, so the marker stands the same way the deposit does. */
+	FVector AnchorUp = FVector::UpVector;
 };

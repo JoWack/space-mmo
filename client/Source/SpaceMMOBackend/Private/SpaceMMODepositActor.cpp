@@ -158,6 +158,30 @@ void ASpaceMMODepositActor::Tick(const float DeltaSeconds)
 	const USpaceMMORenderOriginSubsystem* Origin =
 		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
 
+	// Drawn every frame, because a debug line with a zero lifetime lasts one. This is the only place
+	// that runs often enough for a cross to actually be on screen when somebody looks.
+	if (FParse::Param(FCommandLine::Get(), TEXT("ShowDepositAnchors")))
+	{
+		constexpr float ArmCentimetres = 60.0f;
+
+		const FVector Side = FVector::CrossProduct(AnchorUp, FVector::ForwardVector).GetSafeNormal();
+		const FVector Other = FVector::CrossProduct(AnchorUp, Side).GetSafeNormal();
+
+		// Magenta because nothing else in this world is: the terrain renders in white and black,
+		// and a marker that could be mistaken for scenery would answer nothing.
+		DrawDebugLine(GetWorld(), AnchorWorldLocation - (Side * ArmCentimetres),
+			AnchorWorldLocation + (Side * ArmCentimetres), FColor::Magenta, false, 0.0f, 0, 4.0f);
+
+		DrawDebugLine(GetWorld(), AnchorWorldLocation - (Other * ArmCentimetres),
+			AnchorWorldLocation + (Other * ArmCentimetres), FColor::Magenta, false, 0.0f, 0, 4.0f);
+
+		// Straight up, so the cross is findable from above and its height is readable against the
+		// ground beside it.
+		DrawDebugLine(GetWorld(), AnchorWorldLocation,
+			AnchorWorldLocation + (AnchorUp * ArmCentimetres * 3.0f),
+			FColor::Magenta, false, 0.0f, 0, 4.0f);
+	}
+
 	// A deposit does not move, so between rebases its transform is already right. Only a change of
 	// what "world zero" means can invalidate it.
 	if (Origin == nullptr || Origin->GetRevision() == BuiltAtRevision)
@@ -211,23 +235,12 @@ void ASpaceMMODepositActor::ApplyRenderTransform()
 
 	Marker->SetWorldScale3D(FVector(Scale));
 
-	// -ShowDepositAnchors draws where the height function says the ground is, which is the one thing
-	// a screenshot cannot show. The mesh is seated so its lowest point is exactly here, so if the
-	// drawn terrain is above this cross the ground and the height field disagree and the deposit is
-	// innocent; if the terrain meets it and the model still looks buried, the model's bounds reach
-	// below its visible geometry. Those need opposite fixes and look identical from a distance.
-	if (FParse::Param(FCommandLine::Get(), TEXT("ShowDepositAnchors")))
-	{
-		constexpr float ArmCentimetres = 50.0f;
-
-		const FVector Side = Up.RotateAngleAxis(90.0, FVector::RightVector);
-
-		DrawDebugLine(GetWorld(), Anchor - (Up * ArmCentimetres), Anchor + (Up * ArmCentimetres),
-			FColor::Magenta, false, 0.0f, 0, 3.0f);
-
-		DrawDebugLine(GetWorld(), Anchor - (Side * ArmCentimetres), Anchor + (Side * ArmCentimetres),
-			FColor::Magenta, false, 0.0f, 0, 3.0f);
-	}
+	// Kept for the debug draw, which happens in Tick. Drawing it here instead produced nothing
+	// visible: this function runs at spawn and then only on a render-origin rebase, and a debug line
+	// with a zero lifetime lasts exactly one frame. The cross was rendered once, during level load,
+	// and never again.
+	AnchorWorldLocation = Anchor;
+	AnchorUp = Up;
 
 	BuiltAtRevision = Origin->GetRevision();
 }
