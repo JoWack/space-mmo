@@ -275,10 +275,17 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 		return;
 	}
 
+	// Height above the ground, not above the sphere it sits on. Standing on half a kilometre of
+	// terrain put a landed ship two and a half surface bands up and had it classified as flying,
+	// which is the same mistake the patch width made and for the same reason.
+	const double ViewerAltitude =
+		FPlanetTerrain::AltitudeAboveGroundKilometres(Planet, TerrainConfig, ViewerPosition);
+
 	// Fed its own previous value, so the hysteresis in ClassifyProximity has something to work
 	// against — without it a viewer hovering on the atmosphere boundary would build and destroy
 	// the same patch every frame.
-	ViewerProximity = FPlanetPhysics::ClassifyProximity(Planet, ViewerPosition, ViewerProximity);
+	ViewerProximity = FPlanetPhysics::ClassifyProximityAtAltitude(
+		Planet, ViewerAltitude, ViewerProximity);
 
 	// The globe and the patch are two samplings of one height function, and between samples they
 	// differ by however much terrain falls between the coarse mesh's vertices. Drawn together that
@@ -327,13 +334,10 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	const FVector ViewerDirection =
 		(ViewerPosition.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
 
-	// Height above the ground, not above the sphere the ground sits on. Standing on a half-kilometre
+	// The same height above the ground the classification used. Standing on a half-kilometre
 	// mountain is still standing: the horizon is a few hundred metres away and the patch should be
-	// narrow and detailed. Measuring against the sphere would call that an altitude of half a
-	// kilometre and spread the same vertices over five times the ground for no one's benefit.
-	const double DesiredDegrees = PatchDegreesForAltitude(
-		Planet,
-		FPlanetTerrain::AltitudeAboveGroundKilometres(Planet, TerrainConfig, ViewerPosition));
+	// narrow and detailed.
+	const double DesiredDegrees = PatchDegreesForAltitude(Planet, ViewerAltitude);
 
 	// Two reasons to rebuild: the viewer has walked far enough across the patch, or climbed far
 	// enough that the patch no longer reaches their horizon.

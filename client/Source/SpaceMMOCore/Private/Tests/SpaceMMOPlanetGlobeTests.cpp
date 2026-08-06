@@ -27,6 +27,61 @@ namespace
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOGlobeStandingOnAMountainIsStandingTest,
+	"SpaceMMO.Globe.StandingOnAMountainIsStanding",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOGlobeStandingOnAMountainIsStandingTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = GlobeTestPlanet();
+
+	// Half a kilometre of relief on a planet whose surface band is two hundred metres. Measured
+	// against the sphere, a player standing on that peak is two and a half bands up and reads as
+	// flying — which is what a landed ship reporting ATMOSPHERE was.
+	TestEqual(
+		TEXT("Feet on the ground is Surface, whatever the ground's own height"),
+		FPlanetPhysics::ClassifyProximityAtAltitude(Planet, 0.0, EPlanetProximity::Atmospheric),
+		EPlanetProximity::Surface);
+
+	// Leaving takes more than arriving: the hysteresis is a whole kilometre against a band of two
+	// hundred metres, so the surface state holds until 1.2 km. Deliberately sticky, and it is what
+	// stops a hovering ship flickering between states — but it means "just above the band" is
+	// still Surface, which is the opposite of what this test first asserted.
+	TestEqual(
+		TEXT("Within the hysteresis, still Surface"),
+		FPlanetPhysics::ClassifyProximityAtAltitude(Planet, 0.5, EPlanetProximity::Surface),
+		EPlanetProximity::Surface);
+
+	TestEqual(
+		TEXT("Past the hysteresis, no longer Surface"),
+		FPlanetPhysics::ClassifyProximityAtAltitude(Planet, 2.0, EPlanetProximity::Surface),
+		EPlanetProximity::Atmospheric);
+
+	TestEqual(
+		TEXT("Arriving from above, the band itself is what counts"),
+		FPlanetPhysics::ClassifyProximityAtAltitude(Planet, 0.5, EPlanetProximity::Atmospheric),
+		EPlanetProximity::Atmospheric);
+
+	TestEqual(
+		TEXT("Above the atmosphere is orbital"),
+		FPlanetPhysics::ClassifyProximityAtAltitude(Planet, 20.0, EPlanetProximity::Atmospheric),
+		EPlanetProximity::Orbital);
+
+	// The position overload has to keep measuring against the sphere: callers with no terrain
+	// config cannot ask a height function anything, and silently changing what it means would
+	// move every boundary on a planet that has relief.
+	const FSystemCoordinate OnTheNominalSurface(
+		Planet.Centre.Kilometres + FVector(Planet.RadiusKilometres, 0.0, 0.0));
+
+	TestEqual(
+		TEXT("Sphere-relative overload is unchanged"),
+		FPlanetPhysics::ClassifyProximity(Planet, OnTheNominalSurface),
+		EPlanetProximity::Surface);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOGlobeTopologyTest,
 	"SpaceMMO.Globe.Topology",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

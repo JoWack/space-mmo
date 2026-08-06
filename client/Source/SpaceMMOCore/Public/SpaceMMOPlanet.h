@@ -117,6 +117,22 @@ public:
 		EPlanetProximity Previous = EPlanetProximity::Orbital);
 
 	/**
+	 * The same classification, against an altitude the caller has already decided how to measure.
+	 *
+	 * <strong>"At the surface" has to mean height above the ground, not above the sphere.</strong>
+	 * A planet with half a kilometre of relief puts a standing player half a kilometre above the
+	 * nominal radius, which the surface band — two hundred metres — reads as flying. Anyone with
+	 * terrain to hand should measure with
+	 * <see cref="FPlanetTerrain::AltitudeAboveGroundKilometres"/> and pass it here; the overload
+	 * above is for callers that have only a sphere, and it is the one that called a landed ship
+	 * airborne.
+	 */
+	static EPlanetProximity ClassifyProximityAtAltitude(
+		const FPlanetConfig& Planet,
+		double AltitudeKilometres,
+		EPlanetProximity Previous = EPlanetProximity::Orbital);
+
+	/**
 	 * Speed of a circular orbit at a given altitude, in centimetres per second.
 	 *
 	 * Useful for placing things in orbit and for telling a pilot what they need to hold. Derived

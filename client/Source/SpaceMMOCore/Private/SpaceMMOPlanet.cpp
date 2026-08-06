@@ -59,7 +59,14 @@ EPlanetProximity FPlanetPhysics::ClassifyProximity(
 	const FSystemCoordinate& Position,
 	const EPlanetProximity Previous)
 {
-	const double Altitude = AltitudeKilometres(Planet, Position);
+	return ClassifyProximityAtAltitude(Planet, AltitudeKilometres(Planet, Position), Previous);
+}
+
+EPlanetProximity FPlanetPhysics::ClassifyProximityAtAltitude(
+	const FPlanetConfig& Planet,
+	const double Altitude,
+	const EPlanetProximity Previous)
+{
 	const double Hysteresis = FMath::Max(0.0, Planet.ProximityHysteresisKilometres);
 
 	// Boundaries sit further out when leaving than when entering, so a position parked exactly on
