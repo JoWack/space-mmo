@@ -52,15 +52,22 @@ namespace
 	 * watch, one property at a time, rather than reason about it again.
 	 *
 	 * 0 as built. 1 with the terrain flattened out, leaving a plain spherical cap. 2 at a much
-	 * lower resolution. 3 with radial normals instead of ones accumulated from the faces.
+	 * lower resolution. 3 with radial normals instead of ones accumulated from the faces. None of
+	 * those drew.
+	 *
+	 * 4 is the last structural difference left. The globe's vertices sit twenty kilometres from
+	 * its component's origin and it draws; the patch's sit within two, one of them exactly on it,
+	 * and it does not. This anchors the patch to the planet's centre the way the globe is, which
+	 * is the wrong thing to ship — it throws away the precision the local anchor exists to protect
+	 * (ADR-0001) — but it answers whether the anchor is what stops it drawing.
 	 */
 	float GPatchVariant = 0.0f;
 
 	FAutoConsoleVariableRef CVarPatchVariant(
 		TEXT("SpaceMMO.PatchVariant"),
 		GPatchVariant,
-		TEXT("0 normal, 1 flat, 2 low resolution, 3 radial normals. Whichever one draws names the "
-			"property at fault. Takes effect on the next rebuild, so move afterwards."),
+		TEXT("0 normal, 1 flat, 2 low resolution, 3 radial normals, 4 anchored at the planet's "
+			"centre like the globe. Whichever one draws names the property at fault."),
 		ECVF_Default);
 
 	FAutoConsoleVariableRef CVarPatchIntoGlobe(
@@ -455,6 +462,22 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		}
 	}
 
+	// Re-anchored to the planet's centre: every vertex pushed out by the offset that used to be in
+	// the component's transform, so the numbers look like the globe's.
+	if (Variant == 4)
+	{
+		const FVector CentreOffset =
+			(Patch.Origin.Kilometres - Planet.Centre.Kilometres)
+			* SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+		for (FVector& Position : Patch.Positions)
+		{
+			Position += CentreOffset;
+		}
+
+		Patch.Origin = Planet.Centre;
+	}
+
 	AppliedPatchVariant = Variant;
 
 	UE_LOG(LogSpaceMMO, Log,
@@ -463,6 +486,7 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		Variant == 1 ? TEXT("flat, no terrain")
 			: Variant == 2 ? TEXT("low resolution")
 			: Variant == 3 ? TEXT("radial normals")
+			: Variant == 4 ? TEXT("anchored at the planet's centre")
 			: TEXT("as built"));
 
 	if (!Patch.IsValid())
