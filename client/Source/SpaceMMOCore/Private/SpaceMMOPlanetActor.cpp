@@ -43,6 +43,26 @@ namespace
 	 */
 	float GPatchIntoGlobe = 0.0f;
 
+	/**
+	 * Which variant of the patch mesh to build.
+	 *
+	 * The mesh is valid by every measure available without a renderer — no rejected triangle, no
+	 * bad normal, no degenerate face, structurally sound, correctly attributed — and it still does
+	 * not draw inside a component that draws the globe. So the remaining move is to vary it and
+	 * watch, one property at a time, rather than reason about it again.
+	 *
+	 * 0 as built. 1 with the terrain flattened out, leaving a plain spherical cap. 2 at a much
+	 * lower resolution. 3 with radial normals instead of ones accumulated from the faces.
+	 */
+	float GPatchVariant = 0.0f;
+
+	FAutoConsoleVariableRef CVarPatchVariant(
+		TEXT("SpaceMMO.PatchVariant"),
+		GPatchVariant,
+		TEXT("0 normal, 1 flat, 2 low resolution, 3 radial normals. Whichever one draws names the "
+			"property at fault. Takes effect on the next rebuild, so move afterwards."),
+		ECVF_Default);
+
 	FAutoConsoleVariableRef CVarPatchIntoGlobe(
 		TEXT("SpaceMMO.PatchIntoGlobe"),
 		GPatchIntoGlobe,
@@ -386,11 +406,46 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		return;
 	}
 
+	const int32 Variant = FMath::RoundToInt(GPatchVariant);
+
 	FPlanetPatchConfig Config;
 	Config.CentreDirection = Direction;
 	Config.AngularRadiusDegrees = PatchAngularRadiusDegrees;
 
-	const FPlanetPatchMesh Patch = FPlanetPatch::Build(Planet, TerrainConfig, Config);
+	// Two thousand triangles rather than thirty-two, in case the fault scales with the mesh.
+	if (Variant == 2)
+	{
+		Config.Resolution = 33;
+	}
+
+	// A plain spherical cap: same vertices, same winding, no height variation at all. If this
+	// draws and the real one does not, the fault is in the elevations rather than in the grid.
+	FPlanetTerrainConfig Terrain = TerrainConfig;
+
+	if (Variant == 1)
+	{
+		Terrain.MaxElevationKilometres = 0.0;
+	}
+
+	FPlanetPatchMesh Patch = FPlanetPatch::Build(Planet, Terrain, Config);
+
+	// Radial normals: smooth and provably outward, ignoring the accumulated ones entirely.
+	if (Variant == 3)
+	{
+		const FVector CentreOffset =
+			(Patch.Origin.Kilometres - Planet.Centre.Kilometres)
+			* SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+		for (int32 Index = 0; Index < Patch.Normals.Num(); ++Index)
+		{
+			Patch.Normals[Index] = (CentreOffset + Patch.Positions[Index]).GetSafeNormal();
+		}
+	}
+
+	if (Variant != 0)
+	{
+		UE_LOG(LogSpaceMMO, Log, TEXT("Patch variant %d in use."), Variant);
+	}
 
 	if (!Patch.IsValid())
 	{

@@ -1,3 +1,5 @@
+#include "DynamicMesh/DynamicMesh3.h"
+#include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "Misc/AutomationTest.h"
 #include "SpaceMMOPlanetGlobe.h"
 #include "SpaceMMOPlanetPatch.h"
@@ -56,6 +58,168 @@ bool FSpaceMMOPatchTopologyTest::RunTest(const FString& Parameters)
 
 	TestEqual(TEXT("No index escapes the vertex array"), OutOfRange, 0);
 	TestTrue(TEXT("Mesh reports itself valid"), Mesh.IsValid());
+
+	return true;
+}
+
+namespace
+{
+	/**
+	 * Assembles a mesh exactly as the planet actor does, and reports what survived.
+	 *
+	 * The arrays are clean and the component says it holds the triangles, so if anything is lost
+	 * it is lost here — between handing vertices to FDynamicMesh3 and asking it to draw them.
+	 * AppendTriangle refuses non-manifold work and returns an error instead of adding, which is
+	 * silent unless somebody counts.
+	 */
+	struct FAssembled
+	{
+		int32 Vertices = 0;
+		int32 Triangles = 0;
+		int32 Rejected = 0;
+		int32 NormalElements = 0;
+		bool bMeshValid = false;
+		bool bAttributesValid = false;
+	};
+
+	FAssembled Assemble(
+		const TArray<FVector>& Positions,
+		const TArray<FVector>& Normals,
+		const TArray<int32>& Triangles)
+	{
+		using namespace UE::Geometry;
+
+		FDynamicMesh3 Mesh;
+		Mesh.EnableAttributes();
+
+		for (const FVector& Position : Positions)
+		{
+			Mesh.AppendVertex(FVector3d(Position));
+		}
+
+		FAssembled Result;
+
+		for (int32 Index = 0; Index + 2 < Triangles.Num(); Index += 3)
+		{
+			const int32 Added = Mesh.AppendTriangle(
+				Triangles[Index], Triangles[Index + 1], Triangles[Index + 2]);
+
+			if (Added < 0)
+			{
+				++Result.Rejected;
+			}
+		}
+
+		if (FDynamicMeshNormalOverlay* Overlay =
+			Mesh.Attributes() != nullptr ? Mesh.Attributes()->PrimaryNormals() : nullptr)
+		{
+			Overlay->ClearElements();
+
+			TArray<int32> Elements;
+			Elements.Reserve(Normals.Num());
+
+			for (const FVector& Normal : Normals)
+			{
+				Elements.Add(Overlay->AppendElement(FVector3f(Normal)));
+			}
+
+			for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+			{
+				const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
+
+				Overlay->SetTriangle(
+					TriangleId,
+					FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
+			}
+
+			Result.NormalElements = Overlay->ElementCount();
+		}
+
+		Result.Vertices = Mesh.VertexCount();
+		Result.Triangles = Mesh.TriangleCount();
+
+		Result.bMeshValid = Mesh.CheckValidity(
+			FDynamicMesh3::FValidityOptions(), EValidityCheckFailMode::ReturnOnly);
+
+		// The attribute set's own CheckValidity is protected, so the overlay is checked instead:
+		// every triangle must carry three real normal elements. A triangle whose normals were
+		// never set holds -1s, which is exactly what an overlay looks like when SetTriangle was
+		// skipped for it.
+		Result.bAttributesValid = true;
+
+		if (const FDynamicMeshNormalOverlay* Overlay =
+			Mesh.Attributes() != nullptr ? Mesh.Attributes()->PrimaryNormals() : nullptr)
+		{
+			for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+			{
+				const FIndex3i Elements = Overlay->GetTriangle(TriangleId);
+
+				if (Elements.A < 0 || Elements.B < 0 || Elements.C < 0)
+				{
+					Result.bAttributesValid = false;
+
+					break;
+				}
+			}
+		}
+
+		return Result;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchAssemblesLikeTheGlobeTest,
+	"SpaceMMO.Patch.AssemblesLikeTheGlobe",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchAssemblesLikeTheGlobeTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = PatchTestPlanet();
+	const FPlanetTerrainConfig Terrain = PatchTestTerrain();
+
+	FPlanetPatchConfig PatchConfig;
+	PatchConfig.Resolution = 129;
+	PatchConfig.AngularRadiusDegrees = 4.0;
+
+	const FPlanetPatchMesh Patch = FPlanetPatch::Build(Planet, Terrain, PatchConfig);
+
+	FPlanetGlobeConfig GlobeConfig;
+	GlobeConfig.Resolution = 24;
+
+	const FPlanetGlobeMesh Globe = FPlanetGlobe::Build(Planet, Terrain, GlobeConfig);
+
+	const FAssembled PatchMesh =
+		Assemble(Patch.Positions, Patch.Normals, Patch.Triangles);
+
+	const FAssembled GlobeMesh =
+		Assemble(Globe.Positions, Globe.Normals, Globe.Triangles);
+
+	auto Report = [this](const TCHAR* Name, const FAssembled& A, const int32 Expected)
+	{
+		AddInfo(FString::Printf(
+			TEXT("%s: %d verts, %d/%d tris (%d rejected), %d normal elements, "
+				"mesh valid %d, attributes valid %d"),
+			Name,
+			A.Vertices,
+			A.Triangles,
+			Expected,
+			A.Rejected,
+			A.NormalElements,
+			A.bMeshValid ? 1 : 0,
+			A.bAttributesValid ? 1 : 0));
+	};
+
+	Report(TEXT("patch"), PatchMesh, Patch.Triangles.Num() / 3);
+	Report(TEXT("globe"), GlobeMesh, Globe.Triangles.Num() / 3);
+
+	TestEqual(TEXT("Patch loses no triangle to AppendTriangle"), PatchMesh.Rejected, 0);
+	TestEqual(TEXT("Globe loses no triangle to AppendTriangle"), GlobeMesh.Rejected, 0);
+
+	TestTrue(TEXT("Patch mesh is structurally valid"), PatchMesh.bMeshValid);
+	TestTrue(TEXT("Globe mesh is structurally valid"), GlobeMesh.bMeshValid);
+
+	TestTrue(TEXT("Patch attributes are valid"), PatchMesh.bAttributesValid);
+	TestTrue(TEXT("Globe attributes are valid"), GlobeMesh.bAttributesValid);
 
 	return true;
 }
