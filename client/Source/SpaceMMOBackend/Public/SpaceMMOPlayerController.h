@@ -286,10 +286,13 @@ private:
 	/** Puts a short-lived line under the panel, in the same place gather results appear. */
 	void ShowNotice(const FString& Message, bool bSucceeded);
 
-	/** Polls running jobs, since nothing pushes their remaining time to the client. */
-	void RefreshJobs();
+	/**
+	 * Polls what changes without this player doing anything: a job's remaining time, and the
+	 * credits, goods and book that another player's fill moves.
+	 */
+	void PollServerState();
 
-	FTimerHandle JobRefreshTimer;
+	FTimerHandle StateRefreshTimer;
 
 	/** Which recipe the R key has landed on. Wraps, and survives the list being re-fetched. */
 	int32 SelectedRecipeIndex = 0;

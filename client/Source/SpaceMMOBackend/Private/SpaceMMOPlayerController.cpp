@@ -415,14 +415,30 @@ void ASpaceMMOPlayerController::SellToFaction()
 	ShowNotice(TEXT("Nothing here a faction buys"), false);
 }
 
-void ASpaceMMOPlayerController::RefreshJobs()
+void ASpaceMMOPlayerController::PollServerState()
 {
 	USpaceMMOBackendClient* Client = Backend();
 
-	if (Client != nullptr && CharacterId != 0 && Client->IsSignedIn())
+	if (Client == nullptr || CharacterId == 0 || !Client->IsSignedIn())
 	{
-		Client->FetchJobs(CharacterId);
+		return;
 	}
+
+	// A job countdown finishing.
+	Client->FetchJobs(CharacterId);
+
+	// Everything a fill changes. When somebody else's order crosses ours the credits, the goods and
+	// the book all move on the server without this client doing anything, so a refresh driven only
+	// by local action shows a seller their own sale minutes late — whenever they next happen to
+	// press something.
+	//
+	// Quests are left out: they advance only from this character's own gathering and crafting, both
+	// of which already refresh on the way through. Skills come along with the inventory because they
+	// share a call, not because anything here expects them to move.
+	Client->FetchCharacters();
+	Client->SelectCharacter(CharacterId);
+
+	RefreshBook();
 }
 
 void ASpaceMMOPlayerController::HandleIndustryChanged()
@@ -517,11 +533,15 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 
 		Client->FetchRecipes();
 
-		// Polled, because nothing pushes a countdown. Two seconds is far coarser than the display,
-		// which is deliberate: the panel renders the server's last answer plus nothing, so a stale
-		// second is honest where a locally-decremented one would eventually be wrong.
+		// Polled, because nothing pushes a countdown and nothing pushes another player's trade.
+		// Two seconds is far coarser than the display, which is deliberate: the panel renders the
+		// server's last answer plus nothing, so a stale second is honest where a locally-decremented
+		// one would eventually be wrong.
+		//
+		// A poll standing in for a push, and it should become one when there is a real UI — four
+		// small reads per client every two seconds does not survive a populated station.
 		GetWorldTimerManager().SetTimer(
-			JobRefreshTimer, this, &ASpaceMMOPlayerController::RefreshJobs, 2.0f, true);
+			StateRefreshTimer, this, &ASpaceMMOPlayerController::PollServerState, 2.0f, true);
 	}
 
 	Client->FetchJobs(CharacterId);
