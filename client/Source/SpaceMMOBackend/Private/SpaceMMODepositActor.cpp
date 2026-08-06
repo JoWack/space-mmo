@@ -125,6 +125,27 @@ void ASpaceMMODepositActor::BeginPlay()
 		Node.QuantityMax,
 		*SurfacePosition.ToString(),
 		(SurfacePosition.Kilometres - Planet.Centre.Kilometres).Size() - Planet.RadiusKilometres);
+
+	// How the mesh was fitted, because a deposit that looks wrong looks wrong for one of two
+	// reasons and they need opposite fixes. A pivot the code guessed badly shows up as a lift that
+	// disagrees with the mesh's own extents; a deposit placed correctly but sitting in ground that
+	// renders higher than the height function says shows up as a lift that looks entirely sensible.
+	// Guessing between those from a screenshot cost a round already.
+	if (const UStaticMesh* Mesh = Marker != nullptr ? Marker->GetStaticMesh() : nullptr)
+	{
+		const FBoxSphereBounds MeshBounds = Mesh->GetBounds();
+
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("  mesh %s: extent %s, origin %s -> scale %.3f, lift %.1f cm."),
+			*Mesh->GetName(),
+			*MeshBounds.BoxExtent.ToCompactString(),
+			*MeshBounds.Origin.ToCompactString(),
+			FDepositPlacement::UniformScale(MeshBounds.BoxExtent),
+			FDepositPlacement::BaseLift(
+				MeshBounds.Origin,
+				MeshBounds.BoxExtent,
+				FDepositPlacement::UniformScale(MeshBounds.BoxExtent)));
+	}
 }
 
 void ASpaceMMODepositActor::Tick(const float DeltaSeconds)
