@@ -1,40 +1,42 @@
 #include "SpaceMMOPlanetActor.h"
 
-#include "Components/StaticMeshComponent.h"
-#include "Engine/StaticMesh.h"
+#include "Components/DynamicMeshComponent.h"
+#include "DynamicMesh/DynamicMesh3.h"
+#include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOLog.h"
 #include "GameFramework/PlayerController.h"
+#include "SpaceMMOPlanetGlobe.h"
 #include "SpaceMMOPlanetPatch.h"
 #include "SpaceMMORenderOrigin.h"
 #include "SpaceMMOTerrainPatchActor.h"
 #include "UObject/ConstructorHelpers.h"
 
+using namespace UE::Geometry;
+
 namespace
 {
-	/** The engine sphere is 100 cm across, so its radius is 50 cm. */
-	constexpr double EngineSphereRadiusCentimetres = 50.0;
+	/**
+	 * How much the patch's width may drift from what the altitude asks for before it is rebuilt.
+	 *
+	 * Without a threshold the patch would regenerate every frame of a descent, since the ideal
+	 * width changes continuously with altitude. A quarter is loose enough that a rebuild is an
+	 * occasional event and tight enough that the patch never falls far short of the horizon.
+	 */
+	constexpr double PatchWidthDriftFraction = 0.25;
 }
 
 ASpaceMMOPlanetActor::ASpaceMMOPlanetActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	Surface = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Surface"));
+	Surface = CreateDefaultSubobject<UDynamicMeshComponent>(TEXT("Surface"));
 	SetRootComponent(Surface);
 
 	// Collision is off for the same reason the ship's is: position and contact are decided by the
 	// planet physics, not by Chaos. A collision body scaled to twenty kilometres would also be a
 	// remarkably bad thing to hand the solver.
 	Surface->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(
-		TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-
-	if (SphereMesh.Succeeded())
-	{
-		Surface->SetStaticMesh(SphereMesh.Object);
-	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> SphereMaterial(
 		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
@@ -49,6 +51,8 @@ void ASpaceMMOPlanetActor::BeginPlay()
 {
 	Super::BeginPlay();
 
+	BuildGlobe();
+
 	ApplyRenderTransform();
 
 	UE_LOG(LogSpaceMMO, Log,
@@ -57,6 +61,89 @@ void ASpaceMMOPlanetActor::BeginPlay()
 		Planet.RadiusKilometres,
 		Planet.SurfaceGravity,
 		Planet.AtmosphereHeightKilometres);
+
+	// Relief as a fraction of the radius, because that is what decides whether a planet reads as a
+	// world or as a golf ball, and it is not something anyone can judge from either number alone.
+	// Earth's tallest mountain is 0.14% of its radius.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Terrain rises %.3f km, which is %.2f%% of the radius (Earth is 0.14%%)."),
+		TerrainConfig.MaxElevationKilometres,
+		Planet.RadiusKilometres > 0.0
+			? (TerrainConfig.MaxElevationKilometres / Planet.RadiusKilometres) * 100.0
+			: 0.0);
+}
+
+void ASpaceMMOPlanetActor::BuildGlobe()
+{
+	// A dedicated server has no renderer, and a hundred thousand triangles per planet is a large
+	// amount of nothing to hold. It knows the ground through FPlanetTerrain, which is all it needs.
+	if (IsRunningDedicatedServer() || Surface == nullptr)
+	{
+		return;
+	}
+
+	// Configuration arrives one setter at a time between SpawnActorDeferred and FinishSpawning, so
+	// building on each call would tessellate the planet twice from settings that are still
+	// half-applied before BeginPlay tessellates it a third time from the real ones.
+	if (!HasActorBegunPlay())
+	{
+		return;
+	}
+
+	const FPlanetGlobeMesh Globe = FPlanetGlobe::Build(Planet, TerrainConfig, GlobeConfig);
+
+	if (!Globe.IsValid())
+	{
+		UE_LOG(LogSpaceMMO, Warning, TEXT("Planet globe generated nothing."));
+
+		return;
+	}
+
+	FDynamicMesh3 Mesh;
+	Mesh.EnableAttributes();
+
+	for (const FVector& Position : Globe.Positions)
+	{
+		Mesh.AppendVertex(FVector3d(Position));
+	}
+
+	for (int32 Index = 0; Index + 2 < Globe.Triangles.Num(); Index += 3)
+	{
+		Mesh.AppendTriangle(
+			Globe.Triangles[Index], Globe.Triangles[Index + 1], Globe.Triangles[Index + 2]);
+	}
+
+	if (FDynamicMeshNormalOverlay* Normals =
+		Mesh.Attributes() != nullptr ? Mesh.Attributes()->PrimaryNormals() : nullptr)
+	{
+		Normals->ClearElements();
+
+		TArray<int32> Elements;
+		Elements.Reserve(Globe.Normals.Num());
+
+		for (const FVector& Normal : Globe.Normals)
+		{
+			Elements.Add(Normals->AppendElement(FVector3f(Normal)));
+		}
+
+		for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+		{
+			const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
+
+			Normals->SetTriangle(
+				TriangleId,
+				FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
+		}
+	}
+
+	Surface->SetMesh(MoveTemp(Mesh));
+	Surface->NotifyMeshUpdated();
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Planet globe: %d triangles, a vertex every %.0f m of ground."),
+		Globe.Triangles.Num() / 3,
+		(FMath::DegreesToRadians(90.0 / FMath::Max(GlobeConfig.Resolution - 1, 1))
+			* Planet.RadiusKilometres) * 1000.0);
 }
 
 void ASpaceMMOPlanetActor::Tick(const float DeltaSeconds)
@@ -80,6 +167,21 @@ void ASpaceMMOPlanetActor::Tick(const float DeltaSeconds)
 	}
 
 	ApplyRenderTransform();
+}
+
+double ASpaceMMOPlanetActor::PatchDegreesForAltitude(
+	const FPlanetConfig& Planet,
+	const double AltitudeKilometres,
+	const double MinimumDegrees,
+	const double MaximumDegrees)
+{
+	// A margin past the horizon, so the edge of the patch is over it rather than visibly at it.
+	constexpr double HorizonMargin = 1.2;
+
+	const double Cap =
+		FPlanetGlobe::VisibleCapDegrees(Planet, AltitudeKilometres) * HorizonMargin;
+
+	return FMath::Clamp(Cap, MinimumDegrees, FMath::Max(MinimumDegrees, MaximumDegrees));
 }
 
 bool ASpaceMMOPlanetActor::TryGetViewerPosition(FSystemCoordinate& OutPosition) const
@@ -137,19 +239,14 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	// the same patch every frame.
 	ViewerProximity = FPlanetPhysics::ClassifyProximity(Planet, ViewerPosition, ViewerProximity);
 
-	// The sphere is a stand-in for a planet seen from away, and standing on one it is actively
-	// destructive. /Engine/BasicShapes/Sphere has thirty-odd segments, which is a sphere at a metre
-	// across and a polyhedron at twenty kilometres: every flat face dips kilometres below the true
-	// surface between its vertices, so the ground came with enormous flat planes cutting through it
-	// at hard angles. That is what made the terrain unreadable, and no amount of lighting was going
-	// to fix two surfaces disagreeing about where the ground is.
-	//
-	// Hiding it costs nothing at this range. The horizon on a planet this size is a few hundred
-	// metres from eye height, and the terrain patch spans four degrees of arc — well over a
-	// kilometre — so the patch already covers everything that can be seen from the ground.
+	// The globe and the patch are two samplings of one height function, and between samples they
+	// differ by however much terrain falls between the coarse mesh's vertices. Drawn together that
+	// would be the globe's hills poking through the patch's, so only one is ever visible: the
+	// patch owns the view for as long as it exists, and the patch is built wide enough to cover
+	// everything the viewer could see.
 	if (Surface != nullptr)
 	{
-		Surface->SetVisibility(ViewerProximity != EPlanetProximity::Surface);
+		Surface->SetVisibility(TerrainPatch == nullptr);
 	}
 
 	if (ViewerProximity == EPlanetProximity::Orbital)
@@ -161,6 +258,12 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 			TerrainPatch->Destroy();
 			TerrainPatch = nullptr;
 			PatchDirection = FVector::ZeroVector;
+			PatchAngularRadiusDegrees = 0.0;
+
+			if (Surface != nullptr)
+			{
+				Surface->SetVisibility(true);
+			}
 		}
 
 		return;
@@ -169,8 +272,20 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	const FVector ViewerDirection =
 		(ViewerPosition.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
 
-	if (TerrainPatch != nullptr
-		&& !FPlanetPatch::ShouldRebuild(PatchDirection, ViewerDirection, PatchAngularRadiusDegrees))
+	const double DesiredDegrees = PatchDegreesForAltitude(
+		Planet, FPlanetPhysics::AltitudeKilometres(Planet, ViewerPosition));
+
+	// Two reasons to rebuild: the viewer has walked far enough across the patch, or climbed far
+	// enough that the patch no longer reaches their horizon.
+	const bool bDrifted = TerrainPatch != nullptr
+		&& FPlanetPatch::ShouldRebuild(PatchDirection, ViewerDirection, PatchAngularRadiusDegrees);
+
+	const bool bWrongWidth = TerrainPatch != nullptr
+		&& PatchAngularRadiusDegrees > 0.0
+		&& FMath::Abs(DesiredDegrees - PatchAngularRadiusDegrees)
+			> PatchAngularRadiusDegrees * PatchWidthDriftFraction;
+
+	if (TerrainPatch != nullptr && !bDrifted && !bWrongWidth)
 	{
 		return;
 	}
@@ -198,6 +313,7 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	}
 
 	PatchDirection = ViewerDirection;
+	PatchAngularRadiusDegrees = DesiredDegrees;
 
 	TerrainPatch->SetAngularRadiusDegrees(PatchAngularRadiusDegrees);
 	TerrainPatch->BuildPatch(Planet, TerrainConfig, ViewerDirection);
@@ -207,7 +323,18 @@ void ASpaceMMOPlanetActor::SetPlanetConfig(const FPlanetConfig& NewConfig)
 {
 	Planet = NewConfig;
 
+	BuildGlobe();
+
 	ApplyRenderTransform();
+}
+
+void ASpaceMMOPlanetActor::SetTerrainConfig(const FPlanetTerrainConfig& NewTerrain)
+{
+	TerrainConfig = NewTerrain;
+
+	// The globe is a tessellation of exactly this, so leaving it alone would leave a planet whose
+	// shape and whose ground came from different settings.
+	BuildGlobe();
 }
 
 void ASpaceMMOPlanetActor::ApplyRenderTransform()
@@ -222,11 +349,10 @@ void ASpaceMMOPlanetActor::ApplyRenderTransform()
 		return;
 	}
 
-	const double RadiusCentimetres =
-		Planet.RadiusKilometres * SpaceMMO::Coordinates::CentimetresPerKilometre;
-
+	// The globe's vertices are already at planet scale in centimetres from its centre, so placing
+	// the actor is the whole transform. The engine sphere needed scaling because it was a 100 cm
+	// ball standing in for a 20 km planet, which is also why it was a polyhedron.
 	SetActorLocation(Origin->ToWorldLocation(Planet.Centre));
-	Surface->SetWorldScale3D(FVector(RadiusCentimetres / EngineSphereRadiusCentimetres));
 
 	BuiltAtRevision = Origin->GetRevision();
 }

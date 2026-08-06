@@ -3,11 +3,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "SpaceMMOPlanet.h"
+#include "SpaceMMOPlanetGlobe.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOPlanetActor.generated.h"
 
 class ASpaceMMOTerrainPatchActor;
-class UStaticMeshComponent;
+class UDynamicMeshComponent;
 
 /**
  * A planet, drawn from its system-space position.
@@ -16,10 +17,13 @@ class UStaticMeshComponent;
  * render origin rather than stored — so it holds still while the ship flies past and the origin
  * jumps beneath it.
  *
- * <strong>This is a sphere, not terrain.</strong> It is enough to fly toward, orbit, and measure
- * altitude against, which is what proves the approach transition. An actual landable surface needs
- * runtime cube-sphere LOD terrain, and that is a substantially larger problem deliberately left
- * until the transition around it is known to work.
+ * <strong>Two meshes of one surface, and never both at once.</strong> The globe is the whole
+ * planet at a coarse sampling; the patch is the ground under the viewer at a fine one. Both are
+ * tessellations of the same height function, so neither can drift away from what the physics
+ * thinks the ground is — but a coarse mesh and a fine mesh of the same hills still disagree by
+ * tens of metres between samples, which drawn together would be hills poking through hills. So
+ * the patch widens with altitude until it covers everything in view, and the globe is hidden for
+ * exactly as long as the patch exists.
  */
 UCLASS()
 class SPACEMMOCORE_API ASpaceMMOPlanetActor : public AActor
@@ -41,11 +45,27 @@ public:
 	FPlanetTerrainConfig GetTerrainConfig() const { return TerrainConfig; }
 
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Planet")
-	void SetTerrainConfig(const FPlanetTerrainConfig& NewTerrain) { TerrainConfig = NewTerrain; }
+	void SetTerrainConfig(const FPlanetTerrainConfig& NewTerrain);
 
 	/** Proximity of the local viewer, as the planet last classified it. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Planet")
 	EPlanetProximity GetViewerProximity() const { return ViewerProximity; }
+
+	/**
+	 * How wide the ground patch needs to be, in degrees of arc, for a viewer at a given altitude.
+	 *
+	 * Grows with altitude to cover the horizon, so the patch is always the only surface worth
+	 * drawing. The floor keeps a walking player on fine ground rather than on a patch stretched
+	 * thin to cover a horizon a few hundred metres away; the ceiling is where the patch's
+	 * tangent-plane parameterisation stretches too badly to be worth widening further, and is
+	 * reached just short of the top of the atmosphere.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Planet")
+	static double PatchDegreesForAltitude(
+		const FPlanetConfig& Planet,
+		double AltitudeKilometres,
+		double MinimumDegrees = 4.0,
+		double MaximumDegrees = 60.0);
 
 protected:
 	virtual void BeginPlay() override;
@@ -53,23 +73,19 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
 	FPlanetConfig Planet;
 
-	/** The shape of this planet's surface. Only meaningful once close enough to mesh it. */
+	/** The shape of this planet's surface. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
 	FPlanetTerrainConfig TerrainConfig;
 
-	/**
-	 * How much ground to mesh around the viewer, in degrees of arc.
-	 *
-	 * Four degrees of a 20 km planet is about 1.4 km across. At 129 vertices a side that is roughly
-	 * eleven metres between them, which is the difference between ground a walking person can see
-	 * changing and a flat plane that never appears to move. Ten degrees looked far more generous
-	 * and was, in practice, featureless.
-	 */
+	/** How finely the whole-planet mesh is tessellated. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
-	double PatchAngularRadiusDegrees = 4.0;
+	FPlanetGlobeConfig GlobeConfig;
 
 private:
 	void ApplyRenderTransform();
+
+	/** Tessellates the whole planet. Once, unless the planet or its terrain is reconfigured. */
+	void BuildGlobe();
 
 	/**
 	 * Streams the landing zone in and out as the viewer approaches and leaves.
@@ -89,10 +105,13 @@ private:
 	/** Direction the current patch is centred on, or zero if there is no patch. */
 	FVector PatchDirection = FVector::ZeroVector;
 
+	/** Arc the current patch spans, so a change in altitude can be noticed. */
+	double PatchAngularRadiusDegrees = 0.0;
+
 	EPlanetProximity ViewerProximity = EPlanetProximity::Orbital;
 
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Planet")
-	TObjectPtr<UStaticMeshComponent> Surface;
+	TObjectPtr<UDynamicMeshComponent> Surface;
 
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;

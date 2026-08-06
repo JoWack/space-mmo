@@ -167,9 +167,15 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 
 		PlanetActor->SetPlanetConfig(Config);
 
-		// Terrain the planet streams in once a viewer is close enough to see it. Half a kilometre
-		// of relief on a 20 km world is proportionally close to Everest on Earth — dramatic on
-		// foot, and almost invisible from orbit, which is how a planet should read.
+		// Half a kilometre of relief on a 20 km world is 2.5% of the radius. Earth's tallest
+		// mountain is 0.14% of Earth's, so this planet is roughly eighteen times as rugged, and
+		// now that the whole globe is drawn from these numbers rather than approximated by a ball
+		// that is something you can see from orbit rather than a detail of the landing zone.
+		//
+		// Left as it is on purpose: the lighting was tuned against this terrain, and a peak
+		// several times the height of the horizon is what makes the ground read as ground on a
+		// planet this small. Lowering it toward 0.15 would make the planet rounder from space at
+		// the cost of flattening what a player walks on.
 		FPlanetTerrainConfig Terrain;
 		Terrain.Seed = 20260801;
 		Terrain.MaxElevationKilometres = 0.5;
