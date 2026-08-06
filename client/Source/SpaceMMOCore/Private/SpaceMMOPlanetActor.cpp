@@ -63,6 +63,42 @@ namespace
 	 */
 	float GPatchVariant = 0.0f;
 
+	/**
+	 * Rebuilds the globe, at runtime, from a console command.
+	 *
+	 * Every experiment so far varied the mesh and held one thing constant without noticing: the
+	 * globe's mesh is set once during BeginPlay, and the patch's is set from Tick, over and over,
+	 * long after the component registered. That is the difference nothing has tested.
+	 *
+	 * This tests it with the mesh that is known to draw. If the planet disappears when its own
+	 * geometry is handed to it a second time, the fault was never in the patch at all — it is in
+	 * updating a dynamic mesh after the fact, and the patch has simply been the only thing that
+	 * ever did.
+	 */
+	float GRebuildGlobe = 0.0f;
+
+	FAutoConsoleVariableRef CVarRebuildGlobe(
+		TEXT("SpaceMMO.RebuildGlobe"),
+		GRebuildGlobe,
+		TEXT("1 rebuilds the planet's own mesh at runtime. If the planet vanishes, updating a mesh "
+			"after registration is the fault, not the patch."),
+		ECVF_Default);
+
+	/**
+	 * Marks the render state dirty after handing a component new geometry.
+	 *
+	 * The candidate fix for the above, kept separate from the diagnosis so one can be confirmed
+	 * before the other is believed.
+	 */
+	float GDirtyAfterMeshUpdate = 0.0f;
+
+	FAutoConsoleVariableRef CVarDirtyAfterMeshUpdate(
+		TEXT("SpaceMMO.DirtyAfterMeshUpdate"),
+		GDirtyAfterMeshUpdate,
+		TEXT("1 marks the render state dirty after a mesh update. Ground that appears means the "
+			"component was holding geometry the renderer never asked for again."),
+		ECVF_Default);
+
 	FAutoConsoleVariableRef CVarPatchVariant(
 		TEXT("SpaceMMO.PatchVariant"),
 		GPatchVariant,
@@ -231,6 +267,17 @@ void ASpaceMMOPlanetActor::Tick(const float DeltaSeconds)
 
 	const USpaceMMORenderOriginSubsystem* Origin =
 		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
+
+	// Rebuild the planet's own mesh on request, so the runtime update path can be tested with
+	// geometry that is known to draw.
+	if (GRebuildGlobe > 0.5f)
+	{
+		GRebuildGlobe = 0.0f;
+
+		UE_LOG(LogSpaceMMO, Log, TEXT("Rebuilding the globe at runtime."));
+
+		BuildGlobe();
+	}
 
 	// Terrain is checked every frame regardless of the origin, because it follows the viewer
 	// rather than the render window — a player can walk a long way without a single rebase.
@@ -554,6 +601,12 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 
 	Target->SetMesh(MoveTemp(Mesh));
 	Target->NotifyMeshUpdated();
+
+	if (GDirtyAfterMeshUpdate > 0.5f)
+	{
+		Target->MarkRenderStateDirty();
+	}
+
 	Target->SetVisibility(true);
 
 	bHasPatch = true;
