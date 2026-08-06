@@ -16,6 +16,11 @@ client/.vscode/
 client/.ignore
 client/*.code-workspace
 client/*.sln
+# UE 5.8 generates the newer .slnx solution format, which *.sln does not match — so these were
+# being committed while the rule that was meant to catch them sat right above.
+client/*.slnx
+# Written by the editor to record which Visual Studio components this machine has.
+client/.vsconfig
 client/*.VC.db
 client/*.VC.opendb
 client/*.opensdf
