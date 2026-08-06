@@ -19,12 +19,17 @@ namespace
 	/**
 	 * Whether the globe hides while a terrain patch exists.
 	 *
-	 * A switch rather than a rule, because the two are now the open question. The black appears at
-	 * exactly the altitude the globe hides and the patch takes over, and every measurable property
-	 * of that patch — position, bounds, winding, normals, material — checks out. Turning this off
-	 * puts the globe back underneath and answers which of the two is actually drawing.
+	 * <strong>Off, because the patch does not draw and nobody yet knows why.</strong> Its component
+	 * reports thirty-two thousand triangles, a real material, unit scale, visible, and bounds whose
+	 * sphere contains the camera — which in Unreal means it cannot even be frustum-culled. It is
+	 * still not on screen, while the globe built the same way from the same height function through
+	 * the same component type is. Hiding the globe under it therefore replaced a planet with
+	 * nothing, which is what the black was.
+	 *
+	 * So the globe carries the ground for now and the patch is a refinement that currently refines
+	 * nothing. Set to 1 to reproduce the fault while chasing it.
 	 */
-	float GHideGlobeUnderPatch = 1.0f;
+	float GHideGlobeUnderPatch = 0.0f;
 
 	FAutoConsoleVariableRef CVarHideGlobeUnderPatch(
 		TEXT("SpaceMMO.HideGlobeUnderPatch"),
