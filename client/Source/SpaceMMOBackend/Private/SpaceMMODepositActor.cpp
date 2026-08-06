@@ -1,6 +1,7 @@
 #include "SpaceMMODepositActor.h"
 
 #include "Components/StaticMeshComponent.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
@@ -203,10 +204,30 @@ void ASpaceMMODepositActor::ApplyRenderTransform()
 		Lift = FDepositPlacement::BaseLift(MeshBounds.Origin, MeshBounds.BoxExtent, Scale);
 	}
 
-	SetActorLocation(Origin->ToWorldLocation(SurfacePosition) + (Up * Lift));
+	const FVector Anchor = Origin->ToWorldLocation(SurfacePosition);
+
+	SetActorLocation(Anchor + (Up * Lift));
 	SetActorRotation(Rotation);
 
 	Marker->SetWorldScale3D(FVector(Scale));
+
+	// -ShowDepositAnchors draws where the height function says the ground is, which is the one thing
+	// a screenshot cannot show. The mesh is seated so its lowest point is exactly here, so if the
+	// drawn terrain is above this cross the ground and the height field disagree and the deposit is
+	// innocent; if the terrain meets it and the model still looks buried, the model's bounds reach
+	// below its visible geometry. Those need opposite fixes and look identical from a distance.
+	if (FParse::Param(FCommandLine::Get(), TEXT("ShowDepositAnchors")))
+	{
+		constexpr float ArmCentimetres = 50.0f;
+
+		const FVector Side = Up.RotateAngleAxis(90.0, FVector::RightVector);
+
+		DrawDebugLine(GetWorld(), Anchor - (Up * ArmCentimetres), Anchor + (Up * ArmCentimetres),
+			FColor::Magenta, false, 0.0f, 0, 3.0f);
+
+		DrawDebugLine(GetWorld(), Anchor - (Side * ArmCentimetres), Anchor + (Side * ArmCentimetres),
+			FColor::Magenta, false, 0.0f, 0, 3.0f);
+	}
 
 	BuiltAtRevision = Origin->GetRevision();
 }
