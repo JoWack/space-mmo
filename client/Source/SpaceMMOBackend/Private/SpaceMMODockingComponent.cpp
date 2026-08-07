@@ -67,10 +67,13 @@ void USpaceMMODockingComponent::ServerToggleDock_Implementation()
 
 	if (Backend == nullptr || CharacterId == 0)
 	{
-		// Loud, because the alternative is a key that appears to do nothing and a player who
-		// concludes the station is broken.
 		UE_LOG(LogSpaceMMOBackend, Warning,
-			TEXT("Dock: no character bound to this pawn; nothing to dock."));
+			TEXT("Dock: no character bound to %s; nothing to dock."), *GetNameSafe(Owner));
+
+		// On screen as well as in the log. This branch is the one that actually fired, and
+		// logging alone made a pressed key indistinguishable from an unbound one — which is
+		// exactly how it was reported: "it just does nothing".
+		ClientDockResult(TEXT("Not identified yet; cannot dock."), false);
 
 		return;
 	}

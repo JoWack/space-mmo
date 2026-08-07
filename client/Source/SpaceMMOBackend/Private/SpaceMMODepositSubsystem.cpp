@@ -10,6 +10,7 @@
 #include "SpaceMMOGatheringComponent.h"
 #include "SpaceMMOPlayerController.h"
 #include "SpaceMMOPlanetActor.h"
+#include "SpaceMMOShipPawn.h"
 #include "SpaceMMOStationActor.h"
 
 bool USpaceMMODepositSubsystem::ShouldCreateSubsystem(UObject* Outer) const
@@ -212,10 +213,18 @@ void USpaceMMODepositSubsystem::HandleDepositsLoaded(const int32 BodyId)
 
 void USpaceMMODepositSubsystem::AttachDocking(AActor* Actor)
 {
-	// Any pawn a player can be in, not only the character. You dock a ship, and the docked state
+	// Ships and characters, and nothing else. Both, because you dock a ship and the docked state
 	// then belongs to the character rather than to whichever body they are wearing — which is why
 	// disembarking at a station leaves you docked.
-	APawn* Pawn = Cast<APawn>(Actor);
+	//
+	// "Any pawn" was too broad: the spectator pawn the client holds before possession got one too,
+	// bound the key to it, and pressing G did nothing because a spectator has no character. The
+	// only evidence was one log line reading "Dock key bound on SpectatorPawn_0".
+	const bool bCanDock =
+		Actor != nullptr
+		&& (Actor->IsA<ASpaceMMOShipPawn>() || Actor->IsA<ASpaceMMOCharacterPawn>());
+
+	APawn* Pawn = bCanDock ? Cast<APawn>(Actor) : nullptr;
 
 	if (Pawn == nullptr || Pawn->FindComponentByClass<USpaceMMODockingComponent>() != nullptr)
 	{

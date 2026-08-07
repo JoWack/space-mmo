@@ -8,6 +8,7 @@
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOBackendProtocol.h"
+#include "SpaceMMODockingComponent.h"
 #include "SpaceMMOGatheringComponent.h"
 
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
@@ -1220,6 +1221,28 @@ void ASpaceMMOPlayerController::RefreshPossessedPawn()
 			{
 				UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s will gather as character %d (%s)."),
 					*GetNameSafe(Possessed), CharacterId, *CharacterName);
+			}
+		}
+
+		// The same for docking, which was left out of this and did not work for it.
+		//
+		// The component is created when the pawn spawns, and reads identity from the controller
+		// then — which is usually before the backend has said who this connection is, so it holds
+		// zero. ServerToggleDock refuses a character of zero and returns, logging but showing the
+		// player nothing at all: a key that appears dead rather than one that says why.
+		if (USpaceMMODockingComponent* Docking =
+			Possessed->FindComponentByClass<USpaceMMODockingComponent>())
+		{
+			Docking->CharacterId = CharacterId;
+
+			// And bind here too. On a client the component arrives by replication, and its own
+			// BeginPlay can run before the pawn has an input component to bind to.
+			Docking->BindInput(Possessed->InputComponent);
+
+			if (CharacterId != 0)
+			{
+				UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s will dock as character %d."),
+					*GetNameSafe(Possessed), CharacterId);
 			}
 		}
 	}
