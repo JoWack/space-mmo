@@ -87,6 +87,35 @@ if (args.Contains("--seed", StringComparer.Ordinal))
     return 0;
 }
 
+// Refuse to start against a database that is behind the code.
+//
+// Not migrating on startup is deliberate, for the reason above. The cost of that choice is that
+// somebody eventually adds a migration, restarts the server without seeding, and gets a schema
+// the code does not match — at which point every query touching the changed table throws, and the
+// player-visible symptom is a 500 on sign-in that reads as "it cannot identify my character".
+// That happened, and it cost a session to trace back to a column that was never added.
+//
+// Saying so and stopping is strictly better than serving errors: the fault is named, the fix is
+// printed, and nothing half-works in the meantime.
+await using (AsyncServiceScope scope = app.Services.CreateAsyncScope())
+{
+    SpaceMmoDbContext database = scope.ServiceProvider.GetRequiredService<SpaceMmoDbContext>();
+
+    string[] pending = [.. await database.Database.GetPendingMigrationsAsync()];
+
+    if (pending.Length > 0)
+    {
+        Console.Error.WriteLine(
+            $"Refusing to start: {pending.Length} migration(s) have not been applied to this "
+            + $"database ({string.Join(", ", pending)}).");
+
+        Console.Error.WriteLine(
+            "Run: dotnet run --project services/SpaceMMO.Api -- --seed");
+
+        return 1;
+    }
+}
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 

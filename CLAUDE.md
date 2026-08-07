@@ -70,6 +70,11 @@ Green tests are not the claim. The claim is that a specific wrong behaviour woul
   misleading `FieldCache` error. `RunUAT BuildCookRun ... -server -noclient`, ~30 minutes.
 - **Re-seed after editing anything in `data/`**: `dotnet run --project services/SpaceMMO.Api --
   --seed`. Restarting the API does not do it.
+- **`--seed` is also the only thing that applies migrations.** Startup deliberately does not, so a
+  restart cannot rewrite a production database — but that means a new migration is unapplied until
+  somebody seeds. The API now refuses to start and names the missing migrations rather than serving
+  500s; before that guard existed, the symptom was a failed sign-in reading as "cannot identify my
+  character", which cost a session.
 - **This machine mangles Unreal command-line arguments.** Check `LogInit: Command Line:` in the
   log before believing a flag arrived. Prefer values in config files.
 - **Never round-trip a source file through PowerShell** `Get-Content`/`Set-Content` — it
