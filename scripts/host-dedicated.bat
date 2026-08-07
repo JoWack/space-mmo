@@ -10,11 +10,21 @@ REM
 REM   ReceivedBunch: FieldCache == nullptr
 REM   ReadFieldHeaderAndPayload: GetFromIndex failed
 REM
-REM That is a stale server, not a network fault.
+REM That is a stale server, not a network fault. A newly added component is worse, because it
+REM produces no error at all -- the key simply does nothing, since the server has never heard of
+REM the action it sends. That cost a session on the docking component.
 REM
-REM Rebuild it after any code change with:
-REM   cd /d D:\Programming\UnrealEngineSource
-REM   Engine\Build\BatchFiles\RunUAT.bat BuildCookRun -project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -noP4 -utf8output -platform=Win64 -serverconfig=Development -server -noclient -build -cook -stage -pak
+REM All of that was already written in this comment on the day it happened, and it did not help,
+REM because a comment cannot run. check-staged-server.ps1 can, and this refuses to launch without
+REM it -- including when the check itself fails, since a guard that cannot tell must not wave you
+REM through.
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0check-staged-server.ps1"
+
+if errorlevel 1 (
+    exit /b 1
+)
+
 REM The staged server lives under Saved\StagedBuilds, so its idea of "the project directory" is in
 REM there too, and the default relative path to secrets\ finds nothing. Without the credential it
 REM cannot verify anyone's identity, and every player is refused their own character -- which reads
