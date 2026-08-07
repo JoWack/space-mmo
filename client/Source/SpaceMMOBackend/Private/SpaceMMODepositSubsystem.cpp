@@ -156,7 +156,13 @@ void USpaceMMODepositSubsystem::HandleBodiesLoaded()
 		return;
 	}
 
+	// Remembered, because it is also the answer to "which stations belong on the planet this scene
+	// actually has". Every other body is in the database with nowhere to stand.
+	SceneBodyId = Body.Id;
+
 	Backend->FetchDeposits(Body.Id);
+
+	PlaceStationsWhenReady();
 }
 
 void USpaceMMODepositSubsystem::HandleDepositsLoaded(const int32 BodyId)
@@ -201,6 +207,25 @@ void USpaceMMODepositSubsystem::HandleDepositsLoaded(const int32 BodyId)
 
 void USpaceMMODepositSubsystem::HandleStationsLoaded()
 {
+	bStationsLoaded = true;
+
+	PlaceStationsWhenReady();
+}
+
+void USpaceMMODepositSubsystem::PlaceStationsWhenReady()
+{
+	// Both answers are needed and they arrive in either order: stations are asked for immediately,
+	// bodies take a round trip to resolve a content key. Placing on whichever lands first would
+	// mean that on the ordering where stations win, every body-relative station is compared
+	// against a scene body of zero, matches nothing, and is silently skipped — a world with one
+	// deep-space station in it and no error anywhere.
+	if (bStationsPlaced || !bStationsLoaded || SceneBodyId == 0)
+	{
+		return;
+	}
+
+	bStationsPlaced = true;
+
 	PlaceStations();
 }
 
@@ -245,6 +270,8 @@ void USpaceMMODepositSubsystem::PlaceStations()
 
 	int32 Drawn = 0;
 
+	int32 Skipped = 0;
+
 	for (const FBackendStation& Station : Backend->GetStations())
 	{
 		// A station on a body needs a planet to stand on. Deep-space ones do not, which is why
@@ -254,6 +281,20 @@ void USpaceMMODepositSubsystem::PlaceStations()
 		{
 			UE_LOG(LogSpaceMMOBackend, Warning,
 				TEXT("No planet in the world; station %s has nothing to stand on."), *Station.Key);
+
+			continue;
+		}
+
+		// And it needs to be *this* planet's station.
+		//
+		// The scene has one planet; the system has five. Placing every body-relative station
+		// against the only planet present put all five outposts on the capital, a few hundred
+		// metres apart, which read as one enormous sprawling structure rather than as four
+		// stations that should not have been there at all. Skipping them is honest: those worlds
+		// exist in the database and have nowhere to stand yet.
+		if (Station.bPlaced && Station.bOnBody && Station.BodyId != SceneBodyId)
+		{
+			++Skipped;
 
 			continue;
 		}
@@ -281,8 +322,9 @@ void USpaceMMODepositSubsystem::PlaceStations()
 		Drawn += Station.bPlaced ? 1 : 0;
 	}
 
-	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Placed %d station(s), %d of them drawable."),
-		PlacedStations.Num(), Drawn);
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Placed %d station(s), %d drawable; skipped %d on bodies this scene does not have."),
+		PlacedStations.Num(), Drawn, Skipped);
 }
 
 void USpaceMMODepositSubsystem::PlaceDeposits()

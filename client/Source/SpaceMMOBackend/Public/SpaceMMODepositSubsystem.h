@@ -67,6 +67,14 @@ private:
 	 * body-relative position needs, and a second copy of that lookup would be a second chance to
 	 * read a different planet's radius.
 	 */
+	/**
+	 * Places stations once both they and the scene's body are known.
+	 *
+	 * They arrive in either order, and acting on whichever lands first silently drops every
+	 * body-relative station on the ordering where stations win.
+	 */
+	void PlaceStationsWhenReady();
+
 	void PlaceStations();
 
 	UPROPERTY()
@@ -74,6 +82,15 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<class ASpaceMMOStationActor>> PlacedStations;
+
+	/** The body this scene actually has a planet for. Zero until bodies have loaded. */
+	int32 SceneBodyId = 0;
+
+	/** Whether the station list has arrived. */
+	bool bStationsLoaded = false;
+
+	/** Whether stations have already been placed, so a second trigger does not duplicate them. */
+	bool bStationsPlaced = false;
 
 	/** Handle for the spawn callback, so it can be released when the world goes away. */
 	FDelegateHandle ActorSpawnedHandle;
