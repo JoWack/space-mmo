@@ -76,6 +76,9 @@ private:
 
 	FSystemCoordinate SystemPosition;
 
+	/** How far to raise the mesh so its base rests on the ground rather than its middle. */
+	double BaseLiftCentimetres = 0.0;
+
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Station")
 	TObjectPtr<UStaticMeshComponent> Hull;
 

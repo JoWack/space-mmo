@@ -5,6 +5,7 @@
 #include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMODepositSettings.h"
 #include "SpaceMMORenderOrigin.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -16,11 +17,20 @@ namespace SpaceMMOStation
 	/**
 	 * How large a station stands, in metres.
 	 *
-	 * Big enough to be unmistakable from the air on approach, since finding it is the point.
+	 * <strong>Judged against the horizon, not against a picture of a space station.</strong> This
+	 * planet has a radius of twenty kilometres, so from eye height the horizon is about two
+	 * hundred and sixty metres away. A sixty-metre building — the first value here — subtends
+	 * thirteen degrees at that range and reads as a structure the size of the visible world, which
+	 * is exactly how it looked.
+	 *
+	 * Twenty-five metres is still a landmark you can see from most of the way to the horizon, and
+	 * still large next to a three-metre ore deposit, without dominating a planet that is only
+	 * forty kilometres across.
+	 *
 	 * Stated in metres and converted once, because a radius set in the wrong unit earlier in this
 	 * project wrapped a two-metre shape in a twenty-metre body and nothing looked wrong.
 	 */
-	constexpr double SizeMetres = 60.0;
+	constexpr double SizeMetres = 25.0;
 }
 
 ASpaceMMOStationActor::ASpaceMMOStationActor()
@@ -67,6 +77,21 @@ void ASpaceMMOStationActor::Configure(
 	if (Hull != nullptr)
 	{
 		Hull->SetWorldScale3D(FVector(Scale));
+
+		// How far to raise it so its base rests on the ground rather than its middle sitting in
+		// it. The surface position names a point on the ground, and an actor placed there with a
+		// centred pivot is half buried — half of a twenty-five metre cube is twelve metres of
+		// station underground, which is most of why the first one did not read as standing on
+		// anything.
+		//
+		// The same helper the deposits use, so both handle either pivot convention without being
+		// told which the mesh was authored with.
+		const FBoxSphereBounds MeshBounds = Hull->GetStaticMesh() != nullptr
+			? Hull->GetStaticMesh()->GetBounds()
+			: FBoxSphereBounds(ForceInit);
+
+		BaseLiftCentimetres =
+			FDepositPlacement::BaseLift(MeshBounds.Origin, MeshBounds.BoxExtent, Scale);
 	}
 
 	if (!Station.bPlaced)
@@ -161,7 +186,33 @@ void ASpaceMMOStationActor::ApplyRenderTransform()
 		return;
 	}
 
-	SetActorLocation(Origin->ToWorldLocation(SystemPosition));
+	// Lifted along local up, which on a sphere is the direction from the planet's centre — not
+	// world Z. A station on the far side of the planet lifted along Z would be pushed sideways
+	// into the ground.
+	//
+	// Deep-space stations are not lifted at all: there is no ground under them, and the anchor is
+	// already the middle of the structure rather than a point on a surface.
+	if (!Station.bOnBody)
+	{
+		// Nothing to stand on and nothing to be upright with respect to.
+		SetActorLocation(Origin->ToWorldLocation(SystemPosition));
+
+		BuiltAtRevision = Origin->GetRevision();
+
+		return;
+	}
+
+	const FVector Up = Station.Direction.GetSafeNormal();
+
+	// Turned to face away from the planet's centre, not left pointing along world Z.
+	//
+	// On a sphere "up" is a different direction at every point, and an unrotated box is upright
+	// only at the one place where the local up happens to be world Z. The capital's station sits
+	// where up is roughly negative X, so it was lying on its side — which does more to make a
+	// building look like it is not on the ground than being the wrong size does.
+	SetActorLocationAndRotation(
+		Origin->ToWorldLocation(SystemPosition) + (Up * BaseLiftCentimetres),
+		FRotationMatrix::MakeFromZ(Up).ToQuat());
 
 	BuiltAtRevision = Origin->GetRevision();
 }
