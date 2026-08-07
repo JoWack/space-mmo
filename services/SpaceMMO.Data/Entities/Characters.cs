@@ -67,6 +67,26 @@ public class Character
     /// </remarks>
     public DateTimeOffset? LastGatheredAt { get; set; }
 
+    /// <summary>
+    /// The station this character is docked at, or null when they are not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A place, not a permission.</strong> This says where the character is, and services
+    /// ask whether that place is the one they need. It is deliberately not a "may use the market"
+    /// flag: station interiors are coming, and when they do, "walk to the refinery" becomes a
+    /// second check inside this station rather than a rewrite of every service that consults it.
+    /// </para>
+    /// <para>
+    /// Set only by the game server, which is the only party that knows where a ship actually is.
+    /// A client claiming to be docked is a client claiming a position, and positions are not
+    /// something a client is trusted to report (ADR-0003).
+    /// </para>
+    /// </remarks>
+    public int? DockedStationId { get; set; }
+
+    public Station? DockedStation { get; set; }
+
     public ICollection<CharacterSkill> Skills { get; } = [];
 
     public ICollection<Inventory> Inventories { get; } = [];
