@@ -873,6 +873,86 @@ bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendB
 	return true;
 }
 
+bool FSpaceMMOBackendProtocol::ParseStations(
+	const FString& Json, TArray<FBackendStation>& OutStations)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutStations.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+		FBackendStation Station;
+
+		if (!Object.IsValid() || !Object->TryGetStringField(TEXT("key"), Station.Key))
+		{
+			continue;
+		}
+
+		Object->TryGetStringField(TEXT("name"), Station.Name);
+		Object->TryGetStringField(TEXT("kind"), Station.Kind);
+
+		int64 Scratch = 0;
+
+		if (ReadInt64(Object, TEXT("id"), Scratch))
+		{
+			Station.Id = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("bodyId"), Scratch))
+		{
+			Station.BodyId = static_cast<int32>(Scratch);
+		}
+
+		Object->TryGetNumberField(TEXT("dockingRangeKm"), Station.DockingRangeKilometres);
+
+		// Placed one way or the other, never both, and unplaced is allowed. The server refuses to
+		// serve both, so reading the direction first and only falling through to a system
+		// position means a row that somehow carried both would be drawn on its body rather than
+		// in two places at once.
+		double X = 0.0;
+		double Y = 0.0;
+		double Z = 0.0;
+
+		if (Object->TryGetNumberField(TEXT("directionX"), X)
+			&& Object->TryGetNumberField(TEXT("directionY"), Y)
+			&& Object->TryGetNumberField(TEXT("directionZ"), Z))
+		{
+			const FVector Direction(X, Y, Z);
+
+			// A zero direction names no point on the sphere and normalising it gives a NaN, which
+			// would be a station at no position rather than a visible mistake.
+			if (!Direction.IsNearlyZero())
+			{
+				Station.Direction = Direction.GetSafeNormal();
+				Station.bOnBody = true;
+				Station.bPlaced = true;
+			}
+		}
+		else if (Object->TryGetNumberField(TEXT("systemX"), X)
+			&& Object->TryGetNumberField(TEXT("systemY"), Y)
+			&& Object->TryGetNumberField(TEXT("systemZ"), Z))
+		{
+			Station.Position = FSystemCoordinate(FVector(X, Y, Z));
+			Station.bOnBody = false;
+			Station.bPlaced = true;
+		}
+
+		// A station on a body with no direction, or one in deep space with no coordinate, stays
+		// unplaced rather than being dropped. It exists, it is listed, and nothing can dock at it.
+		OutStations.Add(Station);
+	}
+
+	return true;
+}
+
 bool FSpaceMMOBackendProtocol::ParseResourceNodes(
 	const FString& Json, TArray<FBackendResourceNode>& OutNodes)
 {

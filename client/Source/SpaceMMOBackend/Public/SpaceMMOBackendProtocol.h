@@ -117,6 +117,15 @@ public:
 	static bool ParseResourceNodes(const FString& Json, TArray<FBackendResourceNode>& OutNodes);
 
 	/**
+	 * Reads the station list, including stations the server has no position for.
+	 *
+	 * Unplaced stations are kept rather than dropped, because "this station exists and cannot be
+	 * reached" is a different thing to say than nothing at all, and a client that silently omits
+	 * them makes unfinished content look like missing content.
+	 */
+	static bool ParseStations(const FString& Json, TArray<FBackendStation>& OutStations);
+
+	/**
 	 * Classifies a response.
 	 *
 	 * @param HttpStatus Zero when the request never reached the server.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "SpaceMMOCoordinates.h"
 #include "SpaceMMOBackendTypes.generated.h"
 
 /**
@@ -186,6 +187,62 @@ struct SPACEMMOBACKEND_API FBackendInventoryItem
 	/** Which station holds it, or zero for anything not at one. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 StationId = 0;
+};
+
+/**
+ * A station, and whichever way it is placed.
+ *
+ * <strong>Two ways to be somewhere, and never both.</strong> A station on a body is placed by
+ * direction from that body's centre, exactly like a deposit, and carries no altitude — how far
+ * out the ground is at that direction is a question <c>FPlanetTerrain::SurfacePosition</c>
+ * already answers identically on both machines. A station that orbits nothing has no centre for
+ * a direction to be relative to, so it carries a system coordinate instead.
+ *
+ * A station may also be placed no way at all, which the server allows so that one can be
+ * authored before anybody decides where it stands. Nothing is drawn for it and nothing can dock
+ * at it, which is a station visibly missing rather than one that accepts docking from anywhere.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendStation
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Id = 0;
+
+	/** Stable content key, e.g. <c>station_capital_hub</c>. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Key;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Name;
+
+	/** The body it stands on, or zero for a station that orbits nothing. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 BodyId = 0;
+
+	/** What it is for: TradingHub, Spaceport, Housing, Social, Capital. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Kind;
+
+	/** False when the server has no position for it. Nothing is drawn and nothing may dock. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bPlaced = false;
+
+	/** True when <see cref="Direction"/> is the answer, false when <see cref="Position"/> is. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bOnBody = false;
+
+	/** Direction from the body's centre. Meaningful only when <c>bOnBody</c>. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FVector Direction = FVector::ZeroVector;
+
+	/** System-space position. Meaningful only when <c>bPlaced</c> and not <c>bOnBody</c>. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FSystemCoordinate Position;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	double DockingRangeKilometres = 5.0;
 };
 
 /** Which side of the order book, mirroring the server. */

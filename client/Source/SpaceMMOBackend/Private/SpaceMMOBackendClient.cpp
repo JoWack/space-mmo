@@ -834,6 +834,37 @@ bool USpaceMMOBackendClient::FindBodyByKey(const FString& Key, FBackendBody& Out
 	return false;
 }
 
+void USpaceMMOBackendClient::FetchStations()
+{
+	Stations.Reset();
+
+	// Unauthenticated, like the deposits and the order book: where you can dock is not a secret,
+	// and this has to work on a dedicated server, which holds no session at all.
+	Send(
+		TEXT("GET"),
+		TEXT("/world/stations"),
+		FString(),
+		false,
+		[this](const FString& Body)
+		{
+			FSpaceMMOBackendProtocol::ParseStations(Body, Stations);
+
+			int32 Placed = 0;
+
+			for (const FBackendStation& Station : Stations)
+			{
+				Placed += Station.bPlaced ? 1 : 0;
+			}
+
+			// Both numbers, because they differ exactly when content is unfinished, and a station
+			// that cannot be docked at is worth noticing before somebody flies to it.
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Loaded %d station(s), %d placed."),
+				Stations.Num(), Placed);
+
+			OnStationsLoaded.Broadcast();
+		});
+}
+
 void USpaceMMOBackendClient::FetchDeposits(const int32 BodyId)
 {
 	Deposits.Reset();

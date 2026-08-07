@@ -9,6 +9,7 @@
 #include "SpaceMMOGatheringComponent.h"
 #include "SpaceMMOPlayerController.h"
 #include "SpaceMMOPlanetActor.h"
+#include "SpaceMMOStationActor.h"
 
 bool USpaceMMODepositSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
@@ -47,9 +48,14 @@ void USpaceMMODepositSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 	Backend->OnBodiesLoaded.AddDynamic(this, &USpaceMMODepositSubsystem::HandleBodiesLoaded);
 	Backend->OnDepositsLoaded.AddDynamic(this, &USpaceMMODepositSubsystem::HandleDepositsLoaded);
+	Backend->OnStationsLoaded.AddDynamic(this, &USpaceMMODepositSubsystem::HandleStationsLoaded);
 
 	// Bodies first, so the deposit request can name a body by an id resolved from its content key.
 	Backend->FetchBodies();
+
+	// Stations need no body resolved first — they are asked for all at once and carry whichever
+	// position they have — so this can go out immediately rather than waiting behind the bodies.
+	Backend->FetchStations();
 
 	// Character pawns are spawned on demand rather than placed, so both cases have to be covered:
 	// any that already exist, and any that appear later.
@@ -191,6 +197,92 @@ void USpaceMMODepositSubsystem::HandleDepositsLoaded(const int32 BodyId)
 
 	Backend->GatherAsServer(
 		SelfTestCharacterId, PlacedDeposits[0]->GetNode().Id, SelfTestStationId);
+}
+
+void USpaceMMODepositSubsystem::HandleStationsLoaded()
+{
+	PlaceStations();
+}
+
+void USpaceMMODepositSubsystem::PlaceStations()
+{
+	UWorld* World = GetWorld();
+
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const UGameInstance* GameInstance = World->GetGameInstance();
+
+	const USpaceMMOBackendClient* Backend =
+		GameInstance != nullptr
+			? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
+			: nullptr;
+
+	if (Backend == nullptr)
+	{
+		return;
+	}
+
+	// Read off the planet rather than copied, for the same reason the deposits do it: two
+	// hard-coded radii agree right up until one is edited, and then a station stands at the
+	// altitude of a planet that no longer exists.
+	const ASpaceMMOPlanetActor* PlanetActor = nullptr;
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		PlanetActor = *It;
+
+		break;
+	}
+
+	const FPlanetConfig Planet =
+		PlanetActor != nullptr ? PlanetActor->GetPlanetConfig() : FPlanetConfig();
+
+	const FPlanetTerrainConfig Terrain =
+		PlanetActor != nullptr ? PlanetActor->GetTerrainConfig() : FPlanetTerrainConfig();
+
+	int32 Drawn = 0;
+
+	for (const FBackendStation& Station : Backend->GetStations())
+	{
+		// A station on a body needs a planet to stand on. Deep-space ones do not, which is why
+		// the missing planet is only fatal for the first kind — and why this loop continues
+		// rather than returning.
+		if (Station.bPlaced && Station.bOnBody && PlanetActor == nullptr)
+		{
+			UE_LOG(LogSpaceMMOBackend, Warning,
+				TEXT("No planet in the world; station %s has nothing to stand on."), *Station.Key);
+
+			continue;
+		}
+
+		// Deferred, so Configure runs before BeginPlay. A plain SpawnActor begins play
+		// immediately and the station would briefly occupy the system origin — the same ordering
+		// mistake the deposits carry a comment about having made three times.
+		ASpaceMMOStationActor* Placed = World->SpawnActorDeferred<ASpaceMMOStationActor>(
+			ASpaceMMOStationActor::StaticClass(),
+			FTransform::Identity,
+			nullptr,
+			nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+		if (Placed == nullptr)
+		{
+			continue;
+		}
+
+		Placed->Configure(Station, Planet, Terrain);
+		Placed->FinishSpawning(Placed->GetActorTransform());
+
+		PlacedStations.Add(Placed);
+
+		Drawn += Station.bPlaced ? 1 : 0;
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Placed %d station(s), %d of them drawable."),
+		PlacedStations.Num(), Drawn);
 }
 
 void USpaceMMODepositSubsystem::PlaceDeposits()

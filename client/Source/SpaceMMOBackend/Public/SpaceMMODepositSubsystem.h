@@ -57,8 +57,23 @@ private:
 	/** Spawns an actor per loaded deposit, on the planet the scenery subsystem built. */
 	void PlaceDeposits();
 
+	UFUNCTION()
+	void HandleStationsLoaded();
+
+	/**
+	 * Puts every placed station in the world.
+	 *
+	 * Here rather than in a subsystem of its own because this one already resolves the planet a
+	 * body-relative position needs, and a second copy of that lookup would be a second chance to
+	 * read a different planet's radius.
+	 */
+	void PlaceStations();
+
 	UPROPERTY()
 	TArray<TObjectPtr<class ASpaceMMODepositActor>> PlacedDeposits;
+
+	UPROPERTY()
+	TArray<TObjectPtr<class ASpaceMMOStationActor>> PlacedStations;
 
 	/** Handle for the spawn callback, so it can be released when the world goes away. */
 	FDelegateHandle ActorSpawnedHandle;

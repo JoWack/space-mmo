@@ -11,6 +11,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharactersLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharacterStateLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendDepositsLoaded, int32, BodyId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendBodiesLoaded);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendStationsLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
 	FOnBackendGathered, int32, CharacterId, const FBackendGatherResult&, Result);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendIndustryChanged);
@@ -155,6 +156,18 @@ public:
 	const TArray<FBackendResourceNode>& GetDeposits() const { return Deposits; }
 
 	/**
+	 * Loads every station in the system, wherever it is.
+	 *
+	 * All of them at once rather than per body, because the stations that matter most to a pilot
+	 * are the ones attached to no body at all, and a route keyed by body could never return those.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
+	void FetchStations();
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
+	const TArray<FBackendStation>& GetStations() const { return Stations; }
+
+	/**
 	 * Loads the recipe catalog. Unauthenticated, like bodies and deposits.
 	 *
 	 * What can be built is authored content, identical for everyone, so requiring a token would
@@ -272,6 +285,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
 	FOnBackendBodiesLoaded OnBodiesLoaded;
 
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
+	FOnBackendStationsLoaded OnStationsLoaded;
+
 	/** Fires on the server, where gathering is decided. */
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
 	FOnBackendGathered OnGathered;
@@ -364,6 +380,9 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendBody> Bodies;
+
+	UPROPERTY()
+	TArray<FBackendStation> Stations;
 
 	UPROPERTY()
 	TArray<FBackendRecipe> Recipes;
