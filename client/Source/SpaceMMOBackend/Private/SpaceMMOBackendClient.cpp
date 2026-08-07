@@ -200,6 +200,71 @@ void USpaceMMOBackendClient::LoadServiceSecret()
 		*FingerprintOf(ServiceSecret));
 }
 
+void USpaceMMOBackendClient::DockAsServer(const int32 CharacterId, const int32 StationId)
+{
+	if (ServiceSecret.IsEmpty())
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Dock refused: this machine holds no service credential."));
+
+		return;
+	}
+
+	const FString Body = FString::Printf(
+		TEXT("{\"characterId\":%d,\"stationId\":%d}"), CharacterId, StationId);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/docking/dock"),
+		Body,
+		false,
+		[CharacterId, StationId](const FString&)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Character %d docked at station %d."), CharacterId, StationId);
+		});
+}
+
+void USpaceMMOBackendClient::UndockAsServer(const int32 CharacterId)
+{
+	if (ServiceSecret.IsEmpty())
+	{
+		return;
+	}
+
+	const FString Body = FString::Printf(TEXT("{\"characterId\":%d}"), CharacterId);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/docking/undock"),
+		Body,
+		false,
+		[CharacterId](const FString&)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Character %d undocked."), CharacterId);
+		});
+}
+
+void USpaceMMOBackendClient::FetchDockedStation(const int32 CharacterId)
+{
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/docking/%d"), CharacterId),
+		FString(),
+		true,
+		[this](const FString& Body)
+		{
+			// Absent means not docked, which is a state rather than a failure — a player in
+			// flight is the ordinary case, and treating it as an error would log a warning every
+			// two seconds for the whole time somebody is travelling.
+			int32 Station = 0;
+
+			FSpaceMMOBackendProtocol::ParseDockedStation(Body, Station);
+
+			DockedStationId = Station;
+		});
+}
+
 void USpaceMMOBackendClient::GatherAsServer(
 	const int32 CharacterId,
 	const int64 ResourceNodeId,

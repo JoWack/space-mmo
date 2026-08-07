@@ -873,6 +873,31 @@ bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendB
 	return true;
 }
 
+bool FSpaceMMOBackendProtocol::ParseDockedStation(
+	const FString& Json, int32& OutStationId)
+{
+	OutStationId = 0;
+
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	if (!Object.IsValid())
+	{
+		return false;
+	}
+
+	// A null station is the ordinary answer for anybody in flight, so it is read as zero rather
+	// than as a parse failure. Treating it as an error would log a complaint every couple of
+	// seconds for the whole time somebody is travelling.
+	int64 Station = 0;
+
+	if (ReadInt64(Object, TEXT("stationId"), Station))
+	{
+		OutStationId = static_cast<int32>(Station);
+	}
+
+	return true;
+}
+
 bool FSpaceMMOBackendProtocol::ParseStations(
 	const FString& Json, TArray<FBackendStation>& OutStations)
 {

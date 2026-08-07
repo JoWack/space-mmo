@@ -168,6 +168,24 @@ public:
 	const TArray<FBackendStation>& GetStations() const { return Stations; }
 
 	/**
+	 * Records that a character has docked, as the game server.
+	 *
+	 * Service-credential only, like gathering. Where a ship is is the simulation's to know, and a
+	 * client asking to be docked is a client asserting a position (ADR-0003).
+	 */
+	void DockAsServer(int32 CharacterId, int32 StationId);
+
+	void UndockAsServer(int32 CharacterId);
+
+	/** Reads where this character is docked. A player's own token, since it is their business. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
+	void FetchDockedStation(int32 CharacterId);
+
+	/** The station last reported, or zero when not docked. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
+	int32 GetDockedStationId() const { return DockedStationId; }
+
+	/**
 	 * Loads the recipe catalog. Unauthenticated, like bodies and deposits.
 	 *
 	 * What can be built is authored content, identical for everyone, so requiring a token would
@@ -383,6 +401,9 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendStation> Stations;
+
+	/** Where this client's character is docked, or zero. */
+	int32 DockedStationId = 0;
 
 	UPROPERTY()
 	TArray<FBackendRecipe> Recipes;

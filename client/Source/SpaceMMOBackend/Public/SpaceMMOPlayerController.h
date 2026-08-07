@@ -252,6 +252,15 @@ private:
 	bool TryGetSelectedHolding(FBackendInventoryItem& OutItem) const;
 
 	/** Stand-in for a price box. Well clear of the faction floor, which exists to be the worst deal. */
+	/**
+	 * The station the market keys off: where this character is docked, or zero.
+	 *
+	 * Not the StationId field, which is a scene-wide default for crafting and storage. The market
+	 * is a place you have to be at, and asking with the wrong station is refused by the server --
+	 * so asking with the right one is the client's job, not a hope.
+	 */
+	int32 DockedStationId() const;
+
 	static int64 ListingPriceFor(const FBackendInventoryItem& Item);
 
 	void CycleHolding();

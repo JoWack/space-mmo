@@ -6,6 +6,7 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMODepositActor.h"
+#include "SpaceMMODockingComponent.h"
 #include "SpaceMMOGatheringComponent.h"
 #include "SpaceMMOPlayerController.h"
 #include "SpaceMMOPlanetActor.h"
@@ -59,7 +60,9 @@ void USpaceMMODepositSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 	// Character pawns are spawned on demand rather than placed, so both cases have to be covered:
 	// any that already exist, and any that appear later.
-	for (TActorIterator<ASpaceMMOCharacterPawn> It(&InWorld); It; ++It)
+	// Every pawn, not only characters. Docking attaches to ships as well, and a ship already in
+	// the world when this ran would otherwise never get the key.
+	for (TActorIterator<APawn> It(&InWorld); It; ++It)
 	{
 		AttachGathering(*It);
 	}
@@ -70,6 +73,8 @@ void USpaceMMODepositSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 {
+	AttachDocking(Actor);
+
 	ASpaceMMOCharacterPawn* Pawn = Cast<ASpaceMMOCharacterPawn>(Actor);
 
 	if (Pawn == nullptr || Pawn->FindComponentByClass<USpaceMMOGatheringComponent>() != nullptr)
@@ -203,6 +208,44 @@ void USpaceMMODepositSubsystem::HandleDepositsLoaded(const int32 BodyId)
 
 	Backend->GatherAsServer(
 		SelfTestCharacterId, PlacedDeposits[0]->GetNode().Id, SelfTestStationId);
+}
+
+void USpaceMMODepositSubsystem::AttachDocking(AActor* Actor)
+{
+	// Any pawn a player can be in, not only the character. You dock a ship, and the docked state
+	// then belongs to the character rather than to whichever body they are wearing — which is why
+	// disembarking at a station leaves you docked.
+	APawn* Pawn = Cast<APawn>(Actor);
+
+	if (Pawn == nullptr || Pawn->FindComponentByClass<USpaceMMODockingComponent>() != nullptr)
+	{
+		return;
+	}
+
+	// Authority only, for the reason spelled out in AttachGathering: the component replicates, so
+	// a client that made its own would end up with two, both bound to the key.
+	if (!Pawn->HasAuthority())
+	{
+		return;
+	}
+
+	USpaceMMODockingComponent* Docking =
+		NewObject<USpaceMMODockingComponent>(Pawn, TEXT("Docking"));
+
+	if (Docking == nullptr)
+	{
+		return;
+	}
+
+	Docking->RegisterComponent();
+
+	if (const ASpaceMMOPlayerController* Controller =
+		Cast<ASpaceMMOPlayerController>(Pawn->GetController()))
+	{
+		Docking->CharacterId = Controller->GetCharacterId();
+	}
+
+	Docking->BindInput(Pawn->InputComponent);
 }
 
 void USpaceMMODepositSubsystem::HandleStationsLoaded()

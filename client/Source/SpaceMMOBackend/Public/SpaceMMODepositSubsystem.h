@@ -48,6 +48,9 @@ private:
 	 */
 	void AttachGathering(AActor* Actor);
 
+	/** Gives any player-controlled pawn a docking component, on the authority only. */
+	void AttachDocking(AActor* Actor);
+
 	UFUNCTION()
 	void HandleBodiesLoaded();
 

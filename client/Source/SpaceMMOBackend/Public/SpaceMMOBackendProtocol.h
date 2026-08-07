@@ -126,6 +126,15 @@ public:
 	static bool ParseStations(const FString& Json, TArray<FBackendStation>& OutStations);
 
 	/**
+	 * Reads which station a character is docked at, or zero.
+	 *
+	 * A null station is the ordinary answer for anyone in flight, so it reads as zero rather than
+	 * as a failure — this is polled, and treating "travelling" as an error would complain every
+	 * couple of seconds for the whole journey.
+	 */
+	static bool ParseDockedStation(const FString& Json, int32& OutStationId);
+
+	/**
 	 * Classifies a response.
 	 *
 	 * @param HttpStatus Zero when the request never reached the server.

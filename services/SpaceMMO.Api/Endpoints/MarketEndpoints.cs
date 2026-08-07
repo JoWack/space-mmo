@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Data;
+using SpaceMMO.Data.Docking;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Data.Market;
 using SpaceMMO.Domain.Economy;
@@ -66,6 +67,7 @@ public static class MarketEndpoints
         HttpContext context,
         Caller caller,
         FactionOrderService factionOrders,
+        DockingService docking,
         CancellationToken cancellation)
     {
         OwnershipResult owned =
@@ -74,6 +76,16 @@ public static class MarketEndpoints
         if (owned.Status != OwnershipStatus.Owned)
         {
             return owned.ToProblem();
+        }
+
+        // The faction standing order is a counter at a station like any other. Leaving it open
+        // from anywhere would make it the one way to turn goods into credits without ever
+        // arriving somewhere — and it is deliberately the worst price in the game precisely
+        // because it is always available once you are there.
+        if (await RefuseIfNotDockedAsync(
+            docking, request.CharacterId, request.StationId, cancellation) is { } refusal)
+        {
+            return refusal;
         }
 
         if (request.Quantity <= 0)
@@ -109,11 +121,48 @@ public static class MarketEndpoints
         }
     }
 
+    /// <summary>
+    /// Refuses a request whose caller is not docked at the station it names.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The market is a place, and being at it is what entitles you to use it. Without this the
+    /// order book is reachable from anywhere in the system, which removes the reason stations
+    /// exist and the reason hauling is a profession — a seller on Grimhold could list into the
+    /// capital's book without crossing the contested approach at all (ADR-0008).
+    /// </para>
+    /// <para>
+    /// Checked against the station the request names rather than "docked anywhere", because a
+    /// character docked at Grimhold has no business on a Terra order book and a laxer check would
+    /// let them.
+    /// </para>
+    /// </remarks>
+    private static async Task<IResult?> RefuseIfNotDockedAsync(
+        DockingService docking,
+        int characterId,
+        int stationId,
+        CancellationToken cancellation)
+    {
+        if (await docking.IsDockedAtAsync(characterId, stationId, cancellation))
+        {
+            return null;
+        }
+
+        // Conflict rather than forbidden: nothing about the caller is wrong, they are simply
+        // somewhere else, and flying there fixes it.
+        return Results.Conflict(new
+        {
+            error = "You must be docked at this station to trade here.",
+            reason = "not_docked",
+        });
+    }
+
     private static async Task<IResult> PlaceAsync(
         PlaceOrderBody body,
         HttpContext context,
         Caller caller,
         MarketService market,
+        DockingService docking,
         CancellationToken cancellation)
     {
         OwnershipResult owned =
@@ -122,6 +171,12 @@ public static class MarketEndpoints
         if (owned.Status != OwnershipStatus.Owned)
         {
             return owned.ToProblem();
+        }
+
+        if (await RefuseIfNotDockedAsync(
+            docking, body.CharacterId, body.StationId, cancellation) is { } refusal)
+        {
+            return refusal;
         }
 
         if (body.Quantity <= 0 || body.LimitPriceMinorUnits <= 0)

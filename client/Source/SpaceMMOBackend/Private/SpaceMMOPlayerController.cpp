@@ -133,6 +133,16 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 	}
 }
 
+int32 ASpaceMMOPlayerController::DockedStationId() const
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	// Zero when not docked, which the server refuses. Substituting the scene default here would
+	// turn "you are not at a station" into a request that looks legitimate and fails for a reason
+	// the player cannot see.
+	return Client != nullptr ? Client->GetDockedStationId() : 0;
+}
+
 USpaceMMOBackendClient* ASpaceMMOPlayerController::Backend() const
 {
 	const UWorld* World = GetWorld();
@@ -276,7 +286,7 @@ void ASpaceMMOPlayerController::RefreshBook()
 
 	if (Client != nullptr && TryGetSelectedHolding(Selected))
 	{
-		Client->FetchBook(StationId, Selected.ItemDefId);
+		Client->FetchBook(DockedStationId(), Selected.ItemDefId);
 	}
 }
 
@@ -295,7 +305,7 @@ void ASpaceMMOPlayerController::ListSelectedForSale()
 
 	Client->PlaceOrder(
 		CharacterId,
-		StationId,
+		DockedStationId(),
 		Selected.ItemDefId,
 		EBackendOrderSide::Sell,
 		ListingPriceFor(Selected),
@@ -349,7 +359,7 @@ void ASpaceMMOPlayerController::BuyBestAsk()
 	// price upward — which is what a market order would do and is never what anybody meant.
 	Client->PlaceOrder(
 		CharacterId,
-		StationId,
+		DockedStationId(),
 		Selected.ItemDefId,
 		EBackendOrderSide::Buy,
 		Best->PriceMinorUnits,
@@ -407,7 +417,8 @@ void ASpaceMMOPlayerController::SellToFaction()
 		// again, and one keypress that empties a hangar into the worst price in the game is a
 		// mistake nobody would make deliberately.
 		Client->SellToFaction(
-			CharacterId, StationId, Item.ItemDefId, FMath::Min(Item.Quantity, FactionSaleParcel));
+			CharacterId, DockedStationId(), Item.ItemDefId,
+			FMath::Min(Item.Quantity, FactionSaleParcel));
 
 		return;
 	}
@@ -437,6 +448,10 @@ void ASpaceMMOPlayerController::PollServerState()
 	// share a call, not because anything here expects them to move.
 	Client->FetchCharacters();
 	Client->SelectCharacter(CharacterId);
+
+	// Where the player is docked. Polled rather than assumed, because the server undocks a ship
+	// that flies out of range without this client being told, and every market key depends on it.
+	Client->FetchDockedStation(CharacterId);
 
 	RefreshBook();
 }
