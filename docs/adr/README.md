@@ -18,7 +18,8 @@ pitch, not a decision record.
 | [0005](0005-money-representation.md) | Credits as int64 minor units on an append-only ledger | Accepted |
 | [0006](0006-death-and-insurance.md) | Cause-based loot destruction; insurance pegged to acquisition value | Accepted |
 | [0007](0007-one-handcrafted-system.md) | One handcrafted system, not a procedural galaxy | Accepted |
-| [0008](0008-factions-pvp-and-markets.md) | Faction warfare, PvP zoning, and market structure | Accepted |
+| [0008](0008-factions-pvp-and-markets.md) | Faction warfare, PvP zoning, and market structure | Accepted · PvP rule amended by [0009](0009-retaliation.md) |
+| [0009](0009-retaliation.md) | Pairwise aggression; faction space is defended, not hunted | Accepted |
 
 ## When to write one
 

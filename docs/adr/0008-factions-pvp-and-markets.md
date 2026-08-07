@@ -1,7 +1,13 @@
 # ADR-0008 — Faction warfare, PvP zoning, and market structure
 
 **Status:** Accepted · 2026-08-03 · resolves open question §1 of the design bible ·
-depends on [ADR-0007](0007-one-handcrafted-system.md)
+depends on [ADR-0007](0007-one-handcrafted-system.md) ·
+**PvP rule amended by [ADR-0009](0009-retaliation.md)**
+
+> The faction-space row of the table below has two readings and does not say which is
+> meant, and the claim that PvP needs no new state turned out to be wrong the moment a
+> victim was allowed to answer back. ADR-0009 settles both. Everything here about
+> markets, planet-locked materials, style tags, and cross-faction recipes stands.
 
 > **Amended the same day, before any implementation existed**, to add the contested
 > approach around the capital and new-player protection. The README says not to edit
