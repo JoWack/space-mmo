@@ -289,7 +289,7 @@ launcher engine can no longer load them.
 | `play.bat` | Standalone single player in a window. Needs nothing else running. |
 | `editor.bat` | Opens the editor. Press Play for the same thing with tooling attached. |
 | `host-dedicated.bat` | The cooked dedicated server on port 7777. |
-| `join.bat [log]` | Connects a client to it. Run twice, with different log names, for two players. |
+| `join.bat a`\|`b` | Connects a client. `a` and `b` are two different players; no letter is the default login. |
 | `api.bat` | The backend on port 5080. Not needed for flight, terrain or walking. |
 
 **No backend is required for gameplay.** Flight, planetary approach, terrain streaming, landing,
@@ -318,6 +318,20 @@ runs, and with it you get a process and no window.
 | `Shift` | Boost | — |
 | `C` | Toggle first/third person | Toggle first/third person |
 | `F` | Step out (only when landed) | Board a ship within 50 m |
+| `M` | Release the mouse | Release the mouse |
+
+Everything the backend does has a key too. These are the ones that were missing from this
+table for long enough that they got guessed at in conversation and guessed wrong — `E`, not
+`G`, is gather:
+
+| Key | Does |
+|---|---|
+| `Tab` | Show or hide the character panel: skills, holdings, quests, market, industry, jobs |
+| `E` | Gather from the deposit you are standing at |
+| `J` | Accept the next available quest |
+| `R` `X` `Z` | Industry: cycle recipe, start the job, claim it when it finishes |
+| `H` `N` `B` | Market: cycle which holding, list ten of it, buy the best ask |
+| `V` | Sell a parcel to the faction standing order — the worst price in the game, by design |
 
 The ship starts 200 km from the planet, which is a long flight — use `-ShipStartX=178` to begin
 just above the surface instead. Flight assist is on by default, so releasing the stick slows you
