@@ -55,6 +55,23 @@
         { "item": "shuttle_hull_section", "quantity": 1 },
         { "item": "crude_thruster", "quantity": 1 }
       ]
+    },
+    {
+      "$comment": "The first recipe no race can satisfy alone. Two of its four raw inputs are always on the far side of the faction line, so building one means either trading at the capital's global market or hauling through contested space -- which is what makes the war economic rather than decorative (ADR-0008). Everything before it stays self-sufficient within a race on purpose, so a new player never stalls waiting for a market that may be empty.",
+      "key": "build_alloy_frame",
+      "output": "alloy_frame",
+      "outputQuantity": 1,
+      "skill": "shipcrafting",
+      "requiredLevel": 20,
+      "jobSeconds": 1800,
+      "xpPerRun": 4000,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "terran_ferrite", "quantity": 10 },
+        { "item": "ares_regolith", "quantity": 10 },
+        { "item": "verdant_amber", "quantity": 10 },
+        { "item": "grimhold_slag", "quantity": 10 }
+      ]
     }
   ]
 }

@@ -112,10 +112,58 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
 
         await using SpaceMmoDbContext verify = _fixture.CreateContext();
 
-        Assert.Equal(5, await verify.Skills.CountAsync());
-        Assert.Equal(7, await verify.ItemDefs.CountAsync());
-        Assert.Equal(4, await verify.Recipes.CountAsync());
-        Assert.Equal(7, await verify.QuestDefs.CountAsync());
+        // Counted against the pack rather than against literals. The claim worth making is that
+        // the loader drops nothing, and hard-coded totals do not make it: they fail every time
+        // content is authored, which trains whoever is authoring to bump the number without
+        // reading why it moved — and a number that is always bumped catches nothing.
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        Assert.Equal(pack.Skills.Count, await verify.Skills.CountAsync());
+        Assert.Equal(pack.Items.Count, await verify.ItemDefs.CountAsync());
+        Assert.Equal(pack.Recipes.Count, await verify.Recipes.CountAsync());
+        Assert.Equal(pack.Quests.Count, await verify.QuestDefs.CountAsync());
+        Assert.Equal(pack.ResourceNodes.Count, await verify.ResourceNodes.CountAsync());
+
+        // And that it loaded something at all, since every count above would pass against an
+        // empty directory.
+        Assert.NotEmpty(pack.Items);
+        Assert.NotEmpty(pack.Recipes);
+    }
+
+    [Fact]
+    public async Task TheShippedContentReallyLocksTheFourMaterials()
+    {
+        // Read from the real files, because the rule that enforces planet-locking is worthless if
+        // the flag never arrives. A misspelt JSON key leaves PlanetLocked false, the validator
+        // finds nothing to check, and every other test in this file still passes — the loudest
+        // possible silence.
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        string[] locked = [.. pack.Items.Where(i => i.PlanetLocked).Select(i => i.Key).Order()];
+
+        Assert.Equal(
+            ["ares_regolith", "grimhold_slag", "terran_ferrite", "verdant_amber"], locked);
+
+        // And that each really does come from one world, since that is the fact hauling is built
+        // on rather than a property of the flag.
+        foreach (string key in locked)
+        {
+            string[] bodies = [.. pack.ResourceNodes
+                .Where(n => n.Item == key)
+                .Select(n => n.Body)
+                .Distinct()
+                .Order()];
+
+            Assert.Single(bodies);
+        }
+
+        // The cross-faction recipe consumes all four, which is what makes two of them cross the
+        // line to reach any given builder (ADR-0008).
+        RecipeContent frame = pack.Recipes.Single(r => r.Key == "build_alloy_frame");
+
+        string[] frameInputs = [.. frame.Inputs.Select(i => i.Item).Order()];
+
+        Assert.Equal<IEnumerable<string>>(locked, frameInputs);
     }
 
     [Fact]
@@ -188,14 +236,20 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
 
         await using SpaceMmoDbContext verify = _fixture.CreateContext();
 
-        Assert.Equal(7, await verify.ItemDefs.CountAsync());
-        Assert.Equal(4, await verify.Recipes.CountAsync());
-        Assert.Equal(7, await verify.QuestDefs.CountAsync());
-        Assert.Equal(7, await verify.QuestSteps.CountAsync());
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
 
-        // 1 + 1 + 2 + 2 across the four recipes. Doubling here would mean the wholesale replace
-        // is appending rather than replacing.
-        Assert.Equal(6, await verify.RecipeInputs.CountAsync());
+        Assert.Equal(pack.Items.Count, await verify.ItemDefs.CountAsync());
+        Assert.Equal(pack.Recipes.Count, await verify.Recipes.CountAsync());
+        Assert.Equal(pack.Quests.Count, await verify.QuestDefs.CountAsync());
+
+        Assert.Equal(
+            pack.Quests.Sum(q => q.Steps.Count), await verify.QuestSteps.CountAsync());
+
+        // Doubling here would mean the wholesale replace is appending rather than replacing,
+        // which is the failure this test exists for and the one a literal total hides once
+        // somebody has bumped it twice.
+        Assert.Equal(
+            pack.Recipes.Sum(r => r.Inputs.Count), await verify.RecipeInputs.CountAsync());
     }
 
     [Fact]
@@ -226,7 +280,9 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
 
         Assert.Equal(
             30, (await verify.Recipes.SingleAsync(r => r.Key == original.Key)).JobSeconds);
-        Assert.Equal(4, await verify.Recipes.CountAsync());
+
+        // Edited, not added.
+        Assert.Equal(edited.Recipes.Count, await verify.Recipes.CountAsync());
     }
 
     [Fact]

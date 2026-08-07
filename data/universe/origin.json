@@ -108,6 +108,49 @@
       "quantityMax": 25,
       "respawnSeconds": 300,
       "direction": [-1.0, -0.032, -0.021]
+    },
+
+    {
+      "$lockedComment": "One planet-locked material per homeworld (ADR-0008). Each of these four items occurs here and nowhere else, and the content validator enforces it, because 'planet-locked' silently becoming 'mostly on one planet' would dissolve hauling without anything looking broken. Higher level and slower respawn than the starter deposits: these feed the cross-faction tier, not the tutorial.",
+      "key": "node_terra_ferrite",
+      "body": "body_terra",
+      "item": "terran_ferrite",
+      "skill": "mining",
+      "requiredLevel": 15,
+      "quantityMax": 150,
+      "respawnSeconds": 1800,
+      "direction": [-1.0, 0.03, 0.01]
+    },
+    {
+      "key": "node_ares_regolith",
+      "body": "body_ares",
+      "item": "ares_regolith",
+      "skill": "mining",
+      "requiredLevel": 15,
+      "quantityMax": 150,
+      "respawnSeconds": 1800,
+      "direction": [-1.0, -0.02, 0.03]
+    },
+    {
+      "key": "node_verdance_amber",
+      "body": "body_verdance",
+      "item": "verdant_amber",
+      "skill": "gathering",
+      "$skillComment": "Gathered rather than mined: it is resin from a living planet, and the skill split is a small way for the four worlds to play differently rather than being reskins of each other.",
+      "requiredLevel": 15,
+      "quantityMax": 150,
+      "respawnSeconds": 1800,
+      "direction": [-1.0, 0.015, -0.03]
+    },
+    {
+      "key": "node_grimhold_slag",
+      "body": "body_grimhold",
+      "item": "grimhold_slag",
+      "skill": "mining",
+      "requiredLevel": 15,
+      "quantityMax": 150,
+      "respawnSeconds": 1800,
+      "direction": [-1.0, -0.025, -0.02]
     }
   ],
 

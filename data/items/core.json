@@ -27,6 +27,50 @@
       "$comment": "Denser than its inputs by design: refining should make hauling easier, not harder."
     },
     {
+      "$lockedComment": "The four planet-locked raw materials (ADR-0008). Each occurs on exactly one homeworld and nowhere else, which is what makes hauling a profession and gives the faction line something to be a line between. The starter chain above stays deliberately unlocked: scrap and ferrite are everywhere, so a new player is never waiting on a market that may have no sellers.",
+      "key": "terran_ferrite",
+      "name": "Terran Ferrite",
+      "category": "Raw",
+      "volumeM3": 0.4,
+      "$comment": "Terra. Ocean-quenched iron from a temperate world -- the mundane one, and the baseline the other three are strange against.",
+      "factionBuyPrice": 6,
+      "planetLocked": true
+    },
+    {
+      "key": "ares_regolith",
+      "name": "Ferric Regolith",
+      "category": "Raw",
+      "volumeM3": 0.6,
+      "$comment": "Ares. Red desert dust, bulky for its worth, so hauling it is a decision rather than a reflex.",
+      "factionBuyPrice": 6,
+      "planetLocked": true
+    },
+    {
+      "key": "verdant_amber",
+      "name": "Luminous Amber",
+      "category": "Raw",
+      "volumeM3": 0.15,
+      "$comment": "Verdance. Resin from a planet that reads as alive -- dense in value and small in volume, so it is what a fast ship carries and a slow one gets caught with.",
+      "factionBuyPrice": 6,
+      "planetLocked": true
+    },
+    {
+      "key": "grimhold_slag",
+      "name": "Grimhold Slag",
+      "category": "Raw",
+      "volumeM3": 0.5,
+      "$comment": "Grimhold. Named in ADR-0008 as the example of a material that exists in one place and nowhere else.",
+      "factionBuyPrice": 6,
+      "planetLocked": true
+    },
+    {
+      "key": "alloy_frame",
+      "name": "Composite Frame",
+      "category": "Component",
+      "volumeM3": 30.0,
+      "$comment": "The first thing that cannot be built by one race alone: it consumes all four planet-locked materials, so two of them must cross the faction line to reach any given builder. ADR-0008 calls this the load-bearing decision of the whole document -- without a recipe like this the global market has nothing to trade across and the PvP split is scenery."
+    },
+    {
       "key": "crude_mining_laser",
       "name": "Crude Mining Laser",
       "category": "Tool",

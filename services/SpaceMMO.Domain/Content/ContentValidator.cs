@@ -225,6 +225,48 @@ public static class ContentValidator
                     "node", node.Key, $"Required level {node.RequiredLevel} is outside the curve."));
             }
         }
+
+        ValidatePlanetLockedMaterials(pack, errors);
+    }
+
+    /// <summary>
+    /// A planet-locked material must occur on exactly one body (ADR-0008).
+    /// </summary>
+    /// <remarks>
+    /// Both halves matter and they fail differently. A material on two planets is no longer
+    /// locked, so hauling it stops being a trade and the faction line stops having anything to
+    /// be a line between — and nothing about the world looks wrong while that is true. A
+    /// material on no planet is worse in a quieter way: it is an input to a recipe that nobody
+    /// can ever satisfy, which reads to a player as a broken game rather than as missing
+    /// content.
+    /// </remarks>
+    private static void ValidatePlanetLockedMaterials(ContentPack pack, List<ContentError> errors)
+    {
+        foreach (ItemContent item in pack.Items.Where(i => i.PlanetLocked))
+        {
+            string[] bodies = pack.ResourceNodes
+                .Where(n => n.Item == item.Key)
+                .Select(n => n.Body)
+                .Distinct()
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+
+            if (bodies.Length == 0)
+            {
+                errors.Add(new ContentError(
+                    "item",
+                    item.Key,
+                    "Planet-locked, but no deposit anywhere produces it."));
+            }
+            else if (bodies.Length > 1)
+            {
+                errors.Add(new ContentError(
+                    "item",
+                    item.Key,
+                    $"Planet-locked, but occurs on {bodies.Length} bodies: "
+                        + $"{string.Join(", ", bodies)}."));
+            }
+        }
     }
 
     private static void ValidateItems(ContentPack pack, List<ContentError> errors)

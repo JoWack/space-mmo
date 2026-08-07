@@ -25,8 +25,9 @@ public sealed class ContentValidatorTests
         string key,
         ItemCategory category = ItemCategory.Raw,
         double volume = 1.0,
-        long? factionBuyPrice = null) =>
-        new(key, key, category, volume, factionBuyPrice);
+        long? factionBuyPrice = null,
+        bool planetLocked = false) =>
+        new(key, key, category, volume, factionBuyPrice, planetLocked);
 
     private static RecipeContent Recipe(
         string key = "r1",
@@ -502,6 +503,82 @@ public sealed class ContentValidatorTests
         TestErrors(errors, "Unknown body 'body_nowhere'");
         TestErrors(errors, "Unknown item 'unobtainium'");
         TestErrors(errors, "Unknown skill 'prospecting'");
+    }
+
+    [Fact]
+    public void APlanetLockedMaterialMayNotOccurTwice()
+    {
+        // Two planets means it is not locked, and the damage is invisible: hauling quietly stops
+        // being a trade, the capital stops being the only place to buy across the faction line,
+        // and nothing in the world looks wrong while that is true.
+        ContentPack pack = Pack(
+            items: [Item("slag", planetLocked: true), Item("plate", ItemCategory.Refined)],
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes:
+            [
+                new ResourceNodeContent(
+                    "node_a", "body_grimhold", "slag", "refining", 1, 150, 1800, [1.0, 0.0, 0.0]),
+                new ResourceNodeContent(
+                    "node_b", "body_terra", "slag", "refining", 1, 150, 1800, [1.0, 0.0, 0.0]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "occurs on 2 bodies"));
+    }
+
+    [Fact]
+    public void APlanetLockedMaterialMustOccurSomewhere()
+    {
+        // Nowhere is the louder failure: it is an input to a recipe nobody can ever satisfy, and
+        // a player meets that as a broken game rather than as missing content.
+        ContentPack pack = Pack(
+            items: [Item("slag", planetLocked: true), Item("plate", ItemCategory.Refined)],
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes: []);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "no deposit anywhere produces it"));
+    }
+
+    [Fact]
+    public void AMaterialOnOnePlanetIsLocked()
+    {
+        ContentPack pack = Pack(
+            items: [Item("slag", planetLocked: true), Item("plate", ItemCategory.Refined)],
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes:
+            [
+                new ResourceNodeContent(
+                    "node_a", "body_grimhold", "slag", "refining", 1, 150, 1800, [1.0, 0.0, 0.0]),
+                new ResourceNodeContent(
+                    "node_b", "body_grimhold", "slag", "refining", 1, 150, 1800, [0.0, 1.0, 0.0]),
+            ]);
+
+        // Several deposits on the same world are fine and expected — locked is about the planet,
+        // not about the number of holes in the ground.
+        Assert.False(HasError(ContentValidator.Validate(pack), "Planet-locked"));
+    }
+
+    [Fact]
+    public void TheStarterChainIsDeliberatelyNotLocked()
+    {
+        // Scrap and ferrite are everywhere on purpose, so a brand-new character is never waiting
+        // on a market that may have no sellers. A blanket "one planet per raw material" rule
+        // would forbid exactly the case the onboarding depends on.
+        ContentPack pack = Pack(
+            items: [Item("ore"), Item("plate", ItemCategory.Refined)],
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes:
+            [
+                new ResourceNodeContent(
+                    "node_a", "body_terra", "ore", "refining", 1, 150, 1800, [1.0, 0.0, 0.0]),
+                new ResourceNodeContent(
+                    "node_b", "body_ares", "ore", "refining", 1, 150, 1800, [1.0, 0.0, 0.0]),
+            ]);
+
+        Assert.False(HasError(ContentValidator.Validate(pack), "Planet-locked"));
     }
 
     [Fact]

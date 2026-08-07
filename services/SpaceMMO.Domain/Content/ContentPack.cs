@@ -33,7 +33,24 @@ public sealed record ItemContent(
     string Name,
     ItemCategory Category,
     double VolumeM3,
-    long? FactionBuyPrice = null);
+    long? FactionBuyPrice = null,
+    bool PlanetLocked = false)
+{
+    /// <summary>
+    /// Whether this material occurs on exactly one body and nowhere else (ADR-0008).
+    /// </summary>
+    /// <remarks>
+    /// Declared rather than inferred. "Every raw material appears on one planet" would be the
+    /// wrong rule — the starter chain is deliberately everywhere, so that a new player is never
+    /// waiting on a market that may have no sellers — and a rule that forbids the common case
+    /// would be turned off rather than obeyed.
+    ///
+    /// Saying it out loud is also what lets the validator catch the failure that matters:
+    /// planet-locked quietly becoming "mostly on one planet", which dissolves hauling as a
+    /// profession without anything looking broken.
+    /// </remarks>
+    public bool PlanetLocked { get; init; } = PlanetLocked;
+}
 
 /// <summary>One material a recipe consumes.</summary>
 public sealed record RecipeInputContent(string Item, int Quantity);
