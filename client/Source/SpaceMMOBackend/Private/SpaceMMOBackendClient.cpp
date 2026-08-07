@@ -222,7 +222,11 @@ void USpaceMMOBackendClient::DockAsServer(const int32 CharacterId, const int32 S
 		{
 			UE_LOG(LogSpaceMMOBackend, Log,
 				TEXT("Character %d docked at station %d."), CharacterId, StationId);
-		});
+		},
+		// The credential is a parameter, not something Send reads off the subsystem. Omitting it
+		// sends no header at all and the API refuses the call as a player pretending to be the
+		// simulation — which is the right answer to the request that was actually made.
+		ServiceSecret);
 }
 
 void USpaceMMOBackendClient::UndockAsServer(const int32 CharacterId)
@@ -242,7 +246,8 @@ void USpaceMMOBackendClient::UndockAsServer(const int32 CharacterId)
 		[CharacterId](const FString&)
 		{
 			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Character %d undocked."), CharacterId);
-		});
+		},
+		ServiceSecret);
 }
 
 void USpaceMMOBackendClient::FetchDockedStation(const int32 CharacterId)
@@ -260,6 +265,16 @@ void USpaceMMOBackendClient::FetchDockedStation(const int32 CharacterId)
 			int32 Station = 0;
 
 			FSpaceMMOBackendProtocol::ParseDockedStation(Body, Station);
+
+			// Logged on change, because the on-screen "Docked at X" is the simulation announcing
+			// its own intent and this is the only place the API's answer becomes visible. When the
+			// two disagreed, the message read as success and the market refused anyway, with
+			// nothing in the client log to tell them apart.
+			if (Station != DockedStationId)
+			{
+				UE_LOG(LogSpaceMMOBackend, Log,
+					TEXT("Server says docked station is %d (was %d)."), Station, DockedStationId);
+			}
 
 			DockedStationId = Station;
 		});
