@@ -112,6 +112,38 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Stations_are_returned_with_whichever_position_they_have()
+    {
+        HttpResponseMessage response = await _client.GetAsync("/world/stations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        StationResponse[] stations =
+            (await response.Content.ReadFromJsonAsync<StationResponse[]>())!;
+
+        Assert.NotEmpty(stations);
+
+        // Placed on a body means a direction and no system position; placed in deep space means
+        // the reverse. A station carrying both would be one the client could draw in two places,
+        // and whichever it read first would win.
+        foreach (StationResponse station in stations.Where(s => s.DirectionX is not null))
+        {
+            Assert.NotNull(station.BodyId);
+            Assert.Null(station.SystemX);
+        }
+
+        foreach (StationResponse station in stations.Where(s => s.SystemX is not null))
+        {
+            Assert.Null(station.BodyId);
+            Assert.Null(station.DirectionX);
+        }
+
+        // Docking range has to be usable as sent. Zero would be a station nobody can reach, which
+        // is how an unmigrated column would present.
+        Assert.All(stations, s => Assert.True(s.DockingRangeKm > 0.0));
+    }
+
+    [Fact]
     public async Task A_body_that_does_not_exist_has_no_deposits_rather_than_failing()
     {
         HttpResponseMessage response = await _client.GetAsync("/world/bodies/999999/nodes");
@@ -180,6 +212,34 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
             DirectionY = direction[1] / length,
             DirectionZ = direction[2] / length,
             SharingModel = NodeSharingModel.Shared,
+        });
+
+        // One of each kind of station, so the endpoint is read against both branches rather than
+        // only the one the shipped content happens to use most.
+        context.Stations.Add(new Station
+        {
+            Key = "station_test_ground",
+            Name = "Test Outpost",
+            StarSystemId = body.StarSystemId,
+            BodyId = body.Id,
+            Kind = StationKind.TradingHub,
+            DirectionX = direction[0] / length,
+            DirectionY = direction[1] / length,
+            DirectionZ = direction[2] / length,
+            DockingRangeKilometres = 5.0,
+        });
+
+        context.Stations.Add(new Station
+        {
+            Key = "station_test_deep",
+            Name = "Test Deepdock",
+            StarSystemId = body.StarSystemId,
+            BodyId = null,
+            Kind = StationKind.Spaceport,
+            SystemX = 30.0,
+            SystemY = 12.0,
+            SystemZ = 4.0,
+            DockingRangeKilometres = 8.0,
         });
 
         await context.SaveChangesAsync();

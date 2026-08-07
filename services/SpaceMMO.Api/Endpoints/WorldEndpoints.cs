@@ -24,7 +24,30 @@ public sealed record ResourceNodeResponse(
     double DirectionZ);
 
 /// <summary>
-/// The shape of the world: bodies, and the deposits on them.
+/// A station, and whichever way it is placed.
+/// </summary>
+/// <remarks>
+/// Both position forms are on one record with nulls rather than split into two shapes, because a
+/// client asking "where can I dock" wants one list. Exactly one of the pair is ever set — the
+/// content validator refuses both, and refuses a direction without a body for it to be from.
+/// </remarks>
+public sealed record StationResponse(
+    int Id,
+    string Key,
+    string Name,
+    int StarSystemId,
+    int? BodyId,
+    string Kind,
+    double? DirectionX,
+    double? DirectionY,
+    double? DirectionZ,
+    double? SystemX,
+    double? SystemY,
+    double? SystemZ,
+    double DockingRangeKm);
+
+/// <summary>
+/// The shape of the world: bodies, the deposits on them, and the stations you can dock at.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -47,6 +70,40 @@ public static class WorldEndpoints
 
         group.MapGet("/bodies", BodiesAsync);
         group.MapGet("/bodies/{bodyId:int}/nodes", NodesAsync);
+        group.MapGet("/stations", StationsAsync);
+    }
+
+    /// <summary>
+    /// Every station in the system, with whichever position it has.
+    /// </summary>
+    /// <remarks>
+    /// All of them at once rather than per body, because the ones that matter most to a pilot are
+    /// the ones attached to no body at all, and a route keyed by body could never return those.
+    /// A station with no position is still listed: the client draws nothing for it and docking
+    /// refuses it, which is a station visibly missing rather than one silently absent.
+    /// </remarks>
+    private static async Task<IResult> StationsAsync(
+        SpaceMmoDbContext database, CancellationToken cancellation)
+    {
+        List<StationResponse> stations = await database.Stations
+            .OrderBy(s => s.Key)
+            .Select(s => new StationResponse(
+                s.Id,
+                s.Key,
+                s.Name,
+                s.StarSystemId,
+                s.BodyId,
+                s.Kind.ToString(),
+                s.DirectionX,
+                s.DirectionY,
+                s.DirectionZ,
+                s.SystemX,
+                s.SystemY,
+                s.SystemZ,
+                s.DockingRangeKilometres))
+            .ToListAsync(cancellation);
+
+        return Results.Ok(stations);
     }
 
     private static async Task<IResult> BodiesAsync(
