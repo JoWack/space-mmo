@@ -131,7 +131,28 @@ public sealed record StationContent(
     string Name,
     string System,
     string? Body,
-    StationKind Kind);
+    StationKind Kind,
+    double[]? Direction = null,
+    double[]? SystemPosition = null,
+    double DockingRangeKm = 5.0)
+{
+    /// <summary>
+    /// Where it stands on its body, as a direction from that body's centre.
+    /// </summary>
+    /// <remarks>
+    /// The same way deposits are placed, and for the same reasons: a latitude-longitude pair has
+    /// two singular points and an outpost at a pole is no less valid than one on the equator, and
+    /// storing an altitude would be a second answer to a question the terrain function already
+    /// answers.
+    /// </remarks>
+    public double[]? Direction { get; init; } = Direction;
+
+    /// <summary>Where it floats, for a station that orbits nothing. Kilometres.</summary>
+    public double[]? SystemPosition { get; init; } = SystemPosition;
+
+    /// <summary>How close a ship must be to dock, in kilometres.</summary>
+    public double DockingRangeKm { get; init; } = DockingRangeKm;
+}
 
 /// <summary>
 /// Everything loaded from <c>data/</c>, before it reaches the database.

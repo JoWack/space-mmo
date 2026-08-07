@@ -438,20 +438,48 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 station.BodyId = bodyId;
                 station.Kind = content.Kind;
 
+                ApplyPosition(station, content);
+
                 continue;
             }
 
-            _database.Stations.Add(new Station
+            var created = new Station
             {
                 Key = content.Key,
                 Name = content.Name,
                 StarSystemId = systemId,
                 BodyId = bodyId,
                 Kind = content.Kind,
-            });
+            };
+
+            ApplyPosition(created, content);
+
+            _database.Stations.Add(created);
         }
 
         await _database.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Copies whichever position the content authored, and clears the other.
+    /// </summary>
+    /// <remarks>
+    /// Clearing matters on a reload. Moving a station from a body into deep space would otherwise
+    /// leave the old direction behind alongside the new system position, and a row carrying both
+    /// is exactly what the validator refuses to let content say — reachable only by editing a
+    /// station that already existed, which is the case nobody tests by hand.
+    /// </remarks>
+    private static void ApplyPosition(Station station, StationContent content)
+    {
+        station.DirectionX = content.Direction is { Length: 3 } d ? d[0] : null;
+        station.DirectionY = content.Direction is { Length: 3 } d2 ? d2[1] : null;
+        station.DirectionZ = content.Direction is { Length: 3 } d3 ? d3[2] : null;
+
+        station.SystemX = content.SystemPosition is { Length: 3 } s ? s[0] : null;
+        station.SystemY = content.SystemPosition is { Length: 3 } s2 ? s2[1] : null;
+        station.SystemZ = content.SystemPosition is { Length: 3 } s3 ? s3[2] : null;
+
+        station.DockingRangeKilometres = content.DockingRangeKm;
     }
 
     private async Task UpsertResourceNodesAsync(

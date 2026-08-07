@@ -5,6 +5,7 @@ using SpaceMMO.Domain.Content;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Quests;
+using SpaceMMO.Domain.Universe;
 using Xunit;
 
 namespace SpaceMMO.Data.Tests.Content;
@@ -164,6 +165,84 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
         string[] frameInputs = [.. frame.Inputs.Select(i => i.Item).Order()];
 
         Assert.Equal<IEnumerable<string>>(locked, frameInputs);
+    }
+
+    [Fact]
+    public async Task StationsArriveWithSomewhereToBe()
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        // A station on a body carries a direction and no system position. Nothing can dock at a
+        // station whose position never arrived, so a mis-parsed field presents as a station that
+        // exists and cannot be reached.
+        Station capital = await verify.Stations.SingleAsync(s => s.Key == "station_capital_hub");
+
+        Assert.NotNull(capital.BodyId);
+        Assert.NotNull(capital.DirectionX);
+        Assert.Null(capital.SystemX);
+        Assert.True(capital.DockingRangeKilometres > 0.0);
+
+        // And the deep-space one is the mirror image, which is what makes the second branch real
+        // rather than a code path nothing exercises.
+        Station deepdock = await verify.Stations.SingleAsync(s => s.Key == "station_deepdock");
+
+        Assert.Null(deepdock.BodyId);
+        Assert.Null(deepdock.DirectionX);
+        Assert.NotNull(deepdock.SystemX);
+        Assert.Equal(StationKind.Spaceport, deepdock.Kind);
+
+        // Every station is placed exactly one way. Both at once is what the validator refuses, and
+        // it can only be reached by editing a station that already existed — the case nobody
+        // reloads by hand.
+        foreach (Station station in await verify.Stations.ToListAsync())
+        {
+            Assert.True(
+                (station.DirectionX is null) != (station.SystemX is null),
+                $"{station.Key} is placed {(station.DirectionX is null ? "no" : "both")} ways.");
+        }
+    }
+
+    [Fact]
+    public async Task MovingAStationIntoDeepSpaceLeavesNoOldPositionBehind()
+    {
+        await using (SpaceMmoDbContext first = _fixture.CreateContext())
+        {
+            await new ContentLoader(first).LoadAsync(ContentRoot());
+        }
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        // The same station, relocated off its body. A reload that only wrote the new position
+        // would leave the old direction beside it, producing exactly the row the validator will
+        // not let anyone author.
+        StationContent moved = pack.Stations.Single(s => s.Key == "station_capital_hub") with
+        {
+            Body = null,
+            Direction = null,
+            SystemPosition = [12.0, 3.0, -4.0],
+        };
+
+        ContentPack edited = pack with
+        {
+            Stations = [.. pack.Stations.Where(s => s.Key != moved.Key), moved],
+        };
+
+        await using (SpaceMmoDbContext second = _fixture.CreateContext())
+        {
+            await new ContentLoader(second).ApplyAsync(edited);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Station station = await verify.Stations.SingleAsync(s => s.Key == moved.Key);
+
+        Assert.Null(station.DirectionX);
+        Assert.Null(station.DirectionY);
+        Assert.Null(station.DirectionZ);
+        Assert.Equal(12.0, station.SystemX);
     }
 
     [Fact]

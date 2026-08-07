@@ -97,6 +97,48 @@ public class Station
     public Body? Body { get; set; }
 
     public StationKind Kind { get; set; }
+
+    /// <summary>
+    /// Where the station is, expressed the way its location allows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A station on a body is placed by <em>direction from that body's centre</em>, exactly like a
+    /// resource deposit, and carries no altitude — how high the ground is there is a question the
+    /// terrain function already answers, and a stored second answer would be free to disagree with
+    /// it the moment the terrain configuration changed.
+    /// </para>
+    /// <para>
+    /// A station with no body is placed by a system coordinate instead, because there is no centre
+    /// for a direction to be relative to.
+    /// </para>
+    /// <para>
+    /// Both are nullable so that a station may be authored before anyone decides where it stands.
+    /// Nothing can dock at one without a position, which is the correct behaviour: a station you
+    /// cannot reach is better than one that silently accepts docking from across the system.
+    /// </para>
+    /// </remarks>
+    public double? DirectionX { get; set; }
+
+    public double? DirectionY { get; set; }
+
+    public double? DirectionZ { get; set; }
+
+    /// <summary>System-space position, for a station that orbits nothing. Kilometres.</summary>
+    public double? SystemX { get; set; }
+
+    public double? SystemY { get; set; }
+
+    public double? SystemZ { get; set; }
+
+    /// <summary>
+    /// How close a ship must be to dock, in kilometres.
+    /// </summary>
+    /// <remarks>
+    /// Content rather than a constant, because a planetary outpost and an orbital shipyard are not
+    /// the same size and should not demand the same precision to arrive at.
+    /// </remarks>
+    public double DockingRangeKilometres { get; set; } = 5.0;
 }
 
 /// <summary>

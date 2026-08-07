@@ -506,6 +506,115 @@ public sealed class ContentValidatorTests
     }
 
     [Fact]
+    public void AStationCannotBeInTwoPlaces()
+    {
+        // Two answers to "where is it" means whichever the code happens to read wins and the other
+        // is a lie nobody notices until docking works from somewhere it should not.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations:
+            [
+                new StationContent(
+                    "station_confused", "Confused", "system_origin", "body_terra",
+                    StationKind.TradingHub,
+                    Direction: [1.0, 0.0, 0.0],
+                    SystemPosition: [30.0, 0.0, 0.0]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "only be in one place"));
+    }
+
+    [Fact]
+    public void ADirectionNeedsABodyToBeFrom()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations:
+            [
+                new StationContent(
+                    "station_adrift", "Adrift", "system_origin", null,
+                    StationKind.Spaceport,
+                    Direction: [1.0, 0.0, 0.0]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "orbits no body"));
+    }
+
+    [Fact]
+    public void ASystemPositionOnABodyWouldDriftAwayFromIt()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations:
+            [
+                new StationContent(
+                    "station_pinned", "Pinned", "system_origin", "body_ares",
+                    StationKind.TradingHub,
+                    SystemPosition: [30.0, 0.0, 0.0]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "drift away"));
+    }
+
+    [Fact]
+    public void AStationNobodyCanDockAtIsRejected()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations:
+            [
+                new StationContent(
+                    "station_sealed", "Sealed", "system_origin", "body_terra",
+                    StationKind.TradingHub,
+                    Direction: [1.0, 0.0, 0.0],
+                    DockingRangeKm: 0.0),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Docking range must be positive"));
+    }
+
+    [Fact]
+    public void AStationMayBeAuthoredBeforeAnyoneDecidesWhereItStands()
+    {
+        // Unplaced is legitimate and safe: nothing can dock at a station with no position, which
+        // is better than one that accepts docking from across the system.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations:
+            [
+                new StationContent(
+                    "station_planned", "Planned", "system_origin", "body_terra",
+                    StationKind.TradingHub),
+            ]);
+
+        Assert.Empty(ContentValidator.Validate(pack));
+    }
+
+    [Fact]
+    public void BothWaysOfPlacingAStationAreAccepted()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations:
+            [
+                new StationContent(
+                    "station_ground", "Ground", "system_origin", "body_terra",
+                    StationKind.TradingHub, Direction: [-1.0, 0.03, 0.01]),
+                new StationContent(
+                    "station_orbit", "Orbit", "system_origin", null,
+                    StationKind.Spaceport, SystemPosition: [30.0, 12.0, 4.0]),
+            ]);
+
+        Assert.Empty(ContentValidator.Validate(pack));
+    }
+
+    [Fact]
     public void APlanetLockedMaterialMayNotOccurTwice()
     {
         // Two planets means it is not locked, and the damage is invisible: hauling quietly stops

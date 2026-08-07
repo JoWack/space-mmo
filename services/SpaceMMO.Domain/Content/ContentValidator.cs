@@ -148,6 +148,8 @@ public static class ContentValidator
                 errors.Add(new ContentError(
                     "station", station.Key, $"Unknown body '{station.Body}'."));
             }
+
+            ValidateStationPosition(station, errors);
         }
 
         // Only worth checking once any universe is authored at all — an empty pack is a valid
@@ -240,6 +242,79 @@ public static class ContentValidator
     /// can ever satisfy, which reads to a player as a broken game rather than as missing
     /// content.
     /// </remarks>
+    /// <summary>
+    /// A station must be placed the way its location allows, or not placed at all.
+    /// </summary>
+    /// <remarks>
+    /// Being unplaced is legitimate — a station may be authored before anyone decides where it
+    /// stands, and nothing can dock at one without a position. Being placed <em>both</em> ways is
+    /// not: two answers to "where is it" mean whichever the code happens to read wins, and the
+    /// other is a lie nobody notices until docking works from the wrong place.
+    ///
+    /// A body-relative direction on a station that orbits nothing has no centre to be relative to,
+    /// and a system position on a station attached to a body would drift the moment the body did.
+    /// </remarks>
+    private static void ValidateStationPosition(StationContent station, List<ContentError> errors)
+    {
+        bool hasDirection = station.Direction is not null;
+        bool hasSystemPosition = station.SystemPosition is not null;
+
+        if (hasDirection && hasSystemPosition)
+        {
+            errors.Add(new ContentError(
+                "station",
+                station.Key,
+                "Placed by both a direction and a system position; it can only be in one place."));
+        }
+
+        if (hasDirection)
+        {
+            if (station.Body is null)
+            {
+                errors.Add(new ContentError(
+                    "station",
+                    station.Key,
+                    "Placed by direction, but orbits no body for the direction to be from."));
+            }
+
+            // A zero direction names no point on the sphere, and normalising it later produces a
+            // NaN — a station at no position rather than a visible mistake.
+            if (station.Direction is not { Length: 3 }
+                || (station.Direction[0] == 0.0
+                    && station.Direction[1] == 0.0
+                    && station.Direction[2] == 0.0))
+            {
+                errors.Add(new ContentError(
+                    "station", station.Key, "Direction must be three non-zero components."));
+            }
+        }
+
+        if (hasSystemPosition)
+        {
+            if (station.Body is not null)
+            {
+                errors.Add(new ContentError(
+                    "station",
+                    station.Key,
+                    "Placed by system position, but attached to a body it would drift away from."));
+            }
+
+            if (station.SystemPosition is not { Length: 3 })
+            {
+                errors.Add(new ContentError(
+                    "station", station.Key, "System position must be three components."));
+            }
+        }
+
+        if (station.DockingRangeKm <= 0.0)
+        {
+            // Zero range makes a station impossible to dock at, which reads to a player as a
+            // broken station rather than as unfinished content.
+            errors.Add(new ContentError(
+                "station", station.Key, "Docking range must be positive."));
+        }
+    }
+
     private static void ValidatePlanetLockedMaterials(ContentPack pack, List<ContentError> errors)
     {
         foreach (ItemContent item in pack.Items.Where(i => i.PlanetLocked))

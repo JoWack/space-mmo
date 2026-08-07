@@ -154,41 +154,66 @@
     }
   ],
 
+  "$stationComment": "Stations on a body are placed by direction from its centre, exactly like deposits, and carry no altitude -- the terrain function already answers how high the ground is there and a stored second answer would be free to disagree with it. A station with no body is placed by system position instead, because there is no centre for a direction to be relative to. The validator rejects both at once, since two answers to 'where is it' mean whichever the code happens to read wins.",
+
   "stations": [
     {
       "key": "station_capital_hub",
       "name": "Capital Trading Hub",
       "system": "system_origin",
       "body": "body_capital",
-      "kind": "TradingHub"
+      "kind": "TradingHub",
+      "$directionComment": "On the approach face, near the starter deposits, so the first station a new player meets is not on the far side of the world.",
+      "direction": [-1.0, 0.0, 0.0],
+      "dockingRangeKm": 5.0
     },
     {
       "key": "station_terra_hub",
       "name": "Terra Outpost",
       "system": "system_origin",
       "body": "body_terra",
-      "kind": "TradingHub"
+      "kind": "TradingHub",
+      "$directionComment": "Near that world's own locked deposit, so the material and the place to sell it are not on opposite hemispheres.",
+      "direction": [-1.0, 0.03, 0.01],
+      "dockingRangeKm": 5.0
     },
     {
       "key": "station_ares_hub",
       "name": "Ares Outpost",
       "system": "system_origin",
       "body": "body_ares",
-      "kind": "TradingHub"
+      "kind": "TradingHub",
+      "direction": [-1.0, -0.02, 0.03],
+      "dockingRangeKm": 5.0
     },
     {
       "key": "station_verdance_hub",
       "name": "Verdance Outpost",
       "system": "system_origin",
       "body": "body_verdance",
-      "kind": "TradingHub"
+      "kind": "TradingHub",
+      "direction": [-1.0, 0.015, -0.03],
+      "dockingRangeKm": 5.0
     },
     {
       "key": "station_grimhold_hub",
       "name": "Grimhold Outpost",
       "system": "system_origin",
       "body": "body_grimhold",
-      "kind": "TradingHub"
+      "kind": "TradingHub",
+      "direction": [-1.0, -0.025, -0.02],
+      "dockingRangeKm": 5.0
+    },
+    {
+      "$comment": "The first station that orbits nothing, and the reason the deep-space branch is real rather than theoretical. A Spaceport rather than a market: this is where refitting and industry belong once station interiors exist, and keeping it distinct from the trading hubs from the start means the two never quietly become the same thing.",
+      "key": "station_deepdock",
+      "name": "Deepdock",
+      "system": "system_origin",
+      "body": null,
+      "kind": "Spaceport",
+      "$positionComment": "Between the capital and Terra, off the plane, so reaching it is a decision rather than something that happens on the way to somewhere else.",
+      "systemPosition": [30.0, 12.0, 4.0],
+      "dockingRangeKm": 8.0
     }
   ]
 }
