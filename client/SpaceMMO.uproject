@@ -15,5 +15,13 @@
 			"LoadingPhase": "Default"
 		}
 	],
-	"Plugins": []
+	"Plugins": [
+		{
+			"Name": "ModelContextProtocol",
+			"Enabled": true,
+			"TargetAllowList": [
+				"Editor"
+			]
+		}
+	]
 }
