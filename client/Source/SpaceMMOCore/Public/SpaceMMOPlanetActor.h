@@ -137,6 +137,24 @@ private:
 	/** Which SpaceMMO.PatchVariant the current mesh was built with, so a change forces a rebuild. */
 	int32 AppliedPatchVariant = 0;
 
+	/** Whether the current mesh was built with SpaceMMO.PatchFlipWinding, for the same reason. */
+	bool bAppliedFlippedWinding = false;
+
+	/** Whether the globe was built with SpaceMMO.GlobeFlipWinding, so a change forces a rebuild. */
+	bool bAppliedGlobeFlippedWinding = false;
+
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;
+
+	/**
+	 * Logs what the patch's component is actually holding, one frame after it was given a mesh.
+	 *
+	 * Deferred on purpose. Marking the render state dirty destroys the scene proxy and queues a
+	 * replacement for the end of the frame, so reading it during the build reports the frame
+	 * before the one being asked about.
+	 */
+	void ReportPatchIfPending();
+
+	/** Set when a patch is built, cleared by the report on the following tick. */
+	bool bPatchReportPending = false;
 };

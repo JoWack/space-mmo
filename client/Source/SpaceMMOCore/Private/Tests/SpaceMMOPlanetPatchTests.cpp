@@ -780,6 +780,116 @@ bool FSpaceMMOPatchCentreIsTheRequestedPlaceTest::RunTest(const FString& Paramet
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOFlatPatchFacesOutwardTest,
+	"SpaceMMO.Patch.FlatPatchFacesOutward",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOFlatPatchFacesOutwardTest::RunTest(const FString& Parameters)
+{
+	// SpaceMMO.PatchVariant 1 -- a plain spherical cap with the terrain flattened out -- renders
+	// nothing at all, where the same patch with relief shows at least a band at the horizon. That
+	// makes the flat case the cleanest thing in this investigation to reason about: every triangle
+	// has the same orientation, so if the whole surface is culled, the flat cap is where it shows
+	// with no relief to muddle it.
+	//
+	// SurvivesBeingWide covers winding at four widths but always with terrain. Zero elevation puts
+	// every vertex exactly on a sphere, which is a different arrangement of the same arithmetic and
+	// the one the game actually renders under that variant.
+	const FPlanetConfig Planet = PatchTestPlanet();
+
+	FPlanetTerrainConfig Terrain = PatchTestTerrain();
+	Terrain.MaxElevationKilometres = 0.0;
+
+	FPlanetPatchConfig Config;
+	Config.Resolution = 17;
+	Config.CentreDirection = FVector(0.3, 0.2, -0.9).GetSafeNormal();
+	Config.AngularRadiusDegrees = 4.0;
+
+	const FPlanetPatchMesh Mesh = FPlanetPatch::Build(Planet, Terrain, Config);
+
+	if (!Mesh.IsValid())
+	{
+		AddError(TEXT("A flat patch built nothing."));
+
+		return false;
+	}
+
+	const FVector CentreOffset =
+		(Mesh.Origin.Kilometres - Planet.Centre.Kilometres)
+		* SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+	int32 Inward = 0;
+	int32 Degenerate = 0;
+
+	for (int32 Index = 0; Index + 2 < Mesh.Triangles.Num(); Index += 3)
+	{
+		const FVector A = Mesh.Positions[Mesh.Triangles[Index]];
+		const FVector B = Mesh.Positions[Mesh.Triangles[Index + 1]];
+		const FVector C = Mesh.Positions[Mesh.Triangles[Index + 2]];
+
+		const FVector FaceNormal = FVector::CrossProduct(B - A, C - A);
+
+		// A flat cap is where a collapsed triangle would hide: with no relief, neighbouring
+		// vertices differ only by the gnomonic step, and a zero-area face has no facing at all.
+		if (FaceNormal.IsNearlyZero())
+		{
+			++Degenerate;
+
+			continue;
+		}
+
+		if (FVector::DotProduct(FaceNormal, CentreOffset + ((A + B + C) / 3.0)) <= 0.0)
+		{
+			++Inward;
+		}
+	}
+
+	TestEqual(TEXT("No flat-patch triangle faces inward"), Inward, 0);
+	TestEqual(TEXT("No flat-patch triangle is degenerate"), Degenerate, 0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchFrameIsRightHandedTest,
+	"SpaceMMO.Patch.FrameIsRightHanded",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchFrameIsRightHandedTest::RunTest(const FString& Parameters)
+{
+	// Build() steps along the tangent before the bitangent, and that is only outward-facing because
+	// the frame is right-handed. Nothing asserted the handedness: CentreIsTheRequestedPlace checks
+	// the frame is unit and orthogonal, and swapping the two cross products in BuildTangentFrame
+	// leaves it both while turning every triangle in the mesh inward.
+	//
+	// SurvivesBeingWide would catch that, having counted inward faces at four widths since the
+	// winding bug that prompted it. This is not a second copy of that count -- it names the cause
+	// rather than the symptom, and it covers the branch that test cannot reach: the reference axis
+	// switches from Z to X above 0.9, so the poles build their frame by a different route, and a
+	// handedness fault there would show only on a patch nobody usually asks for.
+	const TArray<FVector> Directions =
+	{
+		FVector(1.0, 0.0, 0.0),
+		FVector(0.0, 0.0, 1.0),
+		FVector(0.0, 0.0, -1.0),
+		FVector(0.3, 0.2, -0.9).GetSafeNormal(),
+	};
+
+	for (const FVector& Direction : Directions)
+	{
+		FVector Tangent;
+		FVector Bitangent;
+		FPlanetPatch::BuildTangentFrame(Direction, Tangent, Bitangent);
+
+		TestTrue(
+			FString::Printf(TEXT("Frame is right-handed at %s"), *Direction.ToCompactString()),
+			FVector::CrossProduct(Tangent, Bitangent).Equals(Direction.GetSafeNormal(), 1e-9));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOPatchRebuildThresholdTest,
 	"SpaceMMO.Patch.RebuildThreshold",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

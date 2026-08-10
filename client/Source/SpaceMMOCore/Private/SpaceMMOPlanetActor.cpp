@@ -9,7 +9,6 @@
 #include "SpaceMMOPlanetGlobe.h"
 #include "SpaceMMOPlanetPatch.h"
 #include "SpaceMMORenderOrigin.h"
-#include "SpaceMMOTerrainPatchActor.h"
 #include "UObject/ConstructorHelpers.h"
 
 using namespace UE::Geometry;
@@ -66,44 +65,85 @@ namespace
 	/**
 	 * Rebuilds the globe, at runtime, from a console command.
 	 *
-	 * Every experiment so far varied the mesh and held one thing constant without noticing: the
-	 * globe's mesh is set once during BeginPlay, and the patch's is set from Tick, over and over,
-	 * long after the component registered. That is the difference nothing has tested.
+	 * Built to test whether handing a registered component new geometry reaches the renderer at
+	 * all — the globe's mesh is set once in BeginPlay, the patch's from Tick, and that difference
+	 * had been in every experiment and tested by none of them.
 	 *
-	 * This tests it with the mesh that is known to draw. If the planet disappears when its own
-	 * geometry is handed to it a second time, the fault was never in the patch at all — it is in
-	 * updating a dynamic mesh after the fact, and the patch has simply been the only thing that
-	 * ever did.
+	 * The engine source answered it instead, for free: NotifyMeshUpdated() -> ResetProxy() ->
+	 * MarkRenderStateDirty(). A mesh updated after registration does reach the renderer, so a
+	 * rebuilt globe would have drawn and the run would have proved nothing about the patch.
+	 *
+	 * Kept because rebuilding the planet on a keypress is a useful lever in its own right, and
+	 * because it restores the globe after SpaceMMO.PatchIntoGlobe borrows its component. It is no
+	 * longer evidence about anything.
 	 */
 	float GRebuildGlobe = 0.0f;
 
 	FAutoConsoleVariableRef CVarRebuildGlobe(
 		TEXT("SpaceMMO.RebuildGlobe"),
 		GRebuildGlobe,
-		TEXT("1 rebuilds the planet's own mesh at runtime. If the planet vanishes, updating a mesh "
-			"after registration is the fault, not the patch."),
+		TEXT("1 rebuilds the planet's own mesh at runtime. A lever, not a measurement: the engine "
+			"already marks the render state dirty on every mesh update."),
 		ECVF_Default);
 
-	/**
-	 * Marks the render state dirty after handing a component new geometry.
-	 *
-	 * The candidate fix for the above, kept separate from the diagnosis so one can be confirmed
-	 * before the other is believed.
-	 */
-	float GDirtyAfterMeshUpdate = 0.0f;
-
-	FAutoConsoleVariableRef CVarDirtyAfterMeshUpdate(
-		TEXT("SpaceMMO.DirtyAfterMeshUpdate"),
-		GDirtyAfterMeshUpdate,
-		TEXT("1 marks the render state dirty after a mesh update. Ground that appears means the "
-			"component was holding geometry the renderer never asked for again."),
-		ECVF_Default);
+	// SpaceMMO.DirtyAfterMeshUpdate is gone, and the hypothesis above with it, without costing a
+	// playtest. UDynamicMeshComponent::NotifyMeshUpdated() calls ResetProxy(), and ResetProxy()
+	// calls MarkRenderStateDirty() before it updates the bounds -- so the "candidate fix" was
+	// asking the engine to do a thing it had already done on the line above. It could never have
+	// changed anything, and had it been run, "no ground" would have read as evidence about
+	// registration timing instead of evidence about nothing at all.
+	//
+	// The same source kills the diagnosis. Handing a registered component new geometry does reach
+	// the renderer, by the engine's own code, so "updating a mesh after registration" is not why
+	// the patch is missing. Read the engine before building a switch to ask it a question.
 
 	FAutoConsoleVariableRef CVarPatchVariant(
 		TEXT("SpaceMMO.PatchVariant"),
 		GPatchVariant,
 		TEXT("0 normal, 1 flat, 2 low resolution, 3 radial normals, 4 anchored at the planet's "
 			"centre like the globe. Whichever one draws names the property at fault."),
+		ECVF_Default);
+
+	/**
+	 * Reverses the order the patch's triangle indices are appended in.
+	 *
+	 * Everything the mesh data can be varied by has now been varied — elevations, resolution,
+	 * normals and anchoring — and none of it made the ground appear, in a component that draws the
+	 * globe. What the playtests keep describing is facing: a white band where the ground is steep
+	 * and distant, nothing where it faces the viewer, and nothing at all once the terrain is
+	 * flattened. That is what backface culling looks like.
+	 *
+	 * The awkward part, and the reason this is a switch rather than a fix: the patch's data is
+	 * outward-wound, asserted by SurvivesBeingWide at four widths, by the identical formula the
+	 * globe's own test uses. So if reversing the order makes the ground appear, the inversion is
+	 * happening somewhere after that data, and this says so without pretending to know where.
+	 */
+	/**
+	 * The same reversal, applied to the globe.
+	 *
+	 * The patch draws when its indices are reversed and the globe draws without that, through the
+	 * same component, at the same determinant, with both meshes asserted outward-wound by equivalent
+	 * tests. One of those statements has to be false, and this is the half that has never been
+	 * varied. If the globe also draws reversed, the sphere is hiding its own facing and the two
+	 * results are compatible; if the globe disappears, the two meshes genuinely have opposite
+	 * handedness and the tests are not measuring the same thing as each other.
+	 */
+	float GGlobeFlipWinding = 0.0f;
+
+	FAutoConsoleVariableRef CVarGlobeFlipWinding(
+		TEXT("SpaceMMO.GlobeFlipWinding"),
+		GGlobeFlipWinding,
+		TEXT("1 appends the globe's triangles in reverse order, and rebuilds it. The globe "
+			"disappearing means it is genuinely wound the opposite way to the patch."),
+		ECVF_Default);
+
+	float GPatchFlipWinding = 0.0f;
+
+	FAutoConsoleVariableRef CVarPatchFlipWinding(
+		TEXT("SpaceMMO.PatchFlipWinding"),
+		GPatchFlipWinding,
+		TEXT("1 appends the patch's triangles in reverse order. Ground that appears means the patch "
+			"is being rasterised back to front."),
 		ECVF_Default);
 
 	FAutoConsoleVariableRef CVarPatchIntoGlobe(
@@ -220,10 +260,14 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 		Mesh.AppendVertex(FVector3d(Position));
 	}
 
+	bAppliedGlobeFlippedWinding = GGlobeFlipWinding > 0.5f;
+
 	for (int32 Index = 0; Index + 2 < Globe.Triangles.Num(); Index += 3)
 	{
 		Mesh.AppendTriangle(
-			Globe.Triangles[Index], Globe.Triangles[Index + 1], Globe.Triangles[Index + 2]);
+			Globe.Triangles[Index],
+			Globe.Triangles[Index + (bAppliedGlobeFlippedWinding ? 2 : 1)],
+			Globe.Triangles[Index + (bAppliedGlobeFlippedWinding ? 1 : 2)]);
 	}
 
 	if (FDynamicMeshNormalOverlay* Normals =
@@ -253,8 +297,9 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 	Surface->NotifyMeshUpdated();
 
 	UE_LOG(LogSpaceMMO, Log,
-		TEXT("Planet globe: %d triangles, a vertex every %.0f m of ground."),
+		TEXT("Planet globe: %d triangles, %s winding, a vertex every %.0f m of ground."),
 		Globe.Triangles.Num() / 3,
+		bAppliedGlobeFlippedWinding ? TEXT("REVERSED") : TEXT("as built"),
 		(FMath::DegreesToRadians(90.0 / FMath::Max(GlobeConfig.Resolution - 1, 1))
 			* Planet.RadiusKilometres) * 1000.0);
 }
@@ -279,9 +324,23 @@ void ASpaceMMOPlanetActor::Tick(const float DeltaSeconds)
 		BuildGlobe();
 	}
 
+	// The globe is otherwise built once, at BeginPlay. Without this the winding switch would set a
+	// value that nothing ever read, and come back "no change" having never been applied -- which is
+	// precisely how three earlier experiments produced results from runs that did not happen.
+	if ((GGlobeFlipWinding > 0.5f) != bAppliedGlobeFlippedWinding)
+	{
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Globe winding changed to %s; rebuilding."),
+			GGlobeFlipWinding > 0.5f ? TEXT("REVERSED") : TEXT("as built"));
+
+		BuildGlobe();
+	}
+
 	// Terrain is checked every frame regardless of the origin, because it follows the viewer
 	// rather than the render window — a player can walk a long way without a single rebase.
 	UpdateTerrainPatch();
+
+	ReportPatchIfPending();
 
 	// Only when the origin actually moves. A planet does not orbit yet, so between rebases its
 	// Unreal transform is already correct.
@@ -450,10 +509,12 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	// reported as "did not draw" when they had never been built.
 	const int32 WantedVariant = FMath::RoundToInt(GPatchVariant);
 	const bool bWantsGlobeComponent = GPatchIntoGlobe > 0.5f;
+	const bool bWantsFlippedWinding = GPatchFlipWinding > 0.5f;
 
 	const bool bRecipeChanged = bHasPatch
 		&& (WantedVariant != AppliedPatchVariant
-			|| bWantsGlobeComponent != bPatchInGlobeComponent);
+			|| bWantsGlobeComponent != bPatchInGlobeComponent
+			|| bWantsFlippedWinding != bAppliedFlippedWinding);
 
 	if (bHasPatch && !bDrifted && !bWrongWidth && !bRecipeChanged)
 	{
@@ -553,10 +614,21 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		Mesh.AppendVertex(FVector3d(Position));
 	}
 
+	// Swapping the second and third index reverses a triangle's winding without touching a single
+	// position, so nothing about where the surface sits can change with it.
+	bAppliedFlippedWinding = GPatchFlipWinding > 0.5f;
+
 	for (int32 Index = 0; Index + 2 < Patch.Triangles.Num(); Index += 3)
 	{
 		Mesh.AppendTriangle(
-			Patch.Triangles[Index], Patch.Triangles[Index + 1], Patch.Triangles[Index + 2]);
+			Patch.Triangles[Index],
+			Patch.Triangles[Index + (bAppliedFlippedWinding ? 2 : 1)],
+			Patch.Triangles[Index + (bAppliedFlippedWinding ? 1 : 2)]);
+	}
+
+	if (bAppliedFlippedWinding)
+	{
+		UE_LOG(LogSpaceMMO, Log, TEXT("Patch winding: reversed."));
 	}
 
 	if (FDynamicMeshNormalOverlay* Normals =
@@ -599,13 +671,10 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 
 	UDynamicMeshComponent* const Target = bPatchInGlobeComponent ? Surface : GroundPatch;
 
+	// NotifyMeshUpdated() already marks the render state dirty, via ResetProxy(). Nothing else is
+	// needed here, and anything added would be a second request for the same work.
 	Target->SetMesh(MoveTemp(Mesh));
 	Target->NotifyMeshUpdated();
-
-	if (GDirtyAfterMeshUpdate > 0.5f)
-	{
-		Target->MarkRenderStateDirty();
-	}
 
 	Target->SetVisibility(true);
 
@@ -620,6 +689,81 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		PatchAngularRadiusDegrees,
 		bPatchInGlobeComponent ? TEXT("the globe's component") : TEXT("its own component"),
 		*Target->GetComponentLocation().ToCompactString());
+
+	// Read next frame rather than here. MarkRenderStateDirty() destroys the scene proxy and queues
+	// a new one for the end of the frame, so asking now reports whatever was true before the mesh
+	// changed — which would be a diagnostic that answers confidently about the wrong frame.
+	bPatchReportPending = true;
+}
+
+void ASpaceMMOPlanetActor::ReportPatchIfPending()
+{
+	if (!bPatchReportPending)
+	{
+		return;
+	}
+
+	bPatchReportPending = false;
+
+	// Not const: UDynamicMeshComponent::GetDynamicMesh() is a non-const accessor, so reading the
+	// triangle count off a const pointer does not compile.
+	UDynamicMeshComponent* const Target = bPatchInGlobeComponent ? Surface : GroundPatch;
+
+	if (Target == nullptr)
+	{
+		UE_LOG(LogSpaceMMO, Warning, TEXT("  patch report: no component to report on."));
+
+		return;
+	}
+
+	// What the component is holding, as opposed to what was handed to it. This block used to live
+	// on ASpaceMMOTerrainPatchActor, which stopped being spawned when the patch moved onto this
+	// actor -- so the run that produced "visible, registered, camera inside its bounds, never on
+	// screen" has not been repeatable since, and every playtest since has had one line to go on.
+	const UMaterialInterface* const Material = Target->GetMaterial(0);
+	const FBoxSphereBounds Bounds = Target->Bounds;
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  patch holds %d triangles, material %s, visible %d, scale %s."),
+		Target->GetDynamicMesh() != nullptr ? Target->GetDynamicMesh()->GetTriangleCount() : -1,
+		Material != nullptr ? *Material->GetName() : TEXT("NONE"),
+		Target->IsVisible() ? 1 : 0,
+		*Target->GetComponentScale().ToCompactString());
+
+	// A component can report itself visible, hold a mesh and a material, and still never reach the
+	// renderer if its owner is hidden, if it never registered, or if no proxy was ever created for
+	// it. Having a proxy a frame after the update is the one that says the geometry got there.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  actor hidden %d, registered %d, has proxy %d, render in main pass %d."),
+		IsHidden() ? 1 : 0,
+		Target->IsRegistered() ? 1 : 0,
+		Target->SceneProxy != nullptr ? 1 : 0,
+		Target->bRenderInMainPass ? 1 : 0);
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  bounds origin %s, box extent %s, sphere radius %.0f cm."),
+		*Bounds.Origin.ToCompactString(),
+		*Bounds.BoxExtent.ToCompactString(),
+		Bounds.SphereRadius);
+
+	// Bounds that do not contain the camera can be frustum-culled; bounds that do cannot, which
+	// turns "it is off screen" from a guess into a ruled-out answer.
+	if (const APlayerController* const Controller =
+		GetWorld() != nullptr ? GetWorld()->GetFirstPlayerController() : nullptr)
+	{
+		FVector ViewLocation = FVector::ZeroVector;
+		FRotator ViewRotation = FRotator::ZeroRotator;
+
+		const_cast<APlayerController*>(Controller)->GetPlayerViewPoint(ViewLocation, ViewRotation);
+
+		const double ToCentre = FVector::Dist(ViewLocation, Bounds.Origin);
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("  camera at %s, %.0f cm from the bounds centre, inside them %d."),
+			*ViewLocation.ToCompactString(),
+			ToCentre,
+			ToCentre <= Bounds.SphereRadius ? 1 : 0);
+	}
 }
 
 void ASpaceMMOPlanetActor::SetPlanetConfig(const FPlanetConfig& NewConfig)
