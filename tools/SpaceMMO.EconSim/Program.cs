@@ -11,7 +11,11 @@ using SpaceMMO.EconSim;
 
 if (args.Length > 0 && args[0] == "--sweep")
 {
-    if (args.Length > 1 && args[1] == "capital")
+    if (args.Length > 1 && args[1] == "population")
+    {
+        RunPopulationSweep();
+    }
+    else if (args.Length > 1 && args[1] == "capital")
     {
         RunCapitalSweep();
     }
@@ -282,6 +286,72 @@ static void RunCapitalSweep()
     Console.WriteLine("when it is there and its homeworld's ore when it is not, so a trip length");
     Console.WriteLine("of one day means it is never home and no planet-locked ore is ever mined.");
     Console.WriteLine("Read trip 3 against trip 7; ignore the zeroes above them.");
+}
+
+/// <summary>
+/// Sweeps how many of the population produce raw material against how many consume finished
+/// goods, holding the total roughly constant.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The question left open by #90. Ore is created about four orders of magnitude faster than it is
+/// consumed and sits at the price floor, and the obvious reading is that deposits are too generous.
+/// The arithmetic says otherwise: pilots are the only terminal consumers, twenty-five of them lose
+/// roughly 1.25 hull sections a day, and a hull section is four plates or eighty ferrite. That is
+/// about a hundred units of real demand a day against a ceiling of 28,800. No node capacity fixes
+/// a ratio; the number of people mining against the number of people buying does.
+/// </para>
+/// <para>
+/// Which matters because the two have opposite consequences. If the price only recovers at a
+/// miner-to-pilot ratio no real game would have, the finding is that this bot mix is
+/// unrepresentative and the content is fine. If it recovers at a plausible one, the deposits really
+/// are too rich and data/universe/origin.json needs changing. Tuning the nodes without asking would
+/// have produced a healthy-looking chart either way.
+/// </para>
+/// </remarks>
+static void RunPopulationSweep()
+{
+    Console.WriteLine("Sweeping producers against consumers, 5-year runs, total population held near 100.");
+    Console.WriteLine("Faucet at the measured equilibrium; deposits as authored.");
+    Console.WriteLine();
+    Console.WriteLine(
+        $"  {"miners",7} {"pilots",7} {"ratio",7} {"ferrite price",14} {"ore created",13} "
+        + $"{"ore used",11} {"frames",7}");
+    Console.WriteLine(new string('─', 78));
+
+    foreach ((int miners, int pilots) in new[]
+    {
+        (40, 25), (30, 40), (20, 55), (12, 65), (8, 70), (4, 75),
+    })
+    {
+        var sweepConfig = new SimulationConfig
+        {
+            Days = 1_825,
+            DailyQuestCredits = Credits.FromWholeCredits(50),
+            Miners = miners,
+            Pilots = pilots,
+        };
+
+        var sweepWorld = new SimWorld(sweepConfig);
+        var sweepBots = new Bots(sweepConfig, sweepWorld);
+        var sweepRng = new SplitMix64(sweepConfig.Seed);
+
+        for (int day = 1; day <= sweepConfig.Days; day++)
+        {
+            sweepBots.RunDay(day, ref sweepRng);
+        }
+
+        long created = sweepWorld.Gathered.GetValueOrDefault(Sim.Ore);
+        long used = sweepWorld.Destroyed.GetValueOrDefault(Sim.Ore);
+
+        Console.WriteLine(
+            $"  {miners,7} {pilots,7} {(double)miners / pilots,7:N2} "
+            + $"{Money(LastTraded(sweepWorld, Sim.Ore)),14} {created,13:N0} {used,11:N0} "
+            + $"{sweepWorld.Crafted.GetValueOrDefault(Sim.Frame),7:N0}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("A price off the 0.01 floor means supply and demand are finally comparable.");
 }
 
 static Credits MoneySupply(SimWorld world) =>
