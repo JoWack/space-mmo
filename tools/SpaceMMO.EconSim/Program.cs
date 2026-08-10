@@ -35,6 +35,10 @@ var config = new SimulationConfig
             ? Credits.FromWholeCredits(faucet)
             : Credits.Zero,
     CsvPath = args.Length > 2 ? args[2] : null,
+
+    // Off unless asked for. The default run must report the game as authored, including the part
+    // where nothing consumes an alloy frame.
+    PilotsFlyFrameHulls = args.Contains("--frame-hulls"),
 };
 
 var world = new SimWorld(config);
@@ -50,7 +54,8 @@ var rows = new List<string>
 Console.WriteLine(
     $"Simulating {config.Days:N0} days with {config.TotalBots} bots "
     + $"({config.Miners} miners, {config.Refiners} refiners, {config.Crafters} crafters, "
-    + $"{config.Traders} traders, {config.Pilots} pilots)...");
+    + $"{config.Framewrights} framewrights, {config.Traders} traders, {config.Pilots} pilots) "
+    + "across four homeworlds and the capital...");
 Console.WriteLine();
 
 int tradesAtLastDay = 0;
@@ -74,8 +79,8 @@ for (int day = 1; day <= config.Days; day++)
             CultureInfo.InvariantCulture,
             $"{day},{Whole(MoneySupply(world))},{Whole(world.Escrow)},"
             + $"{Held(world, Sim.Ore)},{Held(world, Sim.Plate)},{Held(world, Sim.Section)},"
-            + $"{Whole(world.LastPrice[Sim.Ore])},{Whole(world.LastPrice[Sim.Plate])},"
-            + $"{Whole(world.LastPrice[Sim.Section])},{world.Trades.Count - tradesAtLastDay}"));
+            + $"{Whole(LastTraded(world, Sim.Ore))},{Whole(LastTraded(world, Sim.Plate))},"
+            + $"{Whole(LastTraded(world, Sim.Section))},{world.Trades.Count - tradesAtLastDay}"));
     }
 
     tradesAtLastDay = world.Trades.Count;
@@ -192,8 +197,8 @@ static void RunLossSweep()
 
         Console.WriteLine(
             $"  {rate,9:P1} {oreCreated,14:N0} {oreCreated - oreHeld,14:N0} {oreHeld,14:N0} "
-            + $"{Money(sweepWorld.LastPrice[Sim.Ore]),11} "
-            + $"{Money(sweepWorld.LastPrice[Sim.Section]),14}");
+            + $"{Money(LastTraded(sweepWorld, Sim.Ore)),11} "
+            + $"{Money(LastTraded(sweepWorld, Sim.Section)),14}");
     }
 
     Console.WriteLine();
@@ -220,6 +225,27 @@ static string Money(Credits credits) => string.Create(
 
 static long Held(SimWorld world, string item) =>
     world.Characters.Sum(c => (long)c.Held(item)) + world.GoodsOnBook(item);
+
+/// <summary>
+/// The most recent price an item traded at, anywhere.
+/// </summary>
+/// <remarks>
+/// Prices are per market now, so there is no single "the" price. For a summary line the last trade
+/// anywhere is the honest answer: it is a real transaction rather than an average of venues that
+/// never traded with each other.
+/// </remarks>
+static Credits LastTraded(SimWorld world, string item)
+{
+    for (int i = world.Trades.Count - 1; i >= 0; i--)
+    {
+        if (world.Trades[i].Item == item)
+        {
+            return world.Trades[i].Price;
+        }
+    }
+
+    return Credits.Zero;
+}
 
 static void Report(SimWorld world, SimulationConfig config, List<InvariantViolation> violations)
 {
@@ -309,7 +335,46 @@ static void Report(SimWorld world, SimulationConfig config, List<InvariantViolat
             ? "no trades in the last 100 days"
             : $"last-100-day mean {Money(Mean(recent)),8} cr over {recent.Count,7:N0} trades";
 
-        Console.WriteLine($"  {item,-20} {Money(world.LastPrice[item]),8} cr   {window}");
+        Console.WriteLine($"  {item,-20} {Money(LastTraded(world, item)),8} cr   {window}");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("── Markets ────────────────────────────────────────────────");
+    Console.WriteLine("  A homeworld book that never trades is a planet nobody needs to visit.");
+    Console.WriteLine();
+
+    foreach (string market in
+        new[] { "body_terra", "body_ares", "body_verdance", "body_grimhold", Sim.Capital })
+    {
+        List<SimTrade> here = world.Trades
+            .Where(t => t.Market == market && t.Day > config.Days - 100)
+            .ToList();
+
+        Console.WriteLine(
+            $"  {market,-16} {here.Count,10:N0} trades in the last 100 days, "
+            + $"{world.OrdersAt(market),6:N0} orders resting");
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("── Cross-faction demand ───────────────────────────────────");
+
+    long crossOre = world.Trades
+        .Where(t => t.IsCrossFaction && Sim.PlanetLockedOres.Contains(t.Item))
+        .Sum(t => (long)t.Quantity);
+
+    long allOre = world.Trades
+        .Where(t => Sim.PlanetLockedOres.Contains(t.Item))
+        .Sum(t => (long)t.Quantity);
+
+    double share = allOre == 0 ? 0 : 100.0 * crossOre / allOre;
+
+    Console.WriteLine($"  Alloy frames built   {world.Crafted.GetValueOrDefault(Sim.Frame),15:N0}");
+    Console.WriteLine($"  Planet-locked ore    {allOre,15:N0} units traded");
+    Console.WriteLine($"  ... across factions  {crossOre,15:N0} units ({share:N1}%)");
+
+    foreach (InvariantViolation violation in Invariants.CheckCrossFactionDemand(world, config.Days))
+    {
+        Console.WriteLine($"  VIOLATION: {violation}");
     }
 
     Console.WriteLine();

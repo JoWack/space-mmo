@@ -21,6 +21,17 @@ public sealed record SimulationConfig
 
     public int Crafters { get; init; } = 8;
 
+    /// <summary>
+    /// Bots that build alloy frames, and so must buy ore from the other faction.
+    /// </summary>
+    /// <remarks>
+    /// The only archetype whose recipe cannot be satisfied inside one faction. If this is zero, the
+    /// four planet-locked ores never need to meet and cross-faction demand is structurally
+    /// impossible — which is exactly the failure ADR-0008 warns about, so the invariant that
+    /// watches for it must be able to see this go to zero on its own rather than by configuration.
+    /// </remarks>
+    public int Framewrights { get; init; } = 6;
+
     public int Traders { get; init; } = 5;
 
     /// <summary>
@@ -89,11 +100,49 @@ public sealed record SimulationConfig
     /// </remarks>
     public double DailyLossRate { get; init; }
 
+    /// <summary>
+    /// Extra broker fee charged at the capital, in basis points on top of the normal fee.
+    /// </summary>
+    /// <remarks>
+    /// The capital is the only venue carrying all four planet-locked ores, so it is strictly more
+    /// useful than any homeworld. Something has to pay for that, or every seller lists there and
+    /// the four local books die — the failure mode this task exists to tune against.
+    /// </remarks>
+    public int CapitalFeePremiumBasisPoints { get; init; } = 5_000;
+
+    /// <summary>
+    /// Days between a bot's trips to the capital.
+    /// </summary>
+    /// <remarks>
+    /// Flight time, modelled as trading frequency rather than as a position. What matters
+    /// economically is not where a ship is but how often somebody can act on the distant book, and
+    /// a bot that can only reach the capital every few days leaves its local market worth using.
+    /// </remarks>
+    public int CapitalTripDays { get; init; } = 3;
+
+    /// <summary>
+    /// Whether pilots buy and lose alloy frames as well as hull sections.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// False by default, because that is the game as authored: <c>alloy_frame</c> is produced by
+    /// <c>build_alloy_frame</c> and consumed by no recipe at all. A good nobody consumes has no
+    /// steady demand, so framewrights build a handful, cannot sell them, and stop — and the
+    /// cross-faction trade that only they create stops with them.
+    /// </para>
+    /// <para>
+    /// Setting this true stands in for the content that would fix it: some higher-tier hull whose
+    /// recipe takes a frame. It exists so the cross-faction invariant can be shown to go green
+    /// when the cause is removed, rather than being a check that is simply always red.
+    /// </para>
+    /// </remarks>
+    public bool PilotsFlyFrameHulls { get; init; }
+
     /// <summary>Seed for bot decisions, so a run is exactly reproducible.</summary>
     public ulong Seed { get; init; } = 20_260_730;
 
     /// <summary>Where to write the per-day CSV, or null to skip it.</summary>
     public string? CsvPath { get; init; }
 
-    public int TotalBots => Miners + Refiners + Crafters + Traders + Pilots;
+    public int TotalBots => Miners + Refiners + Crafters + Framewrights + Traders + Pilots;
 }

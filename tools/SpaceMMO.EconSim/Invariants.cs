@@ -34,6 +34,70 @@ public static class Invariants
     }
 
     /// <summary>
+    /// Ore actually changes hands between the two factions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// ADR-0008 assumes players from opposing factions have a reason to meet. That reason is
+    /// <c>build_alloy_frame</c>, which takes ten of each planet-locked ore while each faction owns
+    /// only two of the four planets. So the crossing is structurally forced — but only if frames
+    /// are worth building. Tune them out of profitability and no ore ever crosses, the contested
+    /// zone has nothing to contest, and the PvP rules become decoration. Nothing about that failure
+    /// is visible in a price chart, which is why it needs a check rather than a graph.
+    /// </para>
+    /// <para>
+    /// Checked at the end of a run rather than daily: cross-faction trade is a property of an
+    /// economy in motion, and demanding one on the first simulated day would fail for no reason
+    /// beyond nobody having mined anything yet.
+    /// </para>
+    /// </remarks>
+    /// <param name="windowDays">
+    /// How far back "still happening" reaches. Measured over a window rather than over all time,
+    /// because the first version of this check asked whether cross-faction trade had <em>ever</em>
+    /// occurred and passed happily on an economy where it had stopped four years earlier. A guard
+    /// that a dead market satisfies is worse than no guard, since it answers anyway.
+    /// </param>
+    public static List<InvariantViolation> CheckCrossFactionDemand(
+        SimWorld world, int day, int windowDays = 100)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+
+        var violations = new List<InvariantViolation>();
+
+        long recentCrossFactionOre = world.Trades
+            .Where(t => t.Day > day - windowDays
+                && t.IsCrossFaction
+                && Sim.PlanetLockedOres.Contains(t.Item))
+            .Sum(t => (long)t.Quantity);
+
+        if (recentCrossFactionOre == 0)
+        {
+            long everCrossed = world.Trades
+                .Where(t => t.IsCrossFaction && Sim.PlanetLockedOres.Contains(t.Item))
+                .Sum(t => (long)t.Quantity);
+
+            violations.Add(new InvariantViolation(
+                day,
+                "cross-faction demand",
+                $"no planet-locked ore crossed factions in the last {windowDays} days "
+                + $"({everCrossed:N0} units did so earlier in the run). ADR-0008's contested zone "
+                + "has nothing left to contest — check that something still consumes alloy frames."));
+        }
+
+        long framesBuilt = world.Crafted.GetValueOrDefault(Sim.Frame);
+
+        if (framesBuilt == 0)
+        {
+            violations.Add(new InvariantViolation(
+                day,
+                "cross-faction demand",
+                "no alloy frames were ever built, so nothing required ore from both factions."));
+        }
+
+        return violations;
+    }
+
+    /// <summary>
     /// Every unit is accounted for: gathered plus crafted, minus destroyed, equals what is held
     /// plus what is sitting on the book.
     /// </summary>

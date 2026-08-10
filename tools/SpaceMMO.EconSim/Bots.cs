@@ -23,12 +23,25 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
     private readonly SimulationConfig _config = config;
     private readonly SimWorld _world = world;
 
-    /// <summary>Ore still available from the shared deposits today.</summary>
-    private int _oreLeftToday;
+    /// <summary>
+    /// Ore still available today, per homeworld.
+    /// </summary>
+    /// <remarks>
+    /// Per planet, not shared. Node capacity is the hard ceiling on material entering the economy,
+    /// and four planets each with their own deposits is four independent ceilings — pooling them
+    /// would let Terra's miners eat Grimhold's supply and quietly erase the scarcity that makes
+    /// each ore worth shipping.
+    /// </remarks>
+    private readonly Dictionary<string, int> _oreLeftToday = [];
 
     public void RunDay(int day, ref SplitMix64 rng)
     {
-        _oreLeftToday = _world.DailyNodeCapacity;
+        foreach (string ore in Sim.PlanetLockedOres)
+        {
+            _oreLeftToday[ore] = _world.DailyNodeCapacity;
+        }
+
+        _oreLeftToday[Sim.Ore] = _world.DailyNodeCapacity;
 
         _world.ExpireOrders(day);
 
@@ -42,12 +55,23 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
                     RunMiner(character, day);
                     break;
 
+                // Refiners buy their ferrite where it is mined — the capital — and sell plates at
+                // home. Crafters never leave: plates and hull sections are made and consumed on the
+                // same homeworld. That is what keeps four local books worth opening.
                 case "refiner":
-                    RunIndustry(character, day, "refining", Sim.Ore, 20, Sim.Plate, 4, 60);
+                    RunIndustry(
+                        character, day, "refining", Sim.Ore, 20, Sim.Plate, 4, 60,
+                        inputMarket: Sim.Capital, outputMarket: character.HomeBody);
                     break;
 
                 case "crafter":
-                    RunIndustry(character, day, "shipcrafting", Sim.Plate, 4, Sim.Section, 1, 300);
+                    RunIndustry(
+                        character, day, "shipcrafting", Sim.Plate, 4, Sim.Section, 1, 300,
+                        inputMarket: character.HomeBody, outputMarket: character.HomeBody);
+                    break;
+
+                case "framewright":
+                    RunFramewright(character, day);
                     break;
 
                 case "trader":
@@ -65,6 +89,19 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
 
         ApplyLosses(ref rng);
     }
+
+    /// <summary>
+    /// Whether this character can act on the capital's book today.
+    /// </summary>
+    /// <remarks>
+    /// Flight time, expressed as how often the distant market is reachable rather than as a
+    /// position. Staggered by character id so the capital sees steady traffic instead of everyone
+    /// arriving on the same day and then nobody for two — which would read as a market that
+    /// periodically dies rather than one that is merely far away.
+    /// </remarks>
+    private bool CanReachCapital(SimCharacter character, int day) =>
+        _config.CapitalTripDays <= 1
+        || (day + character.Id) % _config.CapitalTripDays == 0;
 
     /// <summary>
     /// The steady-state faucet, routed through the same daily cap the server uses.
@@ -90,6 +127,15 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
     /// </remarks>
     private void RunMiner(SimCharacter character, int day)
     {
+        // At home, the miner works its homeworld's ore, which exists nowhere else. On a capital
+        // trip it works the capital's common ferrite instead. That keeps the original refining
+        // chain supplied — ferrite deposits are authored on the capital, not the homeworlds — and
+        // it means the ore that crosses factions is the scarce one, which is the point.
+        bool atCapital = CanReachCapital(character, day);
+
+        string market = atCapital ? Sim.Capital : character.HomeBody;
+        string ore = atCapital ? Sim.Ore : character.HomeOre;
+
         int level = SkillCurve.LevelForXp(character.Xp.GetValueOrDefault("mining"));
 
         // A day of continuous play, not a single call. GatheringYield.UnitsAvailable applies the
@@ -99,16 +145,16 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
         long ticks = _config.ActiveSecondsPerDay / GatheringYield.TickSeconds;
         long capable = ticks * GatheringYield.UnitsPerTick(level);
 
-        int wanted = (int)Math.Min(capable, _oreLeftToday);
+        int wanted = (int)Math.Min(capable, _oreLeftToday.GetValueOrDefault(ore));
 
         if (wanted <= 0)
         {
             return;
         }
 
-        _oreLeftToday -= wanted;
+        _oreLeftToday[ore] -= wanted;
 
-        _world.RecordGathered(character, Sim.Ore, wanted);
+        _world.RecordGathered(character, ore, wanted);
         character.Xp["mining"] = character.Xp.GetValueOrDefault("mining")
             + (wanted * GatheringYield.XpPerUnit);
 
@@ -119,8 +165,137 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
         // miner who lists once and then hoards forever: a single stale order sat on the book while
         // the stock behind it grew without bound. That starved the ore market no matter how much
         // was mined, and it — not the game's balance — is what drove the price to zero in §5a.
+        // Raw ore is an export, so it is only ever listed at the capital.
+        //
+        // The first version listed home ore on its home book, which read as the obvious thing and
+        // produced an economy with zero trades in it: the only buyers of planet-locked ore are
+        // framewrights, and framewrights are at the capital. Sellers and buyers each behaved
+        // sensibly and never once met. What a homeworld's book carries is plates and hull
+        // sections — goods made locally for local pilots — not the ore underneath them.
+        if (!atCapital)
+        {
+            return;
+        }
+
         _world.PlaceOrder(
-            character, OrderSide.Sell, Sim.Ore, AskPrice(Sim.Ore, character, wanted), wanted, day);
+            character,
+            Sim.Capital,
+            OrderSide.Sell,
+            ore,
+            AskPrice(Sim.Capital, ore, character, wanted),
+            wanted,
+            day);
+
+        // Home ore accumulated since the last trip, carried in on the same journey.
+        int carried = character.Held(character.HomeOre);
+
+        if (carried <= 0
+            || _world.HasRestingOrder(character.Id, Sim.Capital, character.HomeOre, OrderSide.Sell))
+        {
+            return;
+        }
+
+        _world.PlaceOrder(
+            character,
+            Sim.Capital,
+            OrderSide.Sell,
+            character.HomeOre,
+            AskPrice(Sim.Capital, character.HomeOre, character, carried),
+            carried,
+            day);
+    }
+
+    /// <summary>
+    /// Buys all four planet-locked ores at the capital and builds alloy frames.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The only bot whose inputs cannot be sourced inside one faction: <c>build_alloy_frame</c>
+    /// takes ten of each ore, and two of the four come from the other side. Every unit it buys from
+    /// a planet across the line is a cross-faction trade, which is the demand ADR-0008 assumes
+    /// exists.
+    /// </para>
+    /// <para>
+    /// Bids at the capital only. A framewright could in principle fly to each of four homeworlds,
+    /// but the capital is where all four ores are already on one book, and modelling the shortcut
+    /// nobody would skip keeps the simulation about prices rather than about routing.
+    /// </para>
+    /// </remarks>
+    private void RunFramewright(SimCharacter character, int day)
+    {
+        if (!CanReachCapital(character, day))
+        {
+            return;
+        }
+
+        int level = SkillCurve.LevelForXp(character.Xp.GetValueOrDefault("shipcrafting"));
+        int slots = IndustrySlots.MaxConcurrentJobs(level);
+
+        // How many frames the ore on hand supports: the scarcest of the four ores decides, which is
+        // what makes a single missing supply line stop production rather than slow it.
+        int materialLimited = Sim.PlanetLockedOres.Min(o => character.Held(o) / Sim.OrePerFrame);
+        int runs = Math.Min(slots, materialLimited);
+
+        if (runs > 0)
+        {
+            Credits fee = IndustryFees.ForJob(runs);
+
+            if (character.Balance >= fee)
+            {
+                _world.Adjust(character, -fee, LedgerReason.IndustryFee);
+
+                foreach (string ore in Sim.PlanetLockedOres)
+                {
+                    _world.RecordDestroyed(character, ore, runs * Sim.OrePerFrame);
+                }
+
+                _world.RecordCrafted(character, Sim.Frame, runs);
+
+                character.Xp["shipcrafting"] =
+                    character.Xp.GetValueOrDefault("shipcrafting") + (runs * 600L);
+            }
+        }
+
+        if (character.Held(Sim.Frame) > 0
+            && !_world.HasRestingOrder(character.Id, Sim.Capital, Sim.Frame, OrderSide.Sell))
+        {
+            int listing = character.Held(Sim.Frame);
+
+            _world.PlaceOrder(
+                character,
+                Sim.Capital,
+                OrderSide.Sell,
+                Sim.Frame,
+                AskPrice(Sim.Capital, Sim.Frame, character, listing),
+                listing,
+                day);
+        }
+
+        // Restock whichever ores are short, splitting the purse four ways so one expensive ore
+        // cannot consume the budget and leave the frame permanently one ingredient away.
+        Credits perOre = character.Balance.PercentRoundedDown(2_000);
+
+        foreach (string ore in Sim.PlanetLockedOres)
+        {
+            if (_world.HasRestingOrder(character.Id, Sim.Capital, ore, OrderSide.Buy))
+            {
+                continue;
+            }
+
+            int shortfall = (slots * Sim.OrePerFrame) - character.Held(ore);
+
+            if (shortfall <= 0)
+            {
+                continue;
+            }
+
+            Credits bid = _world.LastPrice(Sim.Capital, ore)
+                .PercentRoundedUp(10_000 + SpreadBasisPoints);
+
+            int affordable = Affordable(character, bid, shortfall, perOre);
+
+            _world.PlaceOrder(character, Sim.Capital, OrderSide.Buy, ore, Max(bid), affordable, day);
+        }
     }
 
     /// <summary>
@@ -139,7 +314,9 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
         int inputPerRun,
         string output,
         int outputPerRun,
-        int jobSeconds)
+        int jobSeconds,
+        string inputMarket,
+        string outputMarket)
     {
         int level = SkillCurve.LevelForXp(character.Xp.GetValueOrDefault(skill));
         int slots = IndustrySlots.MaxConcurrentJobs(level);
@@ -164,16 +341,28 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
         }
 
         if (character.Held(output) > 0
-            && !_world.HasRestingOrder(character.Id, output, OrderSide.Sell))
+            && !_world.HasRestingOrder(character.Id, outputMarket, output, OrderSide.Sell))
         {
             int listing = character.Held(output);
 
             _world.PlaceOrder(
-                character, OrderSide.Sell, output, AskPrice(output, character, listing), listing, day);
+                character,
+                outputMarket,
+                OrderSide.Sell,
+                output,
+                AskPrice(outputMarket, output, character, listing),
+                listing,
+                day);
+        }
+
+        // Restocking at the capital means waiting for a flight; at home it is every day.
+        if (inputMarket == Sim.Capital && !CanReachCapital(character, day))
+        {
+            return;
         }
 
         // Restock: bid for enough input to keep the lines busy tomorrow.
-        if (_world.HasRestingOrder(character.Id, input, OrderSide.Buy))
+        if (_world.HasRestingOrder(character.Id, inputMarket, input, OrderSide.Buy))
         {
             return;
         }
@@ -185,13 +374,14 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
             return;
         }
 
-        Credits bid = _world.LastPrice[input].PercentRoundedUp(10_000 + SpreadBasisPoints);
+        Credits bid = _world.LastPrice(inputMarket, input)
+            .PercentRoundedUp(10_000 + SpreadBasisPoints);
 
         // Capped so a refiner does not escrow its entire purse against a day of theoretical
         // throughput it has never once achieved.
         int affordable = Affordable(character, bid, shortfall, character.Balance.PercentRoundedDown(5_000));
 
-        _world.PlaceOrder(character, OrderSide.Buy, input, Max(bid), affordable, day);
+        _world.PlaceOrder(character, inputMarket, OrderSide.Buy, input, Max(bid), affordable, day);
     }
 
     /// <summary>
@@ -211,32 +401,51 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
     /// </remarks>
     private void RunPilot(SimCharacter character, int day, ref SplitMix64 rng)
     {
-        if (character.Held(Sim.Section) > 0)
+        // The frame is bought at the capital, because that is where it is built. A pilot flying one
+        // is the terminal demand the shipped content is missing.
+        if (_config.PilotsFlyFrameHulls)
+        {
+            RunPilotFor(character, day, Sim.Frame, Sim.Capital, ref rng);
+        }
+
+        RunPilotFor(character, day, Sim.Section, character.HomeBody, ref rng);
+    }
+
+    private void RunPilotFor(
+        SimCharacter character, int day, string hull, string market, ref SplitMix64 rng)
+    {
+        if (hull == Sim.Frame && !CanReachCapital(character, day))
+        {
+            return;
+        }
+
+        if (character.Held(hull) > 0)
         {
             // Flying risks the ship. Destroyed outright rather than damaged: this simulation is
             // measuring demand, and a repair economy is a different question from a replacement one.
             if (rng.NextBelow(10_000) < (int)(_config.PilotLossChance * 10_000))
             {
-                _world.RecordDestroyed(character, Sim.Section, 1);
+                _world.RecordDestroyed(character, hull, 1);
             }
 
             return;
         }
 
-        if (_world.HasRestingOrder(character.Id, Sim.Section, OrderSide.Buy))
+        if (_world.HasRestingOrder(character.Id, market, hull, OrderSide.Buy))
         {
             return;
         }
 
         // Bids above the last trade, because a grounded pilot wants a ship more than it wants a
         // bargain. That willingness to pay up is what gives the chain its margin.
-        Credits bid = _world.LastPrice[Sim.Section].PercentRoundedUp(10_000 + SpreadBasisPoints);
+        Credits bid = _world.LastPrice(market, hull)
+            .PercentRoundedUp(10_000 + SpreadBasisPoints);
 
         int quantity = Affordable(character, Max(bid), 1);
 
         if (quantity > 0)
         {
-            _world.PlaceOrder(character, OrderSide.Buy, Sim.Section, Max(bid), quantity, day);
+            _world.PlaceOrder(character, market, OrderSide.Buy, hull, Max(bid), quantity, day);
         }
     }
 
@@ -247,8 +456,13 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
     {
         string item = Sim.TradedItems[rng.NextBelow(Sim.TradedItems.Length)];
 
-        if (_world.HasRestingOrder(character.Id, item, OrderSide.Buy)
-            || _world.HasRestingOrder(character.Id, item, OrderSide.Sell))
+        // Traders work the capital when they can reach it and their home book otherwise, so the
+        // liquidity they provide is spread across venues rather than concentrated wherever the
+        // spread happened to be widest on day one.
+        string market = CanReachCapital(character, day) ? Sim.Capital : character.HomeBody;
+
+        if (_world.HasRestingOrder(character.Id, market, item, OrderSide.Buy)
+            || _world.HasRestingOrder(character.Id, market, item, OrderSide.Sell))
         {
             return;
         }
@@ -257,19 +471,19 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
 
         if (held > 0)
         {
-            Credits ask = _world.LastPrice[item].PercentRoundedUp(10_000 + SpreadBasisPoints);
-            _world.PlaceOrder(character, OrderSide.Sell, item, Max(ask), held, day);
+            Credits ask = _world.LastPrice(market, item).PercentRoundedUp(10_000 + SpreadBasisPoints);
+            _world.PlaceOrder(character, market, OrderSide.Sell, item, Max(ask), held, day);
 
             return;
         }
 
-        Credits bid = _world.LastPrice[item].PercentRoundedDown(10_000 - SpreadBasisPoints);
+        Credits bid = _world.LastPrice(market, item).PercentRoundedDown(10_000 - SpreadBasisPoints);
 
         // A tenth of the purse per position, so one bad fill cannot take a trader out of the market.
         Credits budget = character.Balance.PercentRoundedDown(1_000);
         int quantity = Affordable(character, bid, int.MaxValue, budget);
 
-        _world.PlaceOrder(character, OrderSide.Buy, item, Max(bid), quantity, day);
+        _world.PlaceOrder(character, market, OrderSide.Buy, item, Max(bid), quantity, day);
     }
 
     /// <summary>
@@ -352,19 +566,19 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
     /// </para>
     /// </remarks>
     /// <param name="listing">Units about to be listed, as the yardstick for "a normal day's stock".</param>
-    private Credits AskPrice(string item, SimCharacter seller, int listing)
+    private Credits AskPrice(string market, string item, SimCharacter seller, int listing)
     {
         // Backlog means more than a day's worth already sitting unsold behind this listing.
         bool backlog = seller.Held(item) > listing;
 
         if (backlog)
         {
-            Credits floor = _world.BestAsk(item) ?? _world.LastPrice[item];
+            Credits floor = _world.BestAsk(market, item) ?? _world.LastPrice(market, item);
 
             return Max(floor.PercentRoundedDown(10_000 - SpreadBasisPoints));
         }
 
-        return Max(_world.LastPrice[item].PercentRoundedUp(10_000 + SpreadBasisPoints));
+        return Max(_world.LastPrice(market, item).PercentRoundedUp(10_000 + SpreadBasisPoints));
     }
 
     /// <summary>Keeps a price from reaching zero, which would make the book meaningless.</summary>

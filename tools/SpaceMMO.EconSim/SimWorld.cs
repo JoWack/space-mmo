@@ -1,3 +1,4 @@
+using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Market;
 
@@ -10,15 +11,68 @@ public static class Sim
     public const string Plate = "ferrite_plate";
     public const string Section = "shuttle_hull_section";
 
-    public static readonly string[] TradedItems = [Ore, Plate, Section];
+    /// <summary>The finished good that cannot be built inside one faction.</summary>
+    /// <remarks>
+    /// <c>build_alloy_frame</c> consumes ten of each planet-locked ore, and each ore is gatherable
+    /// on exactly one homeworld — two of them in each faction. So a frame is the point at which
+    /// material has to cross the faction line, and the only reason anyone from A ever needs to buy
+    /// from B. ADR-0008 rests on this: if frames stop being worth building, the crossing stops
+    /// happening and the PvP zone becomes decoration.
+    /// </remarks>
+    public const string Frame = "alloy_frame";
+
+    public const string TerranFerrite = "terran_ferrite";
+    public const string AresRegolith = "ares_regolith";
+    public const string VerdantAmber = "verdant_amber";
+    public const string GrimholdSlag = "grimhold_slag";
+
+    /// <summary>The four ores, one per homeworld, in the order the recipe lists them.</summary>
+    public static readonly string[] PlanetLockedOres =
+        [TerranFerrite, AresRegolith, VerdantAmber, GrimholdSlag];
+
+    /// <summary>Ten of each, from <c>build_alloy_frame</c> in <c>data/recipes/core.json</c>.</summary>
+    public const int OrePerFrame = 10;
+
+    public static readonly string[] TradedItems =
+        [Ore, Plate, Section, Frame, .. PlanetLockedOres];
+
+    /// <summary>Market venues: the four homeworlds and the shared capital.</summary>
+    public const string Capital = "body_capital";
+
+    /// <summary>The ore a homeworld yields. Nowhere else has it.</summary>
+    public static string OreOf(string bodyKey) => bodyKey switch
+    {
+        "body_terra" => TerranFerrite,
+        "body_ares" => AresRegolith,
+        "body_verdance" => VerdantAmber,
+        "body_grimhold" => GrimholdSlag,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(bodyKey), bodyKey, "No planet-locked ore for this body."),
+    };
 }
 
 /// <summary>One simulated player.</summary>
-public sealed class SimCharacter(int id, string archetype)
+public sealed class SimCharacter(int id, string archetype, Race race)
 {
     public int Id { get; } = id;
 
     public string Archetype { get; } = archetype;
+
+    /// <summary>
+    /// Race, which fixes faction and homeworld.
+    /// </summary>
+    /// <remarks>
+    /// Faction and home body are derived through <see cref="Races"/> rather than stored, for the
+    /// same reason the server derives them: a stored triple can claim a Space Orc in Faction A.
+    /// </remarks>
+    public Race Race { get; } = race;
+
+    public Faction Faction => Races.FactionFor(Race);
+
+    public string HomeBody => Races.HomeBodyKeyFor(Race);
+
+    /// <summary>The planet-locked ore this character can gather, and nobody else can.</summary>
+    public string HomeOre => Sim.OreOf(HomeBody);
 
     public Credits Balance { get; set; }
 
@@ -48,7 +102,22 @@ public sealed class SimCharacter(int id, string archetype)
 }
 
 /// <summary>A single trade, kept for the price index.</summary>
-public readonly record struct SimTrade(int Day, string Item, int Quantity, Credits Price);
+/// <remarks>
+/// Carries the two factions rather than just the price, because the question ADR-0008 needs
+/// answered is not "what did ore cost" but "did any of it change hands across the line".
+/// </remarks>
+public readonly record struct SimTrade(
+    int Day,
+    string Market,
+    string Item,
+    int Quantity,
+    Credits Price,
+    Faction BuyerFaction,
+    Faction SellerFaction)
+{
+    /// <summary>True if this trade moved goods between the two factions.</summary>
+    public bool IsCrossFaction => BuyerFaction != SellerFaction;
+}
 
 /// <summary>
 /// The simulated economy.
@@ -78,29 +147,23 @@ public sealed class SimWorld
 
         int id = 1;
 
-        for (int i = 0; i < config.Miners; i++)
-        {
-            Characters.Add(NewCharacter(id++, "miner"));
-        }
+        // Race is assigned per archetype rather than across the whole population, so each
+        // profession is spread evenly over the four homeworlds. Assigning it globally would leave
+        // whole planets with, say, no refiners, and the resulting dead local book would look like a
+        // balance finding rather than the seeding artefact it is.
+        AddArchetype("miner", config.Miners);
+        AddArchetype("refiner", config.Refiners);
+        AddArchetype("crafter", config.Crafters);
+        AddArchetype("framewright", config.Framewrights);
+        AddArchetype("trader", config.Traders);
+        AddArchetype("pilot", config.Pilots);
 
-        for (int i = 0; i < config.Refiners; i++)
+        void AddArchetype(string archetype, int count)
         {
-            Characters.Add(NewCharacter(id++, "refiner"));
-        }
-
-        for (int i = 0; i < config.Crafters; i++)
-        {
-            Characters.Add(NewCharacter(id++, "crafter"));
-        }
-
-        for (int i = 0; i < config.Traders; i++)
-        {
-            Characters.Add(NewCharacter(id++, "trader"));
-        }
-
-        for (int i = 0; i < config.Pilots; i++)
-        {
-            Characters.Add(NewCharacter(id++, "pilot"));
+            for (int i = 0; i < count; i++)
+            {
+                Characters.Add(NewCharacter(id++, archetype, (Race)(i % 4)));
+            }
         }
     }
 
@@ -123,12 +186,36 @@ public sealed class SimWorld
     /// <summary>Credits currently locked in resting buy orders.</summary>
     public Credits Escrow { get; private set; } = Credits.Zero;
 
-    /// <summary>Last traded price per item, seeded from the design bible's targets.</summary>
-    public Dictionary<string, Credits> LastPrice { get; } = new(StringComparer.Ordinal)
+    private readonly Dictionary<(string Market, string Item), Credits> _lastPrice = [];
+
+    /// <summary>
+    /// Last traded price for an item <em>at one market</em>, seeded from the design bible's targets.
+    /// </summary>
+    /// <remarks>
+    /// Per market, not global. A single price index would defeat the whole point of splitting the
+    /// books: the capital's premium and a homeworld's local discount only exist as the difference
+    /// between two prices, and averaging them away would report a healthy market that nobody is
+    /// actually trading in.
+    /// </remarks>
+    public Credits LastPrice(string market, string item) =>
+        _lastPrice.TryGetValue((market, item), out Credits price) ? price : SeedPrice(item);
+
+    /// <summary>Opening price for an item nobody has traded yet.</summary>
+    private static Credits SeedPrice(string item) => item switch
     {
-        [Sim.Ore] = Credits.FromWholeCredits(40),
-        [Sim.Plate] = Credits.FromWholeCredits(250),
-        [Sim.Section] = Credits.FromWholeCredits(1_400),
+        Sim.Ore => Credits.FromWholeCredits(40),
+        Sim.Plate => Credits.FromWholeCredits(250),
+        Sim.Section => Credits.FromWholeCredits(1_400),
+
+        // Each comes from one planet rather than everywhere, so it opens above common ore.
+        Sim.TerranFerrite or Sim.AresRegolith or Sim.VerdantAmber or Sim.GrimholdSlag =>
+            Credits.FromWholeCredits(60),
+
+        // Forty ore at the seed price, plus a margin for the work of collecting them from four
+        // planets across a faction line.
+        Sim.Frame => Credits.FromWholeCredits(3_000),
+
+        _ => Credits.FromWholeCredits(100),
     };
 
     /// <summary>
@@ -142,9 +229,9 @@ public sealed class SimWorld
     public int DailyNodeCapacity =>
         (int)((long)_config.NodeCapacity * _config.NodeCount * 86_400 / _config.NodeRespawnSeconds);
 
-    private SimCharacter NewCharacter(int id, string archetype)
+    private SimCharacter NewCharacter(int id, string archetype, Race race)
     {
-        var character = new SimCharacter(id, archetype) { Balance = _config.BootstrapCredits };
+        var character = new SimCharacter(id, archetype, race) { Balance = _config.BootstrapCredits };
 
         // The onboarding chain, paid once. Uncapped by design — see economy-design §2a.
         Ledger.Add((id, _config.BootstrapCredits, LedgerReason.StoryReward));
@@ -200,7 +287,13 @@ public sealed class SimWorld
     /// one of those — not because this file drifted.
     /// </remarks>
     public void PlaceOrder(
-        SimCharacter character, OrderSide side, string item, Credits limitPrice, int quantity, int day)
+        SimCharacter character,
+        string market,
+        OrderSide side,
+        string item,
+        Credits limitPrice,
+        int quantity,
+        int day)
     {
         if (quantity <= 0 || !limitPrice.IsPositive)
         {
@@ -208,6 +301,14 @@ public sealed class SimWorld
         }
 
         Credits brokerFee = MarketFees.BrokerFee(limitPrice, quantity);
+
+        // The capital charges more to list. It is the only venue where all four planet-locked ores
+        // meet, so without a premium it would swallow every local book by being strictly better —
+        // and a game where all trade happens in one room does not need four planets.
+        if (market == Sim.Capital)
+        {
+            brokerFee += brokerFee.PercentRoundedUp(_config.CapitalFeePremiumBasisPoints);
+        }
 
         if (character.Balance < brokerFee)
         {
@@ -238,7 +339,11 @@ public sealed class SimWorld
 
         Adjust(character, -brokerFee, LedgerReason.BrokerFee);
 
-        List<RestingOrder> candidates = [.. _book.Where(o => BookItem(o.OrderId) == item)];
+        // Only orders at this market. An order resting on Terra is not reachable from Grimhold, and
+        // matching across venues would silently rebuild the single global book this split exists to
+        // get rid of.
+        List<RestingOrder> candidates =
+            [.. _book.Where(o => BookItem(o.OrderId) == item && BookMarket(o.OrderId) == market)];
 
         MatchResult match = MatchingEngine.Match(
             new MatchRequest(character.Id, side, limitPrice, quantity), candidates);
@@ -274,8 +379,10 @@ public sealed class SimWorld
 
             ConsumeRestingOrder(fill.RestingOrderId, fill.Quantity);
 
-            Trades.Add(new SimTrade(day, item, fill.Quantity, fill.Price));
-            LastPrice[item] = fill.Price;
+            Trades.Add(new SimTrade(
+                day, market, item, fill.Quantity, fill.Price, buyer.Faction, seller.Faction));
+
+            _lastPrice[(market, item)] = fill.Price;
 
             remaining -= fill.Quantity;
         }
@@ -287,6 +394,7 @@ public sealed class SimWorld
 
         long orderId = _nextOrderId++;
         _bookItems[orderId] = item;
+        _bookMarkets[orderId] = market;
 
         _book.Add(new RestingOrder(
             orderId, character.Id, side, limitPrice, remaining, DateTimeOffset.UnixEpoch.AddDays(day)));
@@ -328,18 +436,28 @@ public sealed class SimWorld
 
             _book.Remove(order);
             _bookItems.Remove(order.OrderId);
+            _bookMarkets.Remove(order.OrderId);
         }
     }
 
-    /// <summary>Goods sitting in resting sell orders, which still exist and must be counted.</summary>
+    /// <summary>
+    /// Goods sitting in resting sell orders, which still exist and must be counted.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately across every market. Conservation is a property of the whole economy, and
+    /// counting one venue at a time would report a leak every time stock rested somewhere else.
+    /// </remarks>
     public int GoodsOnBook(string item) =>
         _book.Where(o => o.Side == OrderSide.Sell && BookItem(o.OrderId) == item)
             .Sum(o => o.QuantityRemaining);
 
     private readonly Dictionary<long, string> _bookItems = [];
+    private readonly Dictionary<long, string> _bookMarkets = [];
     private readonly Dictionary<long, int> _restingGoods = [];
 
     private string BookItem(long orderId) => _bookItems.GetValueOrDefault(orderId, string.Empty);
+
+    private string BookMarket(long orderId) => _bookMarkets.GetValueOrDefault(orderId, string.Empty);
 
     private void ConsumeRestingOrder(long orderId, int quantity)
     {
@@ -365,6 +483,7 @@ public sealed class SimWorld
         {
             _book.RemoveAt(index);
             _bookItems.Remove(orderId);
+            _bookMarkets.Remove(orderId);
             _restingGoods.Remove(orderId);
 
             return;
@@ -381,22 +500,31 @@ public sealed class SimWorld
     /// not an order ever fills. Re-listing the same stock daily is a way to pay the fee repeatedly
     /// for nothing, and no real player would do it.
     /// </remarks>
-    public bool HasRestingOrder(int characterId, string item, OrderSide side) =>
+    public bool HasRestingOrder(int characterId, string market, string item, OrderSide side) =>
         _book.Any(o => o.CharacterId == characterId
             && o.Side == side
-            && BookItem(o.OrderId) == item);
+            && BookItem(o.OrderId) == item
+            && BookMarket(o.OrderId) == market);
 
-    /// <summary>Best resting ask for an item, or null if nobody is selling.</summary>
-    public Credits? BestAsk(string item) =>
-        _book.Where(o => o.Side == OrderSide.Sell && BookItem(o.OrderId) == item)
+    /// <summary>Best resting ask for an item at one market, or null if nobody is selling.</summary>
+    public Credits? BestAsk(string market, string item) =>
+        _book.Where(o => o.Side == OrderSide.Sell
+                && BookItem(o.OrderId) == item
+                && BookMarket(o.OrderId) == market)
             .Select(o => (Credits?)o.Price)
             .DefaultIfEmpty(null)
             .Min();
 
-    /// <summary>Best resting bid for an item, or null if nobody is buying.</summary>
-    public Credits? BestBid(string item) =>
-        _book.Where(o => o.Side == OrderSide.Buy && BookItem(o.OrderId) == item)
+    /// <summary>Best resting bid for an item at one market, or null if nobody is buying.</summary>
+    public Credits? BestBid(string market, string item) =>
+        _book.Where(o => o.Side == OrderSide.Buy
+                && BookItem(o.OrderId) == item
+                && BookMarket(o.OrderId) == market)
             .Select(o => (Credits?)o.Price)
             .DefaultIfEmpty(null)
             .Max();
+
+    /// <summary>Resting orders at one market, for the local-book liveness report.</summary>
+    public int OrdersAt(string market) =>
+        _book.Count(o => BookMarket(o.OrderId) == market);
 }
