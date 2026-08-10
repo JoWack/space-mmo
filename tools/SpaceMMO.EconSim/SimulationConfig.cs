@@ -104,19 +104,39 @@ public sealed record SimulationConfig
     /// Extra broker fee charged at the capital, in basis points on top of the normal fee.
     /// </summary>
     /// <remarks>
-    /// The capital is the only venue carrying all four planet-locked ores, so it is strictly more
-    /// useful than any homeworld. Something has to pay for that, or every seller lists there and
-    /// the four local books die — the failure mode this task exists to tune against.
+    /// <para>
+    /// Set from `--sweep capital`, and the sweep contradicted why this existed. The premium was
+    /// added on the assumption that without it every seller would list at the capital and the four
+    /// local books would die. Measured across 0 to 25,000 basis points, it barely moves anything:
+    /// frames built go 111 to 90, and local trade counts stay inside their own noise. What actually
+    /// keeps a homeworld's book alive is that plates and hull sections are made and consumed there,
+    /// not that the capital is expensive.
+    /// </para>
+    /// <para>
+    /// Kept at a modest 2,500 rather than removed, because it is still a credit sink and distance
+    /// ought to cost something. It is no longer load-bearing, so it should not be treated as the
+    /// lever if local books ever go quiet — look at whether anything is still manufactured locally.
+    /// </para>
     /// </remarks>
-    public int CapitalFeePremiumBasisPoints { get; init; } = 5_000;
+    public int CapitalFeePremiumBasisPoints { get; init; } = 2_500;
 
     /// <summary>
     /// Days between a bot's trips to the capital.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Flight time, modelled as trading frequency rather than as a position. What matters
     /// economically is not where a ship is but how often somebody can act on the distant book, and
     /// a bot that can only reach the capital every few days leaves its local market worth using.
+    /// </para>
+    /// <para>
+    /// Three, from `--sweep capital`: seven produces about a third fewer frames and a third less
+    /// cross-faction ore, because ore spends its time in a hold rather than on a book. One is
+    /// degenerate rather than better — a miner works the capital's ferrite when it is there and its
+    /// homeworld's ore when it is not, so a one-day trip means it is never home and no
+    /// planet-locked ore is mined at all. That row of the sweep reads as a dead economy and is an
+    /// artefact of the model, not a finding about flight times.
+    /// </para>
     /// </remarks>
     public int CapitalTripDays { get; init; } = 3;
 

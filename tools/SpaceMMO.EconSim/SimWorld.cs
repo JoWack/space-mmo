@@ -524,6 +524,21 @@ public sealed class SimWorld
             .DefaultIfEmpty(null)
             .Max();
 
+    /// <summary>
+    /// Units this character has sitting unsold in its own resting orders.
+    /// </summary>
+    /// <remarks>
+    /// Listing moves goods out of inventory and onto the order, so a seller checking only what it
+    /// holds sees nothing and concludes its stock cleared. A bot deciding whether to make more has
+    /// to count both, or it reads a full shelf as an empty one.
+    /// </remarks>
+    public int RestingQuantity(int characterId, string market, string item, OrderSide side) =>
+        _book.Where(o => o.CharacterId == characterId
+                && o.Side == side
+                && BookItem(o.OrderId) == item
+                && BookMarket(o.OrderId) == market)
+            .Sum(o => o.QuantityRemaining);
+
     /// <summary>Resting orders at one market, for the local-book liveness report.</summary>
     public int OrdersAt(string market) =>
         _book.Count(o => BookMarket(o.OrderId) == market);

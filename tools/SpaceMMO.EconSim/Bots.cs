@@ -20,6 +20,9 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
     /// <summary>Spread bots price at, either side of the last trade.</summary>
     private const int SpreadBasisPoints = 500;
 
+    /// <summary>Unsold frames at which a framewright stops buying more ore.</summary>
+    private const int UnsoldFrameLimit = 3;
+
     private readonly SimulationConfig _config = config;
     private readonly SimWorld _world = world;
 
@@ -177,13 +180,15 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
             return;
         }
 
+        Credits freshAsk = AskPrice(Sim.Capital, ore, character, wanted);
+
         _world.PlaceOrder(
             character,
             Sim.Capital,
             OrderSide.Sell,
             ore,
-            AskPrice(Sim.Capital, ore, character, wanted),
-            wanted,
+            freshAsk,
+            Listable(character, Sim.Capital, freshAsk, wanted),
             day);
 
         // Home ore accumulated since the last trip, carried in on the same journey.
@@ -195,13 +200,15 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
             return;
         }
 
+        Credits carriedAsk = AskPrice(Sim.Capital, character.HomeOre, character, carried);
+
         _world.PlaceOrder(
             character,
             Sim.Capital,
             OrderSide.Sell,
             character.HomeOre,
-            AskPrice(Sim.Capital, character.HomeOre, character, carried),
-            carried,
+            carriedAsk,
+            Listable(character, Sim.Capital, carriedAsk, carried),
             day);
     }
 
@@ -269,6 +276,23 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
                 AskPrice(Sim.Capital, Sim.Frame, character, listing),
                 listing,
                 day);
+        }
+
+        // Stop buying inputs for a product that is not selling.
+        //
+        // Without this the framewright restocked ore forever regardless of whether a single frame
+        // had ever found a buyer, which quietly destroyed the negative control: cross-faction ore
+        // kept flowing in a world where nothing consumed frames, so the invariant passed on the
+        // exact economy it exists to catch. No player keeps buying materials while unsold stock
+        // piles up, and a bot that does makes the check untrustworthy rather than the bot generous.
+        // Held plus listed-but-unsold. Listing moves goods onto the order, so counting only what is
+        // held reads a shelf full of frames nobody wants as a shelf that cleared.
+        int unsold = character.Held(Sim.Frame)
+            + _world.RestingQuantity(character.Id, Sim.Capital, Sim.Frame, OrderSide.Sell);
+
+        if (unsold >= UnsoldFrameLimit)
+        {
+            return;
         }
 
         // Restock whichever ores are short, splitting the purse four ways so one expensive ore
@@ -344,14 +368,15 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
             && !_world.HasRestingOrder(character.Id, outputMarket, output, OrderSide.Sell))
         {
             int listing = character.Held(output);
+            Credits ask = AskPrice(outputMarket, output, character, listing);
 
             _world.PlaceOrder(
                 character,
                 outputMarket,
                 OrderSide.Sell,
                 output,
-                AskPrice(outputMarket, output, character, listing),
-                listing,
+                ask,
+                Listable(character, outputMarket, ask, listing),
                 day);
         }
 
@@ -525,6 +550,47 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// How many units a seller can afford to <em>list</em>, given the broker fee.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The broker fee is a percentage of order value and is charged on placement, so listing a
+    /// large stock costs real credits before a single unit sells. A miner sitting on thousands of
+    /// units of ore owes thousands of credits to offer them, and <see cref="MarketFees"/> waives at
+    /// most one credit — deliberately, because a waiver that scales with order value would be
+    /// farmed.
+    /// </para>
+    /// <para>
+    /// Without this the whole supply chain silently stopped. Miners accumulated ore they could not
+    /// afford to sell, the ore never reached the capital, framewrights never got inputs, and
+    /// cross-faction trade died — all of it looking like weak demand rather than a seller locked
+    /// out of the book. A real player in that position lists what they can and comes back for the
+    /// rest, which is what this does.
+    /// </para>
+    /// </remarks>
+    private int Listable(SimCharacter seller, string market, Credits unitPrice, int wanted)
+    {
+        if (!unitPrice.IsPositive || wanted <= 0)
+        {
+            return 0;
+        }
+
+        long basisPoints = MarketFees.DefaultBrokerFeeBasisPoints;
+
+        if (market == Sim.Capital)
+        {
+            // Mirrors the premium SimWorld.PlaceOrder applies, so the two cannot disagree about
+            // what an order costs.
+            basisPoints += basisPoints * _config.CapitalFeePremiumBasisPoints / 10_000;
+        }
+
+        // Largest q with ceil(price * q * bp / 10000) <= balance.
+        long affordable = seller.Balance.MinorUnits * 10_000 / (unitPrice.MinorUnits * basisPoints);
+
+        return (int)Math.Clamp(affordable, 0, wanted);
     }
 
     /// <summary>How many units a character can afford at a price, including the broker fee.</summary>

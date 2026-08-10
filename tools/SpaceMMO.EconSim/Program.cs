@@ -11,7 +11,11 @@ using SpaceMMO.EconSim;
 
 if (args.Length > 0 && args[0] == "--sweep")
 {
-    if (args.Length > 1 && args[1] == "loss")
+    if (args.Length > 1 && args[1] == "capital")
+    {
+        RunCapitalSweep();
+    }
+    else if (args.Length > 1 && args[1] == "loss")
     {
         RunLossSweep();
     }
@@ -204,6 +208,80 @@ static void RunLossSweep()
 
     Console.WriteLine();
     Console.WriteLine("Ore stops accumulating where consumption approaches creation.");
+}
+
+/// <summary>
+/// Sweeps the capital's fee premium against flight time, looking for the setting where four
+/// homeworld books stay alive and cross-faction trade still happens.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The two are one trade-off, which is why they are swept together rather than one at a time. The
+/// capital is the only venue carrying all four planet-locked ores, so it is strictly more useful
+/// than any homeworld. Left free and close, everybody lists there and the four local books die,
+/// which makes four planets scenery. Priced or distanced too far, nobody goes, the ores never
+/// meet, and ADR-0008's contested zone has nothing to contest. Both failures are quiet.
+/// </para>
+/// <para>
+/// The number to watch is the last column against the second-to-last: local trade has to survive
+/// without cross-faction trade going to zero. Either one alone can be maximised by breaking the
+/// other.
+/// </para>
+/// </remarks>
+static void RunCapitalSweep()
+{
+    Console.WriteLine("Sweeping the capital's fee premium against flight time, 5-year runs.");
+    Console.WriteLine("Faucet held at the measured equilibrium so only these two vary.");
+    Console.WriteLine();
+    Console.WriteLine(
+        $"  {"premium",8} {"trip",5} {"frames",8} {"x-faction ore",14} "
+        + $"{"local/100d",11} {"capital/100d",13}");
+    Console.WriteLine(new string('─', 66));
+
+    foreach (int premium in new[] { 0, 2_500, 5_000, 10_000, 25_000 })
+    {
+        foreach (int trip in new[] { 1, 3, 7 })
+        {
+            var sweepConfig = new SimulationConfig
+            {
+                Days = 1_825,
+                DailyQuestCredits = Credits.FromWholeCredits(50),
+                CapitalFeePremiumBasisPoints = premium,
+                CapitalTripDays = trip,
+            };
+
+            var sweepWorld = new SimWorld(sweepConfig);
+            var sweepBots = new Bots(sweepConfig, sweepWorld);
+            var sweepRng = new SplitMix64(sweepConfig.Seed);
+
+            for (int day = 1; day <= sweepConfig.Days; day++)
+            {
+                sweepBots.RunDay(day, ref sweepRng);
+            }
+
+            long crossOre = sweepWorld.Trades
+                .Where(t => t.IsCrossFaction && Sim.PlanetLockedOres.Contains(t.Item))
+                .Sum(t => (long)t.Quantity);
+
+            int recentLocal = sweepWorld.Trades
+                .Count(t => t.Day > sweepConfig.Days - 100 && t.Market != Sim.Capital);
+
+            int recentCapital = sweepWorld.Trades
+                .Count(t => t.Day > sweepConfig.Days - 100 && t.Market == Sim.Capital);
+
+            Console.WriteLine(
+                $"  {premium,8:N0} {trip,5} {sweepWorld.Crafted.GetValueOrDefault(Sim.Frame),8:N0} "
+                + $"{crossOre,14:N0} {recentLocal,11:N0} {recentCapital,13:N0}");
+        }
+    }
+
+    Console.WriteLine();
+    Console.WriteLine("Want local trade alive AND cross-faction ore well above zero.");
+    Console.WriteLine();
+    Console.WriteLine("trip=1 is degenerate, not a finding: a miner works the capital's ferrite");
+    Console.WriteLine("when it is there and its homeworld's ore when it is not, so a trip length");
+    Console.WriteLine("of one day means it is never home and no planet-locked ore is ever mined.");
+    Console.WriteLine("Read trip 3 against trip 7; ignore the zeroes above them.");
 }
 
 static Credits MoneySupply(SimWorld world) =>
