@@ -779,6 +779,107 @@ bool FSpaceMMOPatchCentreIsTheRequestedPlaceTest::RunTest(const FString& Paramet
 	return true;
 }
 
+namespace
+{
+	/**
+	 * Counts triangles facing the planet's centre, read back out of an FDynamicMesh3.
+	 *
+	 * The existing winding tests read the generator's arrays. The renderer reads the mesh that was
+	 * appended from them, and nothing has ever checked that the two agree — so a fault in the
+	 * append would pass every test in this file and still be invisible on screen, which is exactly
+	 * the shape of bug being chased.
+	 */
+	int32 CountInwardAfterAppend(
+		const TArray<FVector>& Positions,
+		const TArray<int32>& Triangles,
+		const FVector& CentreOffset)
+	{
+		using namespace UE::Geometry;
+
+		FDynamicMesh3 Mesh;
+		Mesh.EnableAttributes();
+
+		for (const FVector& Position : Positions)
+		{
+			Mesh.AppendVertex(FVector3d(Position));
+		}
+
+		for (int32 Index = 0; Index + 2 < Triangles.Num(); Index += 3)
+		{
+			Mesh.AppendTriangle(Triangles[Index], Triangles[Index + 1], Triangles[Index + 2]);
+		}
+
+		int32 Inward = 0;
+
+		for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+		{
+			const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
+
+			const FVector A = FVector(Mesh.GetVertex(Triangle.A));
+			const FVector B = FVector(Mesh.GetVertex(Triangle.B));
+			const FVector C = FVector(Mesh.GetVertex(Triangle.C));
+
+			const FVector Outward = CentreOffset + ((A + B + C) / 3.0);
+
+			if (FVector::DotProduct(FVector::CrossProduct(B - A, C - A), Outward) <= 0.0)
+			{
+				++Inward;
+			}
+		}
+
+		return Inward;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWindingSurvivesTheAppendTest,
+	"SpaceMMO.Patch.WindingSurvivesTheAppend",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWindingSurvivesTheAppendTest::RunTest(const FString& Parameters)
+{
+	// The globe and the patch pass equivalent winding tests against their own arrays, and render
+	// opposite ways: the globe draws as built, the patch only draws with its indices reversed. Both
+	// statements cannot be true, so this measures them the way the renderer sees them -- after the
+	// append into FDynamicMesh3 -- and in the same units, so the two are directly comparable rather
+	// than each being checked against its own reference frame.
+	const FPlanetConfig Planet = PatchTestPlanet();
+	const FPlanetTerrainConfig Terrain = PatchTestTerrain();
+
+	FPlanetGlobeConfig GlobeConfig;
+	GlobeConfig.Resolution = 12;
+
+	const FPlanetGlobeMesh Globe = FPlanetGlobe::Build(Planet, Terrain, GlobeConfig);
+
+	// Globe positions are already relative to the planet's centre, so no offset is needed.
+	const int32 GlobeInward = CountInwardAfterAppend(Globe.Positions, Globe.Triangles, FVector::ZeroVector);
+
+	FPlanetPatchConfig Config;
+	Config.Resolution = 17;
+	Config.CentreDirection = FVector(0.3, 0.2, -0.9).GetSafeNormal();
+	Config.AngularRadiusDegrees = 4.0;
+
+	const FPlanetPatchMesh Patch = FPlanetPatch::Build(Planet, Terrain, Config);
+
+	const FVector CentreOffset =
+		(Patch.Origin.Kilometres - Planet.Centre.Kilometres)
+		* SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+	const int32 PatchInward = CountInwardAfterAppend(Patch.Positions, Patch.Triangles, CentreOffset);
+
+	AddInfo(FString::Printf(
+		TEXT("After the append: globe %d of %d inward, patch %d of %d inward."),
+		GlobeInward,
+		Globe.Triangles.Num() / 3,
+		PatchInward,
+		Patch.Triangles.Num() / 3));
+
+	TestEqual(TEXT("No globe triangle faces inward once appended"), GlobeInward, 0);
+	TestEqual(TEXT("No patch triangle faces inward once appended"), PatchInward, 0);
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOFlatPatchFacesOutwardTest,
 	"SpaceMMO.Patch.FlatPatchFacesOutward",

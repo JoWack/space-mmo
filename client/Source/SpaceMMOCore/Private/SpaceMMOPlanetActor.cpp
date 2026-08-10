@@ -119,6 +119,41 @@ namespace
 	 * happening somewhere after that data, and this says so without pretending to know where.
 	 */
 	/**
+	 * Counts triangles facing the planet's centre, in the mesh about to be handed to a component.
+	 *
+	 * Every winding check in this project runs against a mesh built inside a test, and they all
+	 * pass — including one that reads the winding back out of an FDynamicMesh3 after the append.
+	 * Yet the patch renders only with its indices reversed and the globe renders without. Both
+	 * cannot be true of the same geometry, so this measures the mesh the running game actually
+	 * builds, which is the one thing nobody has looked at.
+	 *
+	 * CentreOffset carries the anchor: the globe's vertices are already relative to the planet's
+	 * centre, the patch's are relative to the ground beneath the viewer.
+	 */
+	int32 CountInwardTriangles(const FDynamicMesh3& Mesh, const FVector& CentreOffset)
+	{
+		int32 Inward = 0;
+
+		for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+		{
+			const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
+
+			const FVector A = FVector(Mesh.GetVertex(Triangle.A));
+			const FVector B = FVector(Mesh.GetVertex(Triangle.B));
+			const FVector C = FVector(Mesh.GetVertex(Triangle.C));
+
+			if (FVector::DotProduct(
+				FVector::CrossProduct(B - A, C - A),
+				CentreOffset + ((A + B + C) / 3.0)) <= 0.0)
+			{
+				++Inward;
+			}
+		}
+
+		return Inward;
+	}
+
+	/**
 	 * The same reversal, applied to the globe.
 	 *
 	 * The patch draws when its indices are reversed and the globe draws without that, through the
@@ -293,8 +328,16 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 		}
 	}
 
+	// Measured on the mesh the component is about to receive, not on one a test assembled.
+	const int32 GlobeInward = CountInwardTriangles(Mesh, FVector::ZeroVector);
+
 	Surface->SetMesh(MoveTemp(Mesh));
 	Surface->NotifyMeshUpdated();
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  globe faces inward: %d of %d."),
+		GlobeInward,
+		Globe.Triangles.Num() / 3);
 
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("Planet globe: %d triangles, %s winding, a vertex every %.0f m of ground."),
@@ -670,6 +713,18 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 	bPatchInGlobeComponent = bWantsGlobeComponent;
 
 	UDynamicMeshComponent* const Target = bPatchInGlobeComponent ? Surface : GroundPatch;
+
+	// The same count as the globe's, against the same reference, so the two can be compared
+	// directly in one log rather than argued about across two.
+	const int32 PatchInward = CountInwardTriangles(
+		Mesh,
+		(PatchOrigin.Kilometres - Planet.Centre.Kilometres)
+			* SpaceMMO::Coordinates::CentimetresPerKilometre);
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  patch faces inward: %d of %d."),
+		PatchInward,
+		Patch.Triangles.Num() / 3);
 
 	// NotifyMeshUpdated() already marks the render state dirty, via ResetProxy(). Nothing else is
 	// needed here, and anything added would be a second request for the same work.

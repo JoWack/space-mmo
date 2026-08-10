@@ -148,9 +148,24 @@ IsLocalToWorldDeterminantNegative()` is the only place the dynamic mesh proxy fl
 (`BaseDynamicMeshSceneProxy.cpp:482`), and both components are pure translations at unit scale — and
 `PatchIntoGlobe` ran the patch through the globe's own component anyway.
 
-So the standing contradiction is: two meshes, both asserted outward-wound by equivalent tests, both
-through the same component with the same determinant, and only one needs reversing. One of those
-statements must be false, and finding which is the next job — `SpaceMMO.GlobeFlipWinding` was added on
+**Winding survives the append, for both meshes.** `SpaceMMO.Patch.WindingSurvivesTheAppend` builds a
+globe and a patch, appends each into an `FDynamicMesh3` exactly as the actor does, reads the winding
+back out of the mesh the renderer would see, and measures both against the planet's centre in the
+same units so they are directly comparable rather than each checked against its own frame. Result:
+**globe 0 of 1452 inward, patch 0 of 512 inward.** So the two meshes have identical handedness all
+the way to the component, and winding is *not* what separates them — which leaves the flip working
+for a reason nobody has identified.
+
+Every winding measurement so far, including that one, is taken on a mesh built inside a test. The
+mesh the running game hands the component has never been looked at. Both builders now log
+`globe faces inward: N of M` and `patch faces inward: N of M`, computed on the mesh about to be
+handed over, so one playtest says whether the runtime geometry differs from what the tests assemble.
+If those counts come back zero for both, winding is finished as an explanation and the flip result
+needs a different account entirely.
+
+So the standing contradiction is: two meshes, identically wound by measurement, through the same
+component with the same determinant, and only one needs reversing. One of those statements must be
+false, and finding which is the next job — `SpaceMMO.GlobeFlipWinding` was added on
 10 August to A/B the globe the same way the patch was. The globe is otherwise built once at
 BeginPlay, so Tick watches the value and rebuilds when it changes — without that the switch would
 have set a value nothing ever read, which is exactly how the earlier experiments produced results
