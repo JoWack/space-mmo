@@ -72,6 +72,22 @@
         { "item": "verdant_amber", "quantity": 10 },
         { "item": "grimhold_slag", "quantity": 10 }
       ]
+    },
+    {
+      "$comment": "What a composite frame is for. build_alloy_frame had no consumer at all, so the frame -- the one item forcing material across the faction line -- had no standing demand, and EconSim showed cross-faction trade dying inside the first months of a five-year run. Two frames rather than one so the demand is worth a builder's while, and it reuses shuttle sections and thrusters rather than inventing new inputs, so the tier above the shuttle is reachable with skills the player already has. Level 25 leaves shipcrafting somewhere to go past the shuttle's 10 and the frame's 20.",
+      "key": "assemble_hull_freighter",
+      "output": "hull_freighter",
+      "outputQuantity": 1,
+      "skill": "shipcrafting",
+      "requiredLevel": 25,
+      "jobSeconds": 3600,
+      "xpPerRun": 9000,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "alloy_frame", "quantity": 2 },
+        { "item": "shuttle_hull_section", "quantity": 4 },
+        { "item": "crude_thruster", "quantity": 2 }
+      ]
     }
   ]
 }

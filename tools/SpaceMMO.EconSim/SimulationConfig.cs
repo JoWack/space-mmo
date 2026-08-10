@@ -121,22 +121,25 @@ public sealed record SimulationConfig
     public int CapitalTripDays { get; init; } = 3;
 
     /// <summary>
-    /// Whether pilots buy and lose alloy frames as well as hull sections.
+    /// Whether pilots buy and lose the frame-consuming hull tier.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// False by default, because that is the game as authored: <c>alloy_frame</c> is produced by
-    /// <c>build_alloy_frame</c> and consumed by no recipe at all. A good nobody consumes has no
-    /// steady demand, so framewrights build a handful, cannot sell them, and stop — and the
-    /// cross-faction trade that only they create stops with them.
+    /// True by default, because <c>assemble_hull_freighter</c> now exists: it takes two composite
+    /// frames, so frames finally have a consumer. Before that recipe was authored the frame was a
+    /// dead end, framewrights built about twenty across five simulated years and stopped, and the
+    /// only reason ore ever crosses the faction line went with them.
     /// </para>
     /// <para>
-    /// Setting this true stands in for the content that would fix it: some higher-tier hull whose
-    /// recipe takes a frame. It exists so the cross-faction invariant can be shown to go green
-    /// when the cause is removed, rather than being a check that is simply always red.
+    /// Modelled as pilots buying frames at the capital rather than as a separate shipwright buying
+    /// frames, sections and thrusters to assemble a freighter. That abstraction is deliberate: what
+    /// this simulation is measuring is whether frames have <em>standing demand</em>, and adding a
+    /// third intermediary between the frame and the player who wants the ship changes the number of
+    /// hops without changing the answer. Set false to reproduce the pre-freighter economy and watch
+    /// the cross-faction invariant fail.
     /// </para>
     /// </remarks>
-    public bool PilotsFlyFrameHulls { get; init; }
+    public bool PilotsFlyFrameHulls { get; init; } = true;
 
     /// <summary>Seed for bot decisions, so a run is exactly reproducible.</summary>
     public ulong Seed { get; init; } = 20_260_730;

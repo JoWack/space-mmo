@@ -36,9 +36,10 @@ var config = new SimulationConfig
             : Credits.Zero,
     CsvPath = args.Length > 2 ? args[2] : null,
 
-    // Off unless asked for. The default run must report the game as authored, including the part
-    // where nothing consumes an alloy frame.
-    PilotsFlyFrameHulls = args.Contains("--frame-hulls"),
+    // On unless switched off, matching authored content now that assemble_hull_freighter consumes
+    // frames. --no-frame-hulls reproduces the economy from before that recipe existed, which is
+    // what makes the cross-faction invariant demonstrably able to fail as well as pass.
+    PilotsFlyFrameHulls = !args.Contains("--no-frame-hulls"),
 };
 
 var world = new SimWorld(config);
