@@ -489,6 +489,20 @@ static void Report(SimWorld world, SimulationConfig config, List<InvariantViolat
         Console.WriteLine($"  {item,-20} {Money(LastTraded(world, item)),8} cr   {window}");
     }
 
+    // Printed next to the number rather than left in a document nobody reads at 1am. A raw
+    // material on the floor has been mistaken for a balance bug three times; ADR-0010 records the
+    // sweeps that ruled out every cause and decided it is the right answer to an empty server.
+    if (LastTraded(world, Sim.Ore) <= Credits.FromMinorUnits(1))
+    {
+        Console.WriteLine();
+        Console.WriteLine(
+            "  Raw ore on the floor is expected at this population, not a balance bug:");
+        Console.WriteLine(
+            "  deposits yield at server scale and demand is per-player. See ADR-0010 before");
+        Console.WriteLine(
+            "  changing any node yield -- population and loss-rate sweeps do not move it.");
+    }
+
     Console.WriteLine();
     Console.WriteLine("── Markets ────────────────────────────────────────────────");
     Console.WriteLine("  A homeworld book that never trades is a planet nobody needs to visit.");

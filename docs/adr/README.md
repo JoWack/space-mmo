@@ -20,6 +20,7 @@ pitch, not a decision record.
 | [0007](0007-one-handcrafted-system.md) | One handcrafted system, not a procedural galaxy | Accepted |
 | [0008](0008-factions-pvp-and-markets.md) | Faction warfare, PvP zoning, and market structure | Accepted · PvP rule amended by [0009](0009-retaliation.md) |
 | [0009](0009-retaliation.md) | Pairwise aggression; faction space is defended, not hunted | Accepted |
+| [0010](0010-deposits-are-sized-for-a-full-server.md) | Deposits are server-scale, so raw ore is worthless until the server is full | Accepted |
 
 ## When to write one
 
