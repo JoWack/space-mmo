@@ -41,10 +41,10 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
     {
         foreach (string ore in Sim.PlanetLockedOres)
         {
-            _oreLeftToday[ore] = _world.DailyNodeCapacity;
+            _oreLeftToday[ore] = _world.DailyCapacityFor(ore);
         }
 
-        _oreLeftToday[Sim.Ore] = _world.DailyNodeCapacity;
+        _oreLeftToday[Sim.Ore] = _world.DailyCapacityFor(Sim.Ore);
 
         _world.ExpireOrders(day);
 

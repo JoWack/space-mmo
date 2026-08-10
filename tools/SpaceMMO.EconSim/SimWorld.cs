@@ -226,8 +226,10 @@ public sealed class SimWorld
     /// time, and node count. No amount of player effort exceeds it — which makes it the single
     /// most important number in the whole simulation.
     /// </remarks>
-    public int DailyNodeCapacity =>
-        (int)((long)_config.NodeCapacity * _config.NodeCount * 86_400 / _config.NodeRespawnSeconds);
+    public int DailyCapacityFor(string item) =>
+        _config.Deposits.TryGetValue(item, out SimulationConfig.Deposit deposit)
+            ? (int)deposit.DailyCapacity
+            : 0;
 
     private SimCharacter NewCharacter(int id, string archetype, Race race)
     {

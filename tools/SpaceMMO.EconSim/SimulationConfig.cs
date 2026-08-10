@@ -70,14 +70,44 @@ public sealed record SimulationConfig
     /// </remarks>
     public int ActiveSecondsPerDay { get; init; } = 7_200;
 
-    /// <summary>Ore a single deposit holds when full.</summary>
-    public int NodeCapacity { get; init; } = 200;
+    /// <summary>One deposit type: how much it holds, how fast it refills, how many exist.</summary>
+    public readonly record struct Deposit(int Capacity, int RespawnSeconds, int Count)
+    {
+        /// <summary>Units this deposit type can yield in a day, the hard ceiling on supply.</summary>
+        public long DailyCapacity => (long)Capacity * Count * 86_400 / RespawnSeconds;
+    }
 
-    /// <summary>Seconds until a depleted deposit refills.</summary>
-    public int NodeRespawnSeconds { get; init; } = 1_200;
+    /// <summary>
+    /// The deposits in <c>data/universe/origin.json</c>, per item.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Transcribed from the authored universe rather than assumed. The previous version carried a
+    /// single capacity/respawn/count triple with a comment claiming it mirrored shipped content,
+    /// and it did not: it assumed thirty deposits of everything, where the game authors two ferrite
+    /// nodes and exactly one node for each planet-locked ore. That overstated raw supply fifteenfold
+    /// for ferrite and sixtyfold for the ores that matter, and the resulting glut — 232 million
+    /// units created against five million consumed, price pinned at the floor — was largely the
+    /// simulator's own invention rather than a finding about the game.
+    /// </para>
+    /// <para>
+    /// This is the "feed in the real value at least once" rule in CLAUDE.md: every number here has
+    /// a counterpart in a JSON file, and if the two drift the simulation quietly answers a question
+    /// about a game nobody is building.
+    /// </para>
+    /// </remarks>
+    public Dictionary<string, Deposit> Deposits { get; init; } = new(StringComparer.Ordinal)
+    {
+        // Two nodes on the capital, 200 each, twenty-minute respawn.
+        ["ferrite_ore"] = new Deposit(200, 1_200, 2),
 
-    /// <summary>How many deposits the population shares.</summary>
-    public int NodeCount { get; init; } = 30;
+        // One node per homeworld, 150 each, thirty-minute respawn. This is the real scarcity: an
+        // entire planet's export comes out of a single deposit.
+        ["terran_ferrite"] = new Deposit(150, 1_800, 1),
+        ["ares_regolith"] = new Deposit(150, 1_800, 1),
+        ["verdant_amber"] = new Deposit(150, 1_800, 1),
+        ["grimhold_slag"] = new Deposit(150, 1_800, 1),
+    };
 
     /// <summary>Credits each character receives once, from the onboarding chain.</summary>
     public Credits BootstrapCredits { get; init; } = Credits.FromWholeCredits(13_000);

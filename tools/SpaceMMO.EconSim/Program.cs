@@ -389,7 +389,9 @@ static void Report(SimWorld world, SimulationConfig config, List<InvariantViolat
 
     Console.WriteLine();
     Console.WriteLine("── Material ───────────────────────────────────────────────");
-    Console.WriteLine($"  Deposit ceiling      {world.DailyNodeCapacity,15:N0} ore/day");
+    Console.WriteLine(
+        $"  Deposit ceiling      {world.DailyCapacityFor(Sim.Ore),15:N0} ferrite/day, "
+        + $"{world.DailyCapacityFor(Sim.TerranFerrite):N0} per planet-locked ore/day");
 
     foreach (string item in Sim.TradedItems)
     {
