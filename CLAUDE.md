@@ -1,8 +1,32 @@
 # Working on SpaceMMO
 
-A solo, long-term hobby project. Design decisions live in `docs/adr/`; how to run anything
-lives in `docs/setup.md`. This file is about how to *debug* it, because that is where the
-expensive mistakes have been.
+A solo, long-term hobby project. Design decisions live in `docs/adr/`; planned work lives in
+`docs/tasks.md`; how to run anything lives in `docs/setup.md`. This file is about how to *debug*
+it, because that is where the expensive mistakes have been.
+
+## Planned work goes in `docs/tasks.md`, not in a task list
+
+Read `docs/tasks.md` at the start of any session that continues existing work, and cite tasks by
+number when reporting.
+
+The assistant's in-session task list does not survive a cleared context. A terrain investigation
+spanning eight commits and several playtests was once resumed with "there should be tasks
+recorded, I believe the terrain work is #84" — and the list was empty, with nothing to recover.
+Everything worth remembering next week belongs in the repository, where git keeps it and a fresh
+session reads it for free. Use the in-session list for the current sitting if it helps; it is
+scratch.
+
+- **Identifiers are permanent and never reused.** They are how a task is referred to in
+  conversation months later.
+- **Record what has been ruled out, and how.** A task that only says what to do invites
+  re-deriving the eliminations at playtest prices. This is the same reason the debugging rules
+  below exist, and it is most of what makes the file worth keeping.
+- **Say what a task is blocked on**, by number, so the order of work is visible without
+  reconstructing it.
+- **Never present a reconstruction as a recovered original.** If a task was rebuilt from commits
+  and code, label it so, and leave a gap where a number's content is genuinely lost. An invented
+  history is worse than an admitted one.
+- **Update it in the same commit as the work**, so a task's state and the code agree.
 
 ## Debugging: ask the running game, not the code
 
