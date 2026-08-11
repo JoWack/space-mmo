@@ -415,7 +415,9 @@ void ASpaceMMOShipPawn::ResolveGroundContact()
 			It->GetTerrainConfig(),
 			Navigation.SystemPosition,
 			FlightState.Velocity,
-			HullRadiusKilometres);
+			HullRadiusKilometres,
+			FPlanetTerrain::DefaultContactToleranceKilometres,
+			bWasOnGround);
 
 		if (!Contact.bOnGround)
 		{

@@ -131,6 +131,8 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 	}
 
 	Gravity = FVector::ZeroVector;
+	const bool bWasOnGround = bOnGround;
+
 	bOnGround = false;
 	SurfaceNormal = FVector::UpVector;
 
@@ -145,7 +147,9 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 			It->GetTerrainConfig(),
 			Navigation.SystemPosition,
 			WalkState.Velocity,
-			StandingHeightKilometres);
+			StandingHeightKilometres,
+			FPlanetTerrain::DefaultContactToleranceKilometres,
+			bWasOnGround);
 
 		// The normal is taken from whichever body is underfoot even when not touching it, so a
 		// jumping character stays oriented to the ground it left rather than snapping upright.

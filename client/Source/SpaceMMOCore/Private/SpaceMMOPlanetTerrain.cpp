@@ -219,7 +219,8 @@ FGroundContact FPlanetTerrain::ResolveContact(
 	const FSystemCoordinate& Position,
 	const FVector& Velocity,
 	const double ContactRadiusKilometres,
-	const double ToleranceKilometres)
+	const double ToleranceKilometres,
+	const bool bWasOnGround)
 {
 	FGroundContact Contact;
 	Contact.Position = Position;
@@ -255,9 +256,27 @@ FGroundContact FPlanetTerrain::ResolveContact(
 	const bool bLeaving =
 		FVector::DotProduct(Velocity, Contact.SurfaceNormal) > MinimumSeparationSpeed;
 
+	// Wider to leave than to arrive.
+	//
+	// A single threshold cannot survive speed. At 738 m/s a ship crosses twelve metres of ground per
+	// frame, and this terrain rises and falls by up to 0.33 m across that distance — more than the
+	// twenty centimetres that decide contact, on 45 frames out of 60. So the state oscillated, four
+	// times in 0.36 s in a real flight, and every one of those transitions was honest arithmetic on
+	// a rule that had no memory.
+	//
+	// Ten times the capture band clears the worst step by a comfortable margin without being large
+	// enough to hide anything a player would notice. Deliberate departures do not depend on it: they
+	// are caught below by separation speed instead.
+	constexpr double ReleaseToleranceMultiplier = 10.0;
+
+	const double CaptureTolerance = FMath::Max(0.0, ToleranceKilometres);
+
+	const double ReleaseTolerance =
+		bWasOnGround ? CaptureTolerance * ReleaseToleranceMultiplier : CaptureTolerance;
+
 	// Clear of the ground, or genuinely climbing away from it. The second case is what lets a jump
 	// happen at all: without it the tolerance band would drag a rising character straight back down.
-	if (Gap > FMath::Max(0.0, ToleranceKilometres) || (Gap > 0.0 && bLeaving))
+	if (Gap > ReleaseTolerance || (Gap > 0.0 && bLeaving))
 	{
 		return Contact;
 	}

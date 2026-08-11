@@ -1,4 +1,5 @@
 #include "Misc/AutomationTest.h"
+#include "SpaceMMOPlanetPatch.h"
 #include "SpaceMMOPlanetTerrain.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -694,6 +695,130 @@ bool FSpaceMMOSurfacePositionIsRelativeToTheCentreTest::RunTest(const FString& P
 	TestTrue(
 		TEXT("The surface point moves with the planet, and by exactly as much"),
 		After.Kilometres.Equals(Before.Kilometres + Shift, 0.000001));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOContactHoldsAtCruiseSpeedTest,
+	"SpaceMMO.Terrain.ContactHoldsAtCruiseSpeed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOContactHoldsAtCruiseSpeedTest::RunTest(const FString& Parameters)
+{
+	// A ship skimming the surface reported Touched down and Lifted off four times in 0.36 s while
+	// travelling about 600 m (task 90). The question is whether that is the contact rule being
+	// wrong or the ground genuinely rising and falling under a fast ship, and it is decidable from
+	// the height function alone: at 738 m/s and 60 Hz the ship crosses about 12 m of ground per
+	// frame, and the contact tolerance is 20 cm.
+	const FPlanetConfig Planet = TerrainTestPlanet();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+
+	constexpr double SpeedMetresPerSecond = 738.0;
+	constexpr double FrameSeconds = 1.0 / 60.0;
+	constexpr double ToleranceMetres = 0.2;
+
+	const FVector Start = FVector(0.3, 0.2, -0.9).GetSafeNormal();
+
+	FVector Tangent;
+	FVector Bitangent;
+	FPlanetPatch::BuildTangentFrame(Start, Tangent, Bitangent);
+
+	const double StepKilometres = (SpeedMetresPerSecond * FrameSeconds) / 1000.0;
+
+	double Previous = FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Start);
+	double WorstStepMetres = 0.0;
+	int32 StepsExceedingTolerance = 0;
+
+	constexpr int32 Steps = 60;
+
+	for (int32 Step = 1; Step <= Steps; ++Step)
+	{
+		// Walking the direction around the sphere, which is what a ship holding a heading does.
+		const FVector Direction =
+			(Start + (Tangent * ((StepKilometres * Step) / Planet.RadiusKilometres))).GetSafeNormal();
+
+		const double Radius = FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Direction);
+
+		const double StepMetres = FMath::Abs(Radius - Previous) * 1000.0;
+
+		WorstStepMetres = FMath::Max(WorstStepMetres, StepMetres);
+
+		if (StepMetres > ToleranceMetres)
+		{
+			++StepsExceedingTolerance;
+		}
+
+		Previous = Radius;
+	}
+
+	AddInfo(FString::Printf(
+		TEXT("At %.0f m/s: worst per-frame ground change %.2f m, %d of %d frames exceed the %.2f m "
+			"contact tolerance."),
+		SpeedMetresPerSecond,
+		WorstStepMetres,
+		StepsExceedingTolerance,
+		Steps,
+		ToleranceMetres));
+
+	// The claim being pinned is not a number but a consequence: at cruise speed the ground moves
+	// further between frames than the band that decides contact, so a rule with one threshold must
+	// oscillate. Any fix has to widen the band it releases on, not the one it captures on.
+	TestTrue(
+		TEXT("Ground moves further per frame than the contact tolerance at cruise speed"),
+		WorstStepMetres > ToleranceMetres);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOContactIsWiderToLeaveThanToArriveTest,
+	"SpaceMMO.Terrain.ContactIsWiderToLeaveThanToArrive",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOContactIsWiderToLeaveThanToArriveTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TerrainTestPlanet();
+	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
+
+	const FVector Up = FVector(0.3, 0.2, -0.9).GetSafeNormal();
+
+	const double GroundRadius = FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Up);
+
+	// Half a metre up: outside the twenty-centimetre capture band, inside the two-metre release
+	// band, and larger than the 0.33 m the ground moves in a frame at cruise speed. This is exactly
+	// the height at which the state used to flap.
+	const double GapKilometres = 0.0005;
+
+	const FSystemCoordinate Position(
+		Planet.Centre.Kilometres + (Up * (GroundRadius + GapKilometres)));
+
+	// Drifting along the surface rather than climbing, so separation speed cannot be what decides
+	// it. Anything genuinely leaving is caught by that instead, and must still be able to leave.
+	FVector Tangent;
+	FVector Bitangent;
+	FPlanetPatch::BuildTangentFrame(Up, Tangent, Bitangent);
+
+	const FVector Velocity = Tangent * 73800.0;
+
+	const FGroundContact Arriving = FPlanetTerrain::ResolveContact(
+		Planet, Terrain, Position, Velocity,
+		0.0, FPlanetTerrain::DefaultContactToleranceKilometres, false);
+
+	const FGroundContact Staying = FPlanetTerrain::ResolveContact(
+		Planet, Terrain, Position, Velocity,
+		0.0, FPlanetTerrain::DefaultContactToleranceKilometres, true);
+
+	TestFalse(TEXT("Half a metre up does not count as landing"), Arriving.bOnGround);
+	TestTrue(TEXT("Half a metre up does not count as taking off"), Staying.bOnGround);
+
+	// The release band must not swallow a real departure, or a ship could never leave slowly and a
+	// jump would read as a stumble.
+	const FGroundContact Climbing = FPlanetTerrain::ResolveContact(
+		Planet, Terrain, Position, Up * 100.0,
+		0.0, FPlanetTerrain::DefaultContactToleranceKilometres, true);
+
+	TestFalse(TEXT("Climbing away still leaves the ground"), Climbing.bOnGround);
 
 	return true;
 }

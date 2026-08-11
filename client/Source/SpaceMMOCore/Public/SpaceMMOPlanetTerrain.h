@@ -167,6 +167,9 @@ public:
 		const FVector& Direction,
 		double SampleAngleDegrees = 0.05);
 
+	/** How far above the ground still counts as standing on it, before hysteresis widens it. */
+	static constexpr double DefaultContactToleranceKilometres = 0.0002;
+
 	/**
 	 * Stops something passing through the ground.
 	 *
@@ -189,6 +192,18 @@ public:
 	 * exactly on the ground is airborne again by the next frame — grounded and airborne alternate
 	 * every tick, jumping becomes unreliable, and the residual gravity each frame shows up as a
 	 * slow drift. Twenty centimetres of tolerance costs nothing and removes all of it.
+	 *
+	 * @param bWasOnGround Whether the caller was in contact last frame, which widens the band it
+	 *                     takes to leave. One threshold cannot survive speed: at 738 m/s a ship
+	 *                     crosses twelve metres of ground per frame, and this terrain moves up to
+	 *                     0.33 m over that distance — more than the twenty centimetres that decide
+	 *                     contact, on 45 frames in 60. So a single-threshold rule must oscillate,
+	 *                     and it did, four times in 0.36 s in a real flight. Capturing on a narrow
+	 *                     band and releasing on a wide one is the same shape as the hysteresis
+	 *                     ClassifyProximityAtAltitude already needs, and for the same reason.
+	 *
+	 *                     A deliberate departure is unaffected, because it is caught by separation
+	 *                     speed rather than by distance.
 	 */
 	static FGroundContact ResolveContact(
 		const FPlanetConfig& Planet,
@@ -196,7 +211,8 @@ public:
 		const FSystemCoordinate& Position,
 		const FVector& Velocity,
 		double ContactRadiusKilometres,
-		double ToleranceKilometres = 0.0002);
+		double ToleranceKilometres = DefaultContactToleranceKilometres,
+		bool bWasOnGround = false);
 
 	/**
 	 * Maps a point on a unit cube to the unit sphere.
