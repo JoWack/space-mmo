@@ -781,6 +781,15 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 
 			if (Surface != nullptr)
 			{
+				// Logged here as well as in the visibility block above, because that block runs
+				// before this one and still sees a patch, so it never reports the globe coming
+				// back. The 11 August playtest showed the release working with the log silent
+				// about it, which is a diagnostic that cannot confirm the thing it exists for.
+				if (!Surface->IsVisible())
+				{
+					UE_LOG(LogSpaceMMO, Log, TEXT("Globe shown (terrain patch released)."));
+				}
+
 				Surface->SetVisibility(true);
 			}
 		}

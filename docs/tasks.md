@@ -460,8 +460,25 @@ feed their previous state in; the character had the same fault while walking, le
 `SpaceMMO.Terrain.ContactIsWiderToLeaveThanToArrive` was verified to fail with the multiplier set
 back to 1, on the assertion that matters.
 
-**Still owed: the in-game confirmation.** The flapping was seen in a real flight and only a real
-flight can show it gone — skim the surface at speed and watch the log stay quiet.
+**The in-game confirmation ran on 11 August, and the premise was partly wrong.** The log still shows
+66 transitions, some 13 ms apart — and they are honest.
+
+**Orbital velocity on this planet is about 443 m/s**: `sqrt(9.81 m/s² × 20,000 m)`. The flight that
+produced them was skimming at 650–870 m/s, which is 1.5 to 2 times orbital. At 868 m/s the
+centripetal requirement is 37.7 m/s² against 9.81 available, so the ship is thrown off the ground by
+its own speed and contact is genuinely intermittent. No contact rule should suppress that; doing so
+would be lying about where the ship is.
+
+At rest it is solid — 4.2 s quiet after the first landing, and nothing at all after the last one — so
+the hysteresis is doing its job on the case it was built for, which is sub-metre threshold noise.
+
+The lesson is about the diagnostic rather than the physics: honest skipping and a broken threshold
+produced identical log lines, and the first response was to fix the threshold. The transition now
+logs speed alongside orbital velocity so the two can never again be confused, and the reader is told
+which one they are looking at.
+
+**Worth deciding separately, and not a bug:** whether a ship at twice orbital velocity a few metres
+above the ground should be possible at all. Decided — see 98.
 
 `ClientA.log`, 10 August, 15:05:33 — the ship alternates four times in 0.36 s while travelling about
 600 m across the surface:
@@ -555,6 +572,41 @@ shipcrafting award anything on completion is **unverified**. The progression cur
 the skills are authored content in `data/skills`, so this is likely wiring rather than design — but
 a loop that does not pay is a loop players will not run twice, and it is the sort of gap that is
 invisible until somebody plays for an hour.
+
+## 98 — Slow ships down in atmosphere
+
+**Pending. Decided 11 August: fast in space, slow in atmosphere and near the ground.**
+
+The 11 August flight skimmed the surface at 650–870 m/s, which on this planet is 1.5 to 2 times
+orbital velocity — `sqrt(9.81 m/s² × 20,000 m)` is only about 443 m/s. Nothing stops that today: the
+flight model is pure 6DOF with thrust in the ship's frame and velocity in the system frame, and no
+force opposes motion at any altitude. A 20 km world makes orbital speed a very low bar to clear by
+accident, and clearing it means the ground cannot be flown along at all, only skipped across.
+
+Three ways, and the first is the one to want:
+
+**A. Atmospheric drag.** A force opposing velocity, scaled by a density that falls off with altitude.
+The planet already carries `AtmosphereHeightKilometres` (12 km on the capital) and proximity is
+already classified by altitude, so the inputs exist. Gives a terminal velocity for free, makes
+re-entry mean something, and costs the pilot nothing they would not expect. `FShipFlightModel::Step`
+already takes gravity, so drag arrives the same way — and it is a pure function, so it is testable
+headlessly to the same standard as the rest of the flight model.
+
+**B. A speed cap inside the atmosphere.** One clamp, trivially implemented, and it will feel like
+one: a ship pinned at a number regardless of thrust reads as a bug to anyone who has not seen the
+code.
+
+**C. Weaker thrust in atmosphere.** Does not solve it. A ship that is already fast stays fast, which
+is exactly the case that produced this task.
+
+Tuning is the real question rather than the mechanism: terminal velocity at sea level wants to be
+comfortably below 443 m/s or the skimming comes straight back, and high enough that crossing a
+continent is not tedious.
+
+**Both ends must agree.** Flight is simulated under `HasAuthority()` on the dedicated server and
+predicted on the client, so drag belongs in the shared model, not in either caller. Putting it
+anywhere else would make the client and the server disagree about where a ship is, which is the
+class of bug `ReceivedBunch: FieldCache == nullptr` taught this project to fear.
 
 ## 96 — Author world content graphically
 

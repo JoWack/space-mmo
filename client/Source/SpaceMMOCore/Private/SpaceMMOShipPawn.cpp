@@ -456,9 +456,30 @@ void ASpaceMMOShipPawn::ResolveGroundContact()
 	// resting on the ground is not.
 	if (bOnGround != bWasOnGround)
 	{
-		UE_LOG(LogSpaceMMO, Log, TEXT("%s at %s"),
+		// Speed, and what it would take to orbit, because those two numbers decide whether this
+		// line is a bug or physics. On a twenty-kilometre planet orbital velocity is only about
+		// 443 m/s, so a ship skimming at 800 is thrown off the ground by its own speed and contact
+		// is genuinely intermittent. Without the comparison, honest skipping and a broken threshold
+		// produce the same log and the wrong one gets fixed.
+		const double SpeedMetresPerSecond = FlightState.Velocity.Size() / 100.0;
+
+		double OrbitalMetresPerSecond = 0.0;
+
+		for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+		{
+			const FPlanetConfig& Planet = It->GetPlanetConfig();
+
+			OrbitalMetresPerSecond = FMath::Sqrt(
+				(Planet.SurfaceGravity / 100.0) * (Planet.RadiusKilometres * 1000.0));
+
+			break;
+		}
+
+		UE_LOG(LogSpaceMMO, Log, TEXT("%s at %s, %.0f m/s (orbital %.0f m/s)"),
 			bOnGround ? TEXT("Touched down") : TEXT("Lifted off"),
-			*Navigation.SystemPosition.ToString());
+			*Navigation.SystemPosition.ToString(),
+			SpeedMetresPerSecond,
+			OrbitalMetresPerSecond);
 
 		// Dev affordance: -AutoDisembark steps out the moment the ship settles, so the whole
 		// descend-land-disembark sequence can be checked without a human holding a key.

@@ -715,7 +715,7 @@ bool FSpaceMMOContactHoldsAtCruiseSpeedTest::RunTest(const FString& Parameters)
 	const FPlanetTerrainConfig Terrain = TerrainTestConfig();
 
 	constexpr double SpeedMetresPerSecond = 738.0;
-	constexpr double FrameSeconds = 1.0 / 60.0;
+	constexpr double CruiseFrameSeconds = 1.0 / 60.0;
 	constexpr double ToleranceMetres = 0.2;
 
 	const FVector Start = FVector(0.3, 0.2, -0.9).GetSafeNormal();
@@ -724,7 +724,7 @@ bool FSpaceMMOContactHoldsAtCruiseSpeedTest::RunTest(const FString& Parameters)
 	FVector Bitangent;
 	FPlanetPatch::BuildTangentFrame(Start, Tangent, Bitangent);
 
-	const double StepKilometres = (SpeedMetresPerSecond * FrameSeconds) / 1000.0;
+	const double StepKilometres = (SpeedMetresPerSecond * CruiseFrameSeconds) / 1000.0;
 
 	double Previous = FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Start);
 	double WorstStepMetres = 0.0;

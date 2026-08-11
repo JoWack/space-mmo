@@ -284,6 +284,11 @@ Scripts live in `scripts/`. All of them use the **source** engine, which is mand
 BuildCookRun has run, the project's binaries are compiled against `UnrealEngineSource` and the
 launcher engine can no longer load them.
 
+**A black window at startup is usually not a hang.** After a code change the first launch sits on an
+empty window for a long while compiling shaders, with nothing on screen and nothing in the log to say
+so. It has been mistaken for a freeze and killed. Give it a minute before believing it — and if you
+want to be sure, `client/Saved/Logs/SpaceMMO.log` keeps growing while it works.
+
 | Script | What it does |
 |---|---|
 | `play.bat` | Standalone single player in a window. Needs nothing else running. |
