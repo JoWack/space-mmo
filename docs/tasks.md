@@ -167,6 +167,14 @@ Worth keeping for future sessions: this measurement cost no playtest. `UnrealEdi
 log — `-nullrhi` crashes the *automation* path on UE 5.8 but is fine here, and the arguments arrived
 intact for once (check `LogInit: Command Line:` anyway).
 
+`SpaceMMO.GlobeIntoPatch` fills that cell, added 10 August. It hands the globe's mesh to the patch's
+component, hides the globe's own so whatever appears is unambiguously from the patch's, stands the
+patch's component at the planet's centre (those vertices are centre-relative, and placing it at a
+patch anchor would put the planet 20 km away and produce a black screen for the wrong reason), and
+suppresses patch building while it is on so the next tick cannot overwrite the geometry being asked
+about. Turning it off rebuilds the globe where it belongs and drops the patch state so the patch
+builds again rather than leaving a stale globe underfoot for kilometres.
+
 **The obvious next experiment is the missing cell of a 2x2.** Three combinations have been tested:
 globe mesh in the globe's component draws; patch mesh in the globe's component is black; patch mesh
 in its own component is black. **Globe mesh in the patch's component has never been tried.** If it

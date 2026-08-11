@@ -143,6 +143,9 @@ private:
 	/** Whether the globe was built with SpaceMMO.GlobeFlipWinding, so a change forces a rebuild. */
 	bool bAppliedGlobeFlippedWinding = false;
 
+	/** True while the globe's mesh is in the patch's component, for SpaceMMO.GlobeIntoPatch. */
+	bool bGlobeInPatchComponent = false;
+
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;
 

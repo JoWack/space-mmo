@@ -119,6 +119,32 @@ namespace
 	 * happening somewhere after that data, and this says so without pretending to know where.
 	 */
 	/**
+	 * Puts the globe's mesh into the patch's component — the missing cell of a 2x2.
+	 *
+	 * Globe mesh in the globe's component draws. Patch mesh in the globe's component does not.
+	 * Patch mesh in its own component does not. The globe's mesh has never been put into the
+	 * patch's component, and that is the combination which decides whether the component was ever
+	 * exonerated at all.
+	 *
+	 * Drawing means the component is fine and the fault is in the patch's geometry, as currently
+	 * believed. Black means the component matters after all, and SpaceMMO.PatchIntoGlobe's black
+	 * result — the finding this whole investigation pivoted on — had some other cause.
+	 *
+	 * The globe's own component is hidden while this is on, so whatever appears is unambiguously
+	 * coming from the patch's. Turning it off rebuilds the globe where it belongs and lets the
+	 * patch build again, because a diagnostic that does not put things back is one that breaks
+	 * what it measures.
+	 */
+	float GGlobeIntoPatch = 0.0f;
+
+	FAutoConsoleVariableRef CVarGlobeIntoPatch(
+		TEXT("SpaceMMO.GlobeIntoPatch"),
+		GGlobeIntoPatch,
+		TEXT("1 puts the globe's mesh into the patch's component and hides the globe's own. Black "
+			"means the component is at fault, not the mesh."),
+		ECVF_Default);
+
+	/**
 	 * Counts triangles facing the planet's centre, in the mesh about to be handed to a component.
 	 *
 	 * Every winding check in this project runs against a mesh built inside a test, and they all
@@ -331,8 +357,24 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 	// Measured on the mesh the component is about to receive, not on one a test assembled.
 	const int32 GlobeInward = CountInwardTriangles(Mesh, FVector::ZeroVector);
 
-	Surface->SetMesh(MoveTemp(Mesh));
-	Surface->NotifyMeshUpdated();
+	// The globe's geometry, handed to whichever component is being asked about. Its vertices are
+	// relative to the planet's centre either way, so the only thing that changes is which component
+	// carries them and where that component has to stand.
+	UDynamicMeshComponent* const GlobeTarget =
+		bGlobeInPatchComponent && GroundPatch != nullptr ? GroundPatch : Surface;
+
+	GlobeTarget->SetMesh(MoveTemp(Mesh));
+	GlobeTarget->NotifyMeshUpdated();
+	GlobeTarget->SetVisibility(true);
+
+	if (bGlobeInPatchComponent && GroundPatch != nullptr)
+	{
+		// Only one of them may draw, or "it appeared" would not say which component produced it.
+		Surface->SetVisibility(false);
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Globe mesh handed to the patch's component; the globe's own is hidden."));
+	}
 
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("  globe faces inward: %d of %d."),
@@ -377,6 +419,33 @@ void ASpaceMMOPlanetActor::Tick(const float DeltaSeconds)
 			GGlobeFlipWinding > 0.5f ? TEXT("REVERSED") : TEXT("as built"));
 
 		BuildGlobe();
+	}
+
+	if ((GGlobeIntoPatch > 0.5f) != bGlobeInPatchComponent)
+	{
+		bGlobeInPatchComponent = GGlobeIntoPatch > 0.5f;
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Globe mesh moving to %s component."),
+			bGlobeInPatchComponent ? TEXT("the patch's") : TEXT("its own"));
+
+		// Turning it off has to give both meshes back. The patch's component is holding the globe
+		// by then, and the patch is only rebuilt when the viewer drifts -- so without dropping the
+		// patch state, the ground would stay a stale globe for kilometres of walking.
+		if (!bGlobeInPatchComponent)
+		{
+			bHasPatch = false;
+			PatchDirection = FVector::ZeroVector;
+			PatchAngularRadiusDegrees = 0.0;
+
+			if (GroundPatch != nullptr)
+			{
+				GroundPatch->SetVisibility(false);
+			}
+		}
+
+		BuildGlobe();
+		ApplyRenderTransform();
 	}
 
 	// Terrain is checked every frame regardless of the origin, because it follows the viewer
@@ -456,6 +525,14 @@ bool ASpaceMMOPlanetActor::TryGetViewerPosition(FSystemCoordinate& OutPosition) 
 
 void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 {
+	// While the patch's component is borrowing the globe's mesh, leave both alone. Building a patch
+	// would overwrite the very geometry the experiment is asking about, on the next tick, and the
+	// answer would be about the patch again.
+	if (bGlobeInPatchComponent)
+	{
+		return;
+	}
+
 	// A dedicated server has no viewer and no renderer. It knows the ground through
 	// FPlanetTerrain, which is all it needs to decide where a player may stand.
 	if (IsRunningDedicatedServer())
@@ -860,9 +937,17 @@ void ASpaceMMOPlanetActor::ApplyRenderTransform()
 	SetActorLocation(Origin->ToWorldLocation(
 		bPatchInGlobeComponent && bHasPatch ? PatchOrigin : Planet.Centre));
 
+	// While the patch's component holds the globe's mesh it has to stand where the globe stands:
+	// those vertices are relative to the planet's centre, not to any patch anchor. Placing it
+	// anywhere else would put the planet twenty kilometres from where it belongs and the
+	// experiment would report "black" for a reason that has nothing to do with the component.
+	if (GroundPatch != nullptr && bGlobeInPatchComponent)
+	{
+		GroundPatch->SetWorldLocation(Origin->ToWorldLocation(Planet.Centre));
+	}
 	// The patch keeps its own absolute position: its vertices are relative to the ground beneath
 	// the viewer, which is twenty kilometres from the planet's centre and moves independently.
-	if (GroundPatch != nullptr && bHasPatch && !bPatchInGlobeComponent)
+	else if (GroundPatch != nullptr && bHasPatch && !bPatchInGlobeComponent)
 	{
 		GroundPatch->SetWorldLocation(Origin->ToWorldLocation(PatchOrigin));
 	}
