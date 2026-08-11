@@ -175,12 +175,29 @@ suppresses patch building while it is on so the next tick cannot overwrite the g
 about. Turning it off rebuilds the globe where it belongs and drops the patch state so the patch
 builds again rather than leaving a stale globe underfoot for kilometres.
 
-**The obvious next experiment is the missing cell of a 2x2.** Three combinations have been tested:
-globe mesh in the globe's component draws; patch mesh in the globe's component is black; patch mesh
-in its own component is black. **Globe mesh in the patch's component has never been tried.** If it
-draws, the component is exonerated and the fault is in the mesh, as currently believed. If it is
-black, the component matters after all and `PatchIntoGlobe`'s black result had some other cause —
-which would reopen the question the whole investigation turned on.
+**The 2x2 is complete, and the component is exonerated.** Globe mesh in the globe's component draws;
+globe mesh in the patch's component draws (confirmed by playtest, 10 August); patch mesh in the
+globe's component is black; patch mesh in its own component is black. Both components render the
+globe's geometry and neither renders the patch's, so `PatchIntoGlobe`'s pivot was right: **the fault
+is in the patch's mesh.**
+
+Which leaves the sharpest statement of the problem yet, and it is a contradiction:
+
+- The patch's mesh fails in two components that both draw the globe's.
+- Its winding measures correct at runtime — 0 of 32768 inward, against the planet's centre.
+- Reversing its indices makes it draw.
+
+The only way all three hold is if the patch's triangles face away from the *viewer* while facing away
+from the *planet's centre* — which happens if the viewer sits on the inside of the patch surface.
+The HUD reports `0.00 km ground` while the patch is built from the same height function, so the
+viewer is on the surface to within the precision of that readout, and which side of it is not
+something any measurement so far has recorded.
+
+**Next: log the signed distance from the camera to the patch surface**, and to the nearest triangle's
+plane, at build time. Negative means the viewer is under its own ground, and the whole picture
+resolves: outward-wound, correctly built, and culled because it is being viewed from beneath.
+Variant 1 argues against it — a flat patch sits 340 m below a viewer standing on 340 m of terrain,
+and that rendered nothing either — so this is a candidate, not a conclusion.
 
 So the standing contradiction is: two meshes, identically wound by measurement, through the same
 component with the same determinant, and only one needs reversing. One of those statements must be
