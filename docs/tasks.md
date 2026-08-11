@@ -405,8 +405,15 @@ since it currently trusts a position the client computed.
 
 ## 89 — Caves need a second representation
 
-**Pending, and now a decision rather than a task.** Scoped 11 August; it needs an ADR before any
-code, and the ADR needs a choice made.
+**Decided, 11 August: [ADR-0011](adr/0011-caves-are-authored-volumes.md) — caves are authored
+volumes, not a density field.** The implementation is not started. The scoping below is kept because
+it is the reasoning the ADR was drawn from; the ADR itself is the decision.
+
+Implementation, when it starts: a cave lookup in C++ (floor and ceiling within a volume) used by
+deposit placement, contact and the mesher; cave definitions in `data/`; a `cave` reference on
+deposits so a cave deposit takes its height from the cave rather than from an authored altitude;
+and a carry-through field on the C# side that is never evaluated. See 96 — a cave is a shape, and
+authoring shapes by hand in JSON is the part that will hurt.
 
 A height field is a function of direction and cannot express an overhang, let alone a cave. Whatever
 is added must keep the property that makes the current model work: the server and every client agree
@@ -548,6 +555,48 @@ shipcrafting award anything on completion is **unverified**. The progression cur
 the skills are authored content in `data/skills`, so this is likely wiring rather than design — but
 a loop that does not pay is a loop players will not run twice, and it is the sort of gap that is
 invisible until somebody plays for an hour.
+
+## 96 — Author world content graphically
+
+**Pending.** Raised 11 August; ADR-0011 makes it pressing, because a cave is a shape rather than a
+point and typing a shape into JSON by hand is worse than typing a position.
+
+**The constraint, and it is not negotiable:** `data/*.json` stays the source of truth. Content
+reaches the game as `data/` → `--seed` → Postgres → C# API → HTTP → client, and the API is the
+authority. It cannot read `.uasset` or `.umap`, so authoring *in* a UE level and leaving it there is
+not an option — anything graphical has to write the JSON back out. Editing content in the editor and
+forgetting the export would produce a world that looks right in the editor and does not exist in the
+game, which is the worst failure mode available.
+
+Three approaches, cheapest first:
+
+1. **Capture in game.** A dev key that logs the normalised direction from the body centre at the
+   player's position, ready to paste. Everything is authored as a direction — deposits, stations,
+   and now caves — so this is small, needs no editor work at all, and solves placement for a single
+   point immediately. It does not help with shape.
+2. **An editor utility that reads and writes `data/`.** Loads `origin.json`, spawns a preview actor
+   per deposit, station and cave on a body, lets them be dragged and shaped, and serialises back.
+   This is the real answer to "can I adjust it graphically", and it is bounded work: UE already has
+   `FJsonSerializer`, and the project already runs an editor MCP plugin, so editor tooling is not
+   foreign here.
+3. **Author in a level and export.** Rejected on the same grounds as above: two sources of truth,
+   and the export is required regardless, so the level buys nothing.
+
+Whatever is built, **re-seed after editing** — `dotnet run --project services/SpaceMMO.Api -- --seed`
+is the only thing that applies changes under `data/`, and restarting the API does not.
+
+## 97 — Settlements
+
+**Pending, and undefined.** Recorded 11 August so a stated plan is not lost, not because it is ready.
+
+Settlements across the worlds are wanted. What is not yet decided is what a settlement *is* — whether
+it is a station with a different `kind` and a bigger footprint, or a new entity with its own table,
+services and population. Stations already carry `key`, `name`, `system`, `body`, `kind`, `direction`
+and `dockingRangeKm`, and a settlement that is a station variant costs a `kind` and some content;
+a settlement that is its own thing costs a schema, endpoints, client actors and a docking story.
+
+Needs that answer before it can be scoped, and it is the sort of question where the cheap version is
+worth trying first.
 
 ---
 
