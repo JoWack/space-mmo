@@ -265,16 +265,23 @@ both take precisely the same path through the converter.
 conversion path, and one draws.** Every difference anyone has proposed has been measured and found
 absent.
 
-**Stop measuring each mesh separately; bisect between them.** The remaining next step is to take the
-mesh that provably draws and make it progressively more like the one that does not. Concretely: build
-the globe, then delete every triangle outside a cap around the viewer, leaving known-good geometry in
-an open, patch-sized surface. If the cropped globe stops drawing, the trigger is the open boundary or
-the small extent, and neither has ever been varied independently. If it keeps drawing, the fault is
-in something specific to `FPlanetPatch::Build`'s vertex generation, and the search narrows to one
-function rather than a comparison between two.
+**The bisect ran, and the fault is not in `FPlanetPatch::Build`.** `SpaceMMO.GlobeCrop 4` takes the
+globe — known-good geometry that draws — deletes every triangle outside a 4° cap around the viewer,
+leaving 134 of 108300, and changes nothing whatever about how those vertices were generated. **It
+disappears too**, confirmed by playtest on 10 August with the patch switched off.
 
-That is a bisection rather than another hypothesis, which is what this task has responded to every
-time it has moved.
+So this was never about the patch generator. The trigger is something about an **open, patch-sized
+cap on a `UDynamicMeshComponent`**, whatever produced its vertices — which also reframes
+`PatchFlipWinding` as a workaround for a general phenomenon rather than a patch-specific quirk.
+
+Note what that does *not* fit: the cropped cap keeps exactly the triangles that were visible in the
+whole globe, sitting directly under the viewer, and removing everything else should not change what
+is on screen. It does. Nothing currently explains that either.
+
+The obvious follow-up, for whoever picks this up: reverse the cropped globe's winding as well. If a
+reversed cap draws, the phenomenon is general — any open cap needs the opposite winding to a closed
+sphere, and that is a single coherent statement about this engine that could be taken to a repro
+outside this project.
 
 So the standing contradiction is: two meshes, identically wound by measurement, through the same
 component with the same determinant, and only one needs reversing. One of those statements must be
@@ -326,12 +333,13 @@ No record survived. Left as a gap rather than invented.
 
 ## 86 — Let the patch carry the ground once it draws
 
-**Ready, and now urgent.** The patch draws as of the workaround in 84, and
-`SpaceMMO.HideGlobeUnderPatch` still defaults to 0 — so both surfaces are drawn at once, and they are
-two samplings of one height function. The globe's chords cut below the true surface between its
-331 m samples while the patch follows it, so they interpenetrate, and the result may well look worse
-than the globe alone did. Flipping that default to 1 is the fix, and it wants one playtest to confirm
-the handover in both directions before it is made the default. Reconstructed, not recovered: this is the task most likely to be the one
+**Done**, 10 August. `SpaceMMO.HideGlobeUnderPatch` now defaults to 1, confirmed by playtest: the
+patch carries the ground and the globe hides beneath it, so the two samplings of one height function
+no longer fight over the same space.
+
+Still unexercised, and worth a look next time somebody is in the game anyway: the **release** path,
+where the viewer leaves the atmosphere, the patch is dropped and the globe comes back. That code has
+never run with a visible patch, so "the globe reappears" has never actually been observed. Reconstructed, not recovered: this is the task most likely to be the one
 described as "tied into" the terrain work, but its original content is gone.
 
 `SpaceMMO.HideGlobeUnderPatch` defaults to 0, so the globe draws the ground and the patch refines

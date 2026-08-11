@@ -18,17 +18,17 @@ namespace
 	/**
 	 * Whether the globe hides while a terrain patch exists.
 	 *
-	 * <strong>Off, because the patch does not draw and nobody yet knows why.</strong> Its component
-	 * reports thirty-two thousand triangles, a real material, unit scale, visible, and bounds whose
-	 * sphere contains the camera — which in Unreal means it cannot even be frustum-culled. It is
-	 * still not on screen, while the globe built the same way from the same height function through
-	 * the same component type is. Hiding the globe under it therefore replaced a planet with
-	 * nothing, which is what the black was.
+	 * On. The globe and the patch are two samplings of one height function, and between samples they
+	 * differ by however much terrain falls between the coarse mesh's vertices — so drawn together
+	 * the globe's chords cut through the patch's hills and the ground reads as two surfaces fighting
+	 * over the same space. Only one may ever be visible, and while a patch exists it is the patch,
+	 * which is built wide enough to cover everything the viewer could see.
 	 *
-	 * So the globe carries the ground for now and the patch is a refinement that currently refines
-	 * nothing. Set to 1 to reproduce the fault while chasing it.
+	 * This was 0 for as long as the patch did not draw, because hiding the globe under a patch that
+	 * rendered nothing replaced the planet with a black screen. That is fixed by the workaround in
+	 * task 84, and confirmed by playtest.
 	 */
-	float GHideGlobeUnderPatch = 0.0f;
+	float GHideGlobeUnderPatch = 1.0f;
 
 	/**
 	 * Puts the patch's mesh into the globe's own component instead of its own.
