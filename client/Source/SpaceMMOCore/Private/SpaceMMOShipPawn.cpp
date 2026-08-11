@@ -368,8 +368,25 @@ FVector ASpaceMMOShipPawn::ComputeGravity() const
 
 	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
 	{
-		Total += FPlanetPhysics::GravityAcceleration(
-			It->GetPlanetConfig(), Navigation.SystemPosition);
+		const FPlanetConfig& Planet = It->GetPlanetConfig();
+
+		Total += FPlanetPhysics::GravityAcceleration(Planet, Navigation.SystemPosition);
+
+		// Air resistance belongs here rather than inside the flight model, because Step already
+		// separates pilot intent from the world acting on the ship, and drag is unambiguously the
+		// world. It also means flight assist keeps damping only what the pilot is doing.
+		//
+		// Measured against the ground rather than the sphere: air sits on the terrain, and a ship
+		// in a valley is deeper in it than one over a mountain of the same radius.
+		const double AltitudeKilometres = FPlanetTerrain::AltitudeAboveGroundKilometres(
+			Planet, It->GetTerrainConfig(), Navigation.SystemPosition);
+
+		Total += FPlanetPhysics::AtmosphericDrag(
+			Planet,
+			AltitudeKilometres,
+			FlightState.Velocity,
+			FlightConfig.ThrustAcceleration,
+			FlightConfig.AtmosphericTerminalSpeed);
 	}
 
 	return Total;

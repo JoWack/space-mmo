@@ -575,7 +575,30 @@ invisible until somebody plays for an hour.
 
 ## 98 — Slow ships down in atmosphere
 
-**Pending. Decided 11 August: fast in space, slow in atmosphere and near the ground.**
+**Implemented 11 August; the number wants flying before it is settled.** Atmospheric drag, option A
+below.
+
+`FPlanetPhysics::AtmosphericDensity` is 1 at the ground and **exactly** 0 at the top of the
+atmosphere and above — exactly, because an exponential tail would leave a whisper of drag acting in
+orbit forever, and that is only ever noticed as an orbit decaying weeks later.
+`FPlanetPhysics::AtmosphericDrag` is quadratic in speed and expressed through a terminal speed rather
+than a coefficient, so the number a designer chooses says what it does: drag cancels full thrust at
+`FShipFlightConfig::AtmosphericTerminalSpeed` at sea level.
+
+Shipped at 20,000 cm/s — **200 m/s, or 400 boosted, against circular orbit at 443 m/s**. Under the
+bar deliberately and not by much, and the test reads those values from the shipped config rather than
+from constants, so raising the config past orbital turns it red. Verified by doing exactly that: at
+300 m/s the boosted 600 fails on "Even boosted, a ship cannot hold orbital speed in the air".
+
+It lives in the caller rather than in `FShipFlightModel::Step`, because `Step` already separates
+pilot intent from the world acting on the ship and drag is unambiguously the world — which also keeps
+flight assist damping only what the pilot does. Altitude is measured above the *ground* rather than
+the sphere, so a ship in a valley is deeper in the air than one over a mountain.
+
+**Owed: a flight.** 200 m/s is a guess at how a 20 km world should feel — the horizon is 253 m away,
+so it crosses the visible world in about a second, and circumnavigating takes ten minutes. Whether
+that reads as fast, sluggish or wrong is not something a test can answer. Change
+`AtmosphericTerminalSpeed` and fly it; the test will refuse anything that reintroduces skimming.
 
 The 11 August flight skimmed the surface at 650–870 m/s, which on this planet is 1.5 to 2 times
 orbital velocity — `sqrt(9.81 m/s² × 20,000 m)` is only about 443 m/s. Nothing stops that today: the

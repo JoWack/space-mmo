@@ -1,5 +1,6 @@
 #include "SpaceMMOPlanet.h"
 #include "Misc/AutomationTest.h"
+#include "SpaceMMOFlightModel.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -387,6 +388,107 @@ bool FSpaceMMOPlanetOrbitSpeedTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Slower higher up"),
 		FPlanetPhysics::CircularOrbitSpeed(Planet, 100.0)
 			< FPlanetPhysics::CircularOrbitSpeed(Planet, 0.0));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOAirIsThickAtTheGroundAndAbsentInSpaceTest,
+	"SpaceMMO.Planet.AirIsThickAtTheGroundAndAbsentInSpace",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOAirIsThickAtTheGroundAndAbsentInSpaceTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TestPlanet();
+
+	TestEqual(
+		TEXT("Sea level is full density"),
+		FPlanetPhysics::AtmosphericDensity(Planet, 0.0), 1.0, PlanetTolerance);
+
+	// Exactly zero, not merely small. Anything above the atmosphere must be in vacuum, or an orbit
+	// decays over hours for reasons nobody will connect to a drag model years later.
+	TestEqual(
+		TEXT("The top of the atmosphere is vacuum"),
+		FPlanetPhysics::AtmosphericDensity(Planet, Planet.AtmosphereHeightKilometres),
+		0.0, PlanetTolerance);
+
+	TestEqual(
+		TEXT("Space is vacuum"),
+		FPlanetPhysics::AtmosphericDensity(Planet, 500.0), 0.0, PlanetTolerance);
+
+	// Below the ground is sea level rather than thicker, so a hard landing cannot produce a drag
+	// force that grows without bound while the ship is briefly inside the terrain.
+	TestEqual(
+		TEXT("Underground is not thicker than sea level"),
+		FPlanetPhysics::AtmosphericDensity(Planet, -1.0), 1.0, PlanetTolerance);
+
+	TestTrue(
+		TEXT("Air thins with height"),
+		FPlanetPhysics::AtmosphericDensity(Planet, 2.0)
+			> FPlanetPhysics::AtmosphericDensity(Planet, 8.0));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOTerminalSpeedStaysBelowOrbitalTest,
+	"SpaceMMO.Planet.TerminalSpeedStaysBelowOrbital",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOTerminalSpeedStaysBelowOrbitalTest::RunTest(const FString& Parameters)
+{
+	const FPlanetConfig Planet = TestPlanet();
+
+	// The shipped configuration, not numbers typed into a test. Asserting against constants here
+	// would let somebody raise the real terminal speed past orbital and still see green, which is
+	// the exact failure this test exists to prevent.
+	const FShipFlightConfig Flight;
+
+	const double Thrust = Flight.ThrustAcceleration;
+	const double TerminalSpeed = Flight.AtmosphericTerminalSpeed;
+	const double BoostMultiplier = Flight.BoostMultiplier;
+
+	// The whole point of the number. A ship faster than circular orbit a few metres up is thrown
+	// off the ground by its own speed and cannot fly along the surface at all, only skip across it
+	// -- which is what a real flight did, 66 contact transitions in three minutes (task 90).
+	const double Orbital = FPlanetPhysics::CircularOrbitSpeed(Planet, 0.0);
+
+	// Boost multiplies thrust, and terminal speed goes as its square root, so this is the fastest
+	// a pilot can hold at sea level.
+	const double BoostedTerminal = TerminalSpeed * FMath::Sqrt(BoostMultiplier);
+
+	AddInfo(FString::Printf(
+		TEXT("Terminal %.0f m/s, boosted %.0f m/s, circular orbit %.0f m/s."),
+		TerminalSpeed / 100.0, BoostedTerminal / 100.0, Orbital / 100.0));
+
+	TestTrue(
+		TEXT("Even boosted, a ship cannot hold orbital speed in the air"),
+		BoostedTerminal < Orbital);
+
+	// At terminal speed drag cancels thrust exactly, which is what makes the name honest.
+	const FVector Drag = FPlanetPhysics::AtmosphericDrag(
+		Planet, 0.0, FVector(TerminalSpeed, 0.0, 0.0), Thrust, TerminalSpeed);
+
+	TestEqual(TEXT("Drag cancels full thrust at terminal speed"), Drag.Size(), Thrust, 1e-6);
+	TestTrue(TEXT("Drag opposes motion"), Drag.X < 0.0);
+
+	// Quadratic: half the speed is a quarter of the force, so slow flight is unencumbered.
+	const FVector Half = FPlanetPhysics::AtmosphericDrag(
+		Planet, 0.0, FVector(TerminalSpeed * 0.5, 0.0, 0.0), Thrust, TerminalSpeed);
+
+	TestEqual(TEXT("Half speed is a quarter of the drag"), Half.Size(), Thrust * 0.25, 1e-6);
+
+	// Nothing in vacuum, however fast, or leaving the atmosphere would still cost speed.
+	const FVector InSpace = FPlanetPhysics::AtmosphericDrag(
+		Planet, 100.0, FVector(200000.0, 0.0, 0.0), Thrust, TerminalSpeed);
+
+	TestTrue(TEXT("No drag in space"), InSpace.IsNearlyZero());
+
+	// A stationary ship must feel nothing rather than a NaN from normalising a zero vector.
+	const FVector AtRest = FPlanetPhysics::AtmosphericDrag(
+		Planet, 0.0, FVector::ZeroVector, Thrust, TerminalSpeed);
+
+	TestTrue(TEXT("No drag at rest"), AtRest.IsNearlyZero());
 
 	return true;
 }

@@ -140,4 +140,39 @@ public:
 	 * to pull at.
 	 */
 	static double CircularOrbitSpeed(const FPlanetConfig& Planet, double AltitudeKilometres);
+
+	/**
+	 * How thick the air is at an altitude, as a fraction of sea level. 1 at the ground, 0 at the
+	 * top of the atmosphere and everywhere above it.
+	 *
+	 * Reaching exactly zero matters more than the shape of the curve. An exponential tail would
+	 * leave a whisper of drag acting in orbit forever, which is both wrong and the kind of thing
+	 * that is only ever noticed as an orbit mysteriously decaying weeks later. Squared, so the air
+	 * thins quickly with height rather than ending abruptly at the boundary.
+	 */
+	static double AtmosphericDensity(const FPlanetConfig& Planet, double AltitudeKilometres);
+
+	/**
+	 * Drag acceleration on something moving through that air, in centimetres per second squared.
+	 *
+	 * <strong>Why this exists:</strong> orbital speed on a 20 km world is only about 443 m/s, and a
+	 * ship makes 2,000. Without air resistance nothing stops a pilot skimming the ground at twice
+	 * orbital velocity, at which point the ship is thrown off the surface by its own speed and
+	 * cannot be flown along the ground at all, only skipped across it. A flight of exactly that was
+	 * what prompted this (task 90).
+	 *
+	 * Quadratic in speed, so it is negligible when slow and firm when fast, and expressed through
+	 * TerminalSpeed rather than a bare coefficient: drag exactly cancels ThrustAcceleration at that
+	 * speed at sea level, which is the number worth choosing and the only one a designer should
+	 * have to think about.
+	 *
+	 * @param ThrustAcceleration What full thrust is worth, so terminal speed means what it says.
+	 * @param TerminalSpeed      Speed at which drag balances full thrust at sea level, cm/s.
+	 */
+	static FVector AtmosphericDrag(
+		const FPlanetConfig& Planet,
+		double AltitudeKilometres,
+		const FVector& Velocity,
+		double ThrustAcceleration,
+		double TerminalSpeed);
 };

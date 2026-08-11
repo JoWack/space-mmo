@@ -106,6 +106,25 @@ struct SPACEMMOCORE_API FShipFlightConfig
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
 	double GroundFriction = 6.0;
+
+	/**
+	 * Speed at which air resistance cancels full thrust at sea level, in centimetres per second.
+	 *
+	 * <strong>The number that decides how a planet feels to fly around</strong>, and the reason it
+	 * is expressed as a speed rather than as a drag coefficient: this is the one a designer should
+	 * have to choose, and it says exactly what it does.
+	 *
+	 * 20,000 is 200 m/s, against a top speed of 2 km/s in vacuum. That gap is the point — ships are
+	 * fast in space and slow in air. It also has to clear a specific bar: circular orbit on the
+	 * 20 km capital is about 443 m/s, and a ship faster than that a few metres up is thrown off the
+	 * ground by its own speed and cannot fly along the surface at all, only skip across it. Boost
+	 * multiplies thrust by four and so terminal speed by two, which lands at 400 m/s — still under
+	 * orbital, deliberately and not by much.
+	 *
+	 * Zero disables air resistance entirely and restores the pure vacuum model.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Flight")
+	double AtmosphericTerminalSpeed = 20000.0;
 };
 
 /**
