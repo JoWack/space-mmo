@@ -13,6 +13,12 @@ a plausible reconstruction presented as the original is worse than an admitted g
 Status is one of **pending**, **in progress**, **blocked** (say on what), or **done** (say which
 commit closed it, and move it to the bottom).
 
+Milestones live in `README.md` under Roadmap. **M3 is the current one — "closing the loop: mine →
+craft → sell, two players trading a player-made item"** — and tasks 91 to 95 are derived from that
+sentence rather than recovered from any list. Where a task asserts something is missing, it says
+whether that was verified in code or inferred from the design bible, because the two are not the
+same and only one of them is safe to act on without looking.
+
 ---
 
 ## 84 — Find why the terrain patch does not draw
@@ -416,6 +422,80 @@ only its noisiness is wrong.
 Cheap to investigate without a playtest: the headless probe lands a ship on its own
 (`-game -nullrhi -ShipStartX=38`), and the altitude and contact numbers can be logged either side of
 the decision.
+
+---
+
+# M3 — closing the loop
+
+Derived from the roadmap line in `README.md`, 11 August. The acceptance criterion for the whole
+milestone is task 93: two players trading a player-made item. Everything else here exists to make
+that possible or to prove it.
+
+What is already built, verified by reading the code rather than assumed: `GatheringEndpoints`,
+`IndustryEndpoints`, `MarketEndpoints`, `DockingEndpoints` and `QuestEndpoints` on the API;
+`SpaceMMOGatheringComponent` and `SpaceMMODockingComponent` on the client; recipes covering
+`refining`, `toolcrafting` and `shipcrafting` in `data/recipes/core.json`; and docking already
+required before trading.
+
+## 91 — Mine, as distinct from gathering
+
+**Pending.**
+
+The design bible separates two skills: `gathering`, "hand-collecting surface materials", and
+`mining`, "tool-gated ore extraction from deposits and asteroids". The client has
+`SpaceMMOGatheringComponent` and no mining equivalent — **verified**: there is no mining component or
+input verb in `client/Source`. `mining` does appear in `SkillAwards.cs`, `Items.cs` and
+`Universe.cs`, so the server side may already know about it; **which parts exist is unverified.**
+
+Start by reading the server before writing any client code, because the milestone needs the *loop*
+rather than a second gathering verb, and the tool gate is what makes mining a different action.
+
+## 92 — Walk the loop once, on one machine
+
+**Pending.** Blocks 93.
+
+Gather → refine → craft → list → buy, by one player, start to finish, with the log showing each step
+crediting the right inventory and awarding the right skill. Nobody has recorded doing this end to
+end; the pieces have been built and tested separately, which is exactly the arrangement that hides a
+seam.
+
+Much of it can run headless — `-game -nullrhi` with the API up drives a client that gathers — so the
+first pass need not cost a playtest. What it must not do is prove the loop with hand-built inputs on
+either side of the wire; at least one step has to use what the other side actually sends.
+
+## 93 — Two players trading a player-made item
+
+**Pending.** Blocked on 92. **This is the M3 acceptance criterion.**
+
+Player A gathers, refines and crafts an item that did not exist before; docks; lists it. Player B
+docks at the same station, buys it, and holds it. Both clients already exist as `ClientA` and
+`ClientB` with separate logs and separate accounts, and the dedicated server flow is documented in
+`scripts/host-dedicated.bat`.
+
+Re-cook the server first — `check-staged-server.ps1` refuses to launch a stale one, and the staged
+build was already three days behind the code on 10 August.
+
+## 94 — Make the tool gate real
+
+**Pending.**
+
+The design bible has toolcrafting gating other gathering skills: tools are what let a player mine
+rather than hand-collect. Whether that gate is enforced anywhere is **unverified** — the recipes
+exist, the skill exists, and nothing has been checked about what happens when a player without a tool
+attempts the action.
+
+Worth settling with a test that sends the real request rather than by reading the handler, since the
+interesting case is what the server does when the client asks for something it should not be allowed.
+
+## 95 — Award skills across the whole loop
+
+**Pending.**
+
+`SkillAwards.cs` exists and `gathering` awards XP today. Whether refining, toolcrafting and
+shipcrafting award anything on completion is **unverified**. The progression curve is ADR-0004 and
+the skills are authored content in `data/skills`, so this is likely wiring rather than design — but
+a loop that does not pay is a loop players will not run twice, and it is the sort of gap that is
+invisible until somebody plays for an hour.
 
 ---
 
