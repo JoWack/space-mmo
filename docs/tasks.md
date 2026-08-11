@@ -193,11 +193,34 @@ The HUD reports `0.00 km ground` while the patch is built from the same height f
 viewer is on the surface to within the precision of that readout, and which side of it is not
 something any measurement so far has recorded.
 
-**Next: log the signed distance from the camera to the patch surface**, and to the nearest triangle's
-plane, at build time. Negative means the viewer is under its own ground, and the whole picture
-resolves: outward-wound, correctly built, and culled because it is being viewed from beneath.
-Variant 1 argues against it — a flat patch sits 340 m below a viewer standing on 340 m of terrain,
-and that rendered nothing either — so this is a candidate, not a conclusion.
+**That candidate is dead, measured 10 August.** The report now logs the signed distance from the
+camera to the patch surface directly beneath it — exact rather than sampled, since the patch's centre
+vertex sits on the anchor at zero offset along the viewer's own direction. A headless descent gives
+seven readings from 1671 m down to 49 m, at touchdown:
+
+    camera is 1671.17 m ABOVE the patch surface beneath it (height function says 1671.17 m).
+    camera is  912.30 m ABOVE ... ( 912.30 m).   camera is 504.78 m ABOVE ... (504.78 m).
+    camera is  281.35 m ABOVE ... ( 281.35 m).   camera is 157.44 m ABOVE ... (157.44 m).
+    camera is   88.30 m ABOVE ... (  88.30 m).   camera is  49.58 m ABOVE ... ( 49.58 m).
+
+**The viewer is above its own ground at every altitude**, so the surface is not being seen from
+beneath. The same line also confirms, at every reading, that **the mesh and the height function agree
+to the centimetre** — the invariant the terrain model may never violate, unverified since the patch
+moved onto the planet actor, and intact.
+
+So the contradiction stands with nothing attached to it:
+
+- The patch's mesh fails in two components that both draw the globe's.
+- Its winding measures correct at runtime, 0 of 32768 inward.
+- The viewer is above it, and it agrees with the height function exactly.
+- Reversing its indices makes it draw.
+
+Every explanation offered so far has been eliminated by measurement. **The next step is not another
+hypothesis**: it is to read how `UDynamicMeshComponent` converts a mesh into render buffers
+(`MeshRenderBufferSet.cpp`, `DynamicMeshSceneProxy.h` under
+`Engine/Source/Runtime/GeometryFramework`), because the difference is somewhere between two meshes
+that measure identical and render differently. Engine source has settled two questions in this
+investigation for free already.
 
 So the standing contradiction is: two meshes, identically wound by measurement, through the same
 component with the same determinant, and only one needs reversing. One of those statements must be

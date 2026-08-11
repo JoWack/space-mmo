@@ -896,6 +896,39 @@ void ASpaceMMOPlanetActor::ReportPatchIfPending()
 			ToCentre,
 			ToCentre <= Bounds.SphereRadius ? 1 : 0);
 	}
+
+	// Which side of its own ground the viewer is on.
+	//
+	// The patch's triangles face away from the planet's centre -- measured, 0 of 32768 inward -- and
+	// are still culled, and drawing them reversed fixes it. Those three only reconcile if the
+	// surface faces away from the *viewer* as well, which means the viewer is beneath it. Nothing
+	// has ever recorded that.
+	//
+	// The anchor is exact rather than approximate: the patch's centre vertex sits on it by
+	// construction, at zero offset, and the anchor is the height function's surface along the
+	// viewer's own direction. So this is the mesh's height directly beneath the camera, not a
+	// nearby sample -- and comparing it against the height function separately says whether the
+	// mesh and the function agree, which is the one thing the terrain model may never violate.
+	FSystemCoordinate ViewerPosition;
+
+	if (TryGetViewerPosition(ViewerPosition))
+	{
+		const double CameraRadius =
+			(ViewerPosition.Kilometres - Planet.Centre.Kilometres).Size();
+
+		const double AnchorRadius = (PatchOrigin.Kilometres - Planet.Centre.Kilometres).Size();
+
+		const double AboveMesh = (CameraRadius - AnchorRadius) * 1000.0;
+
+		const double AboveGround = FPlanetTerrain::AltitudeAboveGroundKilometres(
+			Planet, TerrainConfig, ViewerPosition) * 1000.0;
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("  camera is %.2f m %s the patch surface beneath it (height function says %.2f m)."),
+			FMath::Abs(AboveMesh),
+			AboveMesh >= 0.0 ? TEXT("ABOVE") : TEXT("BELOW"),
+			AboveGround);
+	}
 }
 
 void ASpaceMMOPlanetActor::SetPlanetConfig(const FPlanetConfig& NewConfig)
