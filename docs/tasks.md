@@ -215,12 +215,33 @@ So the contradiction stands with nothing attached to it:
 - The viewer is above it, and it agrees with the height function exactly.
 - Reversing its indices makes it draw.
 
-Every explanation offered so far has been eliminated by measurement. **The next step is not another
-hypothesis**: it is to read how `UDynamicMeshComponent` converts a mesh into render buffers
-(`MeshRenderBufferSet.cpp`, `DynamicMeshSceneProxy.h` under
-`Engine/Source/Runtime/GeometryFramework`), because the difference is somewhere between two meshes
-that measure identical and render differently. Engine source has settled two questions in this
-investigation for free already.
+Every explanation offered so far has been eliminated by measurement.
+
+**The engine's render-buffer conversion is faithful, read 10 August**
+(`MeshRenderBufferSet.h:504`, `InitializeBuffersFromOverlays`). Vertices are unshared, three per
+triangle, written in the order `Tri[0], Tri[1], Tri[2]`; the index buffer is filled sequentially,
+`IndexBuffer[idx] = idx`; no triangle is skipped, reordered or reoriented. **Winding in equals
+winding out.** Both meshes take the same single-buffer path — neither has material IDs, so
+`InitializeByMaterial` never runs, and `Mesh.ReverseCulling` depends only on the transform
+determinant, which is positive for both. The conversion cannot be flipping one mesh and not the
+other, so it is eliminated as the asymmetry.
+
+**Two leads came out of that read, both about attributes rather than winding:**
+
+1. Per-vertex normals silently substitute for the overlay. The loop reads
+   `TriNormal[j] != InvalidID ? NormalOverlay->GetElement(...) : Mesh->GetVertexNormal(Tri[j])`,
+   and neither builder ever sets per-vertex normals — only overlay elements. Any triangle whose
+   overlay triple is unset gets whatever `GetVertexNormal` returns, and a zero normal feeds
+   `MakePerpVectors` into a degenerate tangent basis. Both builders appear to set the overlay for
+   every triangle; that appearance has not been measured.
+2. **Neither mesh sets UVs at all.** `EnableAttributes()` creates a UV layer, the converter asks it
+   for each triangle, gets `InvalidID`, and writes `(0,0)` to every vertex — a degenerate UV
+   triangle, which is what auto-calculated tangents are built from.
+
+Next, and cheap: log the attribute state of both meshes side by side at build time — triangles whose
+normal-overlay triple is unset, UV layer count and whether any UV triangle is set, tangent space
+presence, material IDs, and vertex and triangle counts against the source arrays. A difference there
+is a real difference between two meshes that are identical in every geometric measure taken so far.
 
 So the standing contradiction is: two meshes, identically wound by measurement, through the same
 component with the same determinant, and only one needs reversing. One of those statements must be
