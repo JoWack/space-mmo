@@ -156,12 +156,23 @@ same units so they are directly comparable rather than each checked against its 
 the way to the component, and winding is *not* what separates them — which leaves the flip working
 for a reason nobody has identified.
 
-Every winding measurement so far, including that one, is taken on a mesh built inside a test. The
-mesh the running game hands the component has never been looked at. Both builders now log
-`globe faces inward: N of M` and `patch faces inward: N of M`, computed on the mesh about to be
-handed over, so one playtest says whether the runtime geometry differs from what the tests assemble.
-If those counts come back zero for both, winding is finished as an explanation and the flip result
-needs a different account entirely.
+**The running game builds the same thing, measured 10 August by a headless probe:**
+`globe faces inward: 0 of 108300`, `patch faces inward: 0 of 32768` — full runtime resolution, real
+viewer direction, real configuration. So the runtime meshes are identically outward-wound and
+**winding is eliminated entirely**. Reversing the patch's indices makes it draw for a reason that is
+not its winding relative to the planet, and nothing currently explains that.
+
+Worth keeping for future sessions: this measurement cost no playtest. `UnrealEditor-Cmd.exe ... -game
+-nullrhi -ShipStartX=38` runs the client headless, builds globe and patch, and logs whatever they
+log — `-nullrhi` crashes the *automation* path on UE 5.8 but is fine here, and the arguments arrived
+intact for once (check `LogInit: Command Line:` anyway).
+
+**The obvious next experiment is the missing cell of a 2x2.** Three combinations have been tested:
+globe mesh in the globe's component draws; patch mesh in the globe's component is black; patch mesh
+in its own component is black. **Globe mesh in the patch's component has never been tried.** If it
+draws, the component is exonerated and the fault is in the mesh, as currently believed. If it is
+black, the component matters after all and `PatchIntoGlobe`'s black result had some other cause —
+which would reopen the question the whole investigation turned on.
 
 So the standing contradiction is: two meshes, identically wound by measurement, through the same
 component with the same determinant, and only one needs reversing. One of those statements must be
