@@ -385,25 +385,76 @@ into its silence.
 
 ## 88 — Give the terrain collision from the height function
 
-**Pending.**
+**Done** — it already was, verified 11 August by reading rather than assumed. The task was written
+from the `NoCollision` on both mesh components, which is the design working rather than a gap.
 
-Both the globe and the ground patch are created `NoCollision`. The design is that contact comes from
-`FPlanetTerrain` rather than from either mesh, because the dedicated server holds no mesh and must
-still agree about where the ground is — so the mesh can never be the authority on it.
+- `FPlanetTerrain::ResolveContact` is the collision, and it is a function of position, not of any
+  mesh.
+- `ASpaceMMOShipPawn::SimulateStep` calls it after advancing, and `SimulateStep` runs under
+  `HasAuthority()` — so **the dedicated server resolves contact itself**, from the same height
+  function the client tessellates. That is the whole point of ADR-0002 and it holds.
+- `ASpaceMMOCharacterPawn` resolves the same way while walking.
+- Deposits and stations are placed against the height function too, on every machine.
 
-Worth establishing what currently decides a ship has landed — see 90, which is the symptom.
+One thing worth knowing, and not a gap: **the C# backend has no height function at all** — no noise,
+no elevation, nothing. It stores terrain configuration and serves it, and evaluation happens only in
+C++, shared by the client and the UE dedicated server. So "the server agrees about where the ground
+is" is true of the UE server and silent about the API. That is fine while nothing in the API needs an
+elevation, and it stops being fine the moment one does — gathering range being the obvious candidate,
+since it currently trusts a position the client computed.
 
 ## 89 — Caves need a second representation
 
-**Pending.** Long-term.
+**Pending, and now a decision rather than a task.** Scoped 11 August; it needs an ADR before any
+code, and the ADR needs a choice made.
 
 A height field is a function of direction and cannot express an overhang, let alone a cave. Whatever
 is added must keep the property that makes the current model work: the server and every client agree
-about the ground without shipping any of it (ADR-0002).
+about the ground without shipping any of it (ADR-0002). Three ways to do that, and they differ mostly
+in where the difficulty is put.
+
+**A. A density function — signed distance evaluated in both languages.** The natural extension: the
+surface stops being a height and becomes a field, and caves fall out of it. Keeps every property of
+ADR-0002. The difficulty is that C# and C++ must agree *bit for bit* on a noise function, which
+ADR-0002 already names as the expensive thing to discover late — and today the backend has no noise
+implementation at all, so that is a new shared component with a nasty failure mode.
+
+**B. Authored cave volumes, as content.** A small number of hand-placed volumes in `data/`, read by
+both sides, subtracted from the height field where they apply. No shared noise, no bit-exactness
+problem, and caves become level design instead of mathematics. Loses procedural caves everywhere,
+which nothing has asked for.
+
+**C. Player-carved voxels, stored as deltas.** Fits ADR-0002's "database stores only player-caused
+deltas" exactly, and is the largest build of the three.
+
+**Recommendation: B first.** ADR-0007 has already made this trade once — it swapped a procedural
+galaxy for one handcrafted system and removed an entire technical spine at a cost of a few hours of
+authoring. The same reasoning applies here, and B does not foreclose A or C later, because the cave
+lookup can be swapped underneath whatever reads it.
+
+This is also the honest answer to "should we adopt a voxel plugin": that question is really this one,
+and it is about what representation the server and client share rather than about which UE plugin
+renders it. A plugin cannot run in the C# backend.
 
 ## 90 — Stop the landed state flapping
 
-**Pending.**
+**Done**, 11 August, `7a206bb`. It was not a wrong state: every transition was honest arithmetic on a
+rule with no memory.
+
+Measured first. At 738 m/s and 60 Hz a ship crosses twelve metres of ground per frame, and this
+terrain rises and falls by up to 0.33 m over that distance — more than the twenty centimetres that
+decide contact, on 45 frames out of 60. A single threshold oscillates by construction.
+
+`ResolveContact` now takes whether the caller was in contact last frame and releases on ten times the
+band it captures on, which is the shape `ClassifyProximityAtAltitude` already uses. Deliberate
+departures are unaffected because leaving is decided by separation speed, not distance. Both pawns
+feed their previous state in; the character had the same fault while walking, less visibly.
+
+`SpaceMMO.Terrain.ContactIsWiderToLeaveThanToArrive` was verified to fail with the multiplier set
+back to 1, on the assertion that matters.
+
+**Still owed: the in-game confirmation.** The flapping was seen in a real flight and only a real
+flight can show it gone — skim the surface at speed and watch the log stay quiet.
 
 `ClientA.log`, 10 August, 15:05:33 — the ship alternates four times in 0.36 s while travelling about
 600 m across the surface:
@@ -452,7 +503,7 @@ rather than a second gathering verb, and the tool gate is what makes mining a di
 
 ## 92 — Walk the loop once, on one machine
 
-**Pending.** Blocks 93.
+**Done** — validated by Joe, 11 August. The single-player loop runs end to end.
 
 Gather → refine → craft → list → buy, by one player, start to finish, with the log showing each step
 crediting the right inventory and awarding the right skill. Nobody has recorded doing this end to
@@ -465,7 +516,8 @@ either side of the wire; at least one step has to use what the other side actual
 
 ## 93 — Two players trading a player-made item
 
-**Pending.** Blocked on 92. **This is the M3 acceptance criterion.**
+**Done** — validated by Joe, 11 August. Two players have traded a player-made item, which is
+the M3 acceptance criterion met.
 
 Player A gathers, refines and crafts an item that did not exist before; docks; lists it. Player B
 docks at the same station, buys it, and holds it. Both clients already exist as `ClientA` and
