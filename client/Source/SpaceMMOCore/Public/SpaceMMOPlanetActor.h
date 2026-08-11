@@ -146,6 +146,9 @@ private:
 	/** True while the globe's mesh is in the patch's component, for SpaceMMO.GlobeIntoPatch. */
 	bool bGlobeInPatchComponent = false;
 
+	/** Arc the globe was last cropped to, so changing SpaceMMO.GlobeCrop forces a rebuild. */
+	float AppliedGlobeCropDegrees = 0.0f;
+
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;
 

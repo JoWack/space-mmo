@@ -277,13 +277,54 @@ namespace
 			"disappearing means it is genuinely wound the opposite way to the patch."),
 		ECVF_Default);
 
-	float GPatchFlipWinding = 0.0f;
+	// ---------------------------------------------------------------------------------------------
+	// ON BY DEFAULT, AND NOBODY KNOWS WHY IT IS NEEDED. See docs/tasks.md task 84 before changing it.
+	//
+	// The patch's geometry is outward-wound and that is not in doubt: asserted at four widths, on
+	// the flat cap, after the append into FDynamicMesh3, and measured in the running game at full
+	// resolution (0 of 32768 inward). The globe is wound identically by the same measure, carries
+	// identical attributes, goes through the same component and the same conversion, and draws. The
+	// engine's own conversion copies winding through untouched, and reverses culling only on a
+	// negative transform determinant, which neither has.
+	//
+	// And yet the patch only rasterises with its indices reversed. Every explanation offered has
+	// been eliminated by measurement rather than argument -- registration timing, units, elevations,
+	// resolution, normals, anchoring, the component, lighting, the viewer being under its own
+	// ground, and the attribute state.
+	//
+	// So this is a workaround standing in for a diagnosis, kept deliberately here rather than in
+	// FPlanetPatch::Build: the generator's output is geometrically correct, the tests that say so
+	// are correct, and inverting them to match would turn a known unknown into a lie the next
+	// reader has to unpick. Setting this to 0 restores the fault for anyone who wants another go.
+	// ---------------------------------------------------------------------------------------------
+	float GPatchFlipWinding = 1.0f;
 
 	FAutoConsoleVariableRef CVarPatchFlipWinding(
 		TEXT("SpaceMMO.PatchFlipWinding"),
 		GPatchFlipWinding,
-		TEXT("1 appends the patch's triangles in reverse order. Ground that appears means the patch "
-			"is being rasterised back to front."),
+		TEXT("1 appends the patch's triangles in reverse order, which is the only way it draws. 0 "
+			"restores the unexplained fault. See docs/tasks.md task 84."),
+		ECVF_Default);
+
+	/**
+	 * Crops the globe to a cap around the viewer, out of known-good geometry.
+	 *
+	 * The last bisect worth running. Measuring each mesh separately has run out of things to
+	 * measure -- they are identical in geometry, winding, attributes, component, transform and
+	 * conversion path -- so this goes the other way and makes the mesh that draws progressively
+	 * more like the one that does not, changing nothing about how its vertices were generated.
+	 *
+	 * A cropped globe that stops drawing names the open boundary or the small extent, neither of
+	 * which has ever been varied on its own. One that keeps drawing puts the fault inside
+	 * FPlanetPatch::Build, which is one function rather than a comparison between two meshes.
+	 */
+	float GGlobeCrop = 0.0f;
+
+	FAutoConsoleVariableRef CVarGlobeCrop(
+		TEXT("SpaceMMO.GlobeCrop"),
+		GGlobeCrop,
+		TEXT("Degrees of arc to crop the globe to around the viewer, 0 for the whole sphere. Known-"
+			"good geometry made patch-shaped."),
 		ECVF_Default);
 
 	FAutoConsoleVariableRef CVarPatchIntoGlobe(
@@ -433,6 +474,57 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 		}
 	}
 
+	// Known-good geometry, made patch-shaped. Nothing about how these vertices were generated
+	// changes -- only how many of them survive.
+	AppliedGlobeCropDegrees = GGlobeCrop;
+
+	if (AppliedGlobeCropDegrees > 0.0f)
+	{
+		FSystemCoordinate ViewerPosition;
+
+		if (TryGetViewerPosition(ViewerPosition))
+		{
+			const FVector ViewerDirection =
+				(ViewerPosition.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
+
+			const double MinimumDot =
+				FMath::Cos(FMath::DegreesToRadians(FMath::Min(AppliedGlobeCropDegrees, 179.0f)));
+
+			TArray<int32> Doomed;
+
+			for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+			{
+				const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
+
+				const FVector Centroid = FVector(
+					(Mesh.GetVertex(Triangle.A)
+						+ Mesh.GetVertex(Triangle.B)
+						+ Mesh.GetVertex(Triangle.C)) / 3.0);
+
+				if (FVector::DotProduct(Centroid.GetSafeNormal(), ViewerDirection) < MinimumDot)
+				{
+					Doomed.Add(TriangleId);
+				}
+			}
+
+			for (const int32 TriangleId : Doomed)
+			{
+				Mesh.RemoveTriangle(TriangleId, false, false);
+			}
+
+			UE_LOG(LogSpaceMMO, Log,
+				TEXT("Globe cropped to %.1f degrees around the viewer: %d triangles left of %d."),
+				AppliedGlobeCropDegrees,
+				Mesh.TriangleCount(),
+				Globe.Triangles.Num() / 3);
+		}
+		else
+		{
+			UE_LOG(LogSpaceMMO, Warning,
+				TEXT("Globe crop asked for with no viewer to crop around; left whole."));
+		}
+	}
+
 	// Measured on the mesh the component is about to receive, not on one a test assembled.
 	const int32 GlobeInward = CountInwardTriangles(Mesh, FVector::ZeroVector);
 	const FString GlobeAttributes = DescribeMeshAttributes(Mesh);
@@ -499,6 +591,17 @@ void ASpaceMMOPlanetActor::Tick(const float DeltaSeconds)
 		UE_LOG(LogSpaceMMO, Log,
 			TEXT("Globe winding changed to %s; rebuilding."),
 			GGlobeFlipWinding > 0.5f ? TEXT("REVERSED") : TEXT("as built"));
+
+		BuildGlobe();
+	}
+
+	// The globe is built once at BeginPlay, so without this the crop would set a value nothing ever
+	// read and come back "no change" having never been applied.
+	if (!FMath::IsNearlyEqual(GGlobeCrop, AppliedGlobeCropDegrees))
+	{
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Globe crop changed to %.1f degrees; rebuilding."),
+			GGlobeCrop);
 
 		BuildGlobe();
 	}

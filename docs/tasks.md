@@ -17,6 +17,17 @@ commit closed it, and move it to the bottom).
 
 ## 84 — Find why the terrain patch does not draw
 
+**WORKAROUND TAKEN, MECHANISM UNKNOWN.** `SpaceMMO.PatchFlipWinding` now defaults to 1, so the patch
+draws. Nobody knows why it has to. The switch is deliberately left in the planet actor rather than
+folded into `FPlanetPatch::Build`, because the generator's output is geometrically correct and the
+tests that assert so are correct — inverting them to match what renders would convert a known unknown
+into a falsehood the next reader has to unpick. Set it to 0 to restore the fault.
+
+This was a deliberate decision to stop, not a conclusion. The mesher is 263 lines against a height
+function of 298 that the server, deposits, stations and both pawns depend on (ADR-0002), so the
+throwaway part of this is small and the cost of continuing was mostly playtests. Everything below is
+kept because it is a record of what has been eliminated, and it is all still true.
+
 **In progress.** The 2026-08-10 playtest moved this on, and narrowed it considerably.
 
 **The patch reaches the renderer.** Every build after the first reports `has proxy 1`, `registered 1`,
@@ -315,7 +326,12 @@ No record survived. Left as a gap rather than invented.
 
 ## 86 — Let the patch carry the ground once it draws
 
-**Blocked on 84.** Reconstructed, not recovered: this is the task most likely to be the one
+**Ready, and now urgent.** The patch draws as of the workaround in 84, and
+`SpaceMMO.HideGlobeUnderPatch` still defaults to 0 — so both surfaces are drawn at once, and they are
+two samplings of one height function. The globe's chords cut below the true surface between its
+331 m samples while the patch follows it, so they interpenetrate, and the result may well look worse
+than the globe alone did. Flipping that default to 1 is the fix, and it wants one playtest to confirm
+the handover in both directions before it is made the default. Reconstructed, not recovered: this is the task most likely to be the one
 described as "tied into" the terrain work, but its original content is gone.
 
 `SpaceMMO.HideGlobeUnderPatch` defaults to 0, so the globe draws the ground and the patch refines
