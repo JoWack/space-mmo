@@ -587,8 +587,22 @@ is the only thing that applies changes under `data/`, and restarting the API doe
 
 ## 97 — Settlements
 
-**Pending. Decided 11 August: a settlement is a kind of station, for now.** The cheap version, which
-does not foreclose promoting it to its own entity later.
+**Pending. Decided 11 August: a settlement is a cluster of existing station kinds — no new kind.**
+
+A town is several stations placed close together: `Housing` for the homes, `Social` for the square,
+`TradingHub` or `Spaceport` where it earns its keep. That needs no enum value, no migration and no
+serving change — it is entirely content, authored the way stations already are, and it gives a
+settlement a footprint rather than a point for free.
+
+What it does need is a way to say *these stations are one place*: a name a player can be told to go
+to, and something that stops a cluster reading as four unrelated cubes in a field. Whether that is a
+`settlement` key grouping station entries, or purely a naming convention with no schema at all, is
+the next decision — and the second costs nothing, so it is worth trying first and only adding the key
+when something actually needs to query by it.
+
+The reasoning below was written when the plan was a new `StationKind`. It is kept because the second
+half of it still applies with more force: whatever a settlement is made of, it will render as
+identical engine cubes until somebody gives stations a look.
 
 `StationKind` in `services/SpaceMMO.Domain/Universe/UniverseEnums.cs` already carries `TradingHub`,
 `Spaceport`, `Housing`, `Social` and `Capital`, so adding a value is a one-line change plus content.
