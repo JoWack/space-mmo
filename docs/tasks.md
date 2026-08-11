@@ -238,10 +238,32 @@ other, so it is eliminated as the asymmetry.
    for each triangle, gets `InvalidID`, and writes `(0,0)` to every vertex — a degenerate UV
    triangle, which is what auto-calculated tangents are built from.
 
-Next, and cheap: log the attribute state of both meshes side by side at build time — triangles whose
-normal-overlay triple is unset, UV layer count and whether any UV triangle is set, tangent space
-presence, material IDs, and vertex and triangle counts against the source arrays. A difference there
-is a real difference between two meshes that are identical in every geometric measure taken so far.
+**Both leads are dead, measured 10 August.** The builders now log attribute state, and a headless run
+gives:
+
+    globe: 55296 verts, 108300 tris, 0 missing a normal triple, 0 with UVs across 1 layer,
+           55296 normal elements, per-vertex normals 0, tangent space 0, material ids 0
+    patch: 16641 verts,  32768 tris, 0 missing a normal triple, 0 with UVs across 1 layer,
+           16641 normal elements, per-vertex normals 0, tangent space 0, material ids 0
+
+Normal elements equal vertex count in both, no triangle is missing a normal triple, so the
+`GetVertexNormal` fallback never fires for either. Neither has UVs, tangent space or material IDs, so
+both take precisely the same path through the converter.
+
+**The two meshes are now identical in geometry, winding, attributes, component, transform and
+conversion path, and one draws.** Every difference anyone has proposed has been measured and found
+absent.
+
+**Stop measuring each mesh separately; bisect between them.** The remaining next step is to take the
+mesh that provably draws and make it progressively more like the one that does not. Concretely: build
+the globe, then delete every triangle outside a cap around the viewer, leaving known-good geometry in
+an open, patch-sized surface. If the cropped globe stops drawing, the trigger is the open boundary or
+the small extent, and neither has ever been varied independently. If it keeps drawing, the fault is
+in something specific to `FPlanetPatch::Build`'s vertex generation, and the search narrows to one
+function rather than a comparison between two.
+
+That is a bisection rather than another hypothesis, which is what this task has responded to every
+time it has moved.
 
 So the standing contradiction is: two meshes, identically wound by measurement, through the same
 component with the same determinant, and only one needs reversing. One of those statements must be

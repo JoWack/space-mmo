@@ -145,6 +145,85 @@ namespace
 		ECVF_Default);
 
 	/**
+	 * Describes the attribute state of a mesh, in the terms the renderer actually reads it in.
+	 *
+	 * Both meshes are identical in every geometric measure taken — winding at the source, after the
+	 * append, at runtime, and per the engine's own conversion — and one draws while the other does
+	 * not. Attributes are the part nobody has looked at, and the converter has a silent fallback
+	 * there: a triangle whose normal-overlay triple is unset takes Mesh->GetVertexNormal() instead,
+	 * and neither builder sets per-vertex normals at all. A zero normal makes a degenerate tangent
+	 * basis, which would explain black far better than culling ever did.
+	 *
+	 * UV coverage is reported for the same reason. Neither builder sets UVs, so the converter finds
+	 * no triangle set and writes (0,0) everywhere — and auto-calculated tangents are derived from
+	 * exactly that.
+	 */
+	FString DescribeMeshAttributes(const FDynamicMesh3& Mesh)
+	{
+		const FDynamicMeshAttributeSet* const Attributes = Mesh.Attributes();
+
+		if (Attributes == nullptr)
+		{
+			return TEXT("no attribute set at all");
+		}
+
+		const FDynamicMeshNormalOverlay* const Normals = Attributes->PrimaryNormals();
+
+		const int32 NumUVLayers = Attributes->NumUVLayers();
+
+		const FDynamicMeshUVOverlay* const UVs =
+			NumUVLayers > 0 ? Attributes->GetUVLayer(0) : nullptr;
+
+		int32 TrianglesWithoutNormals = 0;
+		int32 TrianglesWithUVs = 0;
+
+		for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+		{
+			if (Normals == nullptr)
+			{
+				++TrianglesWithoutNormals;
+			}
+			else
+			{
+				const FIndex3i Triangle = Normals->GetTriangle(TriangleId);
+
+				if (Triangle.A == FDynamicMesh3::InvalidID
+					|| Triangle.B == FDynamicMesh3::InvalidID
+					|| Triangle.C == FDynamicMesh3::InvalidID)
+				{
+					++TrianglesWithoutNormals;
+				}
+			}
+
+			if (UVs != nullptr)
+			{
+				const FIndex3i UVTriangle = UVs->GetTriangle(TriangleId);
+
+				if (UVTriangle.A != FDynamicMesh3::InvalidID
+					&& UVTriangle.B != FDynamicMesh3::InvalidID
+					&& UVTriangle.C != FDynamicMesh3::InvalidID)
+				{
+					++TrianglesWithUVs;
+				}
+			}
+		}
+
+		return FString::Printf(
+			TEXT("%d verts, %d tris, %d tris missing a normal triple, %d tris with UVs across %d "
+				"layer(s), %d normal elements, per-vertex normals %d, tangent space %d, material "
+				"ids %d"),
+			Mesh.VertexCount(),
+			Mesh.TriangleCount(),
+			TrianglesWithoutNormals,
+			TrianglesWithUVs,
+			NumUVLayers,
+			Normals != nullptr ? Normals->ElementCount() : -1,
+			Mesh.HasVertexNormals() ? 1 : 0,
+			Attributes->HasTangentSpace() ? 1 : 0,
+			Attributes->HasMaterialID() ? 1 : 0);
+	}
+
+	/**
 	 * Counts triangles facing the planet's centre, in the mesh about to be handed to a component.
 	 *
 	 * Every winding check in this project runs against a mesh built inside a test, and they all
@@ -356,6 +435,7 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 
 	// Measured on the mesh the component is about to receive, not on one a test assembled.
 	const int32 GlobeInward = CountInwardTriangles(Mesh, FVector::ZeroVector);
+	const FString GlobeAttributes = DescribeMeshAttributes(Mesh);
 
 	// The globe's geometry, handed to whichever component is being asked about. Its vertices are
 	// relative to the planet's centre either way, so the only thing that changes is which component
@@ -380,6 +460,8 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 		TEXT("  globe faces inward: %d of %d."),
 		GlobeInward,
 		Globe.Triangles.Num() / 3);
+
+	UE_LOG(LogSpaceMMO, Log, TEXT("  globe attributes: %s."), *GlobeAttributes);
 
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("Planet globe: %d triangles, %s winding, a vertex every %.0f m of ground."),
@@ -802,6 +884,10 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		TEXT("  patch faces inward: %d of %d."),
 		PatchInward,
 		Patch.Triangles.Num() / 3);
+
+	// Printed in the same terms as the globe's, on the line above it in any descent log, so the two
+	// can be compared by eye rather than by argument.
+	UE_LOG(LogSpaceMMO, Log, TEXT("  patch attributes: %s."), *DescribeMeshAttributes(Mesh));
 
 	// NotifyMeshUpdated() already marks the render state dirty, via ResetProxy(). Nothing else is
 	// needed here, and anything added would be a second request for the same work.
