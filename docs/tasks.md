@@ -25,10 +25,11 @@ into a falsehood the next reader has to unpick. Set it to 0 to restore the fault
 
 This was a deliberate decision to stop, not a conclusion. The mesher is 263 lines against a height
 function of 298 that the server, deposits, stations and both pawns depend on (ADR-0002), so the
-throwaway part of this is small and the cost of continuing was mostly playtests. Everything below is
-kept because it is a record of what has been eliminated, and it is all still true.
+throwaway part of this is small and the cost of continuing was mostly playtests.
 
-**In progress.** The 2026-08-10 playtest moved this on, and narrowed it considerably.
+Everything below is the record of what has been eliminated, written as it was found on 10 August.
+Read it as a log rather than as current state: the eliminations hold, but the "next thing to do"
+notes inside it were all subsequently done, and their outcomes appear further down.
 
 **The patch reaches the renderer.** Every build after the first reports `has proxy 1`, `registered 1`,
 `visible 1`, `actor hidden 0`, `render in main pass 1`, a real material, 32768 triangles, unit scale,
@@ -70,17 +71,14 @@ that found these switches were silently not rebuilding and that three variants h
 and everything after it — variants 1 to 4, the registration-timing hypothesis — inherited the
 redirection from component to mesh.
 
-`bRecipeChanged` now includes `bWantsGlobeComponent`, so the switch works. It has not been re-run
-since it started working. That is the next thing to do, before any more of the mesh is investigated.
+`bRecipeChanged` now includes `bWantsGlobeComponent`, so the switch works.
 
-Predicted outcomes, recorded first: ground appearing means the patch's *mesh* is fine and the
-`GroundPatch` *component* is at fault — its absolute location and rotation, its attachment to the
-globe, or its visibility — which is a different and far more tractable bug. Ground staying black
-means the mesh really is at fault, established for the first time with a switch that actually takes
-effect.
+**It was re-run, and stayed black** — confirmed by the log printing `in the globe's component` three
+times with `has proxy 1` and the camera inside the bounds. So the pivot was sound after all and the
+fault is in the mesh, which the completed 2x2 below then confirmed from the other direction.
 
-The detailed ground patch has never appeared on screen. The globe carries the ground instead, at a
-vertex every 331 m, which is the resolution the player is currently walking on.
+Below this point the notes are from before the patch drew at all. At the time it had never appeared
+on screen and the globe carried the ground at a vertex every 331 m; both are now false.
 
 Known, from playtests and from source:
 
@@ -352,9 +350,10 @@ into the atmosphere (globe hidden) and leaving it (patch released, globe shown).
 
 ## 87 — Instrument the live patch path
 
-**In progress.** Code is done and green; the report itself is unproven until a playtest shows it
-firing. Deliberately not closed on a passing suite: an automated run renders nothing, so it cannot
-tell whether `ReportPatchIfPending` ever executes.
+**Done**, 10 August. The report fires, confirmed by playtest and by every headless probe since — it
+produced the proxy state, the bounds, the camera containment, the inward-facing counts, the attribute
+comparison and the signed distance to the surface, which between them carried the whole of 84's
+progress that day.
 
 `ASpaceMMOTerrainPatchActor` was never spawned — a leftover from before patch building moved onto
 `ASpaceMMOPlanetActor` — and it carried all the useful instrumentation: component triangle count,
@@ -386,9 +385,7 @@ Both the globe and the ground patch are created `NoCollision`. The design is tha
 `FPlanetTerrain` rather than from either mesh, because the dedicated server holds no mesh and must
 still agree about where the ground is — so the mesh can never be the authority on it.
 
-Worth establishing what currently decides a ship has landed: `ClientA.log` at 15:05:33 shows
-`Touched down` and `Lifted off` alternating four times within 0.3 s, which looks like a missing
-hysteresis and may deserve its own task once understood.
+Worth establishing what currently decides a ship has landed — see 90, which is the symptom.
 
 ## 89 — Caves need a second representation
 
@@ -397,6 +394,28 @@ hysteresis and may deserve its own task once understood.
 A height field is a function of direction and cannot express an overhang, let alone a cave. Whatever
 is added must keep the property that makes the current model work: the server and every client agree
 about the ground without shipping any of it (ADR-0002).
+
+## 90 — Stop the landed state flapping
+
+**Pending.**
+
+`ClientA.log`, 10 August, 15:05:33 — the ship alternates four times in 0.36 s while travelling about
+600 m across the surface:
+
+    15:05:33.237 Lifted off   (40.086, 3.584, -0.287) km
+    15:05:33.253 Touched down (40.084, 3.575, -0.286) km
+    15:05:33.516 Lifted off   (40.039, 3.390, -0.258) km
+    15:05:33.520 Touched down (40.039, 3.387, -0.257) km
+
+Two readings, and they want separating before anything is changed. It may be a missing hysteresis on
+a threshold the ship is sitting exactly on — the same shape as the bug that had a landed ship
+classified as flying because its altitude was measured from the sphere rather than the ground. Or it
+may be honest: a ship genuinely skipping across terrain at speed, in which case the log is right and
+only its noisiness is wrong.
+
+Cheap to investigate without a playtest: the headless probe lands a ship on its own
+(`-game -nullrhi -ShipStartX=38`), and the altitude and contact numbers can be logged either side of
+the decision.
 
 ---
 
