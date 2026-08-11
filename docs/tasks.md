@@ -587,16 +587,27 @@ is the only thing that applies changes under `data/`, and restarting the API doe
 
 ## 97 — Settlements
 
-**Pending, and undefined.** Recorded 11 August so a stated plan is not lost, not because it is ready.
+**Pending. Decided 11 August: a settlement is a kind of station, for now.** The cheap version, which
+does not foreclose promoting it to its own entity later.
 
-Settlements across the worlds are wanted. What is not yet decided is what a settlement *is* — whether
-it is a station with a different `kind` and a bigger footprint, or a new entity with its own table,
-services and population. Stations already carry `key`, `name`, `system`, `body`, `kind`, `direction`
-and `dockingRangeKm`, and a settlement that is a station variant costs a `kind` and some content;
-a settlement that is its own thing costs a schema, endpoints, client actors and a docking story.
+`StationKind` in `services/SpaceMMO.Domain/Universe/UniverseEnums.cs` already carries `TradingHub`,
+`Spaceport`, `Housing`, `Social` and `Capital`, so adding a value is a one-line change plus content.
+Two things found while checking that, both worth knowing before starting:
 
-Needs that answer before it can be scoped, and it is the sort of question where the cheap version is
-worth trying first.
+**Do not call it `Settlement`.** That word is already taken, and not loosely: `Domain/Market/
+Settlement.cs`, `SettlementTests`, `SettlementIntegrationTests` and `MarketService` all use it for
+the settling of trades. A `StationKind.Settlement` would collide with the market domain in every
+search anyone ever runs. `Outpost`, `Colony` or `Town` are all free.
+
+**Adding the kind is nearly free; making it look like one is not.** The client treats `kind` as an
+opaque `FString` — parsed by `TryGetStringField` and, as far as the code shows, used only in a log
+line at `SpaceMMOStationActor.cpp:122`. Every station is the same engine cube scaled and lifted onto
+the terrain, whatever its kind. So the enum value, the JSON and the serving cost almost nothing, and
+the entire visible difference between a trading hub and a town is work that does not exist yet.
+
+Also worth deciding rather than drifting into: whether a settlement is one station with a bigger
+footprint, or several stations of existing kinds placed close together — `Housing` and `Social`
+already describe parts of what a town is, and a cluster might get there with no new kind at all.
 
 ---
 
