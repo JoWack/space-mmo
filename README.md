@@ -190,9 +190,23 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   visible ✅, deposits say what they need ✅
 - **M4** — goods that move and gear that matters: items between inventories, ship holds, hauling
   planet-locked materials by flying them, equippable tools, weapons and armour
-- **M5** — depth: careers, security zones, the repair loop, caves ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md))
+- **M5** — combat, and the rules that already assume it: personal and ship weapons, the
+  `combat` and `pilot` skill trees, security zones and pairwise aggression
+  ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md),
+  [ADR-0009](docs/adr/0009-retaliation.md)), and death and insurance made real
+  ([ADR-0006](docs/adr/0006-death-and-insurance.md))
+- **M6** — depth: careers, repeatable quest content, the repair loop, caves
+  ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md))
+
+Two corrections worth keeping, because both were wrong for a long time without anybody noticing.
 
 **M4 used to read "universe scale: procedural galaxy, warp handoff, careers, security zones".**
 [ADR-0007](docs/adr/0007-one-handcrafted-system.md) deleted the first two outright — it calls them
 "the entire M4 technical spine, removed at a cost of zero written code" — and the line was never
-updated, so the roadmap still promised a galaxy the ADRs had already cancelled.
+updated, so the roadmap promised a galaxy the ADRs had already cancelled.
+
+**There was no combat milestone at all**, while [design-bible.md](docs/design-bible.md) §2 defines
+eight combat and pilot skills, defers `constitution` and `stamina` XP "to the combat milestone", and
+three ADRs describe rules — who may shoot whom, what a security zone means, what dying costs — that
+have nothing to shoot with. The roadmap has to name every milestone the design documents assume, or
+work disappears between them.

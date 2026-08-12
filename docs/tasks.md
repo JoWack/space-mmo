@@ -781,6 +781,71 @@ one with its condition, sorted by name then condition so two of the same tool ca
 159 client tests and 637 backend tests pass. The API test asserts the laser appears with its
 condition and that a destroyed one does not; the protocol test parses the envelope with one of each.
 
+---
+
+# M5 — combat
+
+Added 12 August, from `docs/design-bible.md` §2 and ADRs 0006, 0008 and 0009. **The roadmap had no
+combat milestone at all**, while the design bible defines eight combat and pilot skills, explicitly
+defers `constitution` and `stamina` XP "to the combat milestone", and three accepted ADRs describe
+who may shoot whom, what a security zone means and what dying costs. Rules were decided; nothing to
+shoot with was ever scheduled.
+
+Nothing here is started. The tasks below are derived from those documents rather than recovered from
+any list, and each says which document it comes from so the next reader can check rather than trust.
+
+## 101 — Seed the combat and pilot skills
+
+**Pending.**
+
+`data/skills/core.json` holds five skills — gathering, mining, refining, toolcrafting, shipcrafting
+— and the design bible §2 defines eight more that do not exist anywhere: `guns`, `melee`,
+`constitution`, `stamina`, `ship_handling`, `lasers`, `missiles`, `warp`. Also missing from the
+crafting tree: `armorcrafting`, `weaponcrafting`, `electronics`, `construction`.
+
+Cheap in itself — the skill system, XP curve and awarding all work — but blocked behind 102 for the
+two that have no XP source, and pointless before there is an action that awards the rest.
+
+## 102 — Decide where `constitution` and `stamina` XP comes from
+
+**Pending. A decision, not an implementation.**
+
+Design bible §2 names this as open: they "are pools, not activities, so they need a defined XP source
+before they're implemented — most likely awarded passively alongside combat actions, as RuneScape
+does with Hitpoints."
+
+That parenthetical is a proposal, not a decision, and it has consequences worth choosing
+deliberately: passive award ties health progression to whichever combat skill a player uses, which
+means a pure-melee character and a pure-guns character level constitution at different rates unless
+the rate is normalised. Worth settling before 101 seeds the rows, because changing an XP source after
+players have XP is a migration and an apology.
+
+## 103 — Make death and insurance real
+
+**Pending.** ADR-0006 is accepted and entirely inert.
+
+Cause-based loot destruction and acquisition-value insurance are implemented in `SpaceMMO.Domain`
+and covered by tests, and nothing can currently die. The rules also cannot bite while everything a
+player owns lives in a station hangar — the enum comments describe what is lost from a ship's hold
+and what is carried into on-foot combat, and neither container is reachable until 99 lands a client
+affordance.
+
+So this is blocked on M4 rather than on combat: the interesting half of dying is what it costs, and
+that requires goods to be somewhere they can be lost.
+
+## 104 — Pairwise aggression and security zones
+
+**Pending.** ADR-0008 and ADR-0009 are accepted and unimplemented.
+
+ADR-0009 settles the rule — aggression is pairwise, faction space is defended rather than hunted —
+and ADR-0008 sets what a security zone means for who may attack whom. `SecurityLevel` already exists
+on systems and bodies and is seeded, so the data is there and nothing reads it for anything but
+display.
+
+Worth doing early in the milestone rather than late: it decides where combat may happen at all, and
+building weapons first would mean tuning them in a world with no rules about where they may be
+fired.
+
 ## 96 — Author world content graphically
 
 **Pending.** Raised 11 August; ADR-0011 makes it pressing, because a cave is a shape rather than a

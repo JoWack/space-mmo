@@ -28,6 +28,30 @@ scratch.
   history is worse than an admitted one.
 - **Update it in the same commit as the work**, so a task's state and the code agree.
 
+## Milestones live in `README.md`, and must match what the design documents assume
+
+Two different things go missing, and only one of them is about context.
+
+A cleared context loses the **assistant's** task list, which is what `docs/tasks.md` above exists to
+prevent. But the combat milestone was never lost at all — it had simply never been written down.
+`docs/design-bible.md` §2 defines eight combat and pilot skills and defers `constitution` and
+`stamina` XP "to the combat milestone", and ADRs 0006, 0008 and 0009 settle who may shoot whom, what
+a security zone means and what dying costs. Three accepted decisions and a skill tree, all
+describing a milestone the roadmap did not list, for months, with nothing to shoot with.
+
+So the roadmap is not just a plan — it is a **reconciliation**, and it has to name every milestone
+the design documents assume.
+
+- **When a design document says "deferred to the X milestone", X belongs in the roadmap**, that day,
+  even if nothing about it is scheduled. A milestone nobody has written down cannot be prioritised,
+  deferred deliberately, or noticed as missing.
+- **When an ADR is accepted, check the roadmap can host it.** ADR-0006's death rules had no
+  milestone to live in and quietly became inert; ADR-0007 deleted M4's entire content and the line
+  went unedited for months, promising a galaxy that had been cancelled.
+- **Never tell anyone a cleared context loses nothing.** It loses everything not written down. The
+  honest version is that anything in the repository survives and anything else does not, which is
+  why writing it down is the whole discipline rather than a courtesy.
+
 ## Debugging: ask the running game, not the code
 
 Most of this project's rules are pure functions with fast headless tests, and those catch a
