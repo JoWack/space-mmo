@@ -320,12 +320,13 @@ public sealed class GatheringService(SpaceMmoDbContext database)
 
         if (!owned)
         {
-            string toolKey = await _database.ItemDefs
+            // Both, because the message is read by a person and the key is read by code.
+            var tool = await _database.ItemDefs
                 .Where(d => d.Id == toolDefId)
-                .Select(d => d.Key)
+                .Select(d => new { d.Key, d.Name })
                 .SingleAsync(cancellationToken);
 
-            throw new MissingToolException(toolKey);
+            throw new MissingToolException(tool.Key, tool.Name);
         }
     }
 

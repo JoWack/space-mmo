@@ -141,8 +141,16 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
-        await Assert.ThrowsAsync<MissingToolException>(() =>
+        MissingToolException refused = await Assert.ThrowsAsync<MissingToolException>(() =>
             new GatheringService(context).GatherAsync(_alice, _toolGatedNodeId, _stationId));
+
+        // The message reaches the player's screen verbatim, so it is part of the behaviour rather
+        // than a detail. It read "This recipe requires a crude_mining_laser" until deposits could
+        // require tools too — telling somebody swinging at a rock about a recipe they were not
+        // making, and naming it in snake case.
+        Assert.Equal("crude_mining_laser", refused.ToolKey);
+        Assert.Contains("Crude Mining Laser", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("recipe", refused.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

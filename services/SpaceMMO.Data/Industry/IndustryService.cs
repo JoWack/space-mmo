@@ -34,10 +34,20 @@ public sealed class NoFreeJobSlotException(string skillKey, int slots)
 }
 
 /// <summary>Thrown when a recipe needs a tool the character does not own.</summary>
-public sealed class MissingToolException(string toolKey)
-    : InvalidOperationException($"This recipe requires a {toolKey}.")
+public sealed class MissingToolException(string toolKey, string? toolName = null)
+    : InvalidOperationException($"You need a {toolName ?? toolKey} to do this.")
 {
+    /// <summary>The item's key, for anything deciding what to do about it.</summary>
     public string ToolKey { get; } = toolKey;
+
+    /// <summary>
+    /// Wording is neutral because this is thrown from two places that are not the same activity.
+    /// It said "This recipe requires a ..." until deposits could require tools too, at which point
+    /// mining a rock started telling players about a recipe they were not making. The name is used
+    /// in preference to the key, since the message is read by a person and "crude_mining_laser" is
+    /// not how anyone refers to a mining laser.
+    /// </summary>
+    public string ToolName { get; } = toolName ?? toolKey;
 }
 
 /// <summary>The outcome of starting a job.</summary>
@@ -424,12 +434,13 @@ public sealed class IndustryService(SpaceMmoDbContext database)
 
         if (!owned)
         {
-            string toolKey = await _database.ItemDefs
+            // Both, because the message is read by a person and the key is read by code.
+            var tool = await _database.ItemDefs
                 .Where(d => d.Id == toolDefId)
-                .Select(d => d.Key)
+                .Select(d => new { d.Key, d.Name })
                 .SingleAsync(cancellationToken);
 
-            throw new MissingToolException(toolKey);
+            throw new MissingToolException(tool.Key, tool.Name);
         }
     }
 
