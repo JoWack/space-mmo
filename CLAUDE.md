@@ -52,6 +52,18 @@ the design documents assume.
   honest version is that anything in the repository survives and anything else does not, which is
   why writing it down is the whole discipline rather than a courtesy.
 
+## Show interface work before building it
+
+**Present every widget, screen, layout and HUD arrangement to Joe and get a yes before implementing
+it.** A sketch, a mock, an ASCII layout, a described arrangement — whatever carries the idea. This
+covers changes as much as new screens: moving a row, re-ordering a panel, or deciding what a line
+says is the same decision at a smaller scale.
+
+Everything else here can be checked against a test, a log, or engine source. Interface cannot.
+A panel can satisfy every requirement anyone wrote down and still be the wrong shape to look at, and
+that only surfaces once it exists — at which point it is a day of work to argue about rather than a
+sketch to redraw. Asking first costs a message.
+
 ## Debugging: ask the running game, not the code
 
 Most of this project's rules are pure functions with fast headless tests, and those catch a

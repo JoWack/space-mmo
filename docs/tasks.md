@@ -799,6 +799,19 @@ source for market UI".
 Combat (M6) sits behind this deliberately. Health, targeting, damage and being shot at cannot be
 reported by text the engine reorders every frame.
 
+**Nothing in this milestone gets built before Joe has seen it and said yes.** Every widget, screen,
+layout and HUD arrangement is presented first — a sketch, a mock, a described layout, whatever
+carries the idea — and confirmed or corrected before any of it is implemented.
+
+This is not ceremony. Interface is taste, and taste cannot be derived from a specification: a panel
+can satisfy every requirement written down and still be the wrong shape to look at, and the way that
+surfaces is a day of work that has to be argued about instead of thrown away. Everything else in this
+repository can be checked against a test or a log; this cannot, so it gets checked against the person
+who has to look at it.
+
+Applies to changes as much as to new screens. Moving something, re-ordering it, or deciding what a
+row says is the same decision at a smaller scale.
+
 ## 106 — A real HUD
 
 **Pending.**
