@@ -81,6 +81,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	const TArray<FBackendInventoryItem>& GetInventory() const { return Inventory; }
 
+	/**
+	 * Owned items that do not stack — tools, weapons, hulls.
+	 *
+	 * Held apart from the stacks because they are apart on the wire and apart in the database, and
+	 * flattening them here would lose the condition that makes each one itself.
+	 */
+	const TArray<FBackendItemInstance>& GetItemInstances() const { return ItemInstances; }
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	int32 GetSelectedCharacterId() const { return SelectedCharacterId; }
 
@@ -392,6 +400,8 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendInventoryItem> Inventory;
+
+	TArray<FBackendItemInstance> ItemInstances;
 
 	UPROPERTY()
 	TArray<FBackendResourceNode> Deposits;

@@ -559,10 +559,12 @@ void USpaceMMOBackendClient::SelectCharacter(const int32 CharacterId)
 		[this](const FString& Body)
 		{
 			TArray<FBackendInventoryItem> Parsed;
+			TArray<FBackendItemInstance> ParsedInstances;
 
-			FSpaceMMOBackendProtocol::ParseInventory(Body, Parsed);
+			FSpaceMMOBackendProtocol::ParseInventory(Body, Parsed, ParsedInstances);
 
 			Inventory = MoveTemp(Parsed);
+			ItemInstances = MoveTemp(ParsedInstances);
 
 			OnCharacterStateLoaded.Broadcast();
 		});

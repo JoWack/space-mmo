@@ -61,7 +61,8 @@ public:
 		const FString& CharacterName,
 		const FString& Balance,
 		const TArray<FBackendSkill>& Skills,
-		const TArray<FBackendInventoryItem>& Inventory);
+		const TArray<FBackendInventoryItem>& Inventory,
+		const TArray<FBackendItemInstance>& Instances);
 
 	/**
 	 * Renders a whole number with thousands separators, e.g. 1234567 as "1,234,567".

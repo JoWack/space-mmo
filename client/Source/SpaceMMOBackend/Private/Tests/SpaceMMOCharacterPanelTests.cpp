@@ -5,6 +5,13 @@
 
 namespace
 {
+	/** Most of these cases predate instances and are about stacks; this keeps them readable. */
+	const TArray<FBackendItemInstance> NoInstances;
+}
+
+
+namespace
+{
 	FBackendSkill MakeSkill(const TCHAR* Name, const int32 Level, const int64 Xp)
 	{
 		FBackendSkill Skill;
@@ -52,7 +59,7 @@ bool FSpaceMMOPanelShowsTrainedSkillsAndHeldItemsTest::RunTest(const FString& Pa
 
 	const TArray<FString> Lines =
 		ASpaceMMOPlayerController::BuildCharacterPanel(
-			TEXT("Ayla"), TEXT("1,234.56"), Skills, Inventory);
+			TEXT("Ayla"), TEXT("1,234.56"), Skills, Inventory, NoInstances);
 
 	TestTrue(TEXT("Names the character"), AnyLineContains(Lines, TEXT("Ayla")));
 	TestTrue(TEXT("Shows the balance"), AnyLineContains(Lines, TEXT("1,234.56 cr")));
@@ -75,7 +82,7 @@ bool FSpaceMMOPanelSpeaksForANewCharacterTest::RunTest(const FString& Parameters
 	// The state every player is in for their first few minutes. A panel that renders as blank space
 	// here reads as broken, and the player has no way to tell that from "you own nothing yet".
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildCharacterPanel(
-		TEXT("Boreth"), FString(), TArray<FBackendSkill>(), TArray<FBackendInventoryItem>());
+		TEXT("Boreth"), FString(), TArray<FBackendSkill>(), TArray<FBackendInventoryItem>(), NoInstances);
 
 	TestTrue(TEXT("Says nothing is trained"), AnyLineContains(Lines, TEXT("nothing trained")));
 	TestTrue(TEXT("Says the hold is empty"), AnyLineContains(Lines, TEXT("empty")));
@@ -104,7 +111,7 @@ bool FSpaceMMOPanelHidesUntrainedSkillsTest::RunTest(const FString& Parameters)
 	};
 
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildCharacterPanel(
-		TEXT("Ayla"), TEXT("500.00"), Skills, TArray<FBackendInventoryItem>());
+		TEXT("Ayla"), TEXT("500.00"), Skills, TArray<FBackendInventoryItem>(), NoInstances);
 
 	TestTrue(TEXT("Keeps the trained one"), AnyLineContains(Lines, TEXT("Mining")));
 	TestFalse(TEXT("Drops an untrained one"), AnyLineContains(Lines, TEXT("Refining")));
@@ -128,7 +135,7 @@ bool FSpaceMMOPanelOrdersByNameTest::RunTest(const FString& Parameters)
 	};
 
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildCharacterPanel(
-		TEXT("Ayla"), TEXT("500.00"), TArray<FBackendSkill>(), Inventory);
+		TEXT("Ayla"), TEXT("500.00"), TArray<FBackendSkill>(), Inventory, NoInstances);
 
 	const int32 Ferrite = IndexOfLineContaining(Lines, TEXT("Ferrite Ore"));
 	const int32 Scrap = IndexOfLineContaining(Lines, TEXT("Scrap Alloy"));

@@ -594,7 +594,8 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 	}
 
 	TArray<FString> Lines = BuildCharacterPanel(
-		CharacterName, Balance, Client->GetSkills(), Client->GetInventory());
+		CharacterName, Balance, Client->GetSkills(), Client->GetInventory(),
+		Client->GetItemInstances());
 
 	Lines.Append(BuildQuestPanel(Client->GetJournal(), Client->GetAvailableQuests()));
 
@@ -871,7 +872,8 @@ TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
 	const FString& CharacterName,
 	const FString& Balance,
 	const TArray<FBackendSkill>& Skills,
-	const TArray<FBackendInventoryItem>& Inventory)
+	const TArray<FBackendInventoryItem>& Inventory,
+	const TArray<FBackendItemInstance>& Instances)
 {
 	TArray<FString> Lines;
 
@@ -920,7 +922,7 @@ TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
 		? TEXT("-- Holdings --")
 		: FString::Printf(TEXT("-- Holdings --  %s cr"), *Balance));
 
-	if (Held.Num() == 0)
+	if (Held.Num() == 0 && Instances.Num() == 0)
 	{
 		Lines.Add(TEXT("   empty"));
 	}
@@ -937,6 +939,23 @@ TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
 				Item.Quantity,
 				*FSpaceMMOBackendProtocol::FormatCredits(Item.FactionBuyPriceMinorUnits))
 			: FString::Printf(TEXT("   %s  x%d"), *Item.Name, Item.Quantity));
+	}
+
+	// Listed one per line with condition rather than counted, because they are not a stack: two
+	// lasers worn to different degrees are two things, and "x2" would say they were one. Until
+	// these were shown at all, a player crafted the mining laser the questline gives them and saw
+	// nothing here — owned, usable, and invisible, which reads as a craft that failed.
+	TArray<FBackendItemInstance> Owned = Instances;
+
+	// Sorted for the same reason the stacks are, and by condition second so a player deciding which
+	// of two lasers to take is not asked to guess which line is which.
+	Owned.Sort([](const FBackendItemInstance& A, const FBackendItemInstance& B)
+		{ return A.Name == B.Name ? A.Condition > B.Condition : A.Name < B.Name; });
+
+	for (const FBackendItemInstance& Instance : Owned)
+	{
+		Lines.Add(FString::Printf(
+			TEXT("   %s  (%d%%)"), *Instance.Name, Instance.Condition));
 	}
 
 	return Lines;

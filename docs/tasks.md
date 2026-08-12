@@ -539,8 +539,8 @@ has been parsed and unused since it was added. A "nearby" panel would say what t
 skill works it, and what it needs. The panel builders are pure static functions tested headlessly
 (`BuildCharacterPanel` and friends), so this is testable without a playtest.
 
-**Blocked on 100 for the useful version.** A panel that says "needs a Crude Mining Laser" is only
-half an answer; the other half is "and you have one", which the client cannot currently know.
+**Unblocked by 100**, which landed first. The client now receives the player's tools, so a nearby
+panel can say both what a rock needs and whether the player is carrying it.
 
 ## 92 — Walk the loop once, on one machine
 
@@ -745,22 +745,33 @@ whether the existing panel can carry it.
 
 ## 100 — Show players the things they own that do not stack
 
-**Pending.** Found 11 August while reframing 91, and it undermines the mining loop as shipped.
+**Done**, 11 August. Found while reframing 91, and worse than what it was found during.
 
-`GET /characters/{id}/inventory` queries `InventoryItems`, which is stacks only. Tools, modules,
-armour, weapons and hulls are all `ItemCategory` values where `IsStackable()` is false, so they live
-as `ItemInstance` rows and **none of them appear in a player's inventory at all**.
+`GET /characters/{id}/inventory` read `InventoryItems`, which is stacks only, while every category
+carrying condition — tools, modules, armour, weapons, hulls — lives as an `ItemInstance`. So a player
+could follow the questline, craft a Crude Mining Laser, and see nothing anywhere: owned, usable, and
+absent from their own inventory, which reads exactly like a craft that silently failed. That is the
+entire reward of quest step two.
 
-The concrete result: a player follows the onboarding questline, crafts a Crude Mining Laser, and
-sees nothing anywhere. They own it, the tool gate passes, and the Holdings panel is unchanged — which
-reads exactly like a craft that silently failed. That is the whole reward of quest step two.
+The response is now an envelope with `stacks` and `items` rather than a bare array. One response
+rather than a second endpoint, deliberately: a client that fetched only stacks would show half a
+player's possessions and believe it was finished, which is the bug being fixed one layer up. The two
+lists use the same field names for the same ideas (`name`, `kind`) so nobody has to remember which
+half they are reading.
 
-It also blocks the useful half of 91: a deposit can now say it needs a laser, but the client has no
-way to know whether the player is carrying one, so it cannot say "and you have one".
+Instances are kept apart from stacks rather than folded in with nullable fields, because two lasers
+at different condition are two things and a quantity of 2 says they are one — and ADR-0006 insures
+each instance against its own acquisition value, so the distinction is load-bearing.
 
-Needs a decision on shape rather than just wiring: instances carry condition and acquisition value
-and stacks do not, so either the response grows a second list, or one list gains nullable fields and
-every consumer learns to read them. The first is more honest about what these things are.
+Destroyed instances are excluded. Their rows survive so history does, and listing them would show a
+player the wreck of something they lost and let them conclude they still had it.
+
+Client side: `FBackendItemInstance`, a parser that tolerates a stacks-only response from an older
+server (no tools rather than no inventory, the milder failure), and a Holdings panel that lists each
+one with its condition, sorted by name then condition so two of the same tool can be told apart.
+
+159 client tests and 637 backend tests pass. The API test asserts the laser appears with its
+condition and that a destroyed one does not; the protocol test parses the envelope with one of each.
 
 ## 96 — Author world content graphically
 

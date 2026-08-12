@@ -319,14 +319,40 @@ bool FSpaceMMOBackendParseSkillsAndInventoryTest::RunTest(const FString& Paramet
 	TestEqual(TEXT("XP survives as int64"), Skills[0].Xp, 13034431LL);
 
 	TArray<FBackendInventoryItem> Items;
+	TArray<FBackendItemInstance> Instances;
 
+	// Two lists, because owning something takes two shapes. This was a bare array of stacks, and
+	// anything with condition — every tool, weapon and hull — was simply absent from it, so a
+	// player could craft the mining laser the questline gives them and find nothing.
 	FSpaceMMOBackendProtocol::ParseInventory(
-		TEXT(R"([{"itemDefId":4,"itemKey":"ferrite_ore","name":"Ferrite Ore","quantity":250}])"),
-		Items);
+		TEXT(R"({"stacks":[
+			{"itemDefId":4,"itemKey":"ferrite_ore","name":"Ferrite Ore","quantity":250,
+			 "factionBuyPriceMinorUnits":null,"kind":1,"stationId":null}],
+		 "items":[
+			{"id":77,"itemDefId":9,"itemKey":"crude_mining_laser","name":"Crude Mining Laser",
+			 "condition":87,"kind":2,"stationId":3}]})"),
+		Items,
+		Instances);
 
 	TestEqual(TEXT("One stack"), Items.Num(), 1);
 	TestEqual(TEXT("Item key"), Items[0].ItemKey, TEXT("ferrite_ore"));
 	TestEqual(TEXT("Quantity"), Items[0].Quantity, 250);
+
+	TestEqual(TEXT("One instance"), Instances.Num(), 1);
+	TestEqual(TEXT("Instance id"), Instances[0].Id, static_cast<int64>(77));
+	TestEqual(TEXT("Instance name"), Instances[0].Name, TEXT("Crude Mining Laser"));
+	TestEqual(TEXT("Condition survives"), Instances[0].Condition, 87);
+	TestEqual(TEXT("Where it is"), Instances[0].StationId, 3);
+
+	// A server that still answers with stacks alone leaves a client with no tools rather than no
+	// inventory, which is the milder of the two failures.
+	TArray<FBackendInventoryItem> OnlyStacks;
+	TArray<FBackendItemInstance> NoInstances;
+
+	TestTrue(
+		TEXT("An envelope without instances still parses"),
+		FSpaceMMOBackendProtocol::ParseInventory(
+			TEXT(R"({"stacks":[]})"), OnlyStacks, NoInstances));
 
 	TArray<FBackendSkill> NoSkills;
 

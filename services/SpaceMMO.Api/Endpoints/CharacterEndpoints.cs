@@ -55,6 +55,43 @@ public sealed record InventoryItemResponse(
     int? StationId);
 
 /// <summary>
+/// One item that does not stack — a tool, a weapon, a hull — with the state that makes it itself.
+/// </summary>
+/// <param name="Condition">0 to 100. Below a threshold the item is unusable until repaired.</param>
+/// <remarks>
+/// Separate from <see cref="InventoryItemResponse"/> rather than folded into it with nullable
+/// fields, because these are not stacks and pretending otherwise loses the distinction that
+/// matters: two lasers at different condition are two things, and a quantity of 2 says they are
+/// one. ADR-0006 pays insurance against acquisition value per instance, so the difference is
+/// load-bearing rather than cosmetic.
+/// </remarks>
+public sealed record ItemInstanceResponse(
+    long Id,
+    int ItemDefId,
+    string ItemKey,
+    string Name,
+    int Condition,
+    InventoryKind Kind,
+    int? StationId);
+
+/// <summary>
+/// Everything a character owns, in the two shapes owning something can take.
+/// </summary>
+/// <remarks>
+/// <strong>This used to be a bare array of stacks, and so half of what a player owned was
+/// invisible.</strong> Every category carrying condition — tools, modules, armour, weapons, hulls
+/// — is an <c>ItemInstance</c> rather than a stack, so a player could craft the mining laser the
+/// onboarding questline exists to give them and see nothing anywhere: owned, usable, and absent
+/// from their own inventory, which reads exactly like a craft that silently failed.
+///
+/// One response rather than a second endpoint, so a client cannot show half a player's possessions
+/// and believe it is finished — which is the bug being fixed, one layer up.
+/// </remarks>
+public sealed record InventoryResponse(
+    IReadOnlyList<InventoryItemResponse> Stacks,
+    IReadOnlyList<ItemInstanceResponse> Items);
+
+/// <summary>
 /// Character creation and read-only views of a character's progression and holdings.
 /// </summary>
 public static class CharacterEndpoints
@@ -258,7 +295,7 @@ public static class CharacterEndpoints
             return owned.ToProblem();
         }
 
-        List<InventoryItemResponse> items = await database.InventoryItems
+        List<InventoryItemResponse> stacks = await database.InventoryItems
             .Where(ii => ii.Inventory!.CharacterId == characterId)
             .Include(ii => ii.ItemDef)
             .OrderBy(ii => ii.ItemDef!.Key)
@@ -274,7 +311,25 @@ public static class CharacterEndpoints
                 ii.Inventory.StationId))
             .ToListAsync(cancellation);
 
-        return Results.Ok(items);
+        // Destroyed instances keep their rows so history survives them (ADR-0006), and must not
+        // appear in an inventory: a player looking at the wreck of something they lost would
+        // reasonably conclude they still had it.
+        List<ItemInstanceResponse> instances = await database.ItemInstances
+            .Where(i => i.Inventory!.CharacterId == characterId && i.DestroyedAt == null)
+            .Include(i => i.ItemDef)
+            .Include(i => i.Inventory)
+            .OrderBy(i => i.ItemDef!.Key).ThenBy(i => i.Id)
+            .Select(i => new ItemInstanceResponse(
+                i.Id,
+                i.ItemDefId,
+                i.ItemDef!.Key,
+                i.ItemDef.Name,
+                i.Condition,
+                i.Inventory!.Kind,
+                i.Inventory.StationId))
+            .ToListAsync(cancellation);
+
+        return Results.Ok(new InventoryResponse(stacks, instances));
     }
 
     /// <summary>

@@ -44,7 +44,16 @@ public:
 	static bool ParseSkills(const FString& Json, TArray<FBackendSkill>& OutSkills);
 
 	/** Parses a JSON array of inventory stacks. */
-	static bool ParseInventory(const FString& Json, TArray<FBackendInventoryItem>& OutItems);
+	/**
+	 * Reads the inventory envelope: stacks and instances, which are different shapes of owning.
+	 *
+	 * One call rather than two, because a caller that fetched only stacks would show half a
+	 * player's possessions and believe it was finished — which is the bug this shape replaced.
+	 */
+	static bool ParseInventory(
+		const FString& Json,
+		TArray<FBackendInventoryItem>& OutItems,
+		TArray<FBackendItemInstance>& OutInstances);
 
 	/** Parses a resolved identity. Fails if the character id is missing or zero. */
 	static bool ParseResolvedCharacter(const FString& Json, FBackendResolvedCharacter& OutResolved);

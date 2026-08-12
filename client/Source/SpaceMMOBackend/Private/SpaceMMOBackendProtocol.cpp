@@ -288,16 +288,31 @@ bool FSpaceMMOBackendProtocol::ParseSkills(const FString& Json, TArray<FBackendS
 }
 
 bool FSpaceMMOBackendProtocol::ParseInventory(
-	const FString& Json, TArray<FBackendInventoryItem>& OutItems)
+	const FString& Json,
+	TArray<FBackendInventoryItem>& OutItems,
+	TArray<FBackendItemInstance>& OutInstances)
 {
-	TArray<TSharedPtr<FJsonValue>> Values;
+	OutItems.Reset();
+	OutInstances.Reset();
 
-	if (!ParseArray(Json, Values))
+	// An object with two lists, where this used to be a bare array of stacks. Anything that does
+	// not stack -- a tool, a weapon, a hull -- was simply absent before, so a player could craft
+	// the mining laser the questline gives them and find nothing in their own inventory.
+	const TSharedPtr<FJsonObject> Envelope = ParseObject(Json);
+
+	if (!Envelope.IsValid())
 	{
 		return false;
 	}
 
-	OutItems.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* StackValues = nullptr;
+
+	if (!Envelope->TryGetArrayField(TEXT("stacks"), StackValues) || StackValues == nullptr)
+	{
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>& Values = *StackValues;
 
 	for (const TSharedPtr<FJsonValue>& Value : Values)
 	{
@@ -355,6 +370,56 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 		}
 
 		OutItems.Add(Item);
+	}
+
+	// Absent rather than empty is tolerated: an older server that still answers with only stacks
+	// leaves a client with no tools rather than no inventory at all, which is the milder failure.
+	const TArray<TSharedPtr<FJsonValue>>* InstanceValues = nullptr;
+
+	if (Envelope->TryGetArrayField(TEXT("items"), InstanceValues) && InstanceValues != nullptr)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *InstanceValues)
+		{
+			const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+			FBackendItemInstance Instance;
+
+			if (!Object.IsValid() || !Object->TryGetStringField(TEXT("itemKey"), Instance.ItemKey))
+			{
+				continue;
+			}
+
+			Object->TryGetStringField(TEXT("name"), Instance.Name);
+
+			int64 Number = 0;
+
+			if (ReadInt64(Object, TEXT("id"), Number))
+			{
+				Instance.Id = Number;
+			}
+
+			if (ReadInt64(Object, TEXT("itemDefId"), Number))
+			{
+				Instance.ItemDefId = static_cast<int32>(Number);
+			}
+
+			if (ReadInt64(Object, TEXT("condition"), Number))
+			{
+				Instance.Condition = static_cast<int32>(Number);
+			}
+
+			if (ReadInt64(Object, TEXT("kind"), Number))
+			{
+				Instance.Kind = ToEnum(Number, EBackendInventoryKind::CharacterCarried, 2);
+			}
+
+			if (ReadInt64(Object, TEXT("stationId"), Number))
+			{
+				Instance.StationId = static_cast<int32>(Number);
+			}
+
+			OutInstances.Add(Instance);
+		}
 	}
 
 	return true;

@@ -502,6 +502,44 @@ struct SPACEMMOBACKEND_API FBackendBody
 };
 
 /**
+ * One owned item that does not stack — a tool, a weapon, a hull.
+ *
+ * Separate from FBackendInventoryItem because these are not stacks: two lasers at different
+ * condition are two things, and a quantity of two would say they were one. Kept apart on the wire
+ * for the same reason (ADR-0006 insures each instance against its own acquisition value).
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendItemInstance
+{
+	GENERATED_BODY()
+
+	/** Server-side id. What a transfer names. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 Id = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 ItemDefId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString ItemKey;
+
+	/** What to call it to a player, e.g. "Crude Mining Laser". */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Name;
+
+	/** 0 to 100. Below a threshold the item is unusable until repaired. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Condition = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendInventoryKind Kind = EBackendInventoryKind::CharacterCarried;
+
+	/** Set for a station hangar; zero for anything that travels with its owner. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 StationId = 0;
+};
+
+/**
  * A deposit on a body, as the server describes it.
  *
  * <strong>A direction, never a position.</strong> The server says which way the deposit lies from

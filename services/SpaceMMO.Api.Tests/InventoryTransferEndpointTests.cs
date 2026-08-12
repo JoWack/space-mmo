@@ -121,6 +121,72 @@ public sealed class InventoryTransferEndpointTests(ApiDatabaseFixture fixture)
             "insufficient_items", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task A_tool_appears_in_the_inventory_it_is_sitting_in()
+    {
+        // The bug this asserts against: the endpoint read InventoryItems, which is stacks only, and
+        // every category carrying condition is an ItemInstance instead. So a player crafted the
+        // mining laser the onboarding questline exists to give them and saw nothing anywhere --
+        // owned, usable, and absent from their own inventory.
+        await using (SpaceMmoDbContext seed = _fixture.CreateContext())
+        {
+            var laser = new ItemDef
+            {
+                Key = "crude_mining_laser",
+                Name = "Crude Mining Laser",
+                Category = ItemCategory.Tool,
+                VolumeM3 = 2,
+            };
+
+            seed.ItemDefs.Add(laser);
+            await seed.SaveChangesAsync();
+
+            seed.ItemInstances.AddRange(
+                new ItemInstance
+                {
+                    ItemDefId = laser.Id,
+                    InventoryId = _hangarId,
+                    Condition = 87,
+                    AcquisitionValue = Credits.FromWholeCredits(250),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                },
+
+                // Destroyed, and must not be listed: somebody looking at the wreck of a thing they
+                // lost would reasonably conclude they still had it.
+                new ItemInstance
+                {
+                    ItemDefId = laser.Id,
+                    InventoryId = _hangarId,
+                    Condition = 0,
+                    AcquisitionValue = Credits.FromWholeCredits(250),
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    DestroyedAt = DateTimeOffset.UtcNow,
+                });
+
+            await seed.SaveChangesAsync();
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/characters/{_characterId}/inventory", UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string body = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains("Crude Mining Laser", body, StringComparison.Ordinal);
+        Assert.Contains("\"condition\":87", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"condition\":0", body, StringComparison.Ordinal);
+
+        // The stacks are still there alongside it, because this replaced a bare array with an
+        // envelope and dropping one half would be a different bug of the same shape.
+        Assert.Contains("Ferrite Plate", body, StringComparison.Ordinal);
+    }
+
     private async Task<HttpResponseMessage> TransferAsync(long from, long to, int quantity)
     {
         using var request = new HttpRequestMessage(
