@@ -24,4 +24,23 @@ REM Without credentials the connection has no character, and gathering says so r
 REM crediting somebody arbitrary. The character id is only a claim: the server checks it against
 REM your session token and refuses any character your account does not own. Omit it and the client
 REM plays the first character on the account.
+REM Refuses the letter form rather than ignoring it. join.bat takes "a" and "b"; this script never
+REM has, and passing one here used to launch a standalone world that looked almost right: no
+REM server, the default login file in both windows, so both were the same character and neither
+REM appeared in the server log. Two single-player worlds side by side are a convincing impression
+REM of multiplayer until somebody notices nobody is there.
+if /I "%~1"=="a" goto wrongscript
+if /I "%~1"=="b" goto wrongscript
+goto run
+
+:wrongscript
+echo.
+echo   play.bat is standalone and takes no player letter.
+echo   For two players against a dedicated server, use:
+echo.
+echo       scripts\join.bat %~1
+echo.
+exit /b 1
+
+:run
 start "" "D:\Programming\UnrealEngineSource\Engine\Binaries\Win64\UnrealEditor.exe" "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -game -windowed -ResX=1600 -ResY=900 %*
