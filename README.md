@@ -83,7 +83,7 @@ holdings, quests, market, industry and whatever deposit is within reach. Run `sc
 first, or the planet has no ore on it. A black window at startup is shader compilation rather than a
 hang.
 
-The scene is spawned from code — there are no authored assets yet. 352 marker cubes sit at
+The scene is spawned from code rather than placed in a level. 352 marker cubes sit at
 known positions in **system** space, so they are a live demonstration of the coordinate model
 rather than scenery: they stay exactly where they are while the ship moves and the render origin
 jumps beneath them. Their instances are rebuilt only when the origin actually moves, so a

@@ -814,21 +814,50 @@ row says is the same decision at a smaller scale.
 
 ## 106 — A real HUD
 
-**Pending.**
+**Pending. Layout agreed with Joe, 12 August — Option A, contextual.** Implementation not started.
 
 Replace the debug-text panel with UMG. `SpaceMMOBackend.Build.cs` does not depend on `UMG` or
 `Slate` yet, so this starts with a module dependency.
 
-The panel's own comments are the specification: it became one joined string because on-screen
-messages are ordered by slot rather than key, are deleted and re-added every frame at zero display
-time, and so land in an order nothing can influence — "the ship's own readouts use keys 1, 3 and 2
-and render as 2, 3, 1". A widget has none of those problems, and gets back the colour that
-`ShowTransientLine` had to give up.
+The panel's own comments are the specification for why: on-screen messages are ordered by slot
+rather than key, are deleted and re-added every frame at zero display time, and so land in an order
+nothing can influence — "the ship's own readouts use keys 1, 3 and 2 and render as 2, 3, 1". A widget
+has none of those problems, and gets back the colour that `ShowTransientLine` had to give up.
 
-Keep the panel builders. `BuildCharacterPanel`, `BuildMarketPanel`, `BuildIndustryPanel`,
+**Keep the panel builders.** `BuildCharacterPanel`, `BuildMarketPanel`, `BuildIndustryPanel`,
 `BuildQuestPanel` and `BuildNearbyPanel` are pure static functions with headless tests, which is why
-the HUD's logic is testable at all. A widget should render their output rather than replace them,
-or that coverage goes with them.
+the HUD's logic is testable at all. A widget should render their output rather than replace them, or
+that coverage goes with them.
+
+### Agreed shape
+
+**Contextual rather than everything at once.** Today one always-on block shows the market book in
+deep space and industry recipes mid-flight.
+
+- **Flying** — a compact nav readout: system position, speed against orbital speed, altitude,
+  proximity band, rebase count.
+- **On foot** — name and credits, and the nearby deposit with its skill, level and tool.
+- **Docked** — a station screen as an **overlay**, opened deliberately rather than always on, with
+  Holdings, Market, Industry and Quests. Overlay rather than full-screen, so the world stays visible
+  behind it.
+
+**Transient messages float above the character pawn** rather than sitting in a corner — a
+world-space widget on the pawn, so a yield or a refusal appears where the player is looking.
+
+Open, and worth settling before that part is built: where a transient message goes **while flying**,
+since there is no character pawn to sit above. Above the ship is one answer; the flight readout is
+another.
+
+**Editor-tweakable by design.** C++ owns the data through a `UUserWidget` subclass with
+`meta = (BindWidget)`; Widget Blueprints own layout, fonts, colours and anchoring, and can be edited
+without a rebuild. A missing `BindWidget` name fails Blueprint compilation with a clear error, so the
+contract cannot drift silently.
+
+`.uasset` in the repository is accepted for this, and is not new: `client/Content` already holds 726
+of them — the third-person template, its animation library, and the deposit meshes.
+
+**Nothing here gets built before Joe has seen it**, per the rule at the top of this milestone. The
+layout above is agreed; the individual widgets are not yet.
 
 ## 107 — Sign in from the game
 
