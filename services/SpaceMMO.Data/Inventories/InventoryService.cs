@@ -21,6 +21,16 @@ public sealed class InsufficientItemsException(
 }
 
 /// <summary>
+/// Thrown when a transfer is asked to move something between inventories that cannot be paired.
+/// </summary>
+/// <remarks>
+/// Both sides must belong to the same character. Ownership is the whole of the rule today, because
+/// there is nowhere else for goods to go: everything gathered or crafted lands in a station hangar,
+/// so a transfer is always between two of one person's own containers.
+/// </remarks>
+public sealed class InventoryTransferException(string message) : InvalidOperationException(message);
+
+/// <summary>
 /// Moves stackable items in and out of inventories.
 /// </summary>
 /// <remarks>
@@ -150,6 +160,121 @@ public sealed class InventoryService(SpaceMmoDbContext database)
             .Where(i => i.InventoryId == inventoryId && i.ItemDefId == itemDefId)
             .Select(i => i.Quantity)
             .FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// Moves a quantity of a stackable item from one of a character's inventories to another.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Cost basis moves with the goods.</strong> Insurance is pegged to acquisition value
+    /// (ADR-0006), so material that arrives somewhere having apparently cost nothing is material
+    /// that pays out nothing when it is lost. <see cref="RemoveAsync"/> already returns the share
+    /// that left, and this hands exactly that share to the destination — so a stack split across
+    /// two containers still sums to what it originally cost, and moving goods can neither create
+    /// nor destroy value.
+    /// </para>
+    /// <para>
+    /// Volume is not checked. <c>CapacityM3</c> exists on the row and hangars are created at zero,
+    /// and nothing anywhere enforces it yet; a transfer is the wrong place to invent that rule,
+    /// because it would apply to one route into a hold and not to the others.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InventoryTransferException">
+    /// If the two inventories are the same, either is unknown, or they belong to different people.
+    /// </exception>
+    /// <exception cref="InsufficientItemsException">If the source holds too few.</exception>
+    public async Task TransferAsync(
+        long fromInventoryId,
+        long toInventoryId,
+        int itemDefId,
+        int quantity,
+        CancellationToken cancellationToken = default)
+    {
+        GuardQuantity(quantity);
+
+        await GuardSameOwnerAsync(fromInventoryId, toInventoryId, cancellationToken);
+
+        Credits moved = await RemoveAsync(fromInventoryId, itemDefId, quantity, cancellationToken);
+
+        await AddAsync(toInventoryId, itemDefId, quantity, moved, cancellationToken);
+    }
+
+    /// <summary>
+    /// Moves a single non-stackable item — a tool, a weapon, a ship — between a character's
+    /// inventories.
+    /// </summary>
+    /// <remarks>
+    /// A different operation from <see cref="TransferAsync"/> rather than a special case of it.
+    /// An instance carries its own condition and acquisition value, so it moves as itself: the row
+    /// changes container and nothing is split, summed or recreated.
+    /// </remarks>
+    /// <exception cref="InventoryTransferException">
+    /// If the instance is unknown, has been destroyed, is already there, or the two inventories do
+    /// not belong to the same character.
+    /// </exception>
+    public async Task TransferInstanceAsync(
+        long itemInstanceId,
+        long toInventoryId,
+        CancellationToken cancellationToken = default)
+    {
+        ItemInstance? instance = await _database.ItemInstances
+            .FirstOrDefaultAsync(i => i.Id == itemInstanceId, cancellationToken);
+
+        if (instance is null)
+        {
+            throw new InventoryTransferException($"Item instance {itemInstanceId} does not exist.");
+        }
+
+        // A destroyed instance keeps its row so history survives it, and must not be recoverable by
+        // moving it somewhere (ADR-0006).
+        if (instance.DestroyedAt is not null || instance.InventoryId is not long fromInventoryId)
+        {
+            throw new InventoryTransferException(
+                $"Item instance {itemInstanceId} has been destroyed.");
+        }
+
+        await GuardSameOwnerAsync(fromInventoryId, toInventoryId, cancellationToken);
+
+        instance.InventoryId = toInventoryId;
+    }
+
+    /// <summary>
+    /// Both inventories must exist and belong to one character.
+    /// </summary>
+    /// <remarks>
+    /// Checked here rather than at the endpoint so no caller can move goods between two people by
+    /// forgetting to. Giving items away is a trade, and a trade is the market's job — it has fees,
+    /// an order book and a settlement path, none of which a silent transfer would go through.
+    /// </remarks>
+    private async Task GuardSameOwnerAsync(
+        long fromInventoryId, long toInventoryId, CancellationToken cancellationToken)
+    {
+        if (fromInventoryId == toInventoryId)
+        {
+            throw new InventoryTransferException(
+                "Source and destination are the same inventory.");
+        }
+
+        Dictionary<long, int> owners = await _database.Inventories
+            .Where(i => i.Id == fromInventoryId || i.Id == toInventoryId)
+            .ToDictionaryAsync(i => i.Id, i => i.CharacterId, cancellationToken);
+
+        if (!owners.TryGetValue(fromInventoryId, out int fromOwner))
+        {
+            throw new InventoryTransferException($"Inventory {fromInventoryId} does not exist.");
+        }
+
+        if (!owners.TryGetValue(toInventoryId, out int toOwner))
+        {
+            throw new InventoryTransferException($"Inventory {toInventoryId} does not exist.");
+        }
+
+        if (fromOwner != toOwner)
+        {
+            throw new InventoryTransferException(
+                $"Inventories {fromInventoryId} and {toInventoryId} belong to different characters.");
+        }
+    }
 
     /// <summary>
     /// Finds a character's storage at a station, creating it on first use.

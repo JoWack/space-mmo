@@ -154,4 +154,11 @@ dotnet test services/SpaceMMO.Domain.Tests
 - **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight ✅, ship pawn ✅,
   planet approach ✅, dedicated server ✅, replicated flight ✅, terrain ✅, walking ✅
 - **M3** — closing the loop: mine → craft → sell, two players trading a player-made item
-- **M4** — universe scale: procedural galaxy, warp handoff, careers, security zones
+- **M4** — goods that move and gear that matters: items between inventories, ship holds, hauling
+  planet-locked materials by flying them, equippable tools, weapons and armour
+- **M5** — depth: careers, security zones, the repair loop, caves ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md))
+
+**M4 used to read "universe scale: procedural galaxy, warp handoff, careers, security zones".**
+[ADR-0007](docs/adr/0007-one-handcrafted-system.md) deleted the first two outright — it calls them
+"the entire M4 technical spine, removed at a cost of zero written code" — and the line was never
+updated, so the roadmap still promised a galaxy the ADRs had already cancelled.

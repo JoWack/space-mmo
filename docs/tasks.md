@@ -672,7 +672,30 @@ class of bug `ReceivedBunch: FieldCache == nullptr` taught this project to fear.
 
 ## 99 — Move items between inventories
 
-**Pending.** Raised 11 August, from 94.
+**Server side done**, 11 August. Raised from 94; the client and the endpoint remain.
+
+`InventoryService.TransferAsync` moves a stackable quantity and `TransferInstanceAsync` moves a
+single instance — a different operation rather than a special case, because an instance carries its
+own condition and acquisition value and so moves as itself rather than being split and recreated.
+
+Three rules are enforced in the service rather than at any caller, so no endpoint can forget them:
+both inventories must exist, they must belong to the same character, and a destroyed instance cannot
+be recovered by moving it. Crossing owners is refused deliberately — giving goods away is a trade,
+and a trade is the market's job, with fees, an order book and a settlement path that a silent
+transfer would route around.
+
+**Cost basis travels with the goods**, which is the part that would have been silently wrong.
+Insurance pays against acquisition value (ADR-0006), so material arriving as though it had cost
+nothing is material that pays nothing when lost. `RemoveAsync` already returns the share that left
+and the destination is handed exactly that, so a stack split across two containers still sums to what
+it originally cost. Verified by handing `Credits.Zero` across instead and watching the test fail.
+
+Volume is deliberately not checked. `CapacityM3` exists and hangars are created at 0, nothing
+anywhere enforces it, and a transfer is the wrong place to invent that rule — it would apply to one
+route into a hold and not to the others.
+
+Remaining: an endpoint, a client affordance, and a decision on whether a transfer should require
+being docked when a station hangar is one side.
 
 Everything a character gathers or crafts lands in a **station hangar**, and nothing can leave it.
 `InventoryService` has `Add`, `Remove`, `QuantityOf` and `GetOrCreateStationHangar`; there is no
