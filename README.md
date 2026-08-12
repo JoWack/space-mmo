@@ -4,9 +4,14 @@ A space MMO in Unreal Engine 5: procedurally generated galaxy, seamless planet
 landing, four playable races across two factions, RuneScape-style 1–99 skills, and a
 player-driven economy in which every tradeable good was manufactured by a player.
 
-**Status: M0 complete, M1 in progress — 496 tests passing** (398 unit, 98 integration). The
-backend economy core is being built first, because it can be fully validated without Unreal,
-art, or players.
+**Status: M0–M3 complete, M4 next — 798 tests passing** (161 client, 637 backend). The backend
+economy core was built first, because it can be fully validated without Unreal, art, or players;
+the client now closes the loop on top of it.
+
+One thing M3 is owed: the single-player walk and the two-player trade were both confirmed by hand
+*before* mining became tool-gated and before crafted tools were visible. The parts are individually
+tested and the loop has not been walked again since, which `docs/tasks.md` records rather than
+implies.
 
 Implemented in `SpaceMMO.Domain`: the RuneScape XP curve, the `Credits` value type, the
 credit-faucet daily cap, tiered ship insurance, cause-based death and loot resolution,
@@ -153,7 +158,9 @@ dotnet test services/SpaceMMO.Domain.Tests
 - **M1** — backend economy core: schema, XP curve, order book, quest engine, EconSim ✅
 - **M2** — UE vertical slice: coordinates ✅, physics grids ✅, flight ✅, ship pawn ✅,
   planet approach ✅, dedicated server ✅, replicated flight ✅, terrain ✅, walking ✅
-- **M3** — closing the loop: mine → craft → sell, two players trading a player-made item
+- **M3** — closing the loop ✅: single-player loop walked end to end ✅, two players trading a
+  player-made item ✅, mining tool-gated ✅, skills awarded across the loop ✅, non-stacking items
+  visible ✅, deposits say what they need ✅
 - **M4** — goods that move and gear that matters: items between inventories, ship holds, hauling
   planet-locked materials by flying them, equippable tools, weapons and armour
 - **M5** — depth: careers, security zones, the repair loop, caves ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md))
