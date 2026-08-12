@@ -577,6 +577,19 @@ the chain could never start."
 The questline already taught the order — gather scrap, craft the tool, mine ore — so this is the
 enforcement that makes its second step mean anything. Until now a player could skip the tool entirely.
 
+**What the gate actually requires, checked on 11 August because it is easy to assume otherwise:**
+possession, not equipment. `GuardToolAsync` asks for any instance of the tool that is not destroyed,
+has `Condition > 0`, and sits in an inventory whose `CharacterId` is the character's. It does **not**
+filter on `InventoryKind`, so a laser in a station hangar on the far side of the system satisfies it
+while its owner mines bare-handed on a planet.
+
+That is loose, and it cannot currently be tightened. Gathering and industry both deposit into a
+station hangar via `GetOrCreateStationHangarAsync`, and `InventoryService` offers `Add`, `Remove`,
+`QuantityOf` and `GetOrCreateStationHangar` — **no move, no transfer, and no endpoint for one**.
+`CharacterCarried` is an enum value that nothing creates or fills. Restricting the check to items on
+the character's person would therefore make mining impossible rather than stricter: the laser could
+never get there. See 99.
+
 Two tests, both verified to fail against the bug. One asserts a property of the shipped pack rather
 than a count: every mining deposit requires a tool that exists, and no gathering deposit requires
 one, so authoring more deposits cannot break it but violating the design rule will. The other checks
@@ -656,6 +669,31 @@ continent is not tedious.
 predicted on the client, so drag belongs in the shared model, not in either caller. Putting it
 anywhere else would make the client and the server disagree about where a ship is, which is the
 class of bug `ReceivedBunch: FieldCache == nullptr` taught this project to fear.
+
+## 99 — Move items between inventories
+
+**Pending.** Raised 11 August, from 94.
+
+Everything a character gathers or crafts lands in a **station hangar**, and nothing can leave it.
+`InventoryService` has `Add`, `Remove`, `QuantityOf` and `GetOrCreateStationHangar`; there is no
+move, no transfer, and no endpoint exposing one. `InventoryKind.CharacterCarried` and
+`InventoryKind.ShipHold` both exist and are both documented in the enum — carried items go into
+on-foot combat and death resolution, a ship's hold is "the thing that is inside the explosion when a
+ship is destroyed" — but nothing routes anything into either.
+
+This blocks more than it looks:
+
+- **Equipping tools.** There is no point in an equip slot while the only inventory that can hold
+  anything is a building. 94's tool gate is possession-anywhere for exactly this reason.
+- **Hauling.** Four materials are planet-locked by ADR-0008 and the cross-faction recipe needs all
+  four, which is the fact the whole trade economy rests on. If goods cannot enter a ship's hold, the
+  only way materials cross the system is the market — and that is a different game from flying them.
+- **Death and insurance.** ADR-0006 destroys loot by cause, and both enum comments describe what is
+  lost where. Neither rule can bite while everything lives in a hangar.
+
+Worth deciding before building: whether a transfer is free at a station and impossible elsewhere,
+whether volume limits apply on the way in, and whether the client needs a real inventory screen or
+whether the existing panel can carry it.
 
 ## 96 — Author world content graphically
 
