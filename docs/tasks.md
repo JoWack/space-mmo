@@ -783,7 +783,103 @@ condition and that a destroyed one does not; the protocol test parses the envelo
 
 ---
 
-# M5 — combat
+# M5 — an interface
+
+Added 12 August. **There is no UMG or Slate anywhere in `client/`.** Every screen in the game is
+`GEngine->AddOnScreenDebugMessage`, including the character panel, the market, industry, quests and
+every notice. That was a reasonable way to get a vertical slice moving and it has now run out of
+road twice in one day: a gather message vanished because debug messages are ordered by slot rather
+than by key and the panel is redrawn every frame, and fixing it cost the message its colour, because
+the panel had to become a single entry to have a stable order at all.
+
+Two design documents already assume a UI that does not exist — `design-bible.md` §3 on item
+categories that "drive UI grouping", and `economy-design.md` §7 on price history as "the price-history
+source for market UI".
+
+Combat (M6) sits behind this deliberately. Health, targeting, damage and being shot at cannot be
+reported by text the engine reorders every frame.
+
+## 106 — A real HUD
+
+**Pending.**
+
+Replace the debug-text panel with UMG. `SpaceMMOBackend.Build.cs` does not depend on `UMG` or
+`Slate` yet, so this starts with a module dependency.
+
+The panel's own comments are the specification: it became one joined string because on-screen
+messages are ordered by slot rather than key, are deleted and re-added every frame at zero display
+time, and so land in an order nothing can influence — "the ship's own readouts use keys 1, 3 and 2
+and render as 2, 3, 1". A widget has none of those problems, and gets back the colour that
+`ShowTransientLine` had to give up.
+
+Keep the panel builders. `BuildCharacterPanel`, `BuildMarketPanel`, `BuildIndustryPanel`,
+`BuildQuestPanel` and `BuildNearbyPanel` are pure static functions with headless tests, which is why
+the HUD's logic is testable at all. A widget should render their output rather than replace them,
+or that coverage goes with them.
+
+## 107 — Sign in from the game
+
+**Pending.**
+
+There is no login screen. Credentials are read from `secrets/player-login.txt`, and `play.bat`
+explains why: command lines mangle values here, and `-BackendEmail=someone@gmail.com` has arrived as
+`someone@gmail .com`, producing a 401 that looks exactly like a wrong password.
+
+That is a fine developer affordance and not something a player can be asked to do. Needs a screen, and
+a decision about where a token lives between sessions — `USpaceMMOBackendClient` deliberately does
+not persist one today.
+
+## 108 — Inventory and transfer screen
+
+**Pending.** Blocks the useful half of 99.
+
+Moving goods between a hangar and a ship hold works over HTTP and has no way to be asked for in game.
+Hauling is M4's premise and is currently reachable only with curl.
+
+Wants: what is in each container, drag or a pick-quantity affordance, and the refusals surfaced —
+`not_docked` and `insufficient_items` already come back with reasons a screen could act on.
+
+## 109 — Market screen
+
+**Pending.** Supersedes the workaround half of 105.
+
+Today the book can only be seen for an item the player already holds, because the fetch is keyed to
+their selected holding. A market screen at a station should show what is for sale regardless of what
+the viewer owns, which is the whole point of a market.
+
+`economy-design.md` §7 already names price history as the source for this.
+
+## 110 — Menus
+
+**Pending.**
+
+No main menu, no character select, no settings. A character is chosen today with `-CharacterId=10`
+on a command line, or by taking the first one on the account.
+
+## 105 — You can only see the book for something you already own
+
+**Pending.** Found by playtest, 12 August.
+
+Player A listed ferrite ore; player B saw `asks: none  bids: none` until B docked at the trading hub
+and cycled their holdings, at which point it appeared.
+
+The station half of that is by design and worth keeping — a market is a place, and ADR-0008 makes
+being at it what entitles you to use it. The **item** half is not designed, it is a side effect:
+`RefreshBook` fetches for `(DockedStationId(), Selected.ItemDefId)`, and the selection comes from
+`TryGetSelectedHolding` — the player's own inventory. So the only books reachable are for things
+already held.
+
+That is backwards for a buyer. Somebody who wants ferrite and has none cannot see that any is for
+sale, cannot see the price, and has no way to discover the market exists for that item — in a game
+whose entire premise is that every tradeable good was made by another player.
+
+Not urgent, and deliberately not fixed on the spot: it needs a decision about what a station's market
+screen actually is. Browsing the whole book at a station is one answer; searching by item is another;
+listing what the station has any asks for at all is a third and probably the smallest.
+
+---
+
+# M6 — combat
 
 Added 12 August, from `docs/design-bible.md` §2 and ADRs 0006, 0008 and 0009. **The roadmap had no
 combat milestone at all**, while the design bible defines eight combat and pilot skills, explicitly
@@ -845,27 +941,6 @@ display.
 Worth doing early in the milestone rather than late: it decides where combat may happen at all, and
 building weapons first would mean tuning them in a world with no rules about where they may be
 fired.
-
-## 105 — You can only see the book for something you already own
-
-**Pending.** Found by playtest, 12 August.
-
-Player A listed ferrite ore; player B saw `asks: none  bids: none` until B docked at the trading hub
-and cycled their holdings, at which point it appeared.
-
-The station half of that is by design and worth keeping — a market is a place, and ADR-0008 makes
-being at it what entitles you to use it. The **item** half is not designed, it is a side effect:
-`RefreshBook` fetches for `(DockedStationId(), Selected.ItemDefId)`, and the selection comes from
-`TryGetSelectedHolding` — the player's own inventory. So the only books reachable are for things
-already held.
-
-That is backwards for a buyer. Somebody who wants ferrite and has none cannot see that any is for
-sale, cannot see the price, and has no way to discover the market exists for that item — in a game
-whose entire premise is that every tradeable good was made by another player.
-
-Not urgent, and deliberately not fixed on the spot: it needs a decision about what a station's market
-screen actually is. Browsing the whole book at a station is one answer; searching by item is another;
-listing what the station has any asks for at all is a third and probably the smallest.
 
 ## 96 — Author world content graphically
 

@@ -190,15 +190,17 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   visible ✅, deposits say what they need ✅
 - **M4** — goods that move and gear that matters: items between inventories, ship holds, hauling
   planet-locked materials by flying them, equippable tools, weapons and armour
-- **M5** — combat, and the rules that already assume it: personal and ship weapons, the
+- **M5** — an interface: a real HUD instead of debug text, signing in from the game rather than a
+  file, inventory and transfer screens, a market screen, and menus
+- **M6** — combat, and the rules that already assume it: personal and ship weapons, the
   `combat` and `pilot` skill trees, security zones and pairwise aggression
   ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md),
   [ADR-0009](docs/adr/0009-retaliation.md)), and death and insurance made real
   ([ADR-0006](docs/adr/0006-death-and-insurance.md))
-- **M6** — depth: careers, repeatable quest content, the repair loop, caves
+- **M7** — depth: careers, repeatable quest content, the repair loop, caves
   ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md))
 
-Two corrections worth keeping, because both were wrong for a long time without anybody noticing.
+Three corrections worth keeping, because each was wrong for a long time without anybody noticing.
 
 **M4 used to read "universe scale: procedural galaxy, warp handoff, careers, security zones".**
 [ADR-0007](docs/adr/0007-one-handcrafted-system.md) deleted the first two outright — it calls them
@@ -208,5 +210,14 @@ updated, so the roadmap promised a galaxy the ADRs had already cancelled.
 **There was no combat milestone at all**, while [design-bible.md](docs/design-bible.md) §2 defines
 eight combat and pilot skills, defers `constitution` and `stamina` XP "to the combat milestone", and
 three ADRs describe rules — who may shoot whom, what a security zone means, what dying costs — that
-have nothing to shoot with. The roadmap has to name every milestone the design documents assume, or
-work disappears between them.
+have nothing to shoot with.
+
+**And there was no interface milestone**, while every screen in the game is
+`AddOnScreenDebugMessage` and there is no UMG or Slate anywhere in `client/`. The design bible
+describes item categories that "drive UI grouping" and economy-design names price history as "the
+source for market UI" — both assuming a UI nobody had scheduled. Combat now sits behind it, because
+health, targeting and being shot at cannot be reported by debug text that the engine reorders every
+frame.
+
+The roadmap has to name every milestone the design documents assume, or work disappears between
+them. Two were found missing on the same day by reading the design documents against it.
