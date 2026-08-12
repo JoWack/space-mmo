@@ -470,6 +470,15 @@ void ASpaceMMOPlayerController::HandleIndustryMessage(
 	ShowNotice(Message, bSucceeded);
 }
 
+void ASpaceMMOPlayerController::ShowTransientLine(const FString& Line)
+{
+	TransientLine = Line;
+
+	const UWorld* World = GetWorld();
+
+	TransientLineExpiresAt = (World != nullptr ? World->GetTimeSeconds() : 0.0) + 4.0;
+}
+
 void ASpaceMMOPlayerController::ShowNotice(const FString& Message, const bool bSucceeded)
 {
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s"), *Message);
@@ -594,9 +603,23 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 		}
 	}
 
-	TArray<FString> Lines = BuildCharacterPanel(
+	TArray<FString> Lines;
+
+	// At the top, where somebody who just pressed a key is already looking, and inside the panel so
+	// it cannot be shuffled below it.
+	const UWorld* World = GetWorld();
+
+	if (!TransientLine.IsEmpty()
+		&& World != nullptr
+		&& World->GetTimeSeconds() < TransientLineExpiresAt)
+	{
+		Lines.Add(TransientLine);
+		Lines.Add(FString());
+	}
+
+	Lines.Append(BuildCharacterPanel(
 		CharacterName, Balance, Client->GetSkills(), Client->GetInventory(),
-		Client->GetItemInstances());
+		Client->GetItemInstances()));
 
 	// Asked of the gathering component rather than searched for here, so the panel and the gather
 	// key can never disagree about which rock is in reach. Absent when flying: the component lives

@@ -127,6 +127,9 @@ private:
 	UFUNCTION(Client, Reliable)
 	void ClientGatherRefused(const FString& Reason);
 
+	/** The controller to tell, or null when this pawn is not somebody's. */
+	class ASpaceMMOPlayerController* OwningController() const;
+
 	/** Possession is what creates the input component, so that is when binding can succeed. */
 	UFUNCTION()
 	void HandlePawnRestarted(APawn* Pawn);

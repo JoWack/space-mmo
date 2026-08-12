@@ -217,18 +217,22 @@ void USpaceMMOGatheringComponent::ServerGather_Implementation()
 			}));
 }
 
+ASpaceMMOPlayerController* USpaceMMOGatheringComponent::OwningController() const
+{
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+
+	return Pawn != nullptr ? Cast<ASpaceMMOPlayerController>(Pawn->GetController()) : nullptr;
+}
+
 void USpaceMMOGatheringComponent::ClientGatherRefused_Implementation(const FString& Reason)
 {
 	const FString Message = Reason.IsEmpty() ? FString(TEXT("That was refused")) : Reason;
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Gather refused: %s"), *Message);
 
-	if (GEngine != nullptr)
+	if (ASpaceMMOPlayerController* Controller = OwningController())
 	{
-		// Yellow rather than the yield's green or the empty-deposit grey: this is something the
-		// player has to act on -- go and craft a laser -- not merely a result.
-		GEngine->AddOnScreenDebugMessage(
-			GatherMessageKey, MessageSeconds, FColor::Yellow, Message);
+		Controller->ShowTransientLine(Message);
 	}
 }
 
@@ -275,17 +279,14 @@ void USpaceMMOGatheringComponent::ClientGatherResult_Implementation(
 		}
 	}
 
-	if (GEngine == nullptr)
+	// Through the panel rather than as its own on-screen message. A separate entry competes with
+	// the panel for slots, and the panel is redrawn every frame with a zero display time, so a
+	// three-second message lands in an order nothing can influence -- in practice below dozens of
+	// panel lines and off the bottom of the screen. It showed once and never again.
+	if (ASpaceMMOPlayerController* Controller = OwningController())
 	{
-		return;
+		Controller->ShowTransientLine(Message);
 	}
-
-	// Green for a yield and grey for nothing yet, so the difference is readable without reading.
-	GEngine->AddOnScreenDebugMessage(
-		GatherMessageKey,
-		MessageSeconds,
-		Quantity > 0 ? FColor::Green : FColor::Silver,
-		Message);
 }
 
 ASpaceMMODepositActor* USpaceMMOGatheringComponent::FindDepositInRange() const

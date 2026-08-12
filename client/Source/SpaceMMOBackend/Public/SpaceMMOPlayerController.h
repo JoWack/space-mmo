@@ -49,6 +49,18 @@ public:
 	void RefreshCharacterState();
 
 	/**
+	 * A line the panel carries for a few seconds — what a gather yielded, or why it was refused.
+	 *
+	 * Part of the panel rather than its own on-screen message, for the reason the panel itself is
+	 * one entry: messages are ordered by slot rather than by key, the panel is redrawn every frame
+	 * with a zero display time and so takes whatever slot the free list hands back, and a separate
+	 * three-second message ends up in an order nothing here can influence — usually below a panel
+	 * dozens of lines long, which is off the bottom of the screen. It appeared once and never again.
+	 */
+	void ShowTransientLine(const FString& Line);
+
+
+	/**
 	 * Builds the character panel's lines from backend state.
 	 *
 	 * Pure and static so the wording, ordering and empty cases can be tested without a world, a
@@ -341,6 +353,7 @@ private:
 	 * a zero display time makes it delete and re-add every message each frame, so slots come back
 	 * from a free list in an order nothing here decides.
 	 */
+
 	static constexpr int32 PanelMessageKey = 200;
 
 	/** Rows the panel will draw before it starts saying how many it is hiding. */
@@ -354,6 +367,11 @@ private:
 	 * relative to the panel is up to the engine, for the reason above.
 	 */
 	static constexpr int32 NoticeMessageKey = PanelMessageKey - 1;
+
+	/** The transient line, and when it stops being shown. */
+	FString TransientLine;
+
+	double TransientLineExpiresAt = 0.0;
 
 	/**
 	 * The client's cue that the server has agreed who it is.
