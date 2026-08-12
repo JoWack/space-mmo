@@ -672,7 +672,7 @@ class of bug `ReceivedBunch: FieldCache == nullptr` taught this project to fear.
 
 ## 99 — Move items between inventories
 
-**Server side done**, 11 August. Raised from 94; the client and the endpoint remain.
+**Server and API done**, 11 August. Raised from 94; the client affordance remains.
 
 `InventoryService.TransferAsync` moves a stackable quantity and `TransferInstanceAsync` moves a
 single instance — a different operation rather than a special case, because an instance carries its
@@ -694,8 +694,22 @@ Volume is deliberately not checked. `CapacityM3` exists and hangars are created 
 anywhere enforces it, and a transfer is the wrong place to invent that rule — it would apply to one
 route into a hold and not to the others.
 
-Remaining: an endpoint, a client affordance, and a decision on whether a transfer should require
-being docked when a station hangar is one side.
+**Presence is enforced at the endpoint**, which answers the question this task left open. Goods do
+not move in or out of a station hangar unless the character is docked at that station — the same rule
+the market runs on, and for the same reason. Without it, hauling planet-locked materials (ADR-0008)
+would be a request rather than a flight, and four worlds would collapse into one warehouse with no
+error and no failing request. Ship holds and carried items travel with their owner, so only hangars
+are checked.
+
+`POST /characters/{id}/inventory/transfer` and `.../transfer-instance` — two routes rather than one
+switching on which field was populated, because they are two operations. Ownership stays in the
+service so no endpoint can forget it; the endpoints add only presence.
+
+Five API tests, including the half-rule case: loading out while docked, undocking, and being refused
+on the way back in. Verified by deleting the presence check and watching the three refusal tests go
+red. 636 backend tests pass.
+
+Remaining: a client affordance, and volume limits whenever `CapacityM3` starts meaning something.
 
 Everything a character gathers or crafts lands in a **station hangar**, and nothing can leave it.
 `InventoryService` has `Add`, `Remove`, `QuantityOf` and `GetOrCreateStationHangar`; there is no

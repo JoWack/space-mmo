@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Data;
+using SpaceMMO.Data.Docking;
 using SpaceMMO.Data.Entities;
+using SpaceMMO.Data.Inventories;
 using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Items;
@@ -10,6 +12,13 @@ using SpaceMMO.Domain.Progression;
 namespace SpaceMMO.Api.Endpoints;
 
 public sealed record CreateCharacterRequest(string Name, Race Race);
+
+/// <summary>Moving a quantity of a stackable item between two of one character's containers.</summary>
+public sealed record TransferRequest(
+    long FromInventoryId, long ToInventoryId, int ItemDefId, int Quantity);
+
+/// <summary>Moving one non-stackable item, which carries its own condition and value.</summary>
+public sealed record TransferInstanceRequest(long ItemInstanceId, long ToInventoryId);
 
 public sealed record CharacterResponse(
     int Id,
@@ -58,6 +67,13 @@ public static class CharacterEndpoints
         group.MapGet("/", ListAsync);
         group.MapGet("/{characterId:int}/skills", SkillsAsync);
         group.MapGet("/{characterId:int}/inventory", InventoryAsync);
+
+        // Two routes rather than one taking either shape, because they are two operations. A stack
+        // moves a quantity and splits its cost basis; an instance moves as itself, carrying its own
+        // condition and acquisition value. One endpoint switching on which field was populated
+        // would hide that in a null check.
+        group.MapPost("/{characterId:int}/inventory/transfer", TransferAsync);
+        group.MapPost("/{characterId:int}/inventory/transfer-instance", TransferInstanceAsync);
     }
 
     /// <summary>
@@ -259,6 +275,161 @@ public static class CharacterEndpoints
             .ToListAsync(cancellation);
 
         return Results.Ok(items);
+    }
+
+    /// <summary>
+    /// Moves a quantity of a stackable item between two of the character's own containers.
+    /// </summary>
+    /// <remarks>
+    /// Ownership of both inventories is enforced in <see cref="InventoryService"/> rather than
+    /// here, so this endpoint cannot be the one that forgets. What it adds is presence: goods do
+    /// not move in or out of a station hangar unless their owner is standing in that station.
+    /// </remarks>
+    private static async Task<IResult> TransferAsync(
+        int characterId,
+        TransferRequest request,
+        HttpContext context,
+        Caller caller,
+        SpaceMmoDbContext database,
+        DockingService docking,
+        CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        OwnershipResult owned = await caller.OwnedCharacterAsync(context, characterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        IResult? refusal = await RefuseIfNotPresentAsync(
+            database, docking, characterId,
+            [request.FromInventoryId, request.ToInventoryId], cancellation);
+
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
+        var inventories = new InventoryService(database);
+
+        try
+        {
+            await inventories.TransferAsync(
+                request.FromInventoryId,
+                request.ToInventoryId,
+                request.ItemDefId,
+                request.Quantity,
+                cancellation);
+
+            await database.SaveChangesAsync(cancellation);
+        }
+        catch (InventoryTransferException error)
+        {
+            return Results.BadRequest(new { error = error.Message, reason = "bad_transfer" });
+        }
+        catch (InsufficientItemsException error)
+        {
+            return Results.Conflict(new { error = error.Message, reason = "insufficient_items" });
+        }
+        catch (ArgumentOutOfRangeException error)
+        {
+            return Results.BadRequest(new { error = error.Message, reason = "bad_quantity" });
+        }
+
+        return Results.Ok();
+    }
+
+    /// <summary>Moves one non-stackable item — a tool, a weapon, a ship — between containers.</summary>
+    private static async Task<IResult> TransferInstanceAsync(
+        int characterId,
+        TransferInstanceRequest request,
+        HttpContext context,
+        Caller caller,
+        SpaceMmoDbContext database,
+        DockingService docking,
+        CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        OwnershipResult owned = await caller.OwnedCharacterAsync(context, characterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        // The source is wherever the instance currently is, which the service resolves — so only
+        // the destination can be checked before the call. The service refuses a cross-owner move
+        // regardless, which is the rule that actually protects anything.
+        IResult? refusal = await RefuseIfNotPresentAsync(
+            database, docking, characterId, [request.ToInventoryId], cancellation);
+
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
+        var inventories = new InventoryService(database);
+
+        try
+        {
+            await inventories.TransferInstanceAsync(
+                request.ItemInstanceId, request.ToInventoryId, cancellation);
+
+            await database.SaveChangesAsync(cancellation);
+        }
+        catch (InventoryTransferException error)
+        {
+            return Results.BadRequest(new { error = error.Message, reason = "bad_transfer" });
+        }
+
+        return Results.Ok();
+    }
+
+    /// <summary>
+    /// Refuses unless the character is docked at every station hangar involved.
+    /// </summary>
+    /// <remarks>
+    /// The same rule the market runs on, and for the same reason: a character docked at Grimhold
+    /// has no business reaching into a hangar on Terra. Without it, hauling planet-locked materials
+    /// (ADR-0008) would be a request rather than a flight, and the four-world economy would
+    /// collapse into one warehouse.
+    ///
+    /// Only hangars are checked. A ship's hold and what a character is carrying travel with them,
+    /// so there is nowhere else they could be.
+    /// </remarks>
+    private static async Task<IResult?> RefuseIfNotPresentAsync(
+        SpaceMmoDbContext database,
+        DockingService docking,
+        int characterId,
+        long[] inventoryIds,
+        CancellationToken cancellation)
+    {
+        List<int> stationIds = await database.Inventories
+            .Where(i => inventoryIds.Contains(i.Id)
+                && i.Kind == InventoryKind.StationHangar
+                && i.StationId != null)
+            .Select(i => i.StationId!.Value)
+            .Distinct()
+            .ToListAsync(cancellation);
+
+        foreach (int stationId in stationIds)
+        {
+            if (!await docking.IsDockedAtAsync(characterId, stationId, cancellation))
+            {
+                // Conflict rather than forbidden: nothing about the caller is wrong, they are
+                // simply somewhere else, and flying there fixes it.
+                return Results.Conflict(new
+                {
+                    error = "You must be docked at this station to move goods in or out of it.",
+                    reason = "not_docked",
+                });
+            }
+        }
+
+        return null;
     }
 
     private static CharacterResponse ToResponse(Character character) => new(
