@@ -478,7 +478,13 @@ logs speed alongside orbital velocity so the two can never again be confused, an
 which one they are looking at.
 
 **Worth deciding separately, and not a bug:** whether a ship at twice orbital velocity a few metres
-above the ground should be possible at all. Decided — see 98.
+above the ground should be possible at all. Decided, and fixed — see 98.
+
+Note what actually closed this. The hysteresis was a real fix for a real defect and did nothing for
+the symptom; **drag removed the symptom by making the condition unreachable**, since a ship can no
+longer hold orbital speed in air. The lesson is the one the whole terrain investigation kept
+teaching: the thing that looks broken and the thing that is broken are often two different things,
+and only measurement tells them apart.
 
 `ClientA.log`, 10 August, 15:05:33 — the ship alternates four times in 0.36 s while travelling about
 600 m across the surface:
@@ -595,10 +601,11 @@ pilot intent from the world acting on the ship and drag is unambiguously the wor
 flight assist damping only what the pilot does. Altitude is measured above the *ground* rather than
 the sphere, so a ship in a valley is deeper in the air than one over a mountain.
 
-**Owed: a flight.** 200 m/s is a guess at how a 20 km world should feel — the horizon is 253 m away,
-so it crosses the visible world in about a second, and circumnavigating takes ten minutes. Whether
-that reads as fast, sluggish or wrong is not something a test can answer. Change
-`AtmosphericTerminalSpeed` and fly it; the test will refuse anything that reintroduces skimming.
+**Done** — flown and confirmed by Joe, 11 August: 200 m/s feels right. The number stays.
+
+That number was the only part a test could not settle, and it is now the one thing here backed by
+nothing but a person flying it — which is the right kind of evidence for the question and worth
+saying plainly, since everything around it is backed by measurement.
 
 The 11 August flight skimmed the surface at 650–870 m/s, which on this planet is 1.5 to 2 times
 orbital velocity — `sqrt(9.81 m/s² × 20,000 m)` is only about 443 m/s. Nothing stops that today: the
