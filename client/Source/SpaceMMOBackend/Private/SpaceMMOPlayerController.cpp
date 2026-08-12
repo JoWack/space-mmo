@@ -8,6 +8,7 @@
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOBackendProtocol.h"
+#include "SpaceMMODepositActor.h"
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMOGatheringComponent.h"
 
@@ -597,6 +598,25 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 		CharacterName, Balance, Client->GetSkills(), Client->GetInventory(),
 		Client->GetItemInstances());
 
+	// Asked of the gathering component rather than searched for here, so the panel and the gather
+	// key can never disagree about which rock is in reach. Absent when flying: the component lives
+	// on the character pawn, and a ship has nothing to pick up with.
+	FBackendResourceNode Nearby;
+
+	if (const APawn* Possessed = GetPawn())
+	{
+		if (const USpaceMMOGatheringComponent* Gathering =
+			Possessed->FindComponentByClass<USpaceMMOGatheringComponent>())
+		{
+			if (const ASpaceMMODepositActor* Deposit = Gathering->FindDepositInRange())
+			{
+				Nearby = Deposit->GetNode();
+			}
+		}
+	}
+
+	Lines.Append(BuildNearbyPanel(Nearby, Client->GetSkills(), Client->GetItemInstances()));
+
 	Lines.Append(BuildQuestPanel(Client->GetJournal(), Client->GetAvailableQuests()));
 
 	FBackendInventoryItem Selling;
@@ -866,6 +886,73 @@ FString ASpaceMMOPlayerController::GroupDigits(const int64 Value)
 	// XP is never negative today, but a formatter that silently drops a sign is a formatter that
 	// lies the first time it is reused for a balance or a delta.
 	return Value < 0 ? TEXT("-") + Grouped : Grouped;
+}
+
+TArray<FString> ASpaceMMOPlayerController::BuildNearbyPanel(
+	const FBackendResourceNode& Node,
+	const TArray<FBackendSkill>& Skills,
+	const TArray<FBackendItemInstance>& Instances)
+{
+	TArray<FString> Lines;
+
+	Lines.Add(TEXT("-- Nearby --"));
+
+	if (Node.Key.IsEmpty())
+	{
+		Lines.Add(TEXT("   nothing within reach"));
+
+		return Lines;
+	}
+
+	// The skill is named as well as the item, because until now nothing ever told a player that
+	// ferrite is mined and scrap is gathered -- the server has always decided it from the node, and
+	// SkillKey has been parsed and unused on this side since the day it was added.
+	int32 Level = 0;
+
+	for (const FBackendSkill& Skill : Skills)
+	{
+		if (Skill.Key == Node.SkillKey)
+		{
+			Level = Skill.Level;
+
+			break;
+		}
+	}
+
+	Lines.Add(FString::Printf(
+		TEXT("   %s   %s lv %d"), *Node.ItemName, *Node.SkillKey, Node.RequiredLevel));
+
+	if (Level < Node.RequiredLevel)
+	{
+		Lines.Add(FString::Printf(TEXT("      you are lv %d"), Level));
+	}
+
+	if (!Node.NeedsTool())
+	{
+		return Lines;
+	}
+
+	// Condition above zero, because that is exactly what the server asks: GuardToolAsync ignores a
+	// broken tool. A panel that counted one would promise a gather the server then refuses, which
+	// is worse than saying nothing at all.
+	bool bCarried = false;
+
+	for (const FBackendItemInstance& Instance : Instances)
+	{
+		if (Instance.ItemKey == Node.RequiredToolKey && Instance.Condition > 0)
+		{
+			bCarried = true;
+
+			break;
+		}
+	}
+
+	Lines.Add(FString::Printf(
+		TEXT("      needs %s%s"),
+		*Node.RequiredToolName,
+		bCarried ? TEXT("  (carried)") : TEXT("  (you have none)")));
+
+	return Lines;
 }
 
 TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(

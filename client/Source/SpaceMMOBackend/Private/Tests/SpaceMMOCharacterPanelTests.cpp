@@ -7,11 +7,32 @@ namespace
 {
 	/** Most of these cases predate instances and are about stacks; this keeps them readable. */
 	const TArray<FBackendItemInstance> NoInstances;
-}
 
+	/** A deposit that needs a tool, as the world endpoint sends one. */
+	FBackendResourceNode MakeGatedNode()
+	{
+		FBackendResourceNode Node;
+		Node.Key = TEXT("node_capital_ferrite_a");
+		Node.ItemKey = TEXT("ferrite_ore");
+		Node.ItemName = TEXT("Ferrite Ore");
+		Node.SkillKey = TEXT("mining");
+		Node.RequiredLevel = 1;
+		Node.RequiredToolKey = TEXT("crude_mining_laser");
+		Node.RequiredToolName = TEXT("Crude Mining Laser");
 
-namespace
-{
+		return Node;
+	}
+
+	FBackendItemInstance MakeTool(const TCHAR* Key, const int32 Condition)
+	{
+		FBackendItemInstance Instance;
+		Instance.ItemKey = Key;
+		Instance.Name = TEXT("Crude Mining Laser");
+		Instance.Condition = Condition;
+
+		return Instance;
+	}
+
 	FBackendSkill MakeSkill(const TCHAR* Name, const int32 Level, const int64 Xp)
 	{
 		FBackendSkill Skill;
@@ -116,6 +137,85 @@ bool FSpaceMMOPanelHidesUntrainedSkillsTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Keeps the trained one"), AnyLineContains(Lines, TEXT("Mining")));
 	TestFalse(TEXT("Drops an untrained one"), AnyLineContains(Lines, TEXT("Refining")));
 	TestFalse(TEXT("Drops the other"), AnyLineContains(Lines, TEXT("Shipcrafting")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMONearbySaysWhatARockNeedsTest,
+	"SpaceMMO.Panel.NearbySaysWhatARockNeeds",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMONearbySaysWhatARockNeedsTest::RunTest(const FString& Parameters)
+{
+	const TArray<FBackendSkill> Skills{ MakeSkill(TEXT("Mining"), 5, 400) };
+
+	// Nothing in reach is an ordinary state, and must say so rather than leave a bare heading that
+	// reads as a panel which failed to load.
+	const TArray<FString> Empty =
+		ASpaceMMOPlayerController::BuildNearbyPanel(
+			FBackendResourceNode(), Skills, NoInstances);
+
+	TestTrue(TEXT("Says nothing is in reach"), AnyLineContains(Empty, TEXT("nothing within reach")));
+
+	const TArray<FBackendItemInstance> WithLaser{ MakeTool(TEXT("crude_mining_laser"), 100) };
+
+	const TArray<FString> Carried =
+		ASpaceMMOPlayerController::BuildNearbyPanel(MakeGatedNode(), Skills, WithLaser);
+
+	TestTrue(TEXT("Names the item"), AnyLineContains(Carried, TEXT("Ferrite Ore")));
+
+	// The skill has been in the payload since deposits existed and was never shown, so nothing ever
+	// told a player that ferrite is mined and scrap is gathered.
+	TestTrue(TEXT("Names the skill"), AnyLineContains(Carried, TEXT("mining")));
+	TestTrue(TEXT("Names the tool"), AnyLineContains(Carried, TEXT("Crude Mining Laser")));
+	TestTrue(TEXT("Says it is carried"), AnyLineContains(Carried, TEXT("carried")));
+
+	const TArray<FString> Without =
+		ASpaceMMOPlayerController::BuildNearbyPanel(MakeGatedNode(), Skills, NoInstances);
+
+	TestTrue(TEXT("Says the tool is missing"), AnyLineContains(Without, TEXT("you have none")));
+
+	// A broken tool is not a tool. GuardToolAsync ignores condition zero, so a panel that counted
+	// one would promise a gather the server then refuses -- worse than saying nothing.
+	const TArray<FBackendItemInstance> Broken{ MakeTool(TEXT("crude_mining_laser"), 0) };
+
+	const TArray<FString> WithBroken =
+		ASpaceMMOPlayerController::BuildNearbyPanel(MakeGatedNode(), Skills, Broken);
+
+	TestTrue(
+		TEXT("A broken tool does not count as carried"),
+		AnyLineContains(WithBroken, TEXT("you have none")));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMONearbySaysWhenYouAreTooLowTest,
+	"SpaceMMO.Panel.NearbySaysWhenYouAreTooLow",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMONearbySaysWhenYouAreTooLowTest::RunTest(const FString& Parameters)
+{
+	FBackendResourceNode Node = MakeGatedNode();
+	Node.RequiredLevel = 15;
+
+	const TArray<FBackendItemInstance> WithLaser{ MakeTool(TEXT("crude_mining_laser"), 100) };
+
+	// A character with no mining at all: the skill row is absent from the response rather than
+	// present at zero, which is the case a lookup that assumed a match would get wrong.
+	const TArray<FString> TooLow = ASpaceMMOPlayerController::BuildNearbyPanel(
+		Node, TArray<FBackendSkill>(), WithLaser);
+
+	TestTrue(TEXT("Shows the requirement"), AnyLineContains(TooLow, TEXT("lv 15")));
+	TestTrue(TEXT("Shows where they are"), AnyLineContains(TooLow, TEXT("you are lv 0")));
+
+	// And says nothing about level when they clear it, because a panel that comments on everything
+	// is one a player stops reading.
+	const TArray<FString> HighEnough = ASpaceMMOPlayerController::BuildNearbyPanel(
+		Node, TArray<FBackendSkill>{ MakeSkill(TEXT("Mining"), 20, 100000) }, WithLaser);
+
+	TestFalse(TEXT("Silent when qualified"), AnyLineContains(HighEnough, TEXT("you are lv")));
 
 	return true;
 }

@@ -520,7 +520,7 @@ required before trading.
 
 ## 91 — Mine, as distinct from gathering
 
-**Reframed 11 August, and the original premise was wrong.** There is no missing verb.
+**Done**, 12 August, and the original premise was wrong. There is no missing verb.
 
 Mining and gathering are the same action on different rocks. The client's
 `SpaceMMOGatheringComponent` finds a deposit in range and sends its node id; the **server** decides
@@ -534,13 +534,21 @@ the running API, with a gated deposit and a bare-handed one, because a bare-hand
 `null` rather than omitting the field and a parser that read null as "some tool" would gate the very
 deposit the onboarding chain starts with.
 
-Remaining: show it. Deposits are not surfaced to the player anywhere — no HUD line, and `SkillKey`
-has been parsed and unused since it was added. A "nearby" panel would say what the rock is, which
-skill works it, and what it needs. The panel builders are pure static functions tested headlessly
-(`BuildCharacterPanel` and friends), so this is testable without a playtest.
+`BuildNearbyPanel` now says what the rock in front of you is, which skill works it, what level that
+takes and where you are against it, and — since 100 landed and the client can see tools — which tool
+it needs and whether you are carrying one.
 
-**Unblocked by 100**, which landed first. The client now receives the player's tools, so a nearby
-panel can say both what a rock needs and whether the player is carrying it.
+It asks `USpaceMMOGatheringComponent::FindDepositInRange` rather than searching for itself, which is
+why that method is now public: a panel with its own idea of "in reach" would eventually name one rock
+while E worked another, and a player would be told they are standing at something they are not.
+
+**A broken tool does not count as carried.** `GuardToolAsync` ignores condition zero, so a panel that
+counted one would promise a gather the server then refuses — worse than saying nothing. Verified by
+dropping the condition check and watching the test fail.
+
+Pure and static like the other panels, so every case is testable without a running game: nothing in
+reach, a tool carried, a tool missing, a tool broken, a level not yet reached, and silence about
+level once it is. 161 client tests pass.
 
 ## 92 — Walk the loop once, on one machine
 

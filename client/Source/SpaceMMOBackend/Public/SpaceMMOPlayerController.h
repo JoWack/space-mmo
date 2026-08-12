@@ -72,6 +72,23 @@ public:
 	 * the first time it is pointed at a credit balance, which is int64 for exactly that reason
 	 * (ADR-0005).
 	 */
+	/**
+	 * What the deposit within reach is, and whether this character can work it.
+	 *
+	 * <strong>An empty Key means nothing is in reach</strong>, which is an ordinary state and says
+	 * so rather than rendering a blank heading.
+	 *
+	 * Pure and static like the other panels, so every interesting case — a rock needing a tool the
+	 * player does not carry, a tool they carry but have broken, a level they have not reached — is
+	 * testable without a running game. The refusal a player would otherwise meet arrives after they
+	 * have already walked there and pressed the key.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
+	static TArray<FString> BuildNearbyPanel(
+		const FBackendResourceNode& Node,
+		const TArray<FBackendSkill>& Skills,
+		const TArray<FBackendItemInstance>& Instances);
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
 	static FString GroupDigits(int64 Value);
 

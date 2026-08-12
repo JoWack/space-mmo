@@ -25,6 +25,15 @@ class SPACEMMOBACKEND_API USpaceMMOGatheringComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	/**
+	 * The deposit this pawn could work right now, or null.
+	 *
+	 * Public so the HUD and the gather key ask the same question of the same code. A panel with its
+	 * own idea of "in reach" would eventually name one rock while E worked another, and a player
+	 * would be told they are standing at something they are not.
+	 */
+	class ASpaceMMODepositActor* FindDepositInRange() const;
+
 	USpaceMMOGatheringComponent();
 
 	virtual void BeginPlay() override;
@@ -121,5 +130,5 @@ private:
 	double LastRequestSeconds = -1000.0;
 
 	/** Nearest deposit within range of the owner, or null. Server-side truth. */
-	class ASpaceMMODepositActor* FindDepositInRange() const;
+
 };
