@@ -520,16 +520,27 @@ required before trading.
 
 ## 91 — Mine, as distinct from gathering
 
-**Pending.**
+**Reframed 11 August, and the original premise was wrong.** There is no missing verb.
 
-The design bible separates two skills: `gathering`, "hand-collecting surface materials", and
-`mining`, "tool-gated ore extraction from deposits and asteroids". The client has
-`SpaceMMOGatheringComponent` and no mining equivalent — **verified**: there is no mining component or
-input verb in `client/Source`. `mining` does appear in `SkillAwards.cs`, `Items.cs` and
-`Universe.cs`, so the server side may already know about it; **which parts exist is unverified.**
+Mining and gathering are the same action on different rocks. The client's
+`SpaceMMOGatheringComponent` finds a deposit in range and sends its node id; the **server** decides
+which skill is awarded from `node.SkillId`, and since the tool gate landed (94) it enforces the
+difference too. A second component would duplicate the first and decide nothing.
 
-Start by reading the server before writing any client code, because the milestone needs the *loop*
-rather than a second gathering verb, and the tool gate is what makes mining a different action.
+What was actually missing is that a player cannot tell what a rock demands until it refuses them.
+Half of that is now fixed: `ResourceNodeResponse` carries `requiredToolKey` and `requiredToolName`,
+`FBackendResourceNode` parses them, and the protocol test uses the real response body — copied from
+the running API, with a gated deposit and a bare-handed one, because a bare-handed deposit sends
+`null` rather than omitting the field and a parser that read null as "some tool" would gate the very
+deposit the onboarding chain starts with.
+
+Remaining: show it. Deposits are not surfaced to the player anywhere — no HUD line, and `SkillKey`
+has been parsed and unused since it was added. A "nearby" panel would say what the rock is, which
+skill works it, and what it needs. The panel builders are pure static functions tested headlessly
+(`BuildCharacterPanel` and friends), so this is testable without a playtest.
+
+**Blocked on 100 for the useful version.** A panel that says "needs a Crude Mining Laser" is only
+half an answer; the other half is "and you have one", which the client cannot currently know.
 
 ## 92 — Walk the loop once, on one machine
 
@@ -731,6 +742,25 @@ This blocks more than it looks:
 Worth deciding before building: whether a transfer is free at a station and impossible elsewhere,
 whether volume limits apply on the way in, and whether the client needs a real inventory screen or
 whether the existing panel can carry it.
+
+## 100 — Show players the things they own that do not stack
+
+**Pending.** Found 11 August while reframing 91, and it undermines the mining loop as shipped.
+
+`GET /characters/{id}/inventory` queries `InventoryItems`, which is stacks only. Tools, modules,
+armour, weapons and hulls are all `ItemCategory` values where `IsStackable()` is false, so they live
+as `ItemInstance` rows and **none of them appear in a player's inventory at all**.
+
+The concrete result: a player follows the onboarding questline, crafts a Crude Mining Laser, and
+sees nothing anywhere. They own it, the tool gate passes, and the Holdings panel is unchanged — which
+reads exactly like a craft that silently failed. That is the whole reward of quest step two.
+
+It also blocks the useful half of 91: a deposit can now say it needs a laser, but the client has no
+way to know whether the player is carrying one, so it cannot say "and you have one".
+
+Needs a decision on shape rather than just wiring: instances carry condition and acquisition value
+and stacks do not, so either the response grows a second list, or one list gains nullable fields and
+every consumer learns to read them. The first is more honest about what these things are.
 
 ## 96 — Author world content graphically
 

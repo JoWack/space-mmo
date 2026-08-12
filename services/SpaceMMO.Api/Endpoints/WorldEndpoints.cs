@@ -10,6 +10,12 @@ public sealed record BodyResponse(
     int StarSystemId,
     double RadiusKm);
 
+/// <param name="RequiredToolName">
+/// Display name of the tool this deposit needs, or null for bare hands. Sent so a player can be
+/// told what a rock demands before they swing at it: the refusal is correct but arrives after the
+/// fact, and "you need a Crude Mining Laser" is worth knowing while there is still time to go and
+/// craft one.
+/// </param>
 public sealed record ResourceNodeResponse(
     long Id,
     string Key,
@@ -21,7 +27,9 @@ public sealed record ResourceNodeResponse(
     int QuantityMax,
     double DirectionX,
     double DirectionY,
-    double DirectionZ);
+    double DirectionZ,
+    string? RequiredToolKey = null,
+    string? RequiredToolName = null);
 
 /// <summary>
 /// A station, and whichever way it is placed.
@@ -133,6 +141,7 @@ public static class WorldEndpoints
             .Where(n => n.BodyId == bodyId)
             .Include(n => n.ItemDef)
             .Include(n => n.Skill)
+            .Include(n => n.RequiredToolItemDef)
             .OrderBy(n => n.Key)
             .Select(n => new ResourceNodeResponse(
                 n.Id,
@@ -145,7 +154,9 @@ public static class WorldEndpoints
                 n.QuantityMax,
                 n.DirectionX,
                 n.DirectionY,
-                n.DirectionZ))
+                n.DirectionZ,
+                n.RequiredToolItemDef!.Key,
+                n.RequiredToolItemDef.Name))
             .ToListAsync(cancellation);
 
         return Results.Ok(nodes);

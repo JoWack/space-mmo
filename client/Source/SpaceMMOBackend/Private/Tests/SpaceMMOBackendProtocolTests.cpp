@@ -349,11 +349,13 @@ bool FSpaceMMOParseResourceNodesTest::RunTest(const FString& Parameters)
 	const FString Json = TEXT(R"([
 		{"id":1,"key":"node_capital_ferrite_a","bodyId":5,"itemKey":"ferrite_ore",
 		 "itemName":"Ferrite Ore","skillKey":"mining","requiredLevel":1,"quantityMax":200,
-		 "directionX":-0.9998000599800071,"directionY":0.01999600119960014,"directionZ":0},
-		{"id":2,"key":"node_capital_ferrite_b","bodyId":5,"itemKey":"ferrite_ore",
-		 "itemName":"Ferrite Ore","skillKey":"mining","requiredLevel":1,"quantityMax":200,
-		 "directionX":-0.9995752707457286,"directionY":-0.01499362906118593,
-		 "directionZ":0.024989381768643217}
+		 "directionX":-0.9998000599800071,"directionY":0.01999600119960014,"directionZ":0,
+		 "requiredToolKey":"crude_mining_laser","requiredToolName":"Crude Mining Laser"},
+		{"id":3,"key":"node_capital_scrap_a","bodyId":5,"itemKey":"scrap_alloy",
+		 "itemName":"Scrap Alloy","skillKey":"gathering","requiredLevel":1,"quantityMax":25,
+		 "directionX":-0.9991291389208884,"directionY":0.03996516555683554,
+		 "directionZ":-0.011989549667050662,
+		 "requiredToolKey":null,"requiredToolName":null}
 	])");
 
 	TArray<FBackendResourceNode> Nodes;
@@ -373,6 +375,19 @@ bool FSpaceMMOParseResourceNodesTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Id"), Nodes[0].Id, static_cast<int64>(1));
 	TestEqual(TEXT("Body"), Nodes[0].BodyId, 5);
 	TestEqual(TEXT("Quantity"), Nodes[0].QuantityMax, 200);
+
+	// Both deposits in the fixture are the two real cases, and the second is why it is a scrap node
+	// rather than a second ferrite one: a bare-handed deposit sends null, not an absent field, and
+	// a parser that treated null as "some tool" would gate the very deposit the onboarding chain
+	// starts with.
+	TestTrue(TEXT("A mining deposit needs a tool"), Nodes[0].NeedsTool());
+	TestEqual(
+		TEXT("Tool key"), Nodes[0].RequiredToolKey, FString(TEXT("crude_mining_laser")));
+	TestEqual(
+		TEXT("Tool name"), Nodes[0].RequiredToolName, FString(TEXT("Crude Mining Laser")));
+
+	TestFalse(TEXT("A gathering deposit needs no tool"), Nodes[1].NeedsTool());
+	TestTrue(TEXT("Null tool leaves the key empty"), Nodes[1].RequiredToolKey.IsEmpty());
 
 	// Direction is what everything else depends on. A deposit whose direction arrived wrong is
 	// drawn somewhere the server does not think it is, and gathering fails for invisible reasons.

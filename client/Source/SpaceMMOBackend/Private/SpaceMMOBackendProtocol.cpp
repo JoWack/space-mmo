@@ -1037,6 +1037,12 @@ bool FSpaceMMOBackendProtocol::ParseResourceNodes(
 		Object->TryGetStringField(TEXT("itemName"), Node.ItemName);
 		Object->TryGetStringField(TEXT("skillKey"), Node.SkillKey);
 
+		// Absent for a bare-handed deposit, and null rather than missing for a gated one whose tool
+		// has somehow gone: TryGetStringField leaves the string empty either way, which is the
+		// answer that matters.
+		Object->TryGetStringField(TEXT("requiredToolKey"), Node.RequiredToolKey);
+		Object->TryGetStringField(TEXT("requiredToolName"), Node.RequiredToolName);
+
 		int64 Id = 0;
 		int64 BodyId = 0;
 		int64 RequiredLevel = 0;

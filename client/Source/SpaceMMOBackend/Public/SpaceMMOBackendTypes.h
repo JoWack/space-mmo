@@ -546,6 +546,23 @@ struct SPACEMMOBACKEND_API FBackendResourceNode
 	/** Unit vector from the body's centre. Normalised server-side on content load. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	FVector Direction = FVector::ZeroVector;
+
+	/** Tool this deposit needs, empty for bare hands. Machine-readable half. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString RequiredToolKey;
+
+	/**
+	 * What to call that tool to a player, e.g. "Crude Mining Laser".
+	 *
+	 * Carried so a deposit can say what it wants before it is swung at. The refusal is correct but
+	 * it arrives afterwards, and knowing you need a laser is only useful while there is still time
+	 * to go and craft one.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString RequiredToolName;
+
+	/** Whether working this deposit needs a tool at all. */
+	bool NeedsTool() const { return !RequiredToolKey.IsEmpty(); }
 };
 
 /**
