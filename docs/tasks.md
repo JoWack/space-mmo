@@ -844,9 +844,7 @@ deep space and industry recipes mid-flight.
 **Transient messages float above the character pawn** rather than sitting in a corner — a
 world-space widget on the pawn, so a yield or a refusal appears where the player is looking.
 
-Open, and worth settling before that part is built: where a transient message goes **while flying**,
-since there is no character pawn to sit above. Above the ship is one answer; the flight readout is
-another.
+While flying they float **above the ship**, for the same reason — agreed 12 August.
 
 **Editor-tweakable by design.** C++ owns the data through a `UUserWidget` subclass with
 `meta = (BindWidget)`; Widget Blueprints own layout, fonts, colours and anchoring, and can be edited

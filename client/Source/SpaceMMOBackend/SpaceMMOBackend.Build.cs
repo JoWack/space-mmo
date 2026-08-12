@@ -31,6 +31,14 @@ public class SpaceMMOBackend : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
+			// The HUD. UMG is the designable half -- Widget Blueprints, laid out in the editor --
+			// and it is built on Slate, which both of them ultimately draw through. Private,
+			// because nothing outside this module should be constructing widgets: the panel
+			// builders stay pure functions returning strings, and only the widget renders them.
+			"UMG",
+			"Slate",
+			"SlateCore",
+
 			// UDeveloperSettings, which is how the deposit mesh mapping reaches Project Settings
 			// and DefaultGame.ini rather than being compiled into a header.
 			"DeveloperSettings",
