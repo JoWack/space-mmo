@@ -71,6 +71,50 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheShippedContent_GatesMiningBehindAToolAndLeavesGatheringBareHanded()
+    {
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        // Design bible §skills: gathering is "hand-collecting surface materials", mining is
+        // "tool-gated ore extraction". The gate has always been enforced in GatheringService and
+        // the column has always existed, but ResourceNodeContent had no field for it — so no
+        // authored deposit could set it and every mining node was minable bare-handed, silently.
+        //
+        // A property rather than a count, so authoring more deposits cannot break it. It fails only
+        // if a mining node ships without a tool, which is the design being violated rather than the
+        // content merely changing.
+        var mining = pack.ResourceNodes
+            .Where(n => string.Equals(n.Skill, "mining", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.NotEmpty(mining);
+
+        foreach (ResourceNodeContent node in mining)
+        {
+            Assert.False(
+                string.IsNullOrWhiteSpace(node.RequiredTool),
+                $"Mining deposit '{node.Key}' can be worked bare-handed.");
+
+            // Resolved by key, so a typo would otherwise surface as a KeyNotFoundException during
+            // seeding — a long way from the line that caused it.
+            Assert.True(
+                pack.Items.Any(i => string.Equals(i.Key, node.RequiredTool, StringComparison.Ordinal)),
+                $"Mining deposit '{node.Key}' requires unknown tool '{node.RequiredTool}'.");
+        }
+
+        // The other half of the rule, and the one that keeps a new character able to start at all:
+        // the onboarding questline gathers scrap before it crafts anything, so if gathering ever
+        // needed a tool the chain could not begin.
+        foreach (ResourceNodeContent node in pack.ResourceNodes
+            .Where(n => string.Equals(n.Skill, "gathering", StringComparison.Ordinal)))
+        {
+            Assert.True(
+                string.IsNullOrWhiteSpace(node.RequiredTool),
+                $"Gathering deposit '{node.Key}' needs a tool, which would strand a new character.");
+        }
+    }
+
+    [Fact]
     public async Task TheShippedContent_ContainsTheOnboardingChain()
     {
         ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
@@ -129,6 +173,19 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
         // empty directory.
         Assert.NotEmpty(pack.Items);
         Assert.NotEmpty(pack.Recipes);
+
+        // A deposit's tool survives the trip into the database, which the counts above cannot see.
+        // The authored side is checked elsewhere, and on its own it proves only that the JSON says
+        // the right thing: a mistyped line in the loader would leave every mining deposit workable
+        // bare-handed with the content test still green. This is the assertion that crosses the
+        // boundary, so it is the one that would catch it.
+        int gatedInDatabase = await verify.ResourceNodes
+            .CountAsync(n => n.RequiredToolItemDefId != null);
+
+        int gatedInPack = pack.ResourceNodes.Count(n => !string.IsNullOrWhiteSpace(n.RequiredTool));
+
+        Assert.Equal(gatedInPack, gatedInDatabase);
+        Assert.NotEqual(0, gatedInDatabase);
     }
 
     [Fact]

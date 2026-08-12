@@ -115,6 +115,9 @@ public sealed record BodyContent(
 /// <summary>A resource deposit, as authored in <c>data/universe/</c>.</summary>
 /// <param name="Direction">Direction from the body's centre. Normalised on load, so authors may
 /// write whole numbers rather than unit vectors.</param>
+/// <param name="RequiredTool">Item key of a tool the character must hold, or null for bare hands.
+/// The database column and <c>GathingService.GuardToolAsync</c> have always existed; this field did
+/// not, so no authored deposit could ever require a tool and the gate was unreachable.</param>
 public sealed record ResourceNodeContent(
     string Key,
     string Body,
@@ -123,7 +126,8 @@ public sealed record ResourceNodeContent(
     int RequiredLevel,
     int QuantityMax,
     int RespawnSeconds,
-    double[] Direction);
+    double[] Direction,
+    string? RequiredTool = null);
 
 /// <summary>A station, as authored in <c>data/universe/</c>.</summary>
 public sealed record StationContent(

@@ -559,25 +559,44 @@ build was already three days behind the code on 10 August.
 
 ## 94 — Make the tool gate real
 
-**Pending.**
+**Done**, 11 August. The inference in this task was wrong in an instructive way: the gate was fully
+enforced and completely unreachable.
 
-The design bible has toolcrafting gating other gathering skills: tools are what let a player mine
-rather than hand-collect. Whether that gate is enforced anywhere is **unverified** — the recipes
-exist, the skill exists, and nothing has been checked about what happens when a player without a tool
-attempts the action.
+`GatheringService.GuardToolAsync` and `IndustryService.GuardToolAsync` both throw
+`MissingToolException` when a character lacks a node's or recipe's required tool, both have had test
+coverage all along, and the `required_tool_item_def_id` column has existed since the initial schema.
+**`ResourceNodeContent` had no field for it**, so no authored deposit could ever set one, every
+mining node was workable bare-handed, and every test still passed.
 
-Worth settling with a test that sends the real request rather than by reading the handler, since the
-interesting case is what the server does when the client asks for something it should not be allowed.
+Fixed by adding `RequiredTool` to `ResourceNodeContent`, mapping it in `ContentLoader` the way a
+recipe's tool is mapped, and gating all four mining deposits on `crude_mining_laser`. Gathering
+deposits stay bare-handed, which the onboarding chain depends on — `craft_crude_mining_laser` takes
+8 `scrap_alloy` and needs no tool itself, and its comment says why: "Deliberately needs no tool, or
+the chain could never start."
+
+The questline already taught the order — gather scrap, craft the tool, mine ore — so this is the
+enforcement that makes its second step mean anything. Until now a player could skip the tool entirely.
+
+Two tests, both verified to fail against the bug. One asserts a property of the shipped pack rather
+than a count: every mining deposit requires a tool that exists, and no gathering deposit requires
+one, so authoring more deposits cannot break it but violating the design rule will. The other checks
+the count of gated nodes in the *database* against the pack after seeding, because the first proves
+only that the JSON says the right thing — a mistyped line in the loader would leave it green while
+every deposit stayed bare-handed.
 
 ## 95 — Award skills across the whole loop
 
-**Pending.**
+**Done — it already was**, verified 11 August by reading rather than assumed. The inference in this
+task was simply wrong.
 
-`SkillAwards.cs` exists and `gathering` awards XP today. Whether refining, toolcrafting and
-shipcrafting award anything on completion is **unverified**. The progression curve is ADR-0004 and
-the skills are authored content in `data/skills`, so this is likely wiring rather than design — but
-a loop that does not pay is a loop players will not run twice, and it is the sort of gap that is
-invisible until somebody plays for an hour.
+Three call sites share one implementation: `GatheringService` awards `node.SkillId`,
+`IndustryService` awards `recipe.SkillId` at **claim** rather than at start, and `QuestService`
+awards on completion. `SkillAwards.AwardAsync` is deliberately the only implementation, because
+three copies were once one bug written three times — a duplicate-key failure that appeared only when
+two of them ran in the same unit of work.
+
+And the content pays: all six shipped recipes carry a positive `xpPerRun`, covering `refining`,
+`toolcrafting` and `shipcrafting`. Nothing was missing.
 
 ## 98 — Slow ships down in atmosphere
 

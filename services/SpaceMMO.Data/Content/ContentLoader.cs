@@ -530,6 +530,12 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             node.DirectionY = y;
             node.DirectionZ = z;
 
+            // Resolved the same way a recipe's tool is, and by key rather than by id, so authors
+            // never write a database identifier. An unknown key throws here rather than seeding a
+            // node nobody can ever gather from.
+            node.RequiredToolItemDefId =
+                content.RequiredTool is string tool ? itemIds[tool] : null;
+
             if (!existing.ContainsKey(content.Key))
             {
                 _database.ResourceNodes.Add(node);
