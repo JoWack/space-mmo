@@ -116,6 +116,17 @@ private:
 	void ClientGatherResult(
 		int32 Quantity, int64 XpAwarded, int32 NodeRemaining, const FString& ItemName);
 
+	/**
+	 * A refusal, delivered to the player who pressed the key.
+	 *
+	 * Gathering is a service call made by the dedicated server, so a 409 arrives there and the
+	 * global failure handler shows it to nobody. Player B pressed E at a ferrite deposit without a
+	 * mining laser and got silence, while the server logged "You need a Crude Mining Laser to do
+	 * this." In standalone the same machine is both ends, which is why this looked like it worked.
+	 */
+	UFUNCTION(Client, Reliable)
+	void ClientGatherRefused(const FString& Reason);
+
 	/** Possession is what creates the input component, so that is when binding can succeed. */
 	UFUNCTION()
 	void HandlePawnRestarted(APawn* Pawn);

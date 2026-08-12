@@ -846,6 +846,27 @@ Worth doing early in the milestone rather than late: it decides where combat may
 building weapons first would mean tuning them in a world with no rules about where they may be
 fired.
 
+## 105 — You can only see the book for something you already own
+
+**Pending.** Found by playtest, 12 August.
+
+Player A listed ferrite ore; player B saw `asks: none  bids: none` until B docked at the trading hub
+and cycled their holdings, at which point it appeared.
+
+The station half of that is by design and worth keeping — a market is a place, and ADR-0008 makes
+being at it what entitles you to use it. The **item** half is not designed, it is a side effect:
+`RefreshBook` fetches for `(DockedStationId(), Selected.ItemDefId)`, and the selection comes from
+`TryGetSelectedHolding` — the player's own inventory. So the only books reachable are for things
+already held.
+
+That is backwards for a buyer. Somebody who wants ferrite and has none cannot see that any is for
+sale, cannot see the price, and has no way to discover the market exists for that item — in a game
+whose entire premise is that every tradeable good was made by another player.
+
+Not urgent, and deliberately not fixed on the spot: it needs a decision about what a station's market
+screen actually is. Browsing the whole book at a station is one answer; searching by item is another;
+listing what the station has any asks for at all is a third and probably the smallest.
+
 ## 96 — Author world content graphically
 
 **Pending.** Raised 11 August; ADR-0011 makes it pressing, because a cave is a shape rather than a

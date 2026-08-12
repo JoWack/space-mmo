@@ -15,6 +15,13 @@
 namespace
 {
 	/**
+	 * One key for every gather message, so pressing E repeatedly replaces the line rather than
+	 * stacking a column up the screen. Shared by the yield and the refusal deliberately: they are
+	 * answers to the same press and only one of them can be current.
+	 */
+	constexpr uint64 GatherMessageKey = 0x5A17;
+
+	/**
 	 * Triggers a gather from the console: SpaceMMO.Gather
 	 *
 	 * The same path the key takes, so it is a real test rather than a parallel one. Exists because
@@ -196,7 +203,33 @@ void USpaceMMOGatheringComponent::ServerGather_Implementation()
 					Component->ClientGatherResult(
 						Result.Quantity, Result.XpAwarded, Result.NodeRemaining, ItemName);
 				}
+			}),
+		USpaceMMOBackendClient::FOnGatherFailed::CreateLambda(
+			[WeakThis](const FBackendFailure& Failure)
+			{
+				// The refusal is the whole answer here: a missing tool, too low a skill, or a
+				// deposit somebody else just emptied. Told to the player rather than logged where
+				// only the host can read it.
+				if (USpaceMMOGatheringComponent* Component = WeakThis.Get())
+				{
+					Component->ClientGatherRefused(Failure.Message);
+				}
 			}));
+}
+
+void USpaceMMOGatheringComponent::ClientGatherRefused_Implementation(const FString& Reason)
+{
+	const FString Message = Reason.IsEmpty() ? FString(TEXT("That was refused")) : Reason;
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Gather refused: %s"), *Message);
+
+	if (GEngine != nullptr)
+	{
+		// Yellow rather than the yield's green or the empty-deposit grey: this is something the
+		// player has to act on -- go and craft a laser -- not merely a result.
+		GEngine->AddOnScreenDebugMessage(
+			GatherMessageKey, MessageSeconds, FColor::Yellow, Message);
+	}
 }
 
 FString USpaceMMOGatheringComponent::FormatGatherMessage(
@@ -247,13 +280,9 @@ void USpaceMMOGatheringComponent::ClientGatherResult_Implementation(
 		return;
 	}
 
-	// A fixed key, so spamming the gather key replaces the message rather than stacking a column
-	// of them up the screen. Green for a yield and grey for a refusal, so the difference is
-	// readable without reading.
-	constexpr uint64 MessageKey = 0x5A17;
-
+	// Green for a yield and grey for nothing yet, so the difference is readable without reading.
 	GEngine->AddOnScreenDebugMessage(
-		MessageKey,
+		GatherMessageKey,
 		MessageSeconds,
 		Quantity > 0 ? FColor::Green : FColor::Silver,
 		Message);

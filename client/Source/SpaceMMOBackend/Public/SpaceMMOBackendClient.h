@@ -105,11 +105,22 @@ public:
 	 */
 	DECLARE_DELEGATE_OneParam(FOnGatherComplete, const FBackendGatherResult&);
 
+	/**
+	 * A refused gather, handed back to whoever asked for it.
+	 *
+	 * Needed because gathering is a <em>service</em> call: the dedicated server makes it, so the
+	 * refusal arrives on the server and OnFailed broadcasts there, where there is no player to tell.
+	 * On a listen server or in standalone the same machine is both and the notice appeared anyway,
+	 * which is exactly why this was believed to work.
+	 */
+	DECLARE_DELEGATE_OneParam(FOnGatherFailed, const FBackendFailure&);
+
 	void GatherAsServer(
 		int32 CharacterId,
 		int64 ResourceNodeId,
 		int32 StationId,
-		FOnGatherComplete OnComplete = FOnGatherComplete());
+		FOnGatherComplete OnComplete = FOnGatherComplete(),
+		FOnGatherFailed OnRefused = FOnGatherFailed());
 
 	/** True if a service secret was found, so the server can actually act. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
@@ -358,13 +369,20 @@ private:
 	 * response arrives after the game instance is gone must not call into freed memory, and during
 	 * shutdown that is not a rare case.
 	 */
+	/**
+	 * @param OnFailure Called instead of broadcasting OnFailed, when a caller wants to handle its
+	 *                  own refusal. A request that handles its failure is not also an unhandled
+	 *                  one, and broadcasting as well would show a standalone player the same
+	 *                  message twice -- once from the global handler and once from its own path.
+	 */
 	void Send(
 		const FString& Verb,
 		const FString& Path,
 		const FString& Body,
 		bool bAuthenticated,
 		FOnBody OnSuccess,
-		const FString& ServiceCredential = FString());
+		const FString& ServiceCredential = FString(),
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
 
 	/**
 	 * Loads the game server's credential, if this machine has one.

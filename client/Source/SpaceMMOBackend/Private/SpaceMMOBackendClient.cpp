@@ -284,7 +284,8 @@ void USpaceMMOBackendClient::GatherAsServer(
 	const int32 CharacterId,
 	const int64 ResourceNodeId,
 	const int32 StationId,
-	FOnGatherComplete OnComplete)
+	FOnGatherComplete OnComplete,
+	FOnGatherFailed OnRefused)
 {
 	if (ServiceSecret.IsEmpty())
 	{
@@ -324,7 +325,13 @@ void USpaceMMOBackendClient::GatherAsServer(
 
 			OnGathered.Broadcast(CharacterId, Result);
 		},
-		ServiceSecret);
+		ServiceSecret,
+		[OnRefused](const FBackendFailure& Failure)
+		{
+			// Handed back rather than broadcast, because this request was made by the dedicated
+			// server on a player's behalf and the player is on another machine entirely.
+			OnRefused.ExecuteIfBound(Failure);
+		});
 }
 
 void USpaceMMOBackendClient::Deinitialize()
@@ -346,7 +353,8 @@ void USpaceMMOBackendClient::Send(
 	const FString& Body,
 	const bool bAuthenticated,
 	FOnBody OnSuccess,
-	const FString& ServiceCredential)
+	const FString& ServiceCredential,
+	TFunction<void(const FBackendFailure&)> OnFailure)
 {
 	if (bAuthenticated && !Session.IsValid())
 	{
@@ -388,7 +396,7 @@ void USpaceMMOBackendClient::Send(
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
 
 	Request->OnProcessRequestComplete().BindLambda(
-		[WeakThis, OnSuccess](FHttpRequestPtr, FHttpResponsePtr Response, const bool bConnected)
+		[WeakThis, OnSuccess, OnFailure](FHttpRequestPtr, FHttpResponsePtr Response, const bool bConnected)
 		{
 			USpaceMMOBackendClient* Client = WeakThis.Get();
 
@@ -413,6 +421,13 @@ void USpaceMMOBackendClient::Send(
 				if (Failure.Error == EBackendError::Unauthenticated && Client->Session.IsValid())
 				{
 					Client->LogOut();
+				}
+
+				if (OnFailure)
+				{
+					OnFailure(Failure);
+
+					return;
 				}
 
 				Client->OnFailed.Broadcast(Failure);
