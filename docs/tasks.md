@@ -972,6 +972,17 @@ two ways separately: **up is the actor's up, not the world's** (on a sphere thos
 one point), and the height is a multiple of the actor's own bounding radius, so a rock, a character
 and a ship all clear themselves untuned.
 
+**Bounds must include non-colliding components, and this cost a playtest.** `GetActorBounds`'s
+first argument is `bOnlyCollidingComponents`, and it was passed `true`. A deposit's marker mesh is
+deliberately `NoCollision` (`SpaceMMODepositActor.cpp:40`), so no component qualified, and
+`GetComponentsBoundingBox` returns an `FBox(ForceInit)` that nothing expands — a zero box at the
+world origin (`Actor.cpp:2267`) rather than a failure. The prompt was projected at the origin, which
+under render-origin rebasing lands somewhere arbitrary and usually still on screen, so it read as a
+label with a mysterious offset rather than one pointing at nothing. The pawn has a collision capsule,
+which is why the transient messages were unaffected and the fault looked deposit-specific.
+
+A label goes over what a player can *see*, so it wants visual bounds, not collision bounds.
+
 The two differ deliberately in what they do when the projection fails. **Messages fall back** to a
 fixed spot under the reticle — they must be seen, and first person puts the camera inside the pawn.
 **The prompt hides** — `FindDepositInRange` returns the nearest deposit in reach, not the one being
