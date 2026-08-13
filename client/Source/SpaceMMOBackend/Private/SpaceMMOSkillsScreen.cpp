@@ -5,6 +5,7 @@
 #include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
 #include "SpaceMMOBackendClient.h"
+#include "SpaceMMOBackendLog.h"
 #include "SpaceMMOPlayerController.h"
 
 void USpaceMMOSkillRow::SetRow(const FSpaceMMOSkillRowText& Row)
@@ -96,7 +97,28 @@ void USpaceMMOSkillsScreen::NativeTick(const FGeometry& Geometry, const float De
 		? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
 		: nullptr;
 
-	if (Client == nullptr || SkillRows == nullptr || RowClass == nullptr)
+	// Both of these are set in the Widget Blueprint and neither fails compilation when missing, so
+	// the failure they produce is a screen that opens, lists nothing and says nothing — which reads
+	// exactly like a character with no skills. Warned once rather than every tick: it is a wiring
+	// mistake, not an event, and sixty lines a second would bury whatever else is in the log.
+	if (SkillRows == nullptr || RowClass == nullptr)
+	{
+		if (!bWarnedAboutWiring)
+		{
+			bWarnedAboutWiring = true;
+
+			UE_LOG(LogSpaceMMOBackend, Warning,
+				TEXT("HUD: the skills screen lists nothing — %s%s%s. Set them in the Widget "
+					"Blueprint; SkillRows is bound by name and RowClass in Class Defaults."),
+				SkillRows == nullptr ? TEXT("no panel named 'SkillRows'") : TEXT(""),
+				SkillRows == nullptr && RowClass == nullptr ? TEXT(" and ") : TEXT(""),
+				RowClass == nullptr ? TEXT("no RowClass set") : TEXT(""));
+		}
+
+		return;
+	}
+
+	if (Client == nullptr)
 	{
 		return;
 	}

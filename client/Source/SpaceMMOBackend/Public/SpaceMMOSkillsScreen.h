@@ -136,4 +136,7 @@ private:
 	 * player is doing with them, so the list is rebuilt only when the wording actually changes.
 	 */
 	FString RowSignature;
+
+	/** So a missing SkillRows or RowClass is said once rather than sixty times a second. */
+	bool bWarnedAboutWiring = false;
 };
