@@ -67,4 +67,39 @@ bool FSpaceMMOGatherMessageSurvivesAMissingItemNameTest::RunTest(const FString& 
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOGatherToneMatchesTheWordingTest,
+	"SpaceMMO.Gathering.ToneMatchesTheWording",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOGatherToneMatchesTheWordingTest::RunTest(const FString& Parameters)
+{
+	// The tone and the wording are decided separately and must agree, because a message reading
+	// "+20 Ferrite Ore" in the colour of a refusal is worse than either mistake alone. Quantity is
+	// the whole question: the server answers 200 either way and nothing else separates them.
+	TestEqual(
+		TEXT("A yield reads as a gain"),
+		USpaceMMOGatheringComponent::GatherTone(20),
+		ESpaceMMOMessageTone::Positive);
+
+	// Both zero-quantity cases are warnings, including the one that is only a matter of waiting --
+	// nothing was credited, and the player pressed a key expecting something.
+	TestEqual(
+		TEXT("Too soon reads as a warning"),
+		USpaceMMOGatheringComponent::GatherTone(0),
+		ESpaceMMOMessageTone::Warning);
+
+	// Paired against the wording rather than asserted alone, so the two cannot drift apart: this
+	// fails if either the tone or the text stops agreeing about what happened.
+	const FString Yield =
+		USpaceMMOGatheringComponent::FormatGatherMessage(20, 100, 180, TEXT("Ferrite Ore"));
+
+	TestTrue(
+		TEXT("The positive one is the one that says a quantity was gained"),
+		Yield.Contains(TEXT("+20"))
+			&& USpaceMMOGatheringComponent::GatherTone(20) == ESpaceMMOMessageTone::Positive);
+
+	return true;
+}
+
 #endif

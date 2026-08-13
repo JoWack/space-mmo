@@ -933,7 +933,37 @@ nothing in them. A Widget Blueprint cannot be inspected from outside the editor.
 13 August, done in the Blueprints without a rebuild. Recorded here because it only becomes
 actionable after the docked overlay lands and removes the last of the on-screen messages.
 
-Remaining: the docked overlay, and transient messages above the pawn and ship.
+**Transient messages are written and awaiting their Blueprints, agreed with Joe 13 August.**
+`USpaceMMOTransientMessages` + `USpaceMMOTransientMessageRow`, floating above the pawn.
+
+This is the piece the whole milestone was created for. `ShowTransientLine` had to be folded into the
+debug panel to get a stable order at all, and the price was colour; the widget gets it back through
+`ESpaceMMOMessageTone`, which says whether something was gained without saying what colour that is.
+
+Three decisions:
+
+1. **First person is handled explicitly.** Both pawns have a `FirstPersonCamera` on `C`, and in first
+   person the camera is inside the pawn — there is nothing to float above, and the projection lands
+   behind the viewer. `FollowPawn` falls back to a fixed spot under the reticle whenever
+   `ProjectWorldLocationToWidgetPosition` fails, so a message can never be silently off screen.
+2. **Three messages, not one.** Mining produces them faster than they can be read, and a yield
+   followed immediately by "give it a moment" would erase the yield being looked for. Oldest out
+   first, each on its own expiry.
+3. **C++ owns when a message goes; the Blueprint owns how.** `OnMessageAdded` is a
+   `BlueprintImplementableEvent` so a Widget Animation can fade or rise it.
+
+Two details worth keeping. The message is offset along the **pawn's** up vector, not the world's —
+on a sphere those differ everywhere but one point, and the world's would put it sideways — and by a
+multiple of the pawn's own bounding radius, so a ship and a character both clear themselves with no
+per-pawn tuning. And `ESpaceMMOMessageTone` lives in `SpaceMMOBackendTypes.h` rather than beside the
+widget, because the player controller's public header names it and that header must not drag UMG in:
+UMG is a private dependency of this module.
+
+**Unset config is a supported state**, and degrades rather than fails: with no Widget Blueprint
+configured, `ShowTransientMessage` falls back to `ShowTransientLine`. No colour and no position, but
+visible — and the gather result is the only feedback a key press gives.
+
+Remaining: the docked overlay (market, industry, quests — holdings has moved to 108).
 
 The panel's own comments are the specification for why: on-screen messages are ordered by slot
 rather than key, are deleted and re-added every frame at zero display time, and so land in an order

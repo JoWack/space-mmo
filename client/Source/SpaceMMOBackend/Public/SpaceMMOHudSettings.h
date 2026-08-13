@@ -54,5 +54,15 @@ public:
 		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOSkillsScreen"))
 	FSoftClassPath SkillsScreen;
 
+	/**
+	 * Messages floating above the pawn. Must derive from <c>USpaceMMOTransientMessages</c>.
+	 *
+	 * Unset means gather results fall back to the debug panel's transient line — no colour and no
+	 * position, but visible, which matters because it is the only feedback a gather key gives.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOTransientMessages"))
+	FSoftClassPath TransientMessages;
+
 	virtual FName GetCategoryName() const override { return TEXT("Game"); }
 };

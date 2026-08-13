@@ -78,6 +78,15 @@ public:
 	 */
 	void UpdateHudContext();
 
+	/**
+	 * Says something to the player, above their pawn, for a few seconds.
+	 *
+	 * Falls back to the debug panel's transient line when no transient-message Widget Blueprint is
+	 * configured, so a message is never simply lost — see <see cref="ShowTransientLine"/>, which is
+	 * what this replaces and what it degrades to.
+	 */
+	void ShowTransientMessage(const FString& Line, ESpaceMMOMessageTone Tone);
+
 	/** Opens and closes the skills screen. Bound to K. */
 	void ToggleSkillsScreen();
 
@@ -96,6 +105,15 @@ public:
 	/** The skills screen, or null when none is configured. */
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOSkillsScreen> SkillsScreen;
+
+	/**
+	 * Messages floating above the pawn, or null when none is configured.
+	 *
+	 * Deliberately absent from UpdateHudContext: it belongs to every context, and it has to keep
+	 * ticking to expire its own messages.
+	 */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOTransientMessages> TransientMessages;
 
 	/**
 	 * Whether the skills screen is open.

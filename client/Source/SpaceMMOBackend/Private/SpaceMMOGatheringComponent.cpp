@@ -232,7 +232,8 @@ void USpaceMMOGatheringComponent::ClientGatherRefused_Implementation(const FStri
 
 	if (ASpaceMMOPlayerController* Controller = OwningController())
 	{
-		Controller->ShowTransientLine(Message);
+		// Always a warning: this path only exists because the server said no.
+		Controller->ShowTransientMessage(Message, ESpaceMMOMessageTone::Warning);
 	}
 }
 
@@ -253,6 +254,11 @@ FString USpaceMMOGatheringComponent::FormatGatherMessage(
 	return NodeRemaining > 0
 		? FString(TEXT("Nothing yet - give it a moment"))
 		: FString(TEXT("This deposit is worked out"));
+}
+
+ESpaceMMOMessageTone USpaceMMOGatheringComponent::GatherTone(const int32 Quantity)
+{
+	return Quantity > 0 ? ESpaceMMOMessageTone::Positive : ESpaceMMOMessageTone::Warning;
 }
 
 void USpaceMMOGatheringComponent::ClientGatherResult_Implementation(
@@ -279,13 +285,14 @@ void USpaceMMOGatheringComponent::ClientGatherResult_Implementation(
 		}
 	}
 
-	// Through the panel rather than as its own on-screen message. A separate entry competes with
-	// the panel for slots, and the panel is redrawn every frame with a zero display time, so a
-	// three-second message lands in an order nothing can influence -- in practice below dozens of
-	// panel lines and off the bottom of the screen. It showed once and never again.
+	// Floats above the pawn now, which is what the panel detour was a workaround for: a separate
+	// on-screen entry competed with the panel for slots, the panel is redrawn every frame at zero
+	// display time, and a three-second message landed wherever the free list put it -- usually below
+	// dozens of panel lines and off the bottom of the screen. The widget also gets the colour back
+	// that folding it into the panel had to give up.
 	if (ASpaceMMOPlayerController* Controller = OwningController())
 	{
-		Controller->ShowTransientLine(Message);
+		Controller->ShowTransientMessage(Message, GatherTone(Quantity));
 	}
 }
 

@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "SpaceMMOTransientMessages.h"
+
 #include "SpaceMMOGatheringComponent.generated.h"
 
 /**
@@ -94,6 +96,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Gathering")
 	static FString FormatGatherMessage(
 		int32 Quantity, int64 XpAwarded, int32 NodeRemaining, const FString& ItemName);
+
+	/**
+	 * Whether a gather result is something gained or something to explain.
+	 *
+	 * Kept beside the wording and tested with it, because the two must agree: a message reading
+	 * "+3 Ferrite Ore" in the colour of a refusal is worse than either alone. Quantity is the whole
+	 * question — the server sends a 200 either way, and nothing else distinguishes them.
+	 */
+	static ESpaceMMOMessageTone GatherTone(int32 Quantity);
 
 	/** How long a gather message stays on screen, in seconds. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Gathering")

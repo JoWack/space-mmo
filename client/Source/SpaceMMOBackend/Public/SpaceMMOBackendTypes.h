@@ -100,6 +100,27 @@ enum class EBackendSkillCategory : uint8
 };
 
 /**
+ * How a transient message should feel, without saying what colour it is.
+ *
+ * The tone is a fact about the message — a yield went well, a refusal did not — and the colour it
+ * becomes is a decision for the Widget Blueprint. Naming it this way keeps that split, and lets
+ * combat add a third tone later without touching anything that renders one.
+ *
+ * Here rather than beside the widget that draws it, because the player controller's public header
+ * names it and that header must not drag UMG in: UMG is a private dependency of this module, and a
+ * public header including it would break any module that later includes this one.
+ */
+UENUM(BlueprintType)
+enum class ESpaceMMOMessageTone : uint8
+{
+	/** Something was gained. */
+	Positive,
+
+	/** Nothing was gained, and the player is being told why. */
+	Warning,
+};
+
+/**
  * One skill's progress.
  *
  * Level arrives from the server rather than being derived here. The XP curve is game rules, and

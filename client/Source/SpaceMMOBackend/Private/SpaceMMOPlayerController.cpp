@@ -17,6 +17,7 @@
 #include "SpaceMMOOnFootReadout.h"
 #include "SpaceMMOShipPawn.h"
 #include "SpaceMMOSkillsScreen.h"
+#include "SpaceMMOTransientMessages.h"
 
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
 {
@@ -130,6 +131,25 @@ void ASpaceMMOPlayerController::CreateHud()
 
 	SkillsScreen = CreateHudWidget<USpaceMMOSkillsScreen>(
 		this, Settings->SkillsScreen, TEXT("skills screen"));
+
+	TransientMessages = CreateHudWidget<USpaceMMOTransientMessages>(
+		this, Settings->TransientMessages, TEXT("transient messages"));
+}
+
+void ASpaceMMOPlayerController::ShowTransientMessage(
+	const FString& Line, const ESpaceMMOMessageTone Tone)
+{
+	if (TransientMessages != nullptr)
+	{
+		TransientMessages->Push(Line, Tone);
+
+		return;
+	}
+
+	// No Widget Blueprint configured. The panel line is worse -- it has no colour and no position --
+	// but a message a player never sees is worse still, and the gather result is the only feedback
+	// that a key press did anything at all.
+	ShowTransientLine(Line);
 }
 
 void ASpaceMMOPlayerController::ApplyMouseCapture()
