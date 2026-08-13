@@ -159,4 +159,6 @@ void USpaceMMODepositPrompt::NativeTick(const FGeometry& Geometry, const float D
 	bHasDeposit = Text.bHasDeposit;
 	bCanGather = Text.bCanGather;
 	bNeedsTool = !Text.Tool.IsEmpty();
+	bHasLevelBlocker = !Text.LevelBlocker.IsEmpty();
+	bHasToolBlocker = !Text.ToolBlocker.IsEmpty();
 }

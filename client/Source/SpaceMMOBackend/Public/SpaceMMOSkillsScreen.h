@@ -63,6 +63,16 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bHasProgress = false;
 
+	/**
+	 * Whether there is anything left to earn to say.
+	 *
+	 * Not the same as bHasProgress: a skill at the cap has a full bar and nothing to go, so binding
+	 * the "to next level" row to the bar's flag would leave a blank line on exactly the row a
+	 * player worked hardest for. Empty text still costs a line's height in a vertical box.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bHasToNext = false;
+
 protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> NameText;

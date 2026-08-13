@@ -106,6 +106,20 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bNeedsTool = false;
 
+	/**
+	 * Whether there is a level blocker to show.
+	 *
+	 * Bind the blocker row's visibility to this. An empty text block still occupies a full line of
+	 * height in a vertical box, so a rock you can happily mine would otherwise show a blank gap
+	 * where the reason you cannot would have been.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bHasLevelBlocker = false;
+
+	/** Whether there is a tool blocker to show. Same reasoning as bHasLevelBlocker. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bHasToolBlocker = false;
+
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
 

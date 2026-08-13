@@ -24,6 +24,7 @@ void USpaceMMOSkillRow::SetRow(const FSpaceMMOSkillRowText& Row)
 
 	bTrained = Row.bTrained;
 	bHasProgress = Row.Progress >= 0.0f;
+	bHasToNext = !Row.ToNext.IsEmpty();
 
 	if (ProgressBar != nullptr)
 	{
