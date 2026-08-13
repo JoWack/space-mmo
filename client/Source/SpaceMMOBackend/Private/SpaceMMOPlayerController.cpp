@@ -9,6 +9,8 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOBackendProtocol.h"
 #include "SpaceMMODepositActor.h"
+#include "SpaceMMOFlightReadout.h"
+#include "SpaceMMOHudSettings.h"
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMOGatheringComponent.h"
 
@@ -43,6 +45,53 @@ void ASpaceMMOPlayerController::BeginPlay()
 		BeginIdentifying();
 
 		ApplyMouseCapture();
+		CreateHud();
+	}
+}
+
+void ASpaceMMOPlayerController::CreateHud()
+{
+	// Unset until somebody makes the Widget Blueprint, and unset is a legitimate state rather than
+	// a fault: the game has to run for anyone who has not made it yet, and the automated runs have
+	// no viewport to add a widget to at all.
+	const USpaceMMOHudSettings* Settings = GetDefault<USpaceMMOHudSettings>();
+
+	if (Settings == nullptr || !Settings->FlightReadout.IsValid())
+	{
+		return;
+	}
+
+	UClass* WidgetClass = Settings->FlightReadout.TryLoadClass<USpaceMMOFlightReadout>();
+
+	if (WidgetClass == nullptr)
+	{
+		// Named but wrong, which is worth a word: a typo'd path and an unset one look identical
+		// from the outside, and one of them is a mistake somebody wants telling about.
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("HUD: '%s' is not a SpaceMMOFlightReadout; no flight readout will be shown."),
+			*Settings->FlightReadout.ToString());
+
+		return;
+	}
+
+	FlightReadout = CreateWidget<USpaceMMOFlightReadout>(this, WidgetClass);
+
+	// Says it happened, because "no warning" and "never ran" look identical from a log otherwise --
+	// and this runs behind a setting, on the local controller only, in a build that may have no
+	// viewport at all.
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("HUD: flight readout %s from '%s'."),
+		FlightReadout != nullptr ? TEXT("created") : TEXT("FAILED to create"),
+		*Settings->FlightReadout.ToString());
+
+	if (FlightReadout != nullptr)
+	{
+		// The readout hides itself when the pawn is not a ship, so it can be added once and left.
+		FlightReadout->AddToViewport();
+
+		// Follows the ship's own flight-debug flag, so one switch governs both halves rather than
+		// the readout and the log disagreeing about whether this is a debugging session.
+		FlightReadout->bShowDebug = true;
 	}
 }
 

@@ -59,6 +59,13 @@ public:
 	 */
 	void ShowTransientLine(const FString& Line);
 
+	/** Creates the HUD widgets named in SpaceMMO HUD settings, if any are. */
+	void CreateHud();
+
+	/** The flight readout, or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOFlightReadout> FlightReadout;
+
 
 	/**
 	 * Builds the character panel's lines from backend state.
