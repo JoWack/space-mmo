@@ -954,8 +954,10 @@ deep space and industry recipes mid-flight.
   proximity band, rebase count.
 - **On foot** — name and credits, and the nearby deposit with its skill, level and tool.
 - **Docked** — a station screen as an **overlay**, opened deliberately rather than always on, with
-  Holdings, Market, Industry and Quests. Overlay rather than full-screen, so the world stays visible
-  behind it.
+  Market, Industry and Quests. Overlay rather than full-screen, so the world stays visible behind it.
+
+  **Holdings was listed here and has since moved out**, to its own `I` overlay — see 108, which
+  records why. What remains is the station's own services, which are place-bound by ADR-0008.
 
 **Transient messages float above the character pawn** rather than sitting in a corner — a
 world-space widget on the pawn, so a yield or a refusal appears where the player is looking.
@@ -987,7 +989,24 @@ not persist one today.
 
 ## 108 — Inventory and transfer screen
 
-**Pending.** Blocks the useful half of 99.
+**Pending. Decided 13 August: its own overlay, opened with `I`** (verified free against
+`DefaultInput.ini`), rather than a section inside the docked overlay.
+
+**This changes what the docked overlay is, and the change is an improvement.** Two keyed overlays
+now exist — `K` for skills, `I` for inventory — and they have something in common that the rest of
+106's docked screen does not: they are about *you*, they mean the same thing everywhere, and there
+is no reason to make somebody land to read them. What is left for the docked overlay is Market,
+Industry and Quests, which are about *the station* and are place-bound by ADR-0008 anyway.
+
+So the split is now:
+
+- **Keyed, always available** — Skills (`K`), Inventory (`I`). About the character.
+- **Docked overlay** — Market, Industry, Quests. About the station, and reachable only there.
+
+Holdings therefore leaves the docked overlay entirely; 106's agreed shape listed it there and this
+supersedes that.
+
+Blocks the useful half of 99.
 
 Moving goods between a hangar and a ship hold works over HTTP and has no way to be asked for in game.
 Hauling is M4's premise and is currently reachable only with curl.
@@ -1014,7 +1033,15 @@ on a command line, or by taking the first one on the account.
 
 ## 105 — You can only see the book for something you already own
 
-**Pending.** Found by playtest, 12 August.
+**Decided 13 August: a station's market screen shows everything for sale there, and has a search.**
+Both halves, not one or the other — browsing answers "what is there?", search answers "who has the
+thing I came for?", and a market with only one of them fails whichever question the player actually
+arrived with.
+
+That rules out the third option below (listing only what the station has asks for) as the whole
+answer, though it remains what browsing shows when nothing is searched.
+
+Implementation is part of 109. Found by playtest, 12 August.
 
 Player A listed ferrite ore; player B saw `asks: none  bids: none` until B docked at the trading hub
 and cycled their holdings, at which point it appeared.
