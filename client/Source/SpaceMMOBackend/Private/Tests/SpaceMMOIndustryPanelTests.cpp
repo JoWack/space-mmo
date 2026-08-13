@@ -28,7 +28,7 @@ namespace
 		return Recipe;
 	}
 
-	FBackendInventoryItem MakeItem(const TCHAR* Key, const int32 Quantity)
+	FBackendInventoryItem MakeIndustryItem(const TCHAR* Key, const int32 Quantity)
 	{
 		FBackendInventoryItem Item;
 		Item.ItemKey = Key;
@@ -38,7 +38,7 @@ namespace
 		return Item;
 	}
 
-	bool AnyLineContains(const TArray<FString>& Lines, const FString& Fragment)
+	bool AnyIndustryLineContains(const TArray<FString>& Lines, const FString& Fragment)
 	{
 		return Lines.ContainsByPredicate(
 			[&Fragment](const FString& Line) { return Line.Contains(Fragment); });
@@ -53,16 +53,16 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FSpaceMMOIndustryPanelShowsHaveAgainstNeedTest::RunTest(const FString& Parameters)
 {
 	const TArray<FBackendRecipe> Recipes{ MakeRecipe(1, TEXT("Ferrite Plate"), TEXT("ferrite_ore"), 20) };
-	const TArray<FBackendInventoryItem> Inventory{ MakeItem(TEXT("ferrite_ore"), 128) };
+	const TArray<FBackendInventoryItem> Inventory{ MakeIndustryItem(TEXT("ferrite_ore"), 128) };
 
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildIndustryPanel(
 		Recipes, TArray<FBackendIndustryJob>(), Inventory, 0);
 
-	TestTrue(TEXT("Names the output"), AnyLineContains(Lines, TEXT("Ferrite Plate")));
+	TestTrue(TEXT("Names the output"), AnyIndustryLineContains(Lines, TEXT("Ferrite Plate")));
 
 	// Held over required, in that order, for the selected recipe. Both numbers came from the
 	// server; the panel only puts them next to each other.
-	TestTrue(TEXT("Shows held over required"), AnyLineContains(Lines, TEXT("128/20")));
+	TestTrue(TEXT("Shows held over required"), AnyIndustryLineContains(Lines, TEXT("128/20")));
 
 	return true;
 }
@@ -75,17 +75,17 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FSpaceMMOIndustryPanelShowsShortfallWithoutRefusingTest::RunTest(const FString& Parameters)
 {
 	const TArray<FBackendRecipe> Recipes{ MakeRecipe(1, TEXT("Ferrite Plate"), TEXT("ferrite_ore"), 20) };
-	const TArray<FBackendInventoryItem> Inventory{ MakeItem(TEXT("ferrite_ore"), 3) };
+	const TArray<FBackendInventoryItem> Inventory{ MakeIndustryItem(TEXT("ferrite_ore"), 3) };
 
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildIndustryPanel(
 		Recipes, TArray<FBackendIndustryJob>(), Inventory, 0);
 
-	TestTrue(TEXT("Shows the shortfall"), AnyLineContains(Lines, TEXT("3/20")));
+	TestTrue(TEXT("Shows the shortfall"), AnyIndustryLineContains(Lines, TEXT("3/20")));
 
 	// Deliberately no verdict. Deciding "you cannot build this" here would be a second copy of the
 	// skill, tool, material and fee gates, free to drift from the real ones — so the recipe is still
 	// listed, the player may still press, and the server gives the only answer that counts.
-	TestTrue(TEXT("Still offers the recipe"), AnyLineContains(Lines, TEXT("Ferrite Plate")));
+	TestTrue(TEXT("Still offers the recipe"), AnyIndustryLineContains(Lines, TEXT("Ferrite Plate")));
 
 	return true;
 }
@@ -105,7 +105,7 @@ bool FSpaceMMOIndustryPanelSelectionSurvivesAShrunkCatalogTest::RunTest(const FS
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildIndustryPanel(
 		Recipes, TArray<FBackendIndustryJob>(), TArray<FBackendInventoryItem>(), 7);
 
-	TestTrue(TEXT("Something is still marked"), AnyLineContains(Lines, TEXT(">")));
+	TestTrue(TEXT("Something is still marked"), AnyIndustryLineContains(Lines, TEXT(">")));
 
 	return true;
 }
@@ -134,11 +134,11 @@ bool FSpaceMMOIndustryPanelDistinguishesReadyFromWaitingTest::RunTest(const FStr
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildIndustryPanel(
 		TArray<FBackendRecipe>(), { Waiting, Ready }, TArray<FBackendInventoryItem>(), 0);
 
-	TestTrue(TEXT("Counts down the unfinished one"), AnyLineContains(Lines, TEXT("42s")));
+	TestTrue(TEXT("Counts down the unfinished one"), AnyIndustryLineContains(Lines, TEXT("42s")));
 
 	// Both flags come from the server, and the difference is the whole point of the line: one is
 	// worth pressing Z for and the other is not.
-	TestTrue(TEXT("Marks the finished one"), AnyLineContains(Lines, TEXT("READY")));
+	TestTrue(TEXT("Marks the finished one"), AnyIndustryLineContains(Lines, TEXT("READY")));
 
 	return true;
 }
@@ -155,8 +155,8 @@ bool FSpaceMMOIndustryPanelSpeaksWithNothingLoadedTest::RunTest(const FString& P
 	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildIndustryPanel(
 		TArray<FBackendRecipe>(), TArray<FBackendIndustryJob>(), TArray<FBackendInventoryItem>(), 0);
 
-	TestTrue(TEXT("Says the catalog is empty"), AnyLineContains(Lines, TEXT("no recipes")));
-	TestTrue(TEXT("Says nothing is running"), AnyLineContains(Lines, TEXT("none running")));
+	TestTrue(TEXT("Says the catalog is empty"), AnyIndustryLineContains(Lines, TEXT("no recipes")));
+	TestTrue(TEXT("Says nothing is running"), AnyIndustryLineContains(Lines, TEXT("none running")));
 
 	return true;
 }

@@ -108,6 +108,25 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	double GetAltitudeKilometres() const;
 
+	/**
+	 * Height above the terrain rather than above the sphere it sits on.
+	 *
+	 * The two disagree by however tall the ground is, and this is the one a pilot cares about:
+	 * it is what reaches zero on landing. Kept alongside the sphere figure rather than replacing
+	 * it, because the proximity band is derived from this one and showing only the other made
+	 * "Altitude 0.34 km | ATMOSPHERE" look like a contradiction while both halves were true.
+	 */
+	double GetGroundAltitudeKilometres() const { return GroundAltitudeKilometres; }
+
+	/**
+	 * Speed of a circular orbit where the ship currently is, in centimetres per second.
+	 *
+	 * A fact about the ship's situation rather than a display concern: on a 20 km world it is only
+	 * about 443 m/s, which is why atmospheric drag caps a ship well below it (task 98) and why a
+	 * faster ship cannot be flown along the ground at all, only skipped across it.
+	 */
+	double GetOrbitalSpeedHere() const;
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	EPlanetProximity GetProximity() const { return Proximity; }
 

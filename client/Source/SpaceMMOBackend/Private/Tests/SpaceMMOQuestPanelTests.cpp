@@ -1,8 +1,15 @@
 #include "Misc/AutomationTest.h"
+#include "SpaceMMOPanelTestHelpers.h"
 #include "SpaceMMOBackendProtocol.h"
 #include "SpaceMMOPlayerController.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
+
+// Shared, because a unity build can put two of these files in one translation
+// unit, where two anonymous namespaces are the same namespace and a second copy
+// of a helper is a redefinition.
+using SpaceMMOPanelTests::AnyLineContains;
+using SpaceMMOPanelTests::IndexOfLineContaining;
 
 namespace
 {
@@ -32,11 +39,6 @@ namespace
 		return Quest;
 	}
 
-	bool AnyLineContains(const TArray<FString>& Lines, const FString& Fragment)
-	{
-		return Lines.ContainsByPredicate(
-			[&Fragment](const FString& Line) { return Line.Contains(Fragment); });
-	}
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(

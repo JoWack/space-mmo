@@ -338,6 +338,24 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 	}
 }
 
+double ASpaceMMOShipPawn::GetOrbitalSpeedHere() const
+{
+    // The same nearest-planet rule GetAltitudeKilometres uses, so the two answers are always about
+    // the same body rather than quietly about different ones.
+    if (const UWorld* World = GetWorld())
+    {
+        for (TActorIterator<ASpaceMMOPlanetActor> It(const_cast<UWorld*>(World)); It; ++It)
+        {
+            return FPlanetPhysics::CircularOrbitSpeed(
+                It->GetPlanetConfig(),
+                FPlanetPhysics::AltitudeKilometres(
+                    It->GetPlanetConfig(), Navigation.SystemPosition));
+        }
+    }
+
+    return 0.0;
+}
+
 double ASpaceMMOShipPawn::GetAltitudeKilometres() const
 {
     if (const UWorld* World = GetWorld())
