@@ -87,11 +87,9 @@ void ASpaceMMOPlayerController::CreateHud()
 	if (FlightReadout != nullptr)
 	{
 		// The readout hides itself when the pawn is not a ship, so it can be added once and left.
+		// Its debug line follows the ship's own flight-debug flag, read every tick rather than set
+		// here, so toggling that flag takes effect without a restart.
 		FlightReadout->AddToViewport();
-
-		// Follows the ship's own flight-debug flag, so one switch governs both halves rather than
-		// the readout and the log disagreeing about whether this is a debugging session.
-		FlightReadout->bShowDebug = true;
 	}
 }
 

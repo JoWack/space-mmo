@@ -306,36 +306,13 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 	PendingInput.Thrust = FVector::ZeroVector;
 	PendingInput.Torque = FVector::ZeroVector;
 
-	if (bShowFlightDebug && GEngine != nullptr)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			1, 0.0f, FColor::Cyan,
-			FString::Printf(
-				TEXT("System %s | %.3f km/s | rebases %d"),
-				*Navigation.SystemPosition.ToString(),
-				GetSpeedKilometresPerSecond(),
-				Navigation.RebaseCount));
-
-		const TCHAR* ProximityName =
-			Proximity == EPlanetProximity::Surface ? TEXT("SURFACE")
-			: Proximity == EPlanetProximity::Atmospheric ? TEXT("ATMOSPHERE")
-			: TEXT("ORBIT");
-
-		// Both altitudes, because they disagree by however tall the ground is and the label keys
-		// off the second one. Showing only the first is what made "Altitude 0.34 km | ATMOSPHERE"
-		// look like a contradiction while both halves were telling the truth.
-		GEngine->AddOnScreenDebugMessage(
-			3, 0.0f, FColor::Yellow,
-			FString::Printf(
-				TEXT("Altitude %.2f km sphere / %.2f km ground | %s"),
-				GetAltitudeKilometres(),
-				GroundAltitudeKilometres,
-				ProximityName));
-
-		GEngine->AddOnScreenDebugMessage(
-			2, 0.0f, FColor::Silver,
-			FString::Printf(TEXT("World %s"), *GetActorLocation().ToCompactString()));
-	}
+	// The three on-screen readouts that used to live here are gone. USpaceMMOFlightReadout says all
+	// of it now, in a widget, where the lines appear in the order they are written -- these were
+	// keyed 1, 3 and 2 and drew as 2, 3, 1, because debug messages are ordered by slot rather than
+	// by key and a zero display time has the engine delete and re-add them every frame.
+	//
+	// bShowFlightDebug survives and still means the same thing: it now governs the readout's debug
+	// line rather than three messages of its own.
 }
 
 double ASpaceMMOShipPawn::GetOrbitalSpeedHere() const

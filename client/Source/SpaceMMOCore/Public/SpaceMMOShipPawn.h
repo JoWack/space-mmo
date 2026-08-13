@@ -127,6 +127,14 @@ public:
 	 */
 	double GetOrbitalSpeedHere() const;
 
+	/**
+	 * Whether flight debugging is on, which the HUD's debug line follows.
+	 *
+	 * One switch rather than two, so the readout and whatever else is being watched cannot disagree
+	 * about whether this is a debugging session.
+	 */
+	bool ShowsFlightDebug() const { return bShowFlightDebug; }
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	EPlanetProximity GetProximity() const { return Proximity; }
 

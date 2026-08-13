@@ -96,6 +96,10 @@ void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float D
 	Inputs.WorldLocationCentimetres = Ship->GetActorLocation();
 	Inputs.RebaseCount = Ship->GetRebaseCount();
 
+	// Follows the ship rather than being set once at creation, so toggling it takes effect without
+	// restarting, and one switch governs the whole debugging session.
+	bShowDebug = Ship->ShowsFlightDebug();
+
 	const FSpaceMMOFlightReadoutText Text = Build(Inputs);
 
 	auto Set = [](UTextBlock* Block, const FString& Value)
