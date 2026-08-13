@@ -63,6 +63,20 @@ FSpaceMMOFlightReadoutText USpaceMMOFlightReadout::Build(
 	return Text;
 }
 
+/**
+ * Never call SetVisibility on this widget from inside this function.
+ *
+ * Slate drives NativeTick from Paint (SWidget.cpp:1505), and a compound widget arranges its children
+ * through an EVisibility::Visible filter (SCompoundWidget.cpp:24) — so a widget that is collapsed or
+ * hidden is not painted, and a widget that is not painted does not tick. Hiding itself here is a
+ * one-way door: the tick that would show it again never runs.
+ *
+ * That is not hypothetical. This widget did exactly that, and the symptom was precise — the readout
+ * disappeared on leaving the ship, as intended, and never came back on getting into it.
+ *
+ * ASpaceMMOPlayerController::UpdateHudContext owns the decision instead, from a tick that always
+ * runs whatever is on screen.
+ */
 void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float DeltaSeconds)
 {
 	Super::NativeTick(Geometry, DeltaSeconds);
@@ -76,14 +90,11 @@ void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float D
 
 	if (Ship == nullptr)
 	{
-		// On foot, or between pawns. The readout is about flying, so it says nothing rather than
-		// holding the last thing it knew — a frozen altitude is worse than none.
-		SetVisibility(ESlateVisibility::Collapsed);
-
+		// On foot, or between pawns. Nothing is updated, so the readout holds whatever it last said
+		// rather than showing a frozen altitude as though it were current — which is why the
+		// controller collapses it rather than this tick doing so. See the note below.
 		return;
 	}
-
-	SetVisibility(ESlateVisibility::HitTestInvisible);
 
 	FSpaceMMOFlightReadoutInputs Inputs;
 	Inputs.SystemPosition = Ship->GetSystemPosition();

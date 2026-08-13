@@ -852,6 +852,24 @@ Done so far:
   than a failed load.
 - The three `AddOnScreenDebugMessage` flight readouts it replaced are gone.
 
+**A widget may not set its own visibility, and this is the second engine rule this task has run
+into.** Found by playtest 12 August: the readout vanished on leaving the ship, as intended, and
+never returned on getting back in.
+
+`SWidget::Paint` is what calls `SWidget::Tick` (`SWidget.cpp:1505`), and a compound widget arranges
+its children through an `EVisibility::Visible` filter (`SCompoundWidget.cpp:24`) — so a collapsed or
+hidden widget is not painted, and a widget that is not painted does not tick. `USpaceMMOFlightReadout`
+collapsed itself from `NativeTick`, which stopped the very tick that would have shown it again. A
+one-way door.
+
+`ASpaceMMOPlayerController::UpdateHudContext` owns the decision now, from an actor tick that runs
+whatever is on screen. **Every context widget in this milestone must be shown and hidden from there**,
+never from its own tick — which suits the contextual design anyway, since the controller is the thing
+that knows which pawn the player is in.
+
+Note what did *not* catch this: 164 green client tests, three of them on this widget. They cover
+`Build()`, which was never wrong. Nothing headless can see a Slate visibility loop.
+
 **Top-left is the engine's, so do not put a widget there.** `UnrealEngine.cpp:13619` fixes
 on-screen debug messages at `x=40, y=45` in the editor (`100` in game) running downward, hardcoded
 with no console variable. The flight readout was originally placed there and sat underneath the

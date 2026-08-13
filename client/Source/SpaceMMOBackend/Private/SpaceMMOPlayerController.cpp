@@ -13,6 +13,7 @@
 #include "SpaceMMOHudSettings.h"
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMOGatheringComponent.h"
+#include "SpaceMMOShipPawn.h"
 
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
 {
@@ -86,7 +87,8 @@ void ASpaceMMOPlayerController::CreateHud()
 
 	if (FlightReadout != nullptr)
 	{
-		// The readout hides itself when the pawn is not a ship, so it can be added once and left.
+		// Added once and left in the viewport; UpdateHudContext shows and hides it from this
+		// actor's tick, because a widget cannot restore its own visibility once it has dropped it.
 		// Its debug line follows the ship's own flight-debug flag, read every tick rather than set
 		// here, so toggling that flag takes effect without a restart.
 		FlightReadout->AddToViewport();
@@ -551,9 +553,36 @@ void ASpaceMMOPlayerController::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	if (IsLocalController())
+	{
+		UpdateHudContext();
+	}
+
 	if (bShowCharacterPanel && IsLocalController())
 	{
 		DrawCharacterPanel();
+	}
+}
+
+void ASpaceMMOPlayerController::UpdateHudContext()
+{
+	if (FlightReadout == nullptr)
+	{
+		return;
+	}
+
+	const bool bFlying = Cast<ASpaceMMOShipPawn>(GetPawn()) != nullptr;
+
+	// HitTestInvisible rather than Visible: a readout that swallowed clicks would make the world
+	// behind it unclickable, and nothing here is meant to be pressed.
+	const ESlateVisibility Wanted =
+		bFlying ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+
+	// Only on a change. Assigning the same value every frame is cheap but not free — Slate compares
+	// and skips, and saying so here stops the next reader wondering.
+	if (FlightReadout->GetVisibility() != Wanted)
+	{
+		FlightReadout->SetVisibility(Wanted);
 	}
 }
 

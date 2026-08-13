@@ -62,6 +62,22 @@ public:
 	/** Creates the HUD widgets named in SpaceMMO HUD settings, if any are. */
 	void CreateHud();
 
+	/**
+	 * Shows the HUD widgets that belong to the pawn the player is in, and hides the rest.
+	 *
+	 * <strong>This has to live here, not in the widgets.</strong> Slate drives
+	 * <c>NativeTick</c> from <c>Paint</c> (<c>SWidget.cpp:1505</c>) and a compound widget arranges
+	 * its children through an <c>EVisibility::Visible</c> filter
+	 * (<c>SCompoundWidget.cpp:24</c>), so a collapsed widget is never painted and therefore never
+	 * ticks. A widget that hides itself from its own tick can never show itself again — which is
+	 * exactly what the flight readout did: it vanished on leaving the ship and stayed gone on
+	 * getting back in.
+	 *
+	 * The controller's tick is unconditional, so the decision is sound here for every context the
+	 * contextual HUD grows — flying, on foot and docked.
+	 */
+	void UpdateHudContext();
+
 	/** The flight readout, or null when none is configured. */
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOFlightReadout> FlightReadout;
