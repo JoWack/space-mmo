@@ -803,6 +803,26 @@ reported by text the engine reorders every frame.
 layout and HUD arrangement is presented first — a sketch, a mock, a described layout, whatever
 carries the idea — and confirmed or corrected before any of it is implemented.
 
+**There are two unrelated binding systems in a Widget Blueprint, and they produce similar-looking
+errors.** Learned 12 August, at the cost of two wrong answers.
+
+- The **Details panel's `Bind` dropdown** is the classic UMG property binding
+  (`FDelegateEditorBinding`, validated in `UMGEditor/Private/WidgetBlueprint.cpp:447`). This is the
+  one this project uses.
+- The **View Bindings panel** — a button in the widget editor's bottom status bar, or
+  `Window → View Bindings` — belongs to the **Model-View-ViewModel plugin**, which is enabled and
+  which nothing here uses. `+ Add Binding` there stamps out a row pre-filled with the selected
+  widget as destination and no source, and that alone fails compilation with
+  `Binding 'X <- <none>': A source path is required, but not set.`
+  (`Plugins/Runtime/ModelViewViewModel/.../MVVMViewBlueprintCompiler.cpp:1147`).
+
+The MVVM row lives in the blueprint's view extension keyed by widget *name*, so **deleting the
+widget does not remove it** — re-adding a widget with the same name re-attaches the same broken row,
+which is what makes it look unfixable. Delete the row in the View Bindings panel.
+
+Worth grepping the engine for any UMG compiler message before theorising: the string above exists in
+exactly one file, and it named the plugin responsible in one search.
+
 This is not ceremony. Interface is taste, and taste cannot be derived from a specification: a panel
 can satisfy every requirement written down and still be the wrong shape to look at, and the way that
 surfaces is a day of work that has to be argued about instead of thrown away. Everything else in this
@@ -814,10 +834,31 @@ row says is the same decision at a smaller scale.
 
 ## 106 — A real HUD
 
-**Pending. Layout agreed with Joe, 12 August — Option A, contextual.** Implementation not started.
+**In progress. Layout agreed with Joe, 12 August — Option A, contextual. The flying readout is
+built and confirmed on screen; the other three contexts are not started.**
 
-Replace the debug-text panel with UMG. `SpaceMMOBackend.Build.cs` does not depend on `UMG` or
-`Slate` yet, so this starts with a module dependency.
+Done so far:
+
+- `SpaceMMOBackend.Build.cs` depends on `UMG`.
+- `USpaceMMOFlightReadout` words the readout in C++ as a pure static `Build()`, tested headlessly
+  (`SpaceMMOFlightReadoutTests.cpp`) for the cases a screenshot cannot settle: metres versus
+  kilometres either side of 1 km, ground altitude rather than sphere altitude in the pilot's line,
+  and an omitted orbital speed where there is nothing to orbit.
+- `WBP_FlightReadout` owns the layout, and **every label is the Blueprint's** — C++ emits bare
+  values. This is the whole point of the split: Joe re-anchored the readout from top-left to
+  top-right without a rebuild.
+- `USpaceMMOHudSettings` names the Blueprint in `DefaultGame.ini` rather than hard-coding a path.
+  Soft and unset by default, so the automated runs — which have no viewport — get no HUD rather
+  than a failed load.
+- The three `AddOnScreenDebugMessage` flight readouts it replaced are gone.
+
+**Top-left is the engine's, so do not put a widget there.** `UnrealEngine.cpp:13619` fixes
+on-screen debug messages at `x=40, y=45` in the editor (`100` in game) running downward, hardcoded
+with no console variable. The flight readout was originally placed there and sat underneath the
+character panel. It now lives top-right, confirmed by playtest 12 August. Every remaining widget in
+this milestone has the same constraint until the debug-text panel itself is gone.
+
+Remaining: the on-foot panel, the docked overlay, and transient messages above the pawn and ship.
 
 The panel's own comments are the specification for why: on-screen messages are ordered by slot
 rather than key, are deleted and re-added every frame at zero display time, and so land in an order
