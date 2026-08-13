@@ -5,6 +5,7 @@
 #include "GameFramework/InputSettings.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMODepositActor.h"
+#include "SpaceMMOHudPlacement.h"
 #include "SpaceMMOGatheringComponent.h"
 
 FSpaceMMODepositPromptText USpaceMMODepositPrompt::Build(
@@ -126,16 +127,30 @@ void USpaceMMODepositPrompt::NativeTick(const FGeometry& Geometry, const float D
 	// it this way. A player told they are standing at something they are not is worse than silence.
 	FBackendResourceNode Nearby;
 
+	const ASpaceMMODepositActor* InReach = nullptr;
+
 	if (const APawn* Possessed = Controller->GetPawn())
 	{
 		if (const USpaceMMOGatheringComponent* Gathering =
 			Possessed->FindComponentByClass<USpaceMMOGatheringComponent>())
 		{
-			if (const ASpaceMMODepositActor* Deposit = Gathering->FindDepositInRange())
-			{
-				Nearby = Deposit->GetNode();
-			}
+			InReach = Gathering->FindDepositInRange();
 		}
+	}
+
+	// The prompt sits over the rock rather than at a fixed place on screen, so it describes the
+	// thing it names. A deposit in reach can be behind the player — FindDepositInRange answers
+	// "nearest within range", not "the one being looked at" — and a label pinned at the screen edge
+	// pointing at something out of view describes nothing. So an unprojectable deposit is treated
+	// as no deposit, and turning around brings it back.
+	FVector2D Position;
+
+	if (InReach != nullptr
+		&& SpaceMMO::Hud::ProjectAbove(Controller, InReach, HeightScale, Position))
+	{
+		Nearby = InReach->GetNode();
+
+		SpaceMMO::Hud::PlaceAt(PromptRoot, Position);
 	}
 
 	const FSpaceMMODepositPromptText Text =

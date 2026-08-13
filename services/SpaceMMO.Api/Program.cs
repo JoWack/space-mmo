@@ -7,8 +7,10 @@ using SpaceMMO.Data.Docking;
 using SpaceMMO.Data.Gathering;
 using SpaceMMO.Data.Industry;
 using SpaceMMO.Data.Inventories;
+using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Market;
 using SpaceMMO.Data.Quests;
+using SpaceMMO.Domain.Economy;
 
 // The HTTP surface over the M1 backend. Thin on purpose: rules live in SpaceMMO.Domain and
 // transactions in SpaceMMO.Data, so nothing in this project decides a game outcome.
@@ -83,6 +85,46 @@ if (args.Contains("--seed", StringComparer.Ordinal))
     await loader.LoadAsync(Path.GetFullPath(contentRoot));
 
     Console.WriteLine($"Seeded content from {Path.GetFullPath(contentRoot)}.");
+
+    // Pays the starting stake to characters made before creation paid one.
+    //
+    // Idempotent by construction: the condition is the absence of a StartingStake ledger entry, not
+    // a zero balance, so a character who earned their way to zero is not topped up and nobody is
+    // paid twice. That distinction is the whole reason this is keyed on the ledger.
+    //
+    // Through the ledger and the balance together, exactly as CreateAsync does (ADR-0005). Credits
+    // that appear without an entry make the books irreconcilable, and reconciliation is what catches
+    // a dupe before players do -- a backfill that quietly broke it would be worse than no backfill.
+    List<Character> unpaid = await database.Characters
+        .Where(c => !database.LedgerEntries
+            .Any(l => l.CharacterId == c.Id && l.Reason == LedgerReason.StartingStake))
+        .ToListAsync();
+
+    if (unpaid.Count > 0)
+    {
+        DateTimeOffset paidAt = DateTimeOffset.UtcNow;
+
+        foreach (Character character in unpaid)
+        {
+            character.Balance += Economy.StartingStake;
+
+            database.LedgerEntries.Add(new LedgerEntry
+            {
+                CharacterId = character.Id,
+                DeltaCredits = Economy.StartingStake,
+                Reason = LedgerReason.StartingStake,
+                CreatedAt = paidAt,
+            });
+        }
+
+        await database.SaveChangesAsync();
+
+        // Named rather than counted, because this moves money and the one thing somebody reading
+        // this output wants to know is who it moved to.
+        Console.WriteLine(
+            $"Paid the {Economy.StartingStake} starting stake to "
+            + $"{string.Join(", ", unpaid.Select(c => c.Name))}.");
+    }
 
     return 0;
 }

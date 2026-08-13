@@ -19,7 +19,16 @@ struct SPACEMMOBACKEND_API FSpaceMMODepositPromptText
 {
 	GENERATED_BODY()
 
-	/** Whether there is anything in reach at all. Everything below is empty when false. */
+	/**
+	 * Whether there is a deposit to show — in reach <em>and</em> on screen.
+	 *
+	 * The second half matters because the prompt floats over the rock itself rather than sitting at
+	 * a fixed place: <c>FindDepositInRange</c> returns the nearest deposit within reach, which can
+	 * easily be behind the player. A label pinned at the screen edge pointing at something out of
+	 * view describes nothing, so the prompt hides instead — turning around brings it back.
+	 *
+	 * Everything below is empty when false.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bHasDeposit = false;
 
@@ -122,6 +131,23 @@ public:
 
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
+
+	/**
+	 * The thing that gets moved to sit over the deposit.
+	 *
+	 * Must be a direct child of a Canvas Panel, because its canvas slot is what carries the
+	 * position. Everything inside it is the Blueprint's.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> PromptRoot;
+
+	/**
+	 * How far above the deposit to float, as a multiple of the deposit's own bounding radius.
+	 *
+	 * Editable because how high is right is taste rather than fact, and deposit meshes differ.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	float HeightScale = 1.0f;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> ItemNameText;

@@ -963,6 +963,21 @@ UMG is a private dependency of this module.
 configured, `ShowTransientMessage` falls back to `ShowTransientLine`. No colour and no position, but
 visible — and the gather result is the only feedback a key press gives.
 
+**The deposit prompt floats over the rock, not the reticle** — Joe, 13 August. It describes the
+thing it names, so it goes on the thing it names, and it follows as you circle it.
+
+The projection is shared with the transient messages in `SpaceMMOHudPlacement.h` rather than written
+twice, because both answer "where on screen is the top of that actor" and both get it wrong the same
+two ways separately: **up is the actor's up, not the world's** (on a sphere those agree at exactly
+one point), and the height is a multiple of the actor's own bounding radius, so a rock, a character
+and a ship all clear themselves untuned.
+
+The two differ deliberately in what they do when the projection fails. **Messages fall back** to a
+fixed spot under the reticle — they must be seen, and first person puts the camera inside the pawn.
+**The prompt hides** — `FindDepositInRange` returns the nearest deposit in reach, not the one being
+looked at, so it can be behind the player, and a label pinned at the screen edge naming something out
+of view describes nothing. `bHasDeposit` therefore means "in reach *and* on screen".
+
 Remaining: the docked overlay (market, industry, quests — holdings has moved to 108).
 
 The panel's own comments are the specification for why: on-screen messages are ordered by slot

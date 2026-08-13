@@ -1,12 +1,12 @@
 #include "SpaceMMOTransientMessages.h"
 
 #include "Blueprint/WidgetLayoutLibrary.h"
-#include "Components/CanvasPanelSlot.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMOHudPlacement.h"
 
 void USpaceMMOTransientMessageRow::SetMessage(const FSpaceMMOTransientMessage& Message)
 {
@@ -99,46 +99,16 @@ void USpaceMMOTransientMessages::RebuildRows()
 
 void USpaceMMOTransientMessages::FollowPawn()
 {
-	// Not named Slot: UWidget already has a member by that name, and shadowing it is a warning this
-	// project treats as an error.
-	UCanvasPanelSlot* RootSlot = MessageRoot != nullptr
-		? Cast<UCanvasPanelSlot>(MessageRoot->Slot)
-		: nullptr;
+	const APlayerController* Controller = GetOwningPlayer();
 
-	APlayerController* Controller = GetOwningPlayer();
-
-	if (RootSlot == nullptr || Controller == nullptr)
+	if (Controller == nullptr)
 	{
 		return;
 	}
 
-	// Anchored by its bottom centre, so the message sits above the point rather than on it and grows
-	// upwards as the stack fills.
-	RootSlot->SetAlignment(FVector2D(0.5, 1.0));
-
-	const APawn* Pawn = Controller->GetPawn();
-
 	FVector2D Position;
 
-	bool bProjected = false;
-
-	if (Pawn != nullptr)
-	{
-		FVector Origin;
-		FVector Extent;
-
-		Pawn->GetActorBounds(true, Origin, Extent);
-
-		// Scaled by the pawn's own size rather than a fixed distance, so a ship and a character both
-		// clear themselves. Up is the pawn's up, not the world's: on a sphere those differ
-		// everywhere except one point, and using the world's would put the message sideways.
-		const FVector Above = Origin + Pawn->GetActorUpVector() * Extent.Size() * HeightScale;
-
-		bProjected = UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(
-			Controller, Above, Position, false);
-	}
-
-	if (!bProjected)
+	if (!SpaceMMO::Hud::ProjectAbove(Controller, Controller->GetPawn(), HeightScale, Position))
 	{
 		// First person puts the camera inside the pawn, so there is nothing to float above and the
 		// projection lands behind the viewer. Rather than let the message be silently off screen,
@@ -150,7 +120,7 @@ void USpaceMMOTransientMessages::FollowPawn()
 		Position = FVector2D(Viewport.X * 0.5, Viewport.Y * 0.62);
 	}
 
-	RootSlot->SetPosition(Position);
+	SpaceMMO::Hud::PlaceAt(MessageRoot, Position);
 }
 
 void USpaceMMOTransientMessages::NativeTick(const FGeometry& Geometry, const float DeltaSeconds)
