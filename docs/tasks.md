@@ -876,8 +876,8 @@ with no console variable. The flight readout was originally placed there and sat
 character panel. It now lives top-right, confirmed by playtest 12 August. Every remaining widget in
 this milestone has the same constraint until the debug-text panel itself is gone.
 
-**The on-foot context is written and awaiting its Blueprints, agreed with Joe 13 August.** Three
-widgets, all C++ done, all tested, none of them visible until the Widget Blueprints exist:
+**The on-foot context is done — built, wired and QA'd by Joe, 13 August.** Three widgets, agreed as
+sketches first:
 
 - **`USpaceMMOOnFootReadout`** — name and credits, top right. Shares the flight readout's corner
   because the two are never on screen together.
@@ -908,6 +908,26 @@ accumulation the other way round changes some levels — or disagree silently. S
 applies to the height function. The client keeps a **negative sentinel** for "not sent", because zero
 means "just started this level" and an older server would otherwise make every skill look freshly
 begun.
+
+**A Scale Box swallowed the deposit prompt, and the diagnosis is worth keeping.** The prompt never
+appeared. Rather than guess, the tick was instrumented to log which of four things had gone wrong —
+no pawn, no gathering component, nothing in range, or a node with no key — plus the widget's own
+resolved visibility, and to say so on change rather than per frame. One playtest answered it:
+
+    Deposit prompt: deposit found. bHasDeposit 1, item 'Ferrite Ore', own visibility 3.
+
+Every flag the Blueprint binds against was correct and the widget was on screen (3 is
+`HitTestInvisible`), which put the fault inside the Widget Blueprint and nowhere else. It was a
+**Scale Box between the Canvas Panel and the content**; removing it fixed it. A Scale Box scales its
+child to its own slot, so a canvas slot without a real size scales the content to nothing — no
+error, no warning, and identical from the outside to a binding that never fires.
+
+The instrumentation was removed once it had answered. What it proves is the approach: **silence from
+that log would itself have been the answer**, meaning the tick was not running at all, and it was
+written that way on purpose so a negative could not be ambiguous.
+
+Also worth knowing, checked while diagnosing: `.uasset` files are compressed, so `strings` finds
+nothing in them. A Widget Blueprint cannot be inspected from outside the editor.
 
 **Once the debug text is gone, Joe moves the flight and on-foot blocks to top left** — his call,
 13 August, done in the Blueprints without a rebuild. Recorded here because it only becomes
