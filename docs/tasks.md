@@ -1006,6 +1006,23 @@ So the split is now:
 Holdings therefore leaves the docked overlay entirely; 106's agreed shape listed it there and this
 supersedes that.
 
+**Read-only first, decided 13 August.** Moving goods needs a selection model and a quantity
+affordance and roughly doubles the work; seeing what you own and where is a real screen on its own,
+and it is the half that is missing today.
+
+**Transfer, when it lands, is drag between groups** — Joe's preference, 13 August. More work than a
+keyed affordance, and worth it.
+
+**Distant hangars are listed and greyed, not hidden.** The API refuses transfers when the character
+is not docked there (`RefuseIfNotPresentAsync`), so they are genuinely unusable from elsewhere — but
+knowing that 1,480 ferrite is sitting two planets away is exactly the thing a hauling game wants a
+player to feel, and hiding it would make the goods simply vanish.
+
+Grouped by container, because that is the fact the screen exists to convey. `InventoryItemResponse`
+already carries `kind` and `stationId`, so the grouping needs no API change. Stacks show a quantity
+and instances show condition, kept apart for the reason ADR-0006 makes load-bearing: two lasers at
+different condition are two things, and a quantity of 2 says they are one.
+
 Blocks the useful half of 99.
 
 Moving goods between a hangar and a ship hold works over HTTP and has no way to be asked for in game.
