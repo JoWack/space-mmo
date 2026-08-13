@@ -42,7 +42,16 @@ bool FSpaceMMOFlightReadoutSpeaksMetresTest::RunTest(const FString& Parameters)
 	// 18,400 cm/s is 184 m/s. It read "0.184 km/s" before, which is not a number anybody compares
 	// against anything at a glance -- and comparing it against orbital speed is why it is on screen.
 	TestEqual(TEXT("Speed in metres per second"), Text.Speed, FString(TEXT("184 m/s")));
-	TestEqual(TEXT("Orbital alongside it"), Text.Orbital, FString(TEXT("orbital 443 m/s")));
+	// Bare numbers, because labels live in the Widget Blueprint where they can be reworded and
+	// restyled without a rebuild. C++ says what the value is; the designer says what it is called.
+	TestEqual(TEXT("Orbital alongside it"), Text.Orbital, FString(TEXT("443 m/s")));
+	TestTrue(TEXT("And it means something here"), Text.bHasOrbital);
+
+	// FSystemCoordinate::ToString already ends in "km"; adding another produced "km km" on screen.
+	TestEqual(
+		TEXT("System position is not doubly united"),
+		Text.SystemPosition,
+		FString(TEXT("(39.685, -1.002, -0.039) km")));
 
 	TestEqual(TEXT("Proximity band"), Text.Proximity, FString(TEXT("SURFACE")));
 
@@ -102,6 +111,10 @@ bool FSpaceMMOFlightReadoutSaysNothingAboutOrbitingNothingTest::RunTest(const FS
 	const FSpaceMMOFlightReadoutText Text = USpaceMMOFlightReadout::Build(Adrift);
 
 	TestTrue(TEXT("Orbital speed is omitted entirely"), Text.Orbital.IsEmpty());
+
+	// The flag a Blueprint binds a label's visibility to, so nothing is left hanging over an empty
+	// value.
+	TestFalse(TEXT("And says so"), Text.bHasOrbital);
 	TestEqual(TEXT("Speed still reported"), Text.Speed, FString(TEXT("184 m/s")));
 
 	return true;

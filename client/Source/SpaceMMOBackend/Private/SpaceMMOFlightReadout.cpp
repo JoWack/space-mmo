@@ -32,9 +32,15 @@ FSpaceMMOFlightReadoutText USpaceMMOFlightReadout::Build(
 
 	// Nothing to orbit is a real state — deep space, between bodies — and an orbital speed of
 	// "0 m/s" there would read as a ship somehow already in orbit of nothing.
-	Text.Orbital = Inputs.OrbitalSpeedCentimetresPerSecond > 0.0
-		? FString::Printf(
-			TEXT("orbital %s"), *MetresPerSecond(Inputs.OrbitalSpeedCentimetresPerSecond))
+	// Reported through bHasOrbital as well, so a Blueprint can hide the label beside it rather than
+	// leaving one dangling over an empty value.
+	Text.bHasOrbital = Inputs.OrbitalSpeedCentimetresPerSecond > 0.0;
+
+	// A bare number, like every other value here: labels live in the Widget Blueprint, where they
+	// can be reworded and restyled without a rebuild. C++ says what the value is; the designer says
+	// what it is called.
+	Text.Orbital = Text.bHasOrbital
+		? MetresPerSecond(Inputs.OrbitalSpeedCentimetresPerSecond)
 		: FString();
 
 	Text.Proximity =
@@ -42,8 +48,7 @@ FSpaceMMOFlightReadoutText USpaceMMOFlightReadout::Build(
 		: Inputs.Proximity == EPlanetProximity::Atmospheric ? TEXT("ATMOSPHERE")
 		: TEXT("ORBIT");
 
-	Text.SystemPosition = FString::Printf(
-		TEXT("system %s km"), *Inputs.SystemPosition.ToString());
+	Text.SystemPosition = Inputs.SystemPosition.ToString();
 
 	// One line, because these are three symptoms of the same thing: whether the coordinate model is
 	// behaving. The sphere altitude sits here rather than beside the ground one because they differ
@@ -107,4 +112,6 @@ void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float D
 	Set(ProximityText, Text.Proximity);
 	Set(SystemPositionText, Text.SystemPosition);
 	Set(DebugText, bShowDebug ? Text.Debug : FString());
+
+	bHasOrbitalSpeed = Text.bHasOrbital;
 }

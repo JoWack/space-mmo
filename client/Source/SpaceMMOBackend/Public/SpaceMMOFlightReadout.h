@@ -32,9 +32,15 @@ struct SPACEMMOBACKEND_API FSpaceMMOFlightReadoutText
 	 * Shown beside speed because it is the number that explains the flight model: on the 20 km
 	 * capital it is about 443 m/s, drag caps a ship at 200, and a ship faster than orbital is
 	 * thrown off the ground by its own speed rather than flying along it.
+	 *
+	 * Empty when there is nothing to orbit; see bHasOrbital.
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	FString Orbital;
+
+	/** Whether Orbital means anything, so a label can be hidden alongside an empty value. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bHasOrbital = false;
 
 	/** ORBIT, ATMOSPHERE or SURFACE. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
@@ -110,6 +116,16 @@ public:
 	/** Whether the debug line is shown, which follows the ship's own flight-debug flag. */
 	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|HUD")
 	bool bShowDebug = false;
+
+	/**
+	 * Whether there is anything to orbit where the ship is.
+	 *
+	 * Bind a row's visibility to this in the designer. Every value here is a bare number now --
+	 * labels live in the Widget Blueprint, so they can be reworded and restyled without a rebuild
+	 * -- which means an empty orbital speed would otherwise leave its label hanging over nothing.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bHasOrbitalSpeed = false;
 
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
