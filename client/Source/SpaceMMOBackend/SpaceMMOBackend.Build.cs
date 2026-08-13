@@ -43,6 +43,10 @@ public class SpaceMMOBackend : ModuleRules
 			// and DefaultGame.ini rather than being compiled into a header.
 			"DeveloperSettings",
 
+			// FKey, so the deposit prompt can read which key is actually bound to Gather rather
+			// than printing an "E" that stops being true the moment anyone rebinds it.
+			"InputCore",
+
 			// Private: callers get the subsystem's API, not the transport. Nothing outside this
 			// module should be constructing an HTTP request against the game server.
 			"HTTP",

@@ -876,7 +876,44 @@ with no console variable. The flight readout was originally placed there and sat
 character panel. It now lives top-right, confirmed by playtest 12 August. Every remaining widget in
 this milestone has the same constraint until the debug-text panel itself is gone.
 
-Remaining: the on-foot panel, the docked overlay, and transient messages above the pawn and ship.
+**The on-foot context is written and awaiting its Blueprints, agreed with Joe 13 August.** Three
+widgets, all C++ done, all tested, none of them visible until the Widget Blueprints exist:
+
+- **`USpaceMMOOnFootReadout`** — name and credits, top right. Shares the flight readout's corner
+  because the two are never on screen together.
+- **`USpaceMMODepositPrompt`** — above the reticle, since it describes what you are looking at
+  rather than what you are. Collapses entirely with nothing in reach. Carries the blockers as
+  separate fields so the Blueprint can colour "you are lv 1" and "you have none" without colouring
+  the rest — which is the whole reason this is a widget: as debug text those lines carried the same
+  weight as everything else.
+- **`USpaceMMOSkillsScreen`** + `USpaceMMOSkillRow` — every skill, opened with **K** (verified free
+  against `DefaultInput.ini`). Trained first, alphabetical within each group.
+
+Three decisions worth keeping:
+
+1. **The key hint reads the actual binding.** `FindGatherKey` asks `UInputSettings` what is bound to
+   `Gather` rather than the Blueprint printing "E". A hint that says E after somebody rebinds is
+   confidently wrong and the player cannot tell.
+2. **Every skill, not just trained ones** — a reversal of `BuildCharacterPanel`'s `Xp > 0` filter,
+   which is right for an always-on panel and wrong for a screen somebody opens on purpose. M6's
+   eight combat skills would otherwise be undiscoverable.
+3. **Untrained skills read `lv 1`, not a dash.** The sketch said a dash; the skills endpoint says
+   every character has every skill at level 1 from creation, so a dash would claim something the
+   server does not.
+
+**Progress figures are served, not derived.** `SkillResponse` gained `xpToNextLevel` and
+`progressToNextLevel` from `SkillCurve.Describe`. A C++ copy of the curve would have to reproduce
+`BuildThresholds`' order-sensitive flooring — its own comment says doing the division and the
+accumulation the other way round changes some levels — or disagree silently. Same reasoning ADR-0002
+applies to the height function. The client keeps a **negative sentinel** for "not sent", because zero
+means "just started this level" and an older server would otherwise make every skill look freshly
+begun.
+
+**Once the debug text is gone, Joe moves the flight and on-foot blocks to top left** — his call,
+13 August, done in the Blueprints without a rebuild. Recorded here because it only becomes
+actionable after the docked overlay lands and removes the last of the on-screen messages.
+
+Remaining: the docked overlay, and transient messages above the pawn and ship.
 
 The panel's own comments are the specification for why: on-screen messages are ordered by slot
 rather than key, are deleted and re-added every frame at zero display time, and so land in an order

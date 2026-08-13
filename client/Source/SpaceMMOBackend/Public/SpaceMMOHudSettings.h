@@ -31,5 +31,28 @@ public:
 		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOFlightReadout"))
 	FSoftClassPath FlightReadout;
 
+	/**
+	 * Name and credits, shown while on foot. Must derive from <c>USpaceMMOOnFootReadout</c>.
+	 *
+	 * Shares the flight readout's corner; the controller shows exactly one of them.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOOnFootReadout"))
+	FSoftClassPath OnFootReadout;
+
+	/**
+	 * The deposit prompt above the reticle. Must derive from <c>USpaceMMODepositPrompt</c>.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMODepositPrompt"))
+	FSoftClassPath DepositPrompt;
+
+	/**
+	 * The skills screen opened with K. Must derive from <c>USpaceMMOSkillsScreen</c>.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOSkillsScreen"))
+	FSoftClassPath SkillsScreen;
+
 	virtual FName GetCategoryName() const override { return TEXT("Game"); }
 };

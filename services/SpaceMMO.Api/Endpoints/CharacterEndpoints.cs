@@ -28,7 +28,28 @@ public sealed record CharacterResponse(
     int HomeBodyId,
     long BalanceMinorUnits);
 
-public sealed record SkillResponse(string Key, string Name, SkillCategory Category, long Xp, int Level);
+/// <param name="XpToNextLevel">
+/// XP still needed to reach the next level, or 0 at the cap.
+/// </param>
+/// <param name="ProgressToNextLevel">
+/// How far through the current level, 0 to 1, for a progress bar. 1 at the cap.
+/// </param>
+/// <remarks>
+/// Progress is served rather than derived on the client because the XP curve is game rules.
+/// <see cref="SkillCurve"/> is deliberate about the order its floors are applied — the comment on
+/// its threshold table says doing the division and the accumulation the other way round produces
+/// different values at some levels — and a second implementation in C++ would reproduce that
+/// subtlety or silently disagree with it. The same reasoning ADR-0002 applies to the height
+/// function applies here: one implementation, on the side that owns the rule.
+/// </remarks>
+public sealed record SkillResponse(
+    string Key,
+    string Name,
+    SkillCategory Category,
+    long Xp,
+    int Level,
+    long XpToNextLevel,
+    double ProgressToNextLevel);
 
 /// <param name="FactionBuyPriceMinorUnits">
 /// What a faction standing order pays per unit, or null if none buys it. Carried on the stack so a
@@ -276,7 +297,18 @@ public static class CharacterEndpoints
             {
                 long xp = r.Xp ?? 0;
 
-                return new SkillResponse(r.Key, r.Name, r.Category, xp, SkillCurve.LevelForXp(xp));
+                // Describe rather than LevelForXp: it returns the level and both progress figures
+                // from one binary search, which is what it exists for.
+                SkillProgress progress = SkillCurve.Describe(xp);
+
+                return new SkillResponse(
+                    r.Key,
+                    r.Name,
+                    r.Category,
+                    xp,
+                    progress.Level,
+                    progress.XpToNextLevel,
+                    progress.ProgressToNextLevel);
             })
             .ToList());
     }

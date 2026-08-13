@@ -281,6 +281,17 @@ bool FSpaceMMOBackendProtocol::ParseSkills(const FString& Json, TArray<FBackendS
 			Skill.Level = static_cast<int32>(Level);
 		}
 
+		ReadInt64(Object, TEXT("xpToNextLevel"), Skill.XpToNextLevel);
+
+		// Left at its sentinel when absent, so a server too old to send it produces a skills screen
+		// with no bars rather than one where every skill claims to have just started its level.
+		double Progress = 0.0;
+
+		if (Object->TryGetNumberField(TEXT("progressToNextLevel"), Progress))
+		{
+			Skill.ProgressToNextLevel = static_cast<float>(Progress);
+		}
+
 		OutSkills.Add(Skill);
 	}
 

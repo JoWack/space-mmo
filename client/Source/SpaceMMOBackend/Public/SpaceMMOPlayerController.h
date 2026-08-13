@@ -78,9 +78,32 @@ public:
 	 */
 	void UpdateHudContext();
 
+	/** Opens and closes the skills screen. Bound to K. */
+	void ToggleSkillsScreen();
+
 	/** The flight readout, or null when none is configured. */
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOFlightReadout> FlightReadout;
+
+	/** Name and credits while on foot, or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOOnFootReadout> OnFootReadout;
+
+	/** The deposit prompt above the reticle, or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMODepositPrompt> DepositPrompt;
+
+	/** The skills screen, or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOSkillsScreen> SkillsScreen;
+
+	/**
+	 * Whether the skills screen is open.
+	 *
+	 * Held here rather than read back off the widget, because the widget stops ticking while it is
+	 * closed and so cannot be asked anything about itself.
+	 */
+	bool bSkillsScreenOpen = false;
 
 
 	/**
@@ -200,6 +223,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
 	bool IsIdentified() const { return CharacterId != 0; }
+
+	/**
+	 * This character's balance, formatted, or empty until the character list has been read.
+	 *
+	 * Empty rather than "0" deliberately: a confident zero is indistinguishable from being broke,
+	 * and the two want different reactions from whoever is reading it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
+	FString GetCharacterBalance() const;
 
 	/** Where this player's gathered material goes. Not yet chosen per player. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Identity")

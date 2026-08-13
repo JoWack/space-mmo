@@ -124,6 +124,23 @@ struct SPACEMMOBACKEND_API FBackendSkill
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 Level = 1;
+
+	/** XP still needed for the next level, or 0 at the cap. Served, for the same reason Level is. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 XpToNextLevel = 0;
+
+	/**
+	 * How far through the current level, 0 to 1.
+	 *
+	 * Negative when the server did not send it, which is not the same as zero: zero is a level just
+	 * begun and draws an empty bar, while "not sent" must draw no bar at all. An older server
+	 * omitting the field would otherwise have every skill on screen claiming no progress.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	float ProgressToNextLevel = -1.0f;
+
+	/** Whether the server sent progress figures at all. */
+	bool HasProgress() const { return ProgressToNextLevel >= 0.0f; }
 };
 
 /**

@@ -12,8 +12,11 @@
 #include "SpaceMMOFlightReadout.h"
 #include "SpaceMMOHudSettings.h"
 #include "SpaceMMODockingComponent.h"
+#include "SpaceMMODepositPrompt.h"
 #include "SpaceMMOGatheringComponent.h"
+#include "SpaceMMOOnFootReadout.h"
 #include "SpaceMMOShipPawn.h"
+#include "SpaceMMOSkillsScreen.h"
 
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
 {
@@ -50,49 +53,83 @@ void ASpaceMMOPlayerController::BeginPlay()
 	}
 }
 
+namespace
+{
+	/**
+	 * Loads one configured HUD widget and puts it in the viewport, or says why it did not.
+	 *
+	 * Unset is a legitimate state rather than a fault: the game has to run for anyone who has not
+	 * made the Widget Blueprint yet, and the automated runs have no viewport to add one to at all.
+	 * Named-but-wrong is a mistake somebody wants telling about, because from the outside a typo'd
+	 * path and an unset one look identical.
+	 */
+	template <typename WidgetType>
+	WidgetType* CreateHudWidget(
+		APlayerController* Owner,
+		const FSoftClassPath& Path,
+		const TCHAR* What)
+	{
+		if (!Path.IsValid())
+		{
+			return nullptr;
+		}
+
+		UClass* WidgetClass = Path.TryLoadClass<WidgetType>();
+
+		if (WidgetClass == nullptr)
+		{
+			UE_LOG(LogSpaceMMOBackend, Warning,
+				TEXT("HUD: '%s' is not the right class for the %s; it will not be shown."),
+				*Path.ToString(), What);
+
+			return nullptr;
+		}
+
+		WidgetType* Widget = CreateWidget<WidgetType>(Owner, WidgetClass);
+
+		// Says it happened, because "no warning" and "never ran" look identical from a log
+		// otherwise -- and this runs behind a setting, on the local controller only, in a build
+		// that may have no viewport at all.
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("HUD: %s %s from '%s'."),
+			What,
+			Widget != nullptr ? TEXT("created") : TEXT("FAILED to create"),
+			*Path.ToString());
+
+		if (Widget != nullptr)
+		{
+			// Added once and left in the viewport; UpdateHudContext shows and hides it from the
+			// controller's tick, because a widget cannot restore its own visibility once it has
+			// dropped it.
+			Widget->AddToViewport();
+		}
+
+		return Widget;
+	}
+}
+
 void ASpaceMMOPlayerController::CreateHud()
 {
-	// Unset until somebody makes the Widget Blueprint, and unset is a legitimate state rather than
-	// a fault: the game has to run for anyone who has not made it yet, and the automated runs have
-	// no viewport to add a widget to at all.
 	const USpaceMMOHudSettings* Settings = GetDefault<USpaceMMOHudSettings>();
 
-	if (Settings == nullptr || !Settings->FlightReadout.IsValid())
+	if (Settings == nullptr)
 	{
 		return;
 	}
 
-	UClass* WidgetClass = Settings->FlightReadout.TryLoadClass<USpaceMMOFlightReadout>();
+	// The flight readout's debug line follows the ship's own flight-debug flag, read every tick
+	// rather than set here, so toggling that flag takes effect without a restart.
+	FlightReadout = CreateHudWidget<USpaceMMOFlightReadout>(
+		this, Settings->FlightReadout, TEXT("flight readout"));
 
-	if (WidgetClass == nullptr)
-	{
-		// Named but wrong, which is worth a word: a typo'd path and an unset one look identical
-		// from the outside, and one of them is a mistake somebody wants telling about.
-		UE_LOG(LogSpaceMMOBackend, Warning,
-			TEXT("HUD: '%s' is not a SpaceMMOFlightReadout; no flight readout will be shown."),
-			*Settings->FlightReadout.ToString());
+	OnFootReadout = CreateHudWidget<USpaceMMOOnFootReadout>(
+		this, Settings->OnFootReadout, TEXT("on-foot readout"));
 
-		return;
-	}
+	DepositPrompt = CreateHudWidget<USpaceMMODepositPrompt>(
+		this, Settings->DepositPrompt, TEXT("deposit prompt"));
 
-	FlightReadout = CreateWidget<USpaceMMOFlightReadout>(this, WidgetClass);
-
-	// Says it happened, because "no warning" and "never ran" look identical from a log otherwise --
-	// and this runs behind a setting, on the local controller only, in a build that may have no
-	// viewport at all.
-	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("HUD: flight readout %s from '%s'."),
-		FlightReadout != nullptr ? TEXT("created") : TEXT("FAILED to create"),
-		*Settings->FlightReadout.ToString());
-
-	if (FlightReadout != nullptr)
-	{
-		// Added once and left in the viewport; UpdateHudContext shows and hides it from this
-		// actor's tick, because a widget cannot restore its own visibility once it has dropped it.
-		// Its debug line follows the ship's own flight-debug flag, read every tick rather than set
-		// here, so toggling that flag takes effect without a restart.
-		FlightReadout->AddToViewport();
-	}
+	SkillsScreen = CreateHudWidget<USpaceMMOSkillsScreen>(
+		this, Settings->SkillsScreen, TEXT("skills screen"));
 }
 
 void ASpaceMMOPlayerController::ApplyMouseCapture()
@@ -151,6 +188,9 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			IE_Pressed,
 			this,
 			&ASpaceMMOPlayerController::ToggleCharacterPanel);
+
+		InputComponent->BindAction(
+			TEXT("ToggleSkills"), IE_Pressed, this, &ASpaceMMOPlayerController::ToggleSkillsScreen);
 
 		InputComponent->BindAction(
 			TEXT("CycleRecipe"), IE_Pressed, this, &ASpaceMMOPlayerController::CycleRecipe);
@@ -566,24 +606,49 @@ void ASpaceMMOPlayerController::Tick(const float DeltaSeconds)
 
 void ASpaceMMOPlayerController::UpdateHudContext()
 {
-	if (FlightReadout == nullptr)
-	{
-		return;
-	}
-
 	const bool bFlying = Cast<ASpaceMMOShipPawn>(GetPawn()) != nullptr;
 
 	// HitTestInvisible rather than Visible: a readout that swallowed clicks would make the world
 	// behind it unclickable, and nothing here is meant to be pressed.
-	const ESlateVisibility Wanted =
-		bFlying ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
-
-	// Only on a change. Assigning the same value every frame is cheap but not free — Slate compares
-	// and skips, and saying so here stops the next reader wondering.
-	if (FlightReadout->GetVisibility() != Wanted)
+	//
+	// Only assigned on a change. Slate compares and skips an identical value, but saying so here
+	// stops the next reader wondering whether this costs a frame.
+	auto Show = [](UUserWidget* Widget, const bool bWanted)
 	{
-		FlightReadout->SetVisibility(Wanted);
-	}
+		if (Widget == nullptr)
+		{
+			return;
+		}
+
+		const ESlateVisibility Wanted =
+			bWanted ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+
+		if (Widget->GetVisibility() != Wanted)
+		{
+			Widget->SetVisibility(Wanted);
+		}
+	};
+
+	// Exactly one of these two, never both: they share a corner deliberately, because a pilot and
+	// somebody on foot are never the same moment.
+	Show(FlightReadout, bFlying);
+	Show(OnFootReadout, !bFlying);
+
+	// Gathering happens on foot — the component lives on the character pawn, and a ship has nothing
+	// to pick up with — so the prompt has nothing to say in flight whatever is beneath the ship.
+	Show(DepositPrompt, !bFlying);
+
+	// Skills are global, so K works in the air as well as on the ground.
+	Show(SkillsScreen, bSkillsScreenOpen);
+}
+
+void ASpaceMMOPlayerController::ToggleSkillsScreen()
+{
+	bSkillsScreenOpen = !bSkillsScreenOpen;
+
+	// Applied immediately rather than waiting for the next tick, so the screen answers the keypress
+	// in the frame it was pressed.
+	UpdateHudContext();
 }
 
 void ASpaceMMOPlayerController::OnRep_CharacterId()
@@ -663,21 +728,7 @@ void ASpaceMMOPlayerController::DrawCharacterPanel()
 		return;
 	}
 
-	// Empty until the character list has been read, and the panel says so rather than printing a
-	// confident zero -- which is indistinguishable from being broke.
-	FString Balance;
-
-	// Not named Character: AController already has a member by that name, and shadowing it is a
-	// warning this project treats as an error.
-	for (const FBackendCharacter& Owned : Client->GetCharacters())
-	{
-		if (Owned.Id == CharacterId)
-		{
-			Balance = Owned.FormatBalance();
-
-			break;
-		}
-	}
+	const FString Balance = GetCharacterBalance();
 
 	TArray<FString> Lines;
 
@@ -962,6 +1013,30 @@ TArray<FString> ASpaceMMOPlayerController::BuildIndustryPanel(
 	}
 
 	return Lines;
+}
+
+FString ASpaceMMOPlayerController::GetCharacterBalance() const
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr)
+	{
+		return FString();
+	}
+
+	// Not named Character: AController already has a member by that name, and shadowing it is a
+	// warning this project treats as an error.
+	for (const FBackendCharacter& Owned : Client->GetCharacters())
+	{
+		if (Owned.Id == CharacterId)
+		{
+			return Owned.FormatBalance();
+		}
+	}
+
+	// Empty until the character list has been read. A confident zero is indistinguishable from being
+	// broke, and the two want different reactions from whoever is reading it.
+	return FString();
 }
 
 FString ASpaceMMOPlayerController::GroupDigits(const int64 Value)

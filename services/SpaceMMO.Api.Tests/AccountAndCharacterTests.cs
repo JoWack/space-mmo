@@ -228,6 +228,71 @@ public sealed class AccountAndCharacterTests(ApiDatabaseFixture fixture) : IAsyn
         Assert.Contains(skills, s => s.Key == "mining");
     }
 
+    [Fact]
+    public async Task Skills_report_progress_towards_the_next_level()
+    {
+        // The skills screen shows how far off the next level is, and both figures are served rather
+        // than derived on the client. SkillCurve's threshold table is order-sensitive -- its own
+        // comment says flooring the division and the accumulation the other way round changes some
+        // levels -- so a C++ reimplementation would either reproduce that subtlety or disagree with
+        // it silently, and a skill bar that disagrees with the server is worse than no bar.
+        await SeedSkillsAsync();
+
+        SessionPayload session = await RegisterAsync("progress@example.com");
+
+        HttpResponseMessage created = await CreateCharacterAsync(session, "Apprentice");
+        CharacterPayload? character = await created.Content.ReadFromJsonAsync<CharacterPayload>();
+
+        await AwardXpAsync(character!.Id, "mining", 100L);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get, new Uri($"/characters/{character.Id}/skills", UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session.Token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+
+        List<SkillPayload>? skills = await response.Content.ReadFromJsonAsync<List<SkillPayload>>();
+
+        Assert.NotNull(skills);
+
+        SkillPayload mining = skills.Single(s => s.Key == "mining");
+
+        // Published thresholds: level 2 begins at 83 XP and level 3 at 174. Written literally rather
+        // than through SkillCurve, because computing the expectation with the same function the
+        // endpoint uses would pass no matter what either of them did.
+        Assert.Equal(2, mining.Level);
+        Assert.Equal(74L, mining.XpToNextLevel);
+        Assert.Equal((100.0 - 83.0) / (174.0 - 83.0), mining.ProgressToNextLevel, 6);
+
+        // An untouched skill is the case a bar renders wrong most visibly: level 1, nothing done,
+        // and 83 to go rather than zero.
+        SkillPayload untouched = skills.Single(s => s.Key == "refining");
+
+        Assert.Equal(1, untouched.Level);
+        Assert.Equal(83L, untouched.XpToNextLevel);
+        Assert.Equal(0.0, untouched.ProgressToNextLevel);
+    }
+
+    /// <summary>Gives a character XP in one skill, the way an award would.</summary>
+    private async Task AwardXpAsync(int characterId, string skillKey, long xp)
+    {
+        await using SpaceMMO.Data.SpaceMmoDbContext context = _fixture.CreateContext();
+
+        SpaceMMO.Data.Entities.Skill skill = context.Skills.Single(s => s.Key == skillKey);
+
+        context.CharacterSkills.Add(new SpaceMMO.Data.Entities.CharacterSkill
+        {
+            CharacterId = characterId,
+            SkillId = skill.Id,
+            Xp = xp,
+        });
+
+        await context.SaveChangesAsync();
+    }
+
     /// <summary>Three skills, so the endpoint has a catalog to report against.</summary>
     private async Task SeedSkillsAsync()
     {
@@ -289,5 +354,11 @@ public sealed class AccountAndCharacterTests(ApiDatabaseFixture fixture) : IAsyn
         int Id, string Name, Race Race, Faction Faction, int HomeBodyId, long BalanceMinorUnits);
 
     private sealed record SkillPayload(
-        string Key, string Name, SkillCategory Category, long Xp, int Level);
+        string Key,
+        string Name,
+        SkillCategory Category,
+        long Xp,
+        int Level,
+        long XpToNextLevel,
+        double ProgressToNextLevel);
 }

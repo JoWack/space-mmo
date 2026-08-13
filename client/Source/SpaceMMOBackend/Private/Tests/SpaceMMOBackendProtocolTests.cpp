@@ -306,17 +306,44 @@ bool FSpaceMMOBackendParseSkillsAndInventoryTest::RunTest(const FString& Paramet
 {
 	TArray<FBackendSkill> Skills;
 
+	// Copied from what the API actually answers with -- the capped skill and a part-trained one,
+	// including the progress figures the skills screen draws its bars from.
 	FSpaceMMOBackendProtocol::ParseSkills(
-		TEXT(R"([{"key":"mining","name":"Mining","category":0,"xp":13034431,"level":99}])"),
+		TEXT(R"([{"key":"mining","name":"Mining","category":0,"xp":13034431,"level":99,
+			  "xpToNextLevel":0,"progressToNextLevel":1},
+			 {"key":"refining","name":"Refining","category":0,"xp":100,"level":2,
+			  "xpToNextLevel":74,"progressToNextLevel":0.18681318681318682}])"),
 		Skills);
 
-	TestEqual(TEXT("One skill"), Skills.Num(), 1);
+	TestEqual(TEXT("Two skills"), Skills.Num(), 2);
 	TestEqual(TEXT("Key"), Skills[0].Key, TEXT("mining"));
 
 	// The level comes from the server. Deriving it here would be a second implementation of the
 	// XP curve, and two implementations of a rule are two chances to disagree about it.
 	TestEqual(TEXT("Level 99 at the curve's cap"), Skills[0].Level, 99);
 	TestEqual(TEXT("XP survives as int64"), Skills[0].Xp, 13034431LL);
+
+	// Progress arrives the same way and for the same reason. SkillCurve's thresholds are built with
+	// order-sensitive flooring, so a C++ copy of the curve would reproduce that or disagree quietly.
+	TestEqual(TEXT("Nothing left to earn at the cap"), Skills[0].XpToNextLevel, 0LL);
+	TestTrue(TEXT("The cap reads as a full bar"), Skills[0].ProgressToNextLevel > 0.999f);
+
+	TestEqual(TEXT("XP to the next level"), Skills[1].XpToNextLevel, 74LL);
+	TestEqual(
+		TEXT("Part way through level 2"), Skills[1].ProgressToNextLevel, 0.1868f, 0.0001f);
+	TestTrue(TEXT("Both skills report progress"), Skills[1].HasProgress());
+
+	// A server too old to send progress must produce a screen with no bars, not one where every
+	// skill claims to have just started its level -- which is what a plain zero default would say.
+	TArray<FBackendSkill> WithoutProgress;
+
+	FSpaceMMOBackendProtocol::ParseSkills(
+		TEXT(R"([{"key":"mining","name":"Mining","category":0,"xp":100,"level":2}])"),
+		WithoutProgress);
+
+	TestEqual(TEXT("Still parsed"), WithoutProgress.Num(), 1);
+	TestEqual(TEXT("Level still read"), WithoutProgress[0].Level, 2);
+	TestFalse(TEXT("But it says it has no progress"), WithoutProgress[0].HasProgress());
 
 	TArray<FBackendInventoryItem> Items;
 	TArray<FBackendItemInstance> Instances;
