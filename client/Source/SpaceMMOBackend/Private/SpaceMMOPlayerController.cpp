@@ -11,6 +11,7 @@
 #include "SpaceMMODepositActor.h"
 #include "SpaceMMOFlightReadout.h"
 #include "SpaceMMOHudSettings.h"
+#include "SpaceMMOInventoryScreen.h"
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMODepositPrompt.h"
 #include "SpaceMMOGatheringComponent.h"
@@ -138,6 +139,9 @@ void ASpaceMMOPlayerController::CreateHud()
 
 	StationOverlay = CreateHudWidget<USpaceMMOStationOverlay>(
 		this, Settings->StationOverlay, TEXT("station overlay"));
+
+	InventoryScreen = CreateHudWidget<USpaceMMOInventoryScreen>(
+		this, Settings->InventoryScreen, TEXT("inventory screen"));
 }
 
 void ASpaceMMOPlayerController::ShowTransientMessage(
@@ -215,6 +219,12 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 
 		InputComponent->BindAction(
 			TEXT("ToggleSkills"), IE_Pressed, this, &ASpaceMMOPlayerController::ToggleSkillsScreen);
+
+		InputComponent->BindAction(
+			TEXT("ToggleInventory"),
+			IE_Pressed,
+			this,
+			&ASpaceMMOPlayerController::ToggleInventoryScreen);
 
 		InputComponent->BindAction(
 			TEXT("ToggleStation"),
@@ -695,6 +705,10 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// Skills are global, so K works in the air as well as on the ground.
 	Show(SkillsScreen, bSkillsScreenOpen);
 
+	// So is what you own, and where it is is the whole point -- so I works in flight too, which is
+	// where a hauler most wants to know what is still sitting in a hangar.
+	Show(InventoryScreen, bInventoryScreenOpen);
+
 	// Undocking closes the station overlay rather than leaving a station's market floating over open
 	// space — and it opens on docking, so arriving somewhere shows you where you have arrived.
 	const int32 Station = DockedStationId();
@@ -802,6 +816,26 @@ void ASpaceMMOPlayerController::ShowQuestsTab()
 	{
 		StationOverlay->SetTab(ESpaceMMOStationTab::Quests);
 	}
+}
+
+void ASpaceMMOPlayerController::ToggleInventoryScreen()
+{
+	if (InventoryScreen == nullptr)
+	{
+		return;
+	}
+
+	bInventoryScreenOpen = !bInventoryScreenOpen;
+
+	// Asked for on opening rather than polled. What a player owns changes on the server -- a job
+	// claimed, a sale settled, another character hauling -- and a screen opened to work out where
+	// something went is the worst possible moment to be showing a stale copy.
+	if (bInventoryScreenOpen)
+	{
+		RefreshCharacterState();
+	}
+
+	UpdateHudContext();
 }
 
 void ASpaceMMOPlayerController::ToggleSkillsScreen()

@@ -1130,6 +1130,21 @@ So the split is now:
 Holdings therefore leaves the docked overlay entirely; 106's agreed shape listed it there and this
 supersedes that.
 
+**Written 14 August, awaiting its Blueprints.** `USpaceMMOInventoryScreen` +
+`USpaceMMOInventoryRow`, opened with `I` — which works in flight as well as on foot, since knowing
+what is still sitting in a hangar is most useful while deciding where to fly. Opening refreshes from
+the backend rather than polling: a screen opened to work out where something went is the worst
+moment to be showing a stale copy.
+
+Order is carried, ship hold, **the hangar being stood in**, then everywhere else alphabetically —
+what is to hand at the top, which is the order the questions get asked in. Reachability mirrors what
+the API enforces rather than guessing at it: a hangar counts as reachable only when docked there,
+which is the same rule `RefuseIfNotPresentAsync` applies to a transfer.
+
+A hangar whose station has not been fetched is named by id (`HANGAR — 41`) rather than left with an
+empty heading, and an empty inventory says "Nothing yet" rather than rendering a blank rectangle
+that reads as a screen which failed to load.
+
 **Read-only first, decided 13 August.** Moving goods needs a selection model and a quantity
 affordance and roughly doubles the work; seeing what you own and where is a real screen on its own,
 and it is the half that is missing today.

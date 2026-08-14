@@ -91,12 +91,28 @@ public:
 	void ToggleSkillsScreen();
 
 	/**
+	 * Opens and closes the inventory screen. Bound to I.
+	 *
+	 * Refreshes on opening rather than polling, because what a player owns changes on the server and
+	 * a screen opened to explain a missing item is the worst moment to be showing a stale copy.
+	 */
+	void ToggleInventoryScreen();
+
+	/**
 	 * Opens and closes the station overlay. Bound to Tab, and opened by docking.
 	 *
 	 * Does nothing when not docked: the overlay is about a place, and a refusal message on every
 	 * stray keypress would get old faster than the information is worth.
 	 */
 	void ToggleStationOverlay();
+
+	/**
+	 * Which station the player is docked at, or 0.
+	 *
+	 * Public because the inventory screen dims goods it cannot reach, and reaching them is exactly
+	 * the question of whether they are here — the same rule the API enforces on a transfer.
+	 */
+	int32 DockedStationId() const;
 
 	/**
 	 * Switches the station overlay's tab. Bound to 1, 2 and 3.
@@ -150,6 +166,10 @@ public:
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOStationOverlay> StationOverlay;
 
+	/** Everything the character owns, or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOInventoryScreen> InventoryScreen;
+
 	/**
 	 * Whether the skills screen is open.
 	 *
@@ -160,6 +180,9 @@ public:
 
 	/** Whether the station overlay is open. Same reasoning as bSkillsScreenOpen. */
 	bool bStationOverlayOpen = false;
+
+	/** Whether the inventory screen is open. Same reasoning as bSkillsScreenOpen. */
+	bool bInventoryScreenOpen = false;
 
 	/** So docking somewhere new can open the overlay, and undocking can close it. */
 	int32 LastDockedStationId = 0;
@@ -403,7 +426,6 @@ private:
 	 * is a place you have to be at, and asking with the wrong station is refused by the server --
 	 * so asking with the right one is the client's job, not a hope.
 	 */
-	int32 DockedStationId() const;
 
 	static int64 ListingPriceFor(const FBackendInventoryItem& Item);
 

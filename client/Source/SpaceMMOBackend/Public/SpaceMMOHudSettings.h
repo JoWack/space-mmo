@@ -74,5 +74,13 @@ public:
 		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOStationOverlay"))
 	FSoftClassPath StationOverlay;
 
+	/**
+	 * Everything the character owns, opened with I. Must derive from
+	 * <c>USpaceMMOInventoryScreen</c>.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOInventoryScreen"))
+	FSoftClassPath InventoryScreen;
+
 	virtual FName GetCategoryName() const override { return TEXT("Game"); }
 };
