@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Blueprint/UserWidget.h"
+#include "SpaceMMOPairedPanel.h"
 #include "CoreMinimal.h"
 #include "SpaceMMOBackendTypes.h"
 
@@ -82,7 +82,7 @@ protected:
  * <c>ASpaceMMOPlayerController::UpdateHudContext</c>.
  */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOInventoryScreen : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOInventoryScreen : public USpaceMMOPairedPanel
 {
 	GENERATED_BODY()
 

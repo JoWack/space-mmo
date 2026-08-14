@@ -100,6 +100,21 @@ enum class EBackendSkillCategory : uint8
 };
 
 /**
+ * Where a panel sits when it is sharing the viewport.
+ *
+ * The station overlay and the inventory screen take a side each when both are open, and the middle
+ * when either is alone. Here rather than beside the widgets for the same reason the message tone is:
+ * the player controller's public header names it, and that header must not pull UMG in.
+ */
+UENUM(BlueprintType)
+enum class ESpaceMMOPanelSide : uint8
+{
+	Centre,
+	Left,
+	Right,
+};
+
+/**
  * How a transient message should feel, without saying what colour it is.
  *
  * The tone is a fact about the message — a yield went well, a refusal did not — and the colour it

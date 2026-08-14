@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Blueprint/UserWidget.h"
+#include "SpaceMMOPairedPanel.h"
 #include "CoreMinimal.h"
 
 #include "SpaceMMOStationOverlay.generated.h"
@@ -50,7 +50,7 @@ protected:
  * <c>USpaceMMOFlightReadout::NativeTick</c> for why a widget cannot.
  */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOStationOverlay : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOStationOverlay : public USpaceMMOPairedPanel
 {
 	GENERATED_BODY()
 

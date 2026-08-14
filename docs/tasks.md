@@ -1370,7 +1370,10 @@ What is known:
 - **Not reproducible on demand.** Three consecutive full runs afterwards each reported
   `Queue Empty 165 tests performed`, 0 failures.
 - **Always at the tail**, one or two tests from the end, which points at shutdown rather than at
-  whatever test happens to be running.
+  whatever test happens to be running. Seen three times by 14 August: twice ending during
+  `ReachesTopSpeed` (second to last) and once during `TurnsAboutTheNormal` (last). Both belong to
+  `SpaceMMO.Walk`, which is simply what runs last alphabetically — and both pass when that category
+  runs alone.
 - No crash dump, no assert, no error line — the log simply stops.
 
 **The mitigation is already in use and should stay:** assert the

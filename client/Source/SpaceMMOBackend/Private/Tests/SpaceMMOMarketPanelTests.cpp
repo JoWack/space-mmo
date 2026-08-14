@@ -91,8 +91,8 @@ bool FSpaceMMOMarketSortsTowardTheSpreadTest::RunTest(const FString& Parameters)
 	const TArray<FString> Lines =
 		ASpaceMMOPlayerController::BuildMarketPanel(TEXT("Ferrite Plate"), Book, 1000);
 
-	const int32 Asks = LineWith(Lines, TEXT("asks:"));
-	const int32 Bids = LineWith(Lines, TEXT("bids:"));
+	const int32 Asks = LineWith(Lines, TEXT("sell orders:"));
+	const int32 Bids = LineWith(Lines, TEXT("buy orders:"));
 
 	TestTrue(TEXT("Both sides shown"), Asks != INDEX_NONE && Bids != INDEX_NONE);
 
@@ -124,8 +124,8 @@ bool FSpaceMMOMarketSpeaksWithAnEmptyBookTest::RunTest(const FString& Parameters
 
 	TestTrue(TEXT("Names the item"), AnyLineContains(Lines, TEXT("Ferrite Plate")));
 	TestTrue(TEXT("Shows the listing price"), AnyLineContains(Lines, TEXT("10.00 cr")));
-	TestTrue(TEXT("Says asks are empty"), AnyLineContains(Lines, TEXT("asks: none")));
-	TestTrue(TEXT("Says bids are empty"), AnyLineContains(Lines, TEXT("bids: none")));
+	TestTrue(TEXT("Says asks are empty"), AnyLineContains(Lines, TEXT("sell orders: none")));
+	TestTrue(TEXT("Says bids are empty"), AnyLineContains(Lines, TEXT("buy orders: none")));
 
 	return true;
 }
@@ -144,7 +144,7 @@ bool FSpaceMMOMarketSaysWhenNothingIsSellableTest::RunTest(const FString& Parame
 		ASpaceMMOPlayerController::BuildMarketPanel(FString(), TArray<FBackendBookEntry>(), 0);
 
 	TestTrue(TEXT("Explains why"), AnyLineContains(Lines, TEXT("nothing here a station can sell")));
-	TestFalse(TEXT("Shows no book"), AnyLineContains(Lines, TEXT("asks:")));
+	TestFalse(TEXT("Shows no book"), AnyLineContains(Lines, TEXT("sell orders:")));
 
 	return true;
 }

@@ -688,6 +688,21 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// where a hauler most wants to know what is still sitting in a hangar.
 	Show(InventoryScreen, bInventoryScreenOpen);
 
+	// Open together, they take a side each and stop covering one another. That pairing is the whole
+	// point while transferring: goods move between a hangar and a hold, and reading one with the
+	// other hidden is what makes hauling feel like paperwork. Alone, each returns to the middle.
+	const bool bPaired = bStationOverlayOpen && bInventoryScreenOpen;
+
+	if (StationOverlay != nullptr)
+	{
+		StationOverlay->SetSide(bPaired ? ESpaceMMOPanelSide::Left : ESpaceMMOPanelSide::Centre);
+	}
+
+	if (InventoryScreen != nullptr)
+	{
+		InventoryScreen->SetSide(bPaired ? ESpaceMMOPanelSide::Right : ESpaceMMOPanelSide::Centre);
+	}
+
 	// Undocking closes the station overlay rather than leaving a station's market floating over open
 	// space — and it opens on docking, so arriving somewhere shows you where you have arrived.
 	const int32 Station = DockedStationId();
@@ -949,8 +964,11 @@ TArray<FString> ASpaceMMOPlayerController::BuildMarketPanel(
 		Lines.Add(FString::Printf(TEXT("      %s:%s"), Label, *Row));
 	};
 
-	AppendSide(TEXT("asks"), Asks);
-	AppendSide(TEXT("bids"), Bids);
+	// "sell orders" and "buy orders" rather than "asks" and "bids". The book's own vocabulary is
+	// exact and the domain uses it throughout, but a player reading a station screen should not have
+	// to know which side of a spread they are on to work out which number they would be paid.
+	AppendSide(TEXT("sell orders"), Asks);
+	AppendSide(TEXT("buy orders"), Bids);
 
 	return Lines;
 }
