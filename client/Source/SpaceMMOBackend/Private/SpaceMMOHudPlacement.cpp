@@ -33,18 +33,26 @@ namespace SpaceMMO::Hud
 		// not an error, which under render-origin rebasing projects somewhere plausible and reads
 		// as a mysterious offset.
 		//
-		// <strong>Visualisation components do not count.</strong> Every UCameraComponent registers
-		// a DrawFrustumComponent and a CameraProxyMeshComponent outside shipping builds, and a
+		// <strong>Editor-only components do not count.</strong> Every UCameraComponent registers a
+		// DrawFrustumComponent and a CameraProxyMeshComponent (CameraComponent.cpp:168,182), and a
 		// frustum is a 10 m box. Both pawns carry two cameras, so four of these swamped a 0.4 x
 		// 0.9 m character and put its bounding radius at 19 m — which floated its messages 19 m
 		// into the air and off the top of the screen. Deposits have no camera, which is why the
 		// same code worked there and made the fault look widget-specific.
+		//
+		// Tested with IsEditorOnly rather than IsVisualizationComponent, which is the more obvious
+		// name and does not compile for the dedicated server: it and its flag live inside
+		// WITH_EDITORONLY_DATA (ActorComponent.h:346). IsEditorOnly is unguarded
+		// (ActorComponent.h:708) and answers the same question here, because
+		// SetIsVisualizationComponent sets bIsEditorOnly as well — which is what both of the
+		// camera's components are created with. In a server build they are never created at all, so
+		// the filter costs nothing there.
 		FBox Box(ForceInit);
 
 		Actor->ForEachComponent<UPrimitiveComponent>(false,
 			[&Box](const UPrimitiveComponent* Primitive)
 			{
-				if (Primitive->IsRegistered() && !Primitive->IsVisualizationComponent())
+				if (Primitive->IsRegistered() && !Primitive->IsEditorOnly())
 				{
 					Box += Primitive->Bounds.GetBox();
 				}

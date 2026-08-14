@@ -992,8 +992,15 @@ visualisation primitives swamped a 0.4 x 0.9 m character and put its bounding ra
 label was faithfully placed 19 m above it. Deposits have no camera, which is why the same code
 worked there and made the fault look widget-specific.
 
-`SpaceMMO::Hud::VisibleBounds` now gathers the box itself, skipping anything
-`IsVisualizationComponent()`. Measured through the shipping path afterwards: **visible radius 122 cm
+`SpaceMMO::Hud::VisibleBounds` now gathers the box itself, skipping anything `IsEditorOnly()`.
+
+**Not `IsVisualizationComponent()`, which is the obvious name and does not compile for the dedicated
+server** — it and its flag live inside `WITH_EDITORONLY_DATA` (`ActorComponent.h:346`), so the cook
+failed after the editor build had been green for an hour. `IsEditorOnly()` is unguarded
+(`ActorComponent.h:708`) and answers the same question, because `SetIsVisualizationComponent` sets
+`bIsEditorOnly` too. This is the second time the server target has caught client-only code, which is
+exactly what `docs/setup.md` keeps it around for — and the lesson is to **build `SpaceMMOServer`
+before starting a cook**, since it takes two minutes against the cook's twenty. Measured through the shipping path afterwards: **visible radius 122 cm
 against a whole-actor radius of 2242 cm.**
 
 Two things worth carrying forward. **`GetActorBounds` is unusable for anything a player looks at** —
