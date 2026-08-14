@@ -16,6 +16,21 @@ class UWidget;
 namespace SpaceMMO::Hud
 {
 	/**
+	 * How big an actor looks, ignoring what is only there for developers.
+	 *
+	 * <strong>Not GetActorBounds.</strong> Two corrections it cannot express are both needed here:
+	 * non-colliding components must count, because these meshes are deliberately collisionless and a
+	 * label belongs where a thing appears rather than where it can be bumped into; and visualisation
+	 * components must not, because every <c>UCameraComponent</c> registers a
+	 * <c>DrawFrustumComponent</c> outside shipping builds and a frustum is a 10 m box.
+	 *
+	 * Falls back to the actor's own location with no extent when nothing drawable is found, rather
+	 * than the zero box at the world origin that <c>GetActorBounds</c> returns (Actor.cpp:2267) —
+	 * that one is not an error and does not look like one.
+	 */
+	SPACEMMOBACKEND_API void VisibleBounds(const AActor* Actor, FVector& Origin, FVector& Extent);
+
+	/**
 	 * Where to draw a label floating above an actor, in widget space.
 	 *
 	 * <strong>Up is the actor's up, not the world's.</strong> On a sphere those agree at exactly one
@@ -41,6 +56,9 @@ namespace SpaceMMO::Hud
 	 * The widget must be a direct child of a Canvas Panel; nothing else carries a position. Does
 	 * nothing if it is not, rather than asserting — a Blueprint is allowed to be wired wrong, and
 	 * the caller warns about that once rather than crashing.
+	 *
+	 * @return false when there was no canvas slot to write to, so a caller can say so rather than
+	 *         leaving "the label did not move" and "the label moved somewhere wrong" looking alike.
 	 */
-	SPACEMMOBACKEND_API void PlaceAt(UWidget* Widget, const FVector2D& Position);
+	SPACEMMOBACKEND_API bool PlaceAt(UWidget* Widget, const FVector2D& Position);
 }

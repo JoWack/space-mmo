@@ -972,6 +972,37 @@ two ways separately: **up is the actor's up, not the world's** (on a sphere thos
 one point), and the height is a multiple of the actor's own bounding radius, so a rock, a character
 and a ship all clear themselves untuned.
 
+**A camera adds a 10 m box to its actor's bounds, and that cost three playtests.** After the fix
+below, the deposit prompt landed correctly and the transient messages disappeared entirely. The
+messages were being placed at `(960, -8238)` on a 1921x1080 viewport — horizontally perfect,
+**8,238 pixels above the top of the screen**.
+
+Three explanations were proposed and all three were wrong. What ended it was enumerating the pawn's
+bounding-box contributors rather than proposing a fourth:
+
+    Hull (StaticMeshComponent):   radius  122 cm
+    CameraProxyMeshComponent_0:   radius   57 cm
+    DrawFrustumComponent_0:       radius 1010 cm
+    CameraProxyMeshComponent_1:   radius   57 cm
+    DrawFrustumComponent_1:       radius 1010 cm
+
+**Every `UCameraComponent` registers a `DrawFrustumComponent` and a `CameraProxyMeshComponent`
+outside shipping builds.** Both pawns carry two cameras — first and third person — so four
+visualisation primitives swamped a 0.4 x 0.9 m character and put its bounding radius at 19 m. The
+label was faithfully placed 19 m above it. Deposits have no camera, which is why the same code
+worked there and made the fault look widget-specific.
+
+`SpaceMMO::Hud::VisibleBounds` now gathers the box itself, skipping anything
+`IsVisualizationComponent()`. Measured through the shipping path afterwards: **visible radius 122 cm
+against a whole-actor radius of 2242 cm.**
+
+Two things worth carrying forward. **`GetActorBounds` is unusable for anything a player looks at** —
+it cannot include non-colliding components and exclude visualisation ones at the same time, and both
+are needed here. And **the probe belongs in the controller, not the widget**: a widget only ticks
+while it is painted, so the first attempt at this diagnostic logged nothing at all in a headless
+run, and moving it to the controller made the whole question answerable with `-game -nullrhi` at no
+cost to anybody.
+
 **Bounds must include non-colliding components, and this cost a playtest.** `GetActorBounds`'s
 first argument is `bOnlyCollidingComponents`, and it was passed `true`. A deposit's marker mesh is
 deliberately `NoCollision` (`SpaceMMODepositActor.cpp:40`), so no component qualified, and

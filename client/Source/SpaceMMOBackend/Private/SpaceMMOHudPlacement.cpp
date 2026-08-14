@@ -2,12 +2,60 @@
 
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/Widget.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/PlayerController.h"
 
 namespace SpaceMMO::Hud
 {
+	void VisibleBounds(const AActor* Actor, FVector& Origin, FVector& Extent)
+	{
+		// An actor with nothing drawable is measured at its own location rather than at the world
+		// origin, so a label on one is merely in a dull place instead of somewhere meaningless.
+		Origin = Actor != nullptr ? Actor->GetActorLocation() : FVector::ZeroVector;
+		Extent = FVector::ZeroVector;
+
+		if (Actor == nullptr)
+		{
+			return;
+		}
+
+		// Bounds are gathered here rather than through GetActorBounds, which offers no way to
+		// exclude what has to be excluded. Two things had to be got right and neither is the
+		// default:
+		//
+		// <strong>Non-colliding components count.</strong> This is a label over something a player
+		// looks at, so it wants where the thing appears, not where it can be bumped into — and the
+		// meshes here are deliberately NoCollision (SpaceMMODepositActor.cpp:40,
+		// SpaceMMOCharacterPawn.cpp:38). Asking for colliding components only returns an
+		// FBox(ForceInit) that nothing expands: a zero box at the world origin (Actor.cpp:2267),
+		// not an error, which under render-origin rebasing projects somewhere plausible and reads
+		// as a mysterious offset.
+		//
+		// <strong>Visualisation components do not count.</strong> Every UCameraComponent registers
+		// a DrawFrustumComponent and a CameraProxyMeshComponent outside shipping builds, and a
+		// frustum is a 10 m box. Both pawns carry two cameras, so four of these swamped a 0.4 x
+		// 0.9 m character and put its bounding radius at 19 m — which floated its messages 19 m
+		// into the air and off the top of the screen. Deposits have no camera, which is why the
+		// same code worked there and made the fault look widget-specific.
+		FBox Box(ForceInit);
+
+		Actor->ForEachComponent<UPrimitiveComponent>(false,
+			[&Box](const UPrimitiveComponent* Primitive)
+			{
+				if (Primitive->IsRegistered() && !Primitive->IsVisualizationComponent())
+				{
+					Box += Primitive->Bounds.GetBox();
+				}
+			});
+
+		if (Box.IsValid)
+		{
+			Box.GetCenterAndExtents(Origin, Extent);
+		}
+	}
+
 	bool ProjectAbove(
 		const APlayerController* Controller,
 		const AActor* Actor,
@@ -22,17 +70,7 @@ namespace SpaceMMO::Hud
 		FVector Origin;
 		FVector Extent;
 
-		// Every component, not only the colliding ones — the second argument of
-		// GetComponentsBoundingBox, which GetActorBounds inverts (Actor.cpp:5398).
-		//
-		// This is a label over something a player can see, so what matters is where the thing looks
-		// like it is, not where it can be bumped into. Asking for colliding components only put the
-		// deposit prompt at the world origin: a deposit's marker mesh is deliberately NoCollision
-		// (SpaceMMODepositActor.cpp:40), so nothing qualified, and an FBox(ForceInit) that nothing
-		// expands is a zero box at the origin (Actor.cpp:2267) rather than an error. With render
-		// origin rebasing that projects somewhere arbitrary and usually still on screen, which reads
-		// as a label with a mysterious offset rather than as one pointing at nothing.
-		Actor->GetActorBounds(false, Origin, Extent);
+		VisibleBounds(Actor, Origin, Extent);
 
 		const FVector Above = Origin + Actor->GetActorUpVector() * Extent.Size() * HeightScale;
 
@@ -40,7 +78,7 @@ namespace SpaceMMO::Hud
 			Controller, Above, OutPosition, false);
 	}
 
-	void PlaceAt(UWidget* Widget, const FVector2D& Position)
+	bool PlaceAt(UWidget* Widget, const FVector2D& Position)
 	{
 		// Not named Slot: UWidget already has a member by that name, and shadowing it is a warning
 		// this project treats as an error.
@@ -50,11 +88,13 @@ namespace SpaceMMO::Hud
 
 		if (RootSlot == nullptr)
 		{
-			return;
+			return false;
 		}
 
 		// Bottom centre, so the label sits above the point rather than on it, and grows upwards.
 		RootSlot->SetAlignment(FVector2D(0.5, 1.0));
 		RootSlot->SetPosition(Position);
+
+		return true;
 	}
 }
