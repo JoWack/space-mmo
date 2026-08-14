@@ -1281,6 +1281,57 @@ Worth doing early in the milestone rather than late: it decides where combat may
 building weapons first would mean tuning them in a world with no rules about where they may be
 fired.
 
+## 111 — Gathering and industry ignore where you are
+
+**Pending. Found by Joe, 14 August**, refining at DeepDock and watching the output appear at the
+capital.
+
+`ASpaceMMOPlayerController::StationId` is a hardcoded `1` — its own comment says "Not yet chosen per
+player" — and it is sent as the storage station for gathering *and* as the station for `StartJob`.
+`IndustryService` then uses that one station for both halves: it consumes inputs from
+`GetOrCreateStationHangarAsync(characterId, stationId)` and deposits outputs back into it. So a job
+started anywhere in the system is really run at station 1, which is self-consistent and therefore
+invisible until somebody docks elsewhere and looks.
+
+The fix is to send `DockedStationId()`. **It must not land before a client can move goods**, because
+on its own it makes crafting possible only where the materials already happen to be, with no in-game
+remedy — transfer exists over HTTP (99) and the inventory screen shipped read-only (108). Order:
+transfer affordance, then this.
+
+Blocked on 108's transfer half.
+
+## 112 — Goods are held, not teleported
+
+**Pending. Joe's stated direction, 14 August.** A design decision rather than a wiring fix, recorded
+before anything is built.
+
+Today everything gathered or crafted appears in a station hangar wherever the player is, which is
+what 111 is about at the mechanical level — but the deeper point is that **goods never travel**. What
+Joe wants instead:
+
+- Gathering and crafting deposit into **carried** inventory (or a ship's hold).
+- Moving goods to a station is a deliberate transfer, not automatic.
+- Crafting and refining, while docked, may draw on **both** carried and station inventory.
+
+This is the direction 99 already pointed at without spelling out: `CharacterCarried` and `ShipHold`
+both exist, are both documented in the enum, and nothing routes anything into either.
+
+**It needs `CapacityM3` to start meaning something.** It exists, hangars are created at 0, and
+nothing anywhere enforces it (99). Without a volume limit, "held" is an infinite backpack and the
+change buys nothing — capacity is precisely what turns ADR-0008's planet-locked materials into
+flights rather than paperwork.
+
+Also to settle before building:
+
+- Whether a character on foot with no ship can carry ore at all, and how much.
+- What happens to carried goods on death — ADR-0006 already distinguishes what is lost from a hold
+  and what is carried into on-foot combat, so this makes those rules bite (103).
+- Whether industry consuming from two inventories at once is one operation or a transfer followed by
+  a craft. The second is simpler and more honest about where the goods went.
+
+Probably wants an ADR: it changes the shape of the economy rather than an implementation detail, and
+M4's premise is hauling.
+
 ## 96 — Author world content graphically
 
 **Pending.** Raised 11 August; ADR-0011 makes it pressing, because a cave is a shape rather than a
