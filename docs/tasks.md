@@ -1031,7 +1031,7 @@ of view describes nothing. `bHasDeposit` therefore means "in reach *and* on scre
 The debug-text panel still draws Holdings, Quests, Market, Industry and Jobs top-left, and goes when
 the docked overlay lands — at which point Joe moves the flight and on-foot blocks to top left.
 
-**The docked overlay is written and awaiting its Blueprints, agreed with Joe 14 August.**
+**The docked overlay is done — built, wired and QA'd by Joe, 14 August.**
 `USpaceMMOStationOverlay` + `USpaceMMOTextRow`, tabbed: Market, Industry, Quests.
 
 - **Opens on docking and toggles with `Tab`**; does nothing when undocked, because the overlay is
@@ -1053,7 +1053,11 @@ goes and `Tab` becomes the station overlay outright. This deviates from the agre
 undocked" — it does nothing *for the overlay*, and the old panel still answers, which is the lesser
 evil against making Holdings unreachable.
 
-Remaining after this: nothing in 106. The debug-text panel goes when 108 lands.
+**106 is complete.** All four contexts are built and QA'd: flying, on foot, transient messages in
+both, and the docked station screen — plus skills on `K`. What remains on screen of the old debug
+text is Holdings, which 108's `I` overlay takes; when that lands the panel goes entirely, the guard
+in `ToggleCharacterPanel` goes with it, `Tab` becomes the station overlay outright, and Joe moves the
+flight and on-foot blocks to top left.
 
 The panel's own comments are the specification for why: on-screen messages are ordered by slot
 rather than key, are deleted and re-added every frame at zero display time, and so land in an order
