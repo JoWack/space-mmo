@@ -933,7 +933,7 @@ nothing in them. A Widget Blueprint cannot be inspected from outside the editor.
 13 August, done in the Blueprints without a rebuild. Recorded here because it only becomes
 actionable after the docked overlay lands and removes the last of the on-screen messages.
 
-**Transient messages are written and awaiting their Blueprints, agreed with Joe 13 August.**
+**Transient messages are done — built, wired and QA'd by Joe, 13 August.**
 `USpaceMMOTransientMessages` + `USpaceMMOTransientMessageRow`, floating above the pawn.
 
 This is the piece the whole milestone was created for. `ShowTransientLine` had to be folded into the
@@ -1019,6 +1019,10 @@ fixed spot under the reticle — they must be seen, and first person puts the ca
 **The prompt hides** — `FindDepositInRange` returns the nearest deposit in reach, not the one being
 looked at, so it can be behind the player, and a label pinned at the screen edge naming something out
 of view describes nothing. `bHasDeposit` therefore means "in reach *and* on screen".
+
+**Three of the four contexts are done and QA'd**: flying, on foot, and transient messages in both.
+The debug-text panel still draws Holdings, Quests, Market, Industry and Jobs top-left, and goes when
+the docked overlay lands — at which point Joe moves the flight and on-foot blocks to top left.
 
 Remaining: the docked overlay (market, industry, quests — holdings has moved to 108).
 
