@@ -189,46 +189,16 @@ public:
 
 
 	/**
-	 * Builds the character panel's lines from backend state.
-	 *
-	 * Pure and static so the wording, ordering and empty cases can be tested without a world, a
-	 * backend or a pawn — the same reason FormatGatherMessage is. Every interesting case here is an
-	 * edge one: a brand-new character has no trained skills and nothing in the hold, and the panel
-	 * has to say so rather than render as a blank space that reads like a bug.
-	 */
-	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
-	static TArray<FString> BuildCharacterPanel(
-		const FString& CharacterName,
-		const FString& Balance,
-		const TArray<FBackendSkill>& Skills,
-		const TArray<FBackendInventoryItem>& Inventory,
-		const TArray<FBackendItemInstance>& Instances);
-
-	/**
 	 * Renders a whole number with thousands separators, e.g. 1234567 as "1,234,567".
 	 *
 	 * Takes int64 rather than clamping to int32 for FString::FormatAsNumber. XP fits in 32 bits
 	 * today, but a formatter that silently saturates is one that reports a wrong number confidently
 	 * the first time it is pointed at a credit balance, which is int64 for exactly that reason
 	 * (ADR-0005).
-	 */
-	/**
-	 * What the deposit within reach is, and whether this character can work it.
 	 *
-	 * <strong>An empty Key means nothing is in reach</strong>, which is an ordinary state and says
-	 * so rather than rendering a blank heading.
-	 *
-	 * Pure and static like the other panels, so every interesting case — a rock needing a tool the
-	 * player does not carry, a tool they carry but have broken, a level they have not reached — is
-	 * testable without a running game. The refusal a player would otherwise meet arrives after they
-	 * have already walked there and pressed the key.
+	 * Outlived the character panel it was written for: the skills screen and the inventory screen
+	 * both use it.
 	 */
-	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
-	static TArray<FString> BuildNearbyPanel(
-		const FBackendResourceNode& Node,
-		const TArray<FBackendSkill>& Skills,
-		const TArray<FBackendItemInstance>& Instances);
-
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
 	static FString GroupDigits(int64 Value);
 
@@ -271,7 +241,7 @@ public:
 	/**
 	 * Builds the industry panel's lines: what can be built, and what is cooking.
 	 *
-	 * Pure and static, like <see cref="BuildCharacterPanel"/>, so the selection arithmetic and the
+	 * Pure and static, like the other panel builders, so the selection arithmetic and the
 	 * have-versus-need arithmetic can be tested without a backend.
 	 *
 	 * <strong>It reports quantities but never decides eligibility.</strong> Showing "20/8" is
@@ -318,15 +288,6 @@ public:
 	/** Where this player's gathered material goes. Not yet chosen per player. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Identity")
 	int32 StationId = 1;
-
-	/**
-	 * Whether the character panel is drawn.
-	 *
-	 * On by default. The panel is the only way to see that mining credited anything, and a display
-	 * that has to be discovered before it can report is no better than no display at all.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Identity")
-	bool bShowCharacterPanel = true;
 
 private:
 	/**
@@ -375,10 +336,6 @@ private:
 	void RefreshPossessedPawn();
 
 	/** Draws the panel. Local client only; a dedicated server has nobody to draw for. */
-	void DrawCharacterPanel();
-
-	void ToggleCharacterPanel();
-
 	/**
 	 * Confines the mouse to the game window, or hands it back.
 	 *
@@ -479,35 +436,23 @@ private:
 	class USpaceMMOBackendClient* Backend() const;
 
 	/**
-	 * Key for the panel, which is drawn as one multi-line message rather than one message per row.
+	 * Keys for the two on-screen messages that outlived the character panel.
 	 *
 	 * Well clear of the navigation readouts the pawns draw, which use 1 through 11: two writers
 	 * sharing a key overwrite each other, and the symptom is a line flickering between two unrelated
-	 * pieces of text.
+	 * pieces of text. Fixed rather than allocated, so repeated presses replace the last message
+	 * rather than stacking a column of them.
 	 *
-	 * The engine offers no way to order separate messages. It iterates its message map by slot, and
-	 * a zero display time makes it delete and re-add every message each frame, so slots come back
-	 * from a free list in an order nothing here decides.
+	 * The engine offers no way to order separate messages -- it iterates its map by slot, and a zero
+	 * display time makes it delete and re-add each one every frame, so slots come back from a free
+	 * list in an order nothing here decides. That is what drove the whole HUD into UMG. These two
+	 * survive because they are single lines with nothing to be ordered against.
 	 */
+	static constexpr int32 NoticeMessageKey = 199;
 
-	static constexpr int32 PanelMessageKey = 200;
+	/** Only used when no transient-message Widget Blueprint is configured. */
+	static constexpr int32 TransientMessageKey = 198;
 
-	/** Rows the panel will draw before it starts saying how many it is hiding. */
-	static constexpr int32 PanelMaxLines = 40;
-
-	/**
-	 * Key for the transient notice line.
-	 *
-	 * Separate from the panel so a refusal does not have to be rebuilt into it, and fixed so
-	 * repeated presses replace the last notice rather than stacking a column of them. Where it lands
-	 * relative to the panel is up to the engine, for the reason above.
-	 */
-	static constexpr int32 NoticeMessageKey = PanelMessageKey - 1;
-
-	/** The transient line, and when it stops being shown. */
-	FString TransientLine;
-
-	double TransientLineExpiresAt = 0.0;
 
 	/**
 	 * The client's cue that the server has agreed who it is.

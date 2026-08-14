@@ -1,6 +1,7 @@
 #include "Misc/AutomationTest.h"
 #include "SpaceMMODepositPrompt.h"
 #include "SpaceMMOOnFootReadout.h"
+#include "SpaceMMOPlayerController.h"
 #include "SpaceMMOSkillsScreen.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -191,6 +192,43 @@ bool FSpaceMMOSkillsScreenShowsEverySkillTest::RunTest(const FString& Parameters
 
 	TestTrue(TEXT("Nothing to go at the cap"), AtCap[0].ToNext.IsEmpty());
 	TestTrue(TEXT("But the bar is full"), AtCap[0].Progress > 0.999f);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOHudGroupsDigitsTest,
+	"SpaceMMO.HUD.GroupsDigits",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOHudGroupsDigitsTest::RunTest(const FString& Parameters)
+{
+	// Moved here when the debug panel was retired. GroupDigits outlived it -- the skills screen and
+	// the inventory screen both use it -- so its coverage had to move rather than go with the panel.
+	TestEqual(TEXT("Zero"), ASpaceMMOPlayerController::GroupDigits(0), FString(TEXT("0")));
+	TestEqual(
+		TEXT("Below a thousand"),
+		ASpaceMMOPlayerController::GroupDigits(999),
+		FString(TEXT("999")));
+
+	// The boundary a naive "insert every three from the left" gets wrong.
+	TestEqual(TEXT("Exactly a thousand"),
+		ASpaceMMOPlayerController::GroupDigits(1000), FString(TEXT("1,000")));
+
+	TestEqual(TEXT("Seven digits"),
+		ASpaceMMOPlayerController::GroupDigits(1234567), FString(TEXT("1,234,567")));
+
+	// Level 99 in this project's curve (ADR-0004). If this line ever fails, the skills screen is
+	// misreporting the single number a player spends years chasing.
+	TestEqual(TEXT("Maximum skill xp"),
+		ASpaceMMOPlayerController::GroupDigits(13034431), FString(TEXT("13,034,431")));
+
+	// Beyond int32, which is why this takes int64 rather than clamping.
+	TestEqual(TEXT("Past four billion"),
+		ASpaceMMOPlayerController::GroupDigits(4294967296LL), FString(TEXT("4,294,967,296")));
+
+	TestEqual(TEXT("Negative keeps its sign"),
+		ASpaceMMOPlayerController::GroupDigits(-1234), FString(TEXT("-1,234")));
 
 	return true;
 }

@@ -1321,16 +1321,66 @@ nothing anywhere enforces it (99). Without a volume limit, "held" is an infinite
 change buys nothing — capacity is precisely what turns ADR-0008's planet-locked materials into
 flights rather than paperwork.
 
-Also to settle before building:
+### Settled by Joe, 14 August
 
-- Whether a character on foot with no ship can carry ore at all, and how much.
-- What happens to carried goods on death — ADR-0006 already distinguishes what is lost from a hold
-  and what is carried into on-foot combat, so this makes those rules bite (103).
-- Whether industry consuming from two inventories at once is one operation or a transfer followed by
-  a craft. The second is simpler and more honest about where the goods went.
+**A character on foot carries goods, limited by weight.** Default 50 kg, raised by the `stamina`
+skill, and further by a backpack — an equippable, so M4's "equippable tools, weapons and armour".
+
+**Death: a few safe slots, and everything else drops.** A player marks a limited number of items as
+safe; those survive into their held inventory on respawn. Everything unmarked drops, armour and
+weapons included — except that an item whose condition has reached 0% is destroyed rather than
+dropped.
+
+**Industry does not reach into two inventories.** Crafting while docked is a transfer followed by a
+craft, which is simpler and honest about where the goods went.
+
+### Three things those answers run into
+
+1. **There is no mass anywhere.** `ItemDef` carries `VolumeM3` and `Inventory` carries `CapacityM3`
+   (`Entities/Items.cs:28,133`) — volume, not weight. A 50 kg limit needs either a new `MassKg` on
+   items, or the limit restated in m³. Worth deciding deliberately rather than adding a second
+   dimension by accident: two capacity systems that disagree is a bug generator, and a hauling game
+   only needs one number to be interesting.
+2. **`stamina` does not exist yet.** It is one of the eight skills 101 seeds, and 101 is blocked on
+   102 deciding where its XP comes from — which the design bible explicitly leaves open. So
+   capacity-from-stamina is blocked behind both; a flat 50 kg is not.
+3. **The death rules extend ADR-0006 rather than implement it.** That ADR settles cause-based loot
+   destruction and acquisition-value insurance; safe slots, dropping on death and destruction at 0%
+   condition are new rules on top. They want an ADR of their own or an amendment, not a task comment
+   — ADR-0006 going quietly inert once already is why the roadmap reconciliation rule exists.
 
 Probably wants an ADR: it changes the shape of the economy rather than an implementation detail, and
 M4's premise is hauling.
+
+## 113 — The automation run sometimes stops two tests early, and looks green doing it
+
+**Pending. Observed twice on 14 August**, and worth fixing before it costs somebody a wrong
+conclusion.
+
+The full suite occasionally ends during the second-to-last test — `SpaceMMO.Walk.ReachesTopSpeed`
+both times — with **exit code 0, zero failures, and no completion line**. Counting
+`Result={Success}` alone gives a plausible-looking number (163 or 166 instead of 165) and reports
+success, which is how it went unnoticed the first time: it was written off as a log-flush artifact,
+and it is not.
+
+What is known:
+
+- **Not the test.** `SpaceMMO.Walk` run alone passed 6 of 6 with the completion line, three times.
+  `ReachesTopSpeed` is 720 calls to a pure function with no world and no rendering.
+- **Not reproducible on demand.** Three consecutive full runs afterwards each reported
+  `Queue Empty 165 tests performed`, 0 failures.
+- **Always at the tail**, one or two tests from the end, which points at shutdown rather than at
+  whatever test happens to be running.
+- No crash dump, no assert, no error line — the log simply stops.
+
+**The mitigation is already in use and should stay:** assert the
+`...Automation Test Queue Empty N tests performed` line and the expected N, never a bare count of
+successes. A count cannot distinguish "all passed" from "stopped early having passed everything it
+reached", and those are very different claims.
+
+Worth doing eventually: run with `-stdout -FullStdOutLogOutput` and capture the exit path, or bisect
+by running the suite minus the last category. Low priority while the completion-line check holds,
+but it undermines every "N tests pass" claim until it is understood.
 
 ## 96 — Author world content graphically
 

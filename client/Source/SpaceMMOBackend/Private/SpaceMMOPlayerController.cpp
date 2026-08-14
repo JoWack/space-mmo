@@ -212,12 +212,6 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 	if (InputComponent != nullptr)
 	{
 		InputComponent->BindAction(
-			TEXT("ToggleCharacterPanel"),
-			IE_Pressed,
-			this,
-			&ASpaceMMOPlayerController::ToggleCharacterPanel);
-
-		InputComponent->BindAction(
 			TEXT("ToggleSkills"), IE_Pressed, this, &ASpaceMMOPlayerController::ToggleSkillsScreen);
 
 		InputComponent->BindAction(
@@ -613,11 +607,23 @@ void ASpaceMMOPlayerController::HandleIndustryMessage(
 
 void ASpaceMMOPlayerController::ShowTransientLine(const FString& Line)
 {
-	TransientLine = Line;
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s"), *Line);
 
-	const UWorld* World = GetWorld();
-
-	TransientLineExpiresAt = (World != nullptr ? World->GetTimeSeconds() : 0.0) + 4.0;
+	// Its own on-screen message again, which it could not be before.
+	//
+	// This was folded into the character panel because on-screen messages are ordered by slot rather
+	// than by key, and that panel was redrawn every frame at a zero display time -- so it took
+	// whatever slot the free list handed back, and a separate three-second message landed in an
+	// order nothing could influence, usually below dozens of panel lines and off the bottom of the
+	// screen. The panel is gone, so nothing competes for slots and a plain message is stable again.
+	//
+	// Only reached when no transient-message Widget Blueprint is configured. It has no colour and no
+	// position, but a gather result is the only feedback a key press gives, and losing it entirely
+	// would be worse.
+	if (GEngine != nullptr)
+	{
+		GEngine->AddOnScreenDebugMessage(TransientMessageKey, 4.0f, FColor::White, Line);
+	}
 }
 
 void ASpaceMMOPlayerController::ShowNotice(const FString& Message, const bool bSucceeded)
@@ -631,28 +637,6 @@ void ASpaceMMOPlayerController::ShowNotice(const FString& Message, const bool bS
 	}
 }
 
-void ASpaceMMOPlayerController::ToggleCharacterPanel()
-{
-	// Tab is shared with the station overlay, which takes it while docked. Both are bound to the
-	// same key deliberately: the overlay replaces most of this panel, and asking a player to learn
-	// a second key for a screen that is about to be deleted would be churn for its own sake.
-	//
-	// <strong>Scaffolding.</strong> This panel is the only way to reach Holdings until task 108's
-	// inventory overlay lands, which is the only reason it still exists. When it goes, so does this
-	// guard, and Tab becomes the station overlay outright.
-	if (StationOverlay != nullptr && DockedStationId() != 0)
-	{
-		return;
-	}
-
-	bShowCharacterPanel = !bShowCharacterPanel;
-
-	if (!bShowCharacterPanel && GEngine != nullptr)
-	{
-		GEngine->RemoveOnScreenDebugMessage(PanelMessageKey);
-	}
-}
-
 void ASpaceMMOPlayerController::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -660,11 +644,6 @@ void ASpaceMMOPlayerController::Tick(const float DeltaSeconds)
 	if (IsLocalController())
 	{
 		UpdateHudContext();
-	}
-
-	if (bShowCharacterPanel && IsLocalController())
-	{
-		DrawCharacterPanel();
 	}
 }
 
@@ -908,96 +887,6 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 	}
 
 	Client->FetchJobs(CharacterId);
-}
-
-void ASpaceMMOPlayerController::DrawCharacterPanel()
-{
-	if (GEngine == nullptr)
-	{
-		return;
-	}
-
-	const USpaceMMOBackendClient* Client = Backend();
-
-	if (Client == nullptr)
-	{
-		return;
-	}
-
-	const FString Balance = GetCharacterBalance();
-
-	TArray<FString> Lines;
-
-	// At the top, where somebody who just pressed a key is already looking, and inside the panel so
-	// it cannot be shuffled below it.
-	const UWorld* World = GetWorld();
-
-	if (!TransientLine.IsEmpty()
-		&& World != nullptr
-		&& World->GetTimeSeconds() < TransientLineExpiresAt)
-	{
-		Lines.Add(TransientLine);
-		Lines.Add(FString());
-	}
-
-	Lines.Append(BuildCharacterPanel(
-		CharacterName, Balance, Client->GetSkills(), Client->GetInventory(),
-		Client->GetItemInstances()));
-
-	// Asked of the gathering component rather than searched for here, so the panel and the gather
-	// key can never disagree about which rock is in reach. Absent when flying: the component lives
-	// on the character pawn, and a ship has nothing to pick up with.
-	FBackendResourceNode Nearby;
-
-	if (const APawn* Possessed = GetPawn())
-	{
-		if (const USpaceMMOGatheringComponent* Gathering =
-			Possessed->FindComponentByClass<USpaceMMOGatheringComponent>())
-		{
-			if (const ASpaceMMODepositActor* Deposit = Gathering->FindDepositInRange())
-			{
-				Nearby = Deposit->GetNode();
-			}
-		}
-	}
-
-	Lines.Append(BuildNearbyPanel(Nearby, Client->GetSkills(), Client->GetItemInstances()));
-
-	Lines.Append(BuildQuestPanel(Client->GetJournal(), Client->GetAvailableQuests()));
-
-	FBackendInventoryItem Selling;
-
-	Lines.Append(TryGetSelectedHolding(Selling)
-		? BuildMarketPanel(Selling.Name, Client->GetBook(), ListingPriceFor(Selling))
-		: BuildMarketPanel(FString(), TArray<FBackendBookEntry>(), 0));
-
-	Lines.Append(BuildIndustryPanel(
-		Client->GetRecipes(), Client->GetJobs(), Client->GetInventory(), SelectedRecipeIndex));
-
-	// Says so rather than silently dropping the tail. A panel that quietly stops listing at forty
-	// rows would read as "I do not own that", which is the one thing an inventory display must never
-	// get wrong.
-	if (Lines.Num() > PanelMaxLines)
-	{
-		const int32 Hidden = Lines.Num() - PanelMaxLines + 1;
-
-		Lines.SetNum(PanelMaxLines);
-		Lines[PanelMaxLines - 1] = FString::Printf(TEXT("   ... and %d more"), Hidden);
-	}
-
-	// One message carrying every line, not one message per line.
-	//
-	// UEngine::DrawOnscreenDebugMessages walks its message map with a plain TMap iterator, so the
-	// order on screen is slot order rather than key order. That would be survivable if slots were
-	// stable, but these are drawn with a zero display time, which means the engine deletes every one
-	// of them at the end of each frame and the next frame re-adds them into whatever slots the free
-	// list hands back. The result is an order nothing here can influence -- the ship's own readouts
-	// use keys 1, 3 and 2 and render as 2, 3, 1.
-	//
-	// Joining the lines makes the whole panel a single entry, so its internal order is simply string
-	// order and cannot be shuffled. It also removes the need to clear unused rows.
-	GEngine->AddOnScreenDebugMessage(
-		PanelMessageKey, 0.0f, FColor::White, FString::Join(Lines, TEXT("\n")));
 }
 
 TArray<FString> ASpaceMMOPlayerController::BuildMarketPanel(
@@ -1256,166 +1145,6 @@ FString ASpaceMMOPlayerController::GroupDigits(const int64 Value)
 	// XP is never negative today, but a formatter that silently drops a sign is a formatter that
 	// lies the first time it is reused for a balance or a delta.
 	return Value < 0 ? TEXT("-") + Grouped : Grouped;
-}
-
-TArray<FString> ASpaceMMOPlayerController::BuildNearbyPanel(
-	const FBackendResourceNode& Node,
-	const TArray<FBackendSkill>& Skills,
-	const TArray<FBackendItemInstance>& Instances)
-{
-	TArray<FString> Lines;
-
-	Lines.Add(TEXT("-- Nearby --"));
-
-	if (Node.Key.IsEmpty())
-	{
-		Lines.Add(TEXT("   nothing within reach"));
-
-		return Lines;
-	}
-
-	// The skill is named as well as the item, because until now nothing ever told a player that
-	// ferrite is mined and scrap is gathered -- the server has always decided it from the node, and
-	// SkillKey has been parsed and unused on this side since the day it was added.
-	int32 Level = 0;
-
-	for (const FBackendSkill& Skill : Skills)
-	{
-		if (Skill.Key == Node.SkillKey)
-		{
-			Level = Skill.Level;
-
-			break;
-		}
-	}
-
-	Lines.Add(FString::Printf(
-		TEXT("   %s   %s lv %d"), *Node.ItemName, *Node.SkillKey, Node.RequiredLevel));
-
-	if (Level < Node.RequiredLevel)
-	{
-		Lines.Add(FString::Printf(TEXT("      you are lv %d"), Level));
-	}
-
-	if (!Node.NeedsTool())
-	{
-		return Lines;
-	}
-
-	// Condition above zero, because that is exactly what the server asks: GuardToolAsync ignores a
-	// broken tool. A panel that counted one would promise a gather the server then refuses, which
-	// is worse than saying nothing at all.
-	bool bCarried = false;
-
-	for (const FBackendItemInstance& Instance : Instances)
-	{
-		if (Instance.ItemKey == Node.RequiredToolKey && Instance.Condition > 0)
-		{
-			bCarried = true;
-
-			break;
-		}
-	}
-
-	Lines.Add(FString::Printf(
-		TEXT("      needs %s%s"),
-		*Node.RequiredToolName,
-		bCarried ? TEXT("  (carried)") : TEXT("  (you have none)")));
-
-	return Lines;
-}
-
-TArray<FString> ASpaceMMOPlayerController::BuildCharacterPanel(
-	const FString& CharacterName,
-	const FString& Balance,
-	const TArray<FBackendSkill>& Skills,
-	const TArray<FBackendInventoryItem>& Inventory,
-	const TArray<FBackendItemInstance>& Instances)
-{
-	TArray<FString> Lines;
-
-	Lines.Add(CharacterName.IsEmpty()
-		? TEXT("Not identified")
-		: FString::Printf(TEXT("== %s =="), *CharacterName));
-
-	// Only trained skills. A character has a row for every skill in the game from creation, and
-	// listing thirty untouched zeroes would bury the one line that changed.
-	TArray<FBackendSkill> Trained = Skills.FilterByPredicate(
-		[](const FBackendSkill& Skill) { return Skill.Xp > 0; });
-
-	// Sorted here rather than trusted from the response. JSON array order is whatever the query
-	// returned, and a list that reorders itself between refreshes is unreadable precisely when it is
-	// being watched -- which, for this panel, is always.
-	Trained.Sort([](const FBackendSkill& A, const FBackendSkill& B) { return A.Name < B.Name; });
-
-	Lines.Add(TEXT("-- Skills --"));
-
-	if (Trained.Num() == 0)
-	{
-		Lines.Add(TEXT("   nothing trained yet"));
-	}
-
-	for (const FBackendSkill& Skill : Trained)
-	{
-		Lines.Add(FString::Printf(
-			TEXT("   %s  lv %d  (%s xp)"),
-			*Skill.Name,
-			Skill.Level,
-			*GroupDigits(Skill.Xp)));
-	}
-
-	TArray<FBackendInventoryItem> Held = Inventory;
-
-	Held.Sort([](const FBackendInventoryItem& A, const FBackendInventoryItem& B)
-		{ return A.Name < B.Name; });
-
-	// "Holdings", not "Hold". The endpoint returns every stack the character owns across every
-	// inventory -- ship holds and station hangars alike -- and gathered ore lands in a hangar. A
-	// panel headed "Hold" would have a player looking in their cargo bay for ore that is on a
-	// different planet.
-	// Credits sit with the holdings rather than in the header, because that is where a player looks
-	// when deciding whether they can afford to do the thing they are looking at.
-	Lines.Add(Balance.IsEmpty()
-		? TEXT("-- Holdings --")
-		: FString::Printf(TEXT("-- Holdings --  %s cr"), *Balance));
-
-	if (Held.Num() == 0 && Instances.Num() == 0)
-	{
-		Lines.Add(TEXT("   empty"));
-	}
-
-	for (const FBackendInventoryItem& Item : Held)
-	{
-		// The faction price is shown on the stack rather than hidden behind a menu, because the
-		// moment it matters is the moment a player is broke and looking for anything they can turn
-		// into credits. It is marked as a floor so nobody mistakes it for what the thing is worth.
-		Lines.Add(Item.FactionBuyPriceMinorUnits > 0
-			? FString::Printf(
-				TEXT("   %s  x%d   V sells @ %s cr"),
-				*Item.Name,
-				Item.Quantity,
-				*FSpaceMMOBackendProtocol::FormatCredits(Item.FactionBuyPriceMinorUnits))
-			: FString::Printf(TEXT("   %s  x%d"), *Item.Name, Item.Quantity));
-	}
-
-	// Listed one per line with condition rather than counted, because they are not a stack: two
-	// lasers worn to different degrees are two things, and "x2" would say they were one. Until
-	// these were shown at all, a player crafted the mining laser the questline gives them and saw
-	// nothing here — owned, usable, and invisible, which reads as a craft that failed.
-	TArray<FBackendItemInstance> Owned = Instances;
-
-	// Sorted for the same reason the stacks are, and by condition second so a player deciding which
-	// of two lasers to take is not asked to guess which line is which.
-	Owned.Sort([](const FBackendItemInstance& A, const FBackendItemInstance& B)
-		{ return A.Name == B.Name ? A.Condition > B.Condition : A.Name < B.Name; });
-
-	for (const FBackendItemInstance& Instance : Owned)
-	{
-		Lines.Add(FString::Printf(
-			TEXT("   %s  (%d%%)"), *Instance.Name, Instance.Condition));
-	}
-
-	return Lines;
 }
 
 void ASpaceMMOPlayerController::BeginIdentifying()
