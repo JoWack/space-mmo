@@ -90,6 +90,37 @@ public:
 	/** Opens and closes the skills screen. Bound to K. */
 	void ToggleSkillsScreen();
 
+	/**
+	 * Opens and closes the station overlay. Bound to Tab, and opened by docking.
+	 *
+	 * Does nothing when not docked: the overlay is about a place, and a refusal message on every
+	 * stray keypress would get old faster than the information is worth.
+	 */
+	void ToggleStationOverlay();
+
+	/**
+	 * Switches the station overlay's tab. Bound to 1, 2 and 3.
+	 *
+	 * Only while the overlay is open, so the number keys stay free for anything else later — and so
+	 * pressing them in flight cannot change something the player cannot see.
+	 */
+	void ShowMarketTab();
+	void ShowIndustryTab();
+	void ShowQuestsTab();
+
+	/**
+	 * The three panels the station overlay renders, and where the player is.
+	 *
+	 * Assembled here rather than in the widget because the selection state and the price arithmetic
+	 * are the controller's, and because these are the same pure builders the debug panel uses — the
+	 * only automated coverage the HUD's wording has.
+	 */
+	void GetStationPanels(
+		FString& OutStationName,
+		TArray<FString>& OutMarket,
+		TArray<FString>& OutIndustry,
+		TArray<FString>& OutQuests) const;
+
 	/** The flight readout, or null when none is configured. */
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOFlightReadout> FlightReadout;
@@ -115,6 +146,10 @@ public:
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOTransientMessages> TransientMessages;
 
+	/** The station screen shown while docked, or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOStationOverlay> StationOverlay;
+
 	/**
 	 * Whether the skills screen is open.
 	 *
@@ -122,6 +157,12 @@ public:
 	 * closed and so cannot be asked anything about itself.
 	 */
 	bool bSkillsScreenOpen = false;
+
+	/** Whether the station overlay is open. Same reasoning as bSkillsScreenOpen. */
+	bool bStationOverlayOpen = false;
+
+	/** So docking somewhere new can open the overlay, and undocking can close it. */
+	int32 LastDockedStationId = 0;
 
 
 	/**

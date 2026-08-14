@@ -1031,7 +1031,29 @@ of view describes nothing. `bHasDeposit` therefore means "in reach *and* on scre
 The debug-text panel still draws Holdings, Quests, Market, Industry and Jobs top-left, and goes when
 the docked overlay lands — at which point Joe moves the flight and on-foot blocks to top left.
 
-Remaining: the docked overlay (market, industry, quests — holdings has moved to 108).
+**The docked overlay is written and awaiting its Blueprints, agreed with Joe 14 August.**
+`USpaceMMOStationOverlay` + `USpaceMMOTextRow`, tabbed: Market, Industry, Quests.
+
+- **Opens on docking and toggles with `Tab`**; does nothing when undocked, because the overlay is
+  about a place and a refusal on every stray keypress gets old faster than it informs. Undocking
+  closes it rather than leaving a station's market floating over open space.
+- **Tabs on `1`, `2`, `3`**, and only while it is open, so those keys stay free and cannot change
+  something the player cannot see.
+- **It renders the existing panel builders' lines** rather than restructuring them.
+  `BuildMarketPanel`, `BuildIndustryPanel` and `BuildQuestPanel` are the only automated coverage the
+  HUD's wording has, and the market half is about to be rewritten by 109 anyway — restructuring it
+  twice would be waste.
+- **`Visible`, not `HitTestInvisible`**, unlike every other HUD widget: this is the one meant to be
+  interacted with once it grows mouse support.
+
+**`Tab` is shared with the debug panel on purpose, and that is scaffolding.** The overlay takes it
+while docked; the debug panel keeps it otherwise, because that panel is the only way to reach
+Holdings until 108's inventory overlay lands. When 108 ships, the guard in `ToggleCharacterPanel`
+goes and `Tab` becomes the station overlay outright. This deviates from the agreed "does nothing when
+undocked" — it does nothing *for the overlay*, and the old panel still answers, which is the lesser
+evil against making Holdings unreachable.
+
+Remaining after this: nothing in 106. The debug-text panel goes when 108 lands.
 
 The panel's own comments are the specification for why: on-screen messages are ordered by slot
 rather than key, are deleted and re-added every frame at zero display time, and so land in an order

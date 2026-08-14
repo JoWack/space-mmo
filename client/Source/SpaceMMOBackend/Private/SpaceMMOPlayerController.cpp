@@ -17,6 +17,7 @@
 #include "SpaceMMOOnFootReadout.h"
 #include "SpaceMMOShipPawn.h"
 #include "SpaceMMOSkillsScreen.h"
+#include "SpaceMMOStationOverlay.h"
 #include "SpaceMMOTransientMessages.h"
 
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
@@ -134,6 +135,9 @@ void ASpaceMMOPlayerController::CreateHud()
 
 	TransientMessages = CreateHudWidget<USpaceMMOTransientMessages>(
 		this, Settings->TransientMessages, TEXT("transient messages"));
+
+	StationOverlay = CreateHudWidget<USpaceMMOStationOverlay>(
+		this, Settings->StationOverlay, TEXT("station overlay"));
 }
 
 void ASpaceMMOPlayerController::ShowTransientMessage(
@@ -211,6 +215,24 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 
 		InputComponent->BindAction(
 			TEXT("ToggleSkills"), IE_Pressed, this, &ASpaceMMOPlayerController::ToggleSkillsScreen);
+
+		InputComponent->BindAction(
+			TEXT("ToggleStation"),
+			IE_Pressed,
+			this,
+			&ASpaceMMOPlayerController::ToggleStationOverlay);
+
+		InputComponent->BindAction(
+			TEXT("StationTabMarket"), IE_Pressed, this, &ASpaceMMOPlayerController::ShowMarketTab);
+
+		InputComponent->BindAction(
+			TEXT("StationTabIndustry"),
+			IE_Pressed,
+			this,
+			&ASpaceMMOPlayerController::ShowIndustryTab);
+
+		InputComponent->BindAction(
+			TEXT("StationTabQuests"), IE_Pressed, this, &ASpaceMMOPlayerController::ShowQuestsTab);
 
 		InputComponent->BindAction(
 			TEXT("CycleRecipe"), IE_Pressed, this, &ASpaceMMOPlayerController::CycleRecipe);
@@ -601,6 +623,18 @@ void ASpaceMMOPlayerController::ShowNotice(const FString& Message, const bool bS
 
 void ASpaceMMOPlayerController::ToggleCharacterPanel()
 {
+	// Tab is shared with the station overlay, which takes it while docked. Both are bound to the
+	// same key deliberately: the overlay replaces most of this panel, and asking a player to learn
+	// a second key for a screen that is about to be deleted would be churn for its own sake.
+	//
+	// <strong>Scaffolding.</strong> This panel is the only way to reach Holdings until task 108's
+	// inventory overlay lands, which is the only reason it still exists. When it goes, so does this
+	// guard, and Tab becomes the station overlay outright.
+	if (StationOverlay != nullptr && DockedStationId() != 0)
+	{
+		return;
+	}
+
 	bShowCharacterPanel = !bShowCharacterPanel;
 
 	if (!bShowCharacterPanel && GEngine != nullptr)
@@ -660,6 +694,114 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 
 	// Skills are global, so K works in the air as well as on the ground.
 	Show(SkillsScreen, bSkillsScreenOpen);
+
+	// Undocking closes the station overlay rather than leaving a station's market floating over open
+	// space — and it opens on docking, so arriving somewhere shows you where you have arrived.
+	const int32 Station = DockedStationId();
+
+	if (Station == 0)
+	{
+		bStationOverlayOpen = false;
+	}
+	else if (Station != LastDockedStationId)
+	{
+		bStationOverlayOpen = true;
+	}
+
+	LastDockedStationId = Station;
+
+	// Visible rather than HitTestInvisible: this is the one HUD element meant to be interacted
+	// with, and it is the only one that should take a click when mouse capture is released.
+	if (StationOverlay != nullptr)
+	{
+		const ESlateVisibility Wanted = bStationOverlayOpen
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed;
+
+		if (StationOverlay->GetVisibility() != Wanted)
+		{
+			StationOverlay->SetVisibility(Wanted);
+		}
+	}
+}
+
+void ASpaceMMOPlayerController::GetStationPanels(
+	FString& OutStationName,
+	TArray<FString>& OutMarket,
+	TArray<FString>& OutIndustry,
+	TArray<FString>& OutQuests) const
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr)
+	{
+		return;
+	}
+
+	// Not named StationId: this controller already has a member by that name, and shadowing it is a
+	// warning this project treats as an error.
+	const int32 Docked = DockedStationId();
+
+	for (const FBackendStation& Station : Client->GetStations())
+	{
+		if (Station.Id == Docked)
+		{
+			OutStationName = Station.Name;
+
+			break;
+		}
+	}
+
+	// The same pure builders the debug panel uses. They are the only automated coverage the HUD's
+	// wording has, and rendering their output rather than replacing them is what keeps it.
+	FBackendInventoryItem Selling;
+
+	OutMarket = TryGetSelectedHolding(Selling)
+		? BuildMarketPanel(Selling.Name, Client->GetBook(), ListingPriceFor(Selling))
+		: BuildMarketPanel(FString(), TArray<FBackendBookEntry>(), 0);
+
+	OutIndustry = BuildIndustryPanel(
+		Client->GetRecipes(), Client->GetJobs(), Client->GetInventory(), SelectedRecipeIndex);
+
+	OutQuests = BuildQuestPanel(Client->GetJournal(), Client->GetAvailableQuests());
+}
+
+void ASpaceMMOPlayerController::ToggleStationOverlay()
+{
+	// Nothing when not docked. The overlay is about a place, and a refusal on every stray keypress
+	// would get old faster than the information is worth.
+	if (StationOverlay == nullptr || (!bStationOverlayOpen && DockedStationId() == 0))
+	{
+		return;
+	}
+
+	bStationOverlayOpen = !bStationOverlayOpen;
+
+	UpdateHudContext();
+}
+
+void ASpaceMMOPlayerController::ShowMarketTab()
+{
+	if (StationOverlay != nullptr && bStationOverlayOpen)
+	{
+		StationOverlay->SetTab(ESpaceMMOStationTab::Market);
+	}
+}
+
+void ASpaceMMOPlayerController::ShowIndustryTab()
+{
+	if (StationOverlay != nullptr && bStationOverlayOpen)
+	{
+		StationOverlay->SetTab(ESpaceMMOStationTab::Industry);
+	}
+}
+
+void ASpaceMMOPlayerController::ShowQuestsTab()
+{
+	if (StationOverlay != nullptr && bStationOverlayOpen)
+	{
+		StationOverlay->SetTab(ESpaceMMOStationTab::Quests);
+	}
 }
 
 void ASpaceMMOPlayerController::ToggleSkillsScreen()

@@ -64,5 +64,15 @@ public:
 		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOTransientMessages"))
 	FSoftClassPath TransientMessages;
 
+	/**
+	 * The station screen shown while docked. Must derive from <c>USpaceMMOStationOverlay</c>.
+	 *
+	 * Unset means the debug panel remains the only way to reach a market, an industry queue or a
+	 * quest — which is what it is today, so unset is a working state rather than a broken one.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOStationOverlay"))
+	FSoftClassPath StationOverlay;
+
 	virtual FName GetCategoryName() const override { return TEXT("Game"); }
 };
