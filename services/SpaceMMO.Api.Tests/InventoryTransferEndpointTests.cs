@@ -187,6 +187,49 @@ public sealed class InventoryTransferEndpointTests(ApiDatabaseFixture fixture)
         Assert.Contains("Ferrite Plate", body, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task An_empty_container_is_still_listed_and_named()
+    {
+        // The gap this closes: transfer is addressed by inventory id, and the response described
+        // only contents -- so a container holding nothing could not be named, and the most likely
+        // first haul anybody makes is into a hold that is empty by definition. A client could see
+        // goods it was unable to move anywhere.
+        long emptyId;
+
+        await using (SpaceMmoDbContext seed = _fixture.CreateContext())
+        {
+            var carried = new Inventory
+            {
+                CharacterId = _characterId,
+                Kind = InventoryKind.CharacterCarried,
+            };
+
+            seed.Inventories.Add(carried);
+            await seed.SaveChangesAsync();
+
+            emptyId = carried.Id;
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/characters/{_characterId}/inventory", UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string body = await response.Content.ReadAsStringAsync();
+
+        // Present despite holding nothing, and addressable.
+        Assert.Contains($"\"inventoryId\":{emptyId}", body, StringComparison.Ordinal);
+
+        // And every stack says which container it is in, which is the other half of addressing a
+        // transfer: naming a destination is useless without naming a source.
+        Assert.Contains($"\"inventoryId\":{_hangarId}", body, StringComparison.Ordinal);
+    }
+
     private async Task<HttpResponseMessage> TransferAsync(long from, long to, int quantity)
     {
         using var request = new HttpRequestMessage(

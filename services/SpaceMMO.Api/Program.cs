@@ -11,6 +11,7 @@ using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Market;
 using SpaceMMO.Data.Quests;
 using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Items;
 
 // The HTTP surface over the M1 backend. Thin on purpose: rules live in SpaceMMO.Domain and
 // transactions in SpaceMMO.Data, so nothing in this project decides a game outcome.
@@ -124,6 +125,26 @@ if (args.Contains("--seed", StringComparer.Ordinal))
         Console.WriteLine(
             $"Paid the {Economy.StartingStake} starting stake to "
             + $"{string.Join(", ", unpaid.Select(c => c.Name))}.");
+    }
+
+    // Pockets for characters made before creation granted them, so every character has somewhere
+    // to move goods to. Idempotent by construction: it asks for the ones that have none.
+    List<int> withoutCarried = await database.Characters
+        .Where(c => !database.Inventories
+            .Any(i => i.CharacterId == c.Id && i.Kind == InventoryKind.CharacterCarried))
+        .Select(c => c.Id)
+        .ToListAsync();
+
+    if (withoutCarried.Count > 0)
+    {
+        var inventories = scope.ServiceProvider.GetRequiredService<InventoryService>();
+
+        foreach (int characterId in withoutCarried)
+        {
+            await inventories.GetOrCreateCarriedAsync(characterId);
+        }
+
+        Console.WriteLine($"Gave {withoutCarried.Count} character(s) a carried inventory.");
     }
 
     return 0;

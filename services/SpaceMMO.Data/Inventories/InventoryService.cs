@@ -315,6 +315,50 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         return hangar;
     }
 
+    /// <summary>
+    /// The inventory a character carries on their person, creating it if it does not exist.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Keyed on the character alone: there is exactly one, it travels with them, and unlike a
+    /// hangar it is not somewhere they have to be.
+    /// </para>
+    /// <para>
+    /// Auto-created for the same reason a hangar is — a "find your pockets" step before a player
+    /// can pick anything up would be friction with no gameplay behind it.
+    /// </para>
+    /// <para>
+    /// Capacity is left unlimited for now and is the piece task 112 changes: carrying is meant to
+    /// be bounded by weight, which is what turns planet-locked materials (ADR-0008) into flights
+    /// rather than paperwork. Nothing enforces any capacity today, so a limit here would be the
+    /// only one in the game and would read as arbitrary.
+    /// </para>
+    /// </remarks>
+    public async Task<Inventory> GetOrCreateCarriedAsync(
+        int characterId, CancellationToken cancellationToken = default)
+    {
+        Inventory? existing = await _database.Inventories.FirstOrDefaultAsync(
+            i => i.CharacterId == characterId && i.Kind == InventoryKind.CharacterCarried,
+            cancellationToken);
+
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var carried = new Inventory
+        {
+            CharacterId = characterId,
+            Kind = InventoryKind.CharacterCarried,
+            CapacityM3 = 0,
+        };
+
+        _database.Inventories.Add(carried);
+        await _database.SaveChangesAsync(cancellationToken);
+
+        return carried;
+    }
+
     private static void GuardQuantity(int quantity)
     {
         if (quantity <= 0)

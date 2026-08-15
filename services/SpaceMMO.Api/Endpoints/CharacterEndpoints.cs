@@ -67,6 +67,7 @@ public sealed record SkillResponse(
 /// happening at one station; the market makes it load-bearing.
 /// </remarks>
 public sealed record InventoryItemResponse(
+    long InventoryId,
     int ItemDefId,
     string ItemKey,
     string Name,
@@ -87,6 +88,7 @@ public sealed record InventoryItemResponse(
 /// load-bearing rather than cosmetic.
 /// </remarks>
 public sealed record ItemInstanceResponse(
+    long InventoryId,
     long Id,
     int ItemDefId,
     string ItemKey,
@@ -108,9 +110,24 @@ public sealed record ItemInstanceResponse(
 /// One response rather than a second endpoint, so a client cannot show half a player's possessions
 /// and believe it is finished — which is the bug being fixed, one layer up.
 /// </remarks>
+/// <summary>
+/// One container a character owns, whether or not anything is in it.
+/// </summary>
+/// <remarks>
+/// <strong>Listed separately because contents cannot describe an empty container.</strong> A client
+/// moving goods needs somewhere to move them to, and the most likely first transfer anybody makes
+/// is into a hold that is empty by definition — which no list of items can mention.
+/// </remarks>
+public sealed record InventoryContainerResponse(
+    long InventoryId,
+    InventoryKind Kind,
+    int? StationId,
+    double CapacityM3);
+
 public sealed record InventoryResponse(
     IReadOnlyList<InventoryItemResponse> Stacks,
-    IReadOnlyList<ItemInstanceResponse> Items);
+    IReadOnlyList<ItemInstanceResponse> Items,
+    IReadOnlyList<InventoryContainerResponse> Containers);
 
 /// <summary>
 /// Character creation and read-only views of a character's progression and holdings.
@@ -146,6 +163,7 @@ public static class CharacterEndpoints
         HttpContext context,
         Caller caller,
         SpaceMmoDbContext database,
+        InventoryService inventories,
         CancellationToken cancellation)
     {
         int? accountId = caller.AccountId(context);
@@ -218,6 +236,11 @@ public static class CharacterEndpoints
         });
 
         await database.SaveChangesAsync(cancellation);
+
+        // Pockets, from the first moment. Created here rather than lazily on first use so that a
+        // client always has somewhere to move goods to: transfer is addressed by inventory id, and
+        // a container that does not exist yet cannot be named.
+        await inventories.GetOrCreateCarriedAsync(character.Id, cancellation);
 
         return Results.Created($"/characters/{character.Id}", ToResponse(character));
     }
@@ -332,6 +355,7 @@ public static class CharacterEndpoints
             .Include(ii => ii.ItemDef)
             .OrderBy(ii => ii.ItemDef!.Key)
             .Select(ii => new InventoryItemResponse(
+                ii.InventoryId,
                 ii.ItemDefId,
                 ii.ItemDef!.Key,
                 ii.ItemDef.Name,
@@ -352,6 +376,7 @@ public static class CharacterEndpoints
             .Include(i => i.Inventory)
             .OrderBy(i => i.ItemDef!.Key).ThenBy(i => i.Id)
             .Select(i => new ItemInstanceResponse(
+                i.InventoryId!.Value,
                 i.Id,
                 i.ItemDefId,
                 i.ItemDef!.Key,
@@ -361,7 +386,16 @@ public static class CharacterEndpoints
                 i.Inventory.StationId))
             .ToListAsync(cancellation);
 
-        return Results.Ok(new InventoryResponse(stacks, instances));
+        // Every container, not only the ones holding something. Transfer is addressed by inventory
+        // id, so a container the client cannot name is one it cannot move goods into — and an empty
+        // hold is exactly where a player's first haul goes.
+        List<InventoryContainerResponse> containers = await database.Inventories
+            .Where(i => i.CharacterId == characterId)
+            .OrderBy(i => i.Kind).ThenBy(i => i.StationId)
+            .Select(i => new InventoryContainerResponse(i.Id, i.Kind, i.StationId, i.CapacityM3))
+            .ToListAsync(cancellation);
+
+        return Results.Ok(new InventoryResponse(stacks, instances, containers));
     }
 
     /// <summary>

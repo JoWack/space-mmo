@@ -1145,6 +1145,22 @@ A hangar whose station has not been fetched is named by id (`HANGAR — 41`) rat
 empty heading, and an empty inventory says "Nothing yet" rather than rendering a blank rectangle
 that reads as a screen which failed to load.
 
+**Containers exist, 15 August.** `InventoryService.GetOrCreateCarriedAsync` mirrors the hangar
+factory — keyed on the character alone, since there is exactly one and it travels with them. Created
+at character creation, and `--seed` backfills anyone older, the same idempotent shape as the starting
+stake. Twelve characters were given pockets on the first run.
+
+The inventory response now carries **`inventoryId` on every stack and instance**, plus a
+**`containers` list of every container owned whether or not anything is in it**. Both were required
+before drag-to-transfer could exist at all: transfer is addressed by inventory id, contents cannot
+describe an empty container, and the first haul anybody makes goes into a hold that is empty by
+definition.
+
+**Ship holds are not part of this** and cannot be until
+[ADR-0012](adr/0012-a-ship-is-earned-and-carries-its-own-hold.md) lands — no character owns a ship
+instance, so a hold has nothing to hang from. **Transfer is therefore carried ↔ hangar only**, which
+is enough to build and exercise the drag interaction against.
+
 **Read-only first, decided 13 August.** Moving goods needs a selection model and a quantity
 affordance and roughly doubles the work; seeing what you own and where is a real screen on its own,
 and it is the half that is missing today.
@@ -1298,7 +1314,8 @@ on its own it makes crafting possible only where the materials already happen to
 remedy — transfer exists over HTTP (99) and the inventory screen shipped read-only (108). Order:
 transfer affordance, then this.
 
-Blocked on 108's transfer half.
+Blocked on 108's transfer half — and note that transfer itself is limited to carried and hangar
+until 115 gives ships their holds.
 
 ## 112 — Goods are held, not teleported
 
@@ -1413,6 +1430,45 @@ Worth preferring 1. It also gives 107's login screen somewhere sensible to hand 
 the only one of the two that closes the presence hole rather than papering over it.
 
 Not caused by the HUD work; the station overlay made a long-standing seam visible.
+
+## 115 — A ship is a thing you earn, and its hold belongs to it
+
+**Pending. Decided 15 August: [ADR-0012](adr/0012-a-ship-is-earned-and-carries-its-own-hold.md).**
+The ADR is the decision; what follows is the shape of the work and what it runs into.
+
+- **Nobody starts with a ship.** A player crafts a hull and **summons** it — at a docking station or
+  ship hangar — through the main questline.
+- **A hold belongs to a ship**, not to a character. The schema already says so:
+  `Inventory.ShipItemInstanceId` points at an `ItemInstance`, and shipcrafting already produces
+  hulls as instances.
+- **A hold is reachable only when the player is with it**: docked at a station with their active
+  ship, or sitting in that ship with the inventory open.
+
+### What this changes that is not obvious
+
+**The game currently starts you in a ship.** `SpaceMMOGameMode` sets
+`DefaultPawnClass = ASpaceMMOShipPawn`, so every connection spawns flying. Under this design a new
+player starts on foot with no ship at all, and the whole opening — where you appear, what the
+questline asks first, what the flight tutorial is — follows from that. This is the largest
+consequence and none of it is written down anywhere yet.
+
+**"Active ship" is new state.** A character may own several hulls; exactly one is the one they are
+flying or would summon. Nothing models that today, and the hold's accessibility rule depends on it.
+
+**Summoning is a new verb**, and it needs a place: which station kinds can do it, whether it costs
+anything, and what happens to a summoned ship that is left somewhere.
+
+### What it blocks and is blocked by
+
+Blocks the ship-hold half of the container work (108/112): a hold cannot be created while no
+character owns a ship instance, so **transfer is limited to carried ↔ hangar until this lands**.
+
+Related to ADR-0006, which already assumes a ship's hold is what is inside the explosion when a ship
+is destroyed — that rule only becomes real once holds belong to ships.
+
+**Wants an ADR.** It settles how players get their first ship, which is an onboarding decision as
+much as an inventory one, and the roadmap-reconciliation rule exists because exactly this kind of
+decision went unwritten before.
 
 ## 96 — Author world content graphically
 
