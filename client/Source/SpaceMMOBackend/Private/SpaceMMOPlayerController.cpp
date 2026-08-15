@@ -142,6 +142,14 @@ void ASpaceMMOPlayerController::CreateHud()
 
 	InventoryScreen = CreateHudWidget<USpaceMMOInventoryScreen>(
 		this, Settings->InventoryScreen, TEXT("inventory screen"));
+
+	// Decide what belongs on screen now, rather than on the first tick.
+	//
+	// AddToViewport leaves a widget visible, and until something says otherwise every screen here is
+	// showing -- so the inventory screen and the station overlay both appeared for a frame or two at
+	// startup before the first tick collapsed them. One call closes that window entirely, and it has
+	// to be after all six exist because the pairing depends on knowing which others are open.
+	UpdateHudContext();
 }
 
 void ASpaceMMOPlayerController::ShowTransientMessage(

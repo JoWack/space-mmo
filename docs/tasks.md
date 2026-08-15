@@ -1385,6 +1385,35 @@ Worth doing eventually: run with `-stdout -FullStdOutLogOutput` and capture the 
 by running the suite minus the last category. Low priority while the completion-line check holds,
 but it undermines every "N tests pass" claim until it is understood.
 
+## 114 — Docking survives a restart but the ship does not
+
+**Pending. Found by Joe, 14 August**: docked at DeepDock, closed the game, restarted. `G` correctly
+said nothing was in range — and `Tab` still opened DeepDock's station overlay.
+
+Nothing there is misreporting. `Character.DockedStationId` is persisted (`Entities/Characters.cs:86`),
+so the character really is still docked; the ship is simply respawned at a default position rather
+than at the station it is docked to. The record and the world disagree, and the station overlay is
+only the first thing to notice.
+
+**The sharper consequence is that presence is enforced against the record alone.**
+`RefuseIfNotPresentAsync` asks `DockingService.IsDockedAtAsync` and never asks where the ship is
+(`CharacterEndpoints.cs:490`). So a player who quits while docked resumes with full market and
+hangar access to that station from anywhere in the system — a restart is a free trip. Harmless while
+one person is playing and exactly the shape of thing that stops being harmless later.
+
+Two ways, and it is a design choice rather than a fix:
+
+1. **Spawn a docked character at their station.** Keeps the fiction, keeps the record true, and is
+   what a player would expect — you log back in where you left off. Needs the spawn path to place a
+   pawn against a station's position rather than a default one.
+2. **Undock on login.** One line, loses the state, and leaves a player who quit inside a station
+   floating outside it.
+
+Worth preferring 1. It also gives 107's login screen somewhere sensible to hand off to, and it is
+the only one of the two that closes the presence hole rather than papering over it.
+
+Not caused by the HUD work; the station overlay made a long-standing seam visible.
+
 ## 96 — Author world content graphically
 
 **Pending.** Raised 11 August; ADR-0011 makes it pressing, because a cave is a shape rather than a
