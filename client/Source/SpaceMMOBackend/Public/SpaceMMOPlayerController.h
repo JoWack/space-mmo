@@ -184,6 +184,9 @@ public:
 	/** Whether the inventory screen is open. Same reasoning as bSkillsScreenOpen. */
 	bool bInventoryScreenOpen = false;
 
+	/** So closing the inventory only recaptures the mouse if opening it was what released one. */
+	bool bMouseWasCapturedBeforeInventory = false;
+
 	/** So docking somewhere new can open the overlay, and undocking can close it. */
 	int32 LastDockedStationId = 0;
 

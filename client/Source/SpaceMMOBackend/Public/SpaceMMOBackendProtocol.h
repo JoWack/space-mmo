@@ -53,7 +53,8 @@ public:
 	static bool ParseInventory(
 		const FString& Json,
 		TArray<FBackendInventoryItem>& OutItems,
-		TArray<FBackendItemInstance>& OutInstances);
+		TArray<FBackendItemInstance>& OutInstances,
+		TArray<FBackendInventoryContainer>& OutContainers);
 
 	/** Parses a resolved identity. Fails if the character id is missing or zero. */
 	static bool ParseResolvedCharacter(const FString& Json, FBackendResolvedCharacter& OutResolved);
@@ -99,6 +100,18 @@ public:
 
 	/** JSON body for starting a job. */
 	static FString MakeStartJobBody(int32 CharacterId, int32 RecipeId, int32 StationId, int32 Runs);
+
+	/** Moving a quantity of a stackable item between two of one character's containers. */
+	static FString MakeTransferBody(
+		int64 FromInventoryId, int64 ToInventoryId, int32 ItemDefId, int32 Quantity);
+
+	/**
+	 * Moving one non-stackable item.
+	 *
+	 * No quantity and no source: an instance is itself, and the server knows where it is. Sending a
+	 * source would be the client asserting something it read a moment ago and the server owns.
+	 */
+	static FString MakeTransferInstanceBody(int64 ItemInstanceId, int64 ToInventoryId);
 
 	/** JSON body for claiming a job. */
 	static FString MakeClaimJobBody(int32 CharacterId, int64 JobId);

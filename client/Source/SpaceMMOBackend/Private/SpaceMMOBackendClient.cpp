@@ -575,11 +575,14 @@ void USpaceMMOBackendClient::SelectCharacter(const int32 CharacterId)
 		{
 			TArray<FBackendInventoryItem> Parsed;
 			TArray<FBackendItemInstance> ParsedInstances;
+			TArray<FBackendInventoryContainer> ParsedContainers;
 
-			FSpaceMMOBackendProtocol::ParseInventory(Body, Parsed, ParsedInstances);
+			FSpaceMMOBackendProtocol::ParseInventory(
+				Body, Parsed, ParsedInstances, ParsedContainers);
 
 			Inventory = MoveTemp(Parsed);
 			ItemInstances = MoveTemp(ParsedInstances);
+			Containers = MoveTemp(ParsedContainers);
 
 			OnCharacterStateLoaded.Broadcast();
 		});
@@ -625,6 +628,60 @@ void USpaceMMOBackendClient::FetchJobs(const int32 CharacterId)
 
 			OnIndustryChanged.Broadcast();
 		});
+}
+
+void USpaceMMOBackendClient::TransferStack(
+	const int32 CharacterId,
+	const int64 FromInventoryId,
+	const int64 ToInventoryId,
+	const int32 ItemDefId,
+	const int32 Quantity,
+	TFunction<void(const FBackendFailure&)> OnFailure)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		FString::Printf(TEXT("/characters/%d/inventory/transfer"), CharacterId),
+		FSpaceMMOBackendProtocol::MakeTransferBody(
+			FromInventoryId, ToInventoryId, ItemDefId, Quantity),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				// Asked for, not applied locally. The server decided what actually moved -- a
+				// partial stack, a refusal on the last unit -- and its answer is the only one worth
+				// showing.
+				Self->SelectCharacter(CharacterId);
+			}
+		},
+		FString(),
+		MoveTemp(OnFailure));
+}
+
+void USpaceMMOBackendClient::TransferInstance(
+	const int32 CharacterId,
+	const int64 ItemInstanceId,
+	const int64 ToInventoryId,
+	TFunction<void(const FBackendFailure&)> OnFailure)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		FString::Printf(TEXT("/characters/%d/inventory/transfer-instance"), CharacterId),
+		FSpaceMMOBackendProtocol::MakeTransferInstanceBody(ItemInstanceId, ToInventoryId),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				Self->SelectCharacter(CharacterId);
+			}
+		},
+		FString(),
+		MoveTemp(OnFailure));
 }
 
 void USpaceMMOBackendClient::StartJob(

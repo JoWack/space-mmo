@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Blueprint/DragDropOperation.h"
 #include "SpaceMMOPairedPanel.h"
 #include "CoreMinimal.h"
 #include "SpaceMMOBackendTypes.h"
@@ -16,6 +17,27 @@ USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FSpaceMMOInventoryLine
 {
 	GENERATED_BODY()
+
+	/**
+	 * Which container this line belongs to.
+	 *
+	 * Every line carries it, headings included — which is what makes the whole group a drop target
+	 * rather than only its heading, without a widget per group to drop onto.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	int64 InventoryId = 0;
+
+	/** The stack's item, or 0 on a heading or an instance. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	int32 ItemDefId = 0;
+
+	/** The instance's id, or 0 on a heading or a stack. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	int64 InstanceId = 0;
+
+	/** How many are here, for a stack. Instances are always one and move whole. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	int32 Quantity = 0;
 
 	/** "SHIP HOLD", "HANGAR — Tycho Trading Hub", or an item's name. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
@@ -38,6 +60,29 @@ struct SPACEMMOBACKEND_API FSpaceMMOInventoryLine
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bReachable = true;
+
+	/** Whether this line names something that can be picked up and moved. */
+	bool CanDrag() const
+	{
+		return !bIsHeading && bReachable && (ItemDefId != 0 || InstanceId != 0);
+	}
+};
+
+/**
+ * Goods in transit between two containers.
+ *
+ * Carries the whole source line rather than an id, because the drop needs to know what is being
+ * moved as well as where from — an instance moves whole, a stack asks how many, and the difference
+ * is a property of the thing being dragged.
+ */
+UCLASS()
+class SPACEMMOBACKEND_API USpaceMMOInventoryDrag : public UDragDropOperation
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FSpaceMMOInventoryLine Line;
 };
 
 /** One row. Its own widget so the Blueprint owns what a row looks like. */
@@ -50,6 +95,21 @@ public:
 	/** Fills the row in. Called by the screen; nothing else needs it. */
 	void SetLine(const FSpaceMMOInventoryLine& Line);
 
+	const FSpaceMMOInventoryLine& GetLine() const { return Line; }
+
+	/** Set by the screen so a dropped row knows who to tell. */
+	void SetOwningScreen(class USpaceMMOInventoryScreen* Screen) { OwningScreen = Screen; }
+
+	/**
+	 * Whether a legal drop is hovering over this row.
+	 *
+	 * Bind a highlight to it. Every row in a container reports this together, so the whole group
+	 * lights up rather than the one line under the cursor — a group is the target, and a single
+	 * highlighted row would suggest goods land *there* rather than in the container.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bIsDropTarget = false;
+
 	/** Bind a heading's weight or colour to this. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bIsHeading = false;
@@ -59,11 +119,37 @@ public:
 	bool bReachable = true;
 
 protected:
+	virtual FReply NativeOnMouseButtonDown(
+		const FGeometry& Geometry, const FPointerEvent& Event) override;
+
+	virtual void NativeOnDragDetected(
+		const FGeometry& Geometry,
+		const FPointerEvent& Event,
+		UDragDropOperation*& OutOperation) override;
+
+	virtual bool NativeOnDrop(
+		const FGeometry& Geometry,
+		const FDragDropEvent& Event,
+		UDragDropOperation* Operation) override;
+
+	virtual void NativeOnDragEnter(
+		const FGeometry& Geometry,
+		const FDragDropEvent& Event,
+		UDragDropOperation* Operation) override;
+
+	virtual void NativeOnDragLeave(
+		const FDragDropEvent& Event, UDragDropOperation* Operation) override;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> LabelText;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> AmountText;
+
+private:
+	FSpaceMMOInventoryLine Line;
+
+	TWeakObjectPtr<class USpaceMMOInventoryScreen> OwningScreen;
 };
 
 /**
@@ -101,11 +187,55 @@ public:
 	static TArray<FSpaceMMOInventoryLine> Build(
 		const TArray<FBackendInventoryItem>& Stacks,
 		const TArray<FBackendItemInstance>& Instances,
+		const TArray<FBackendInventoryContainer>& Containers,
 		const TArray<FBackendStation>& Stations,
 		int32 DockedStationId);
 
+	/**
+	 * Whether goods named by one line may be dropped on another.
+	 *
+	 * Pure and static so every case is testable without a mouse: what may be picked up, what may
+	 * receive it, and the one that is easy to get wrong — a drop back into the container the goods
+	 * are already in, which would send the server a move from a place to itself.
+	 */
+	static bool CanDrop(const FSpaceMMOInventoryLine& Source, const FSpaceMMOInventoryLine& Target);
+
+	/**
+	 * Begins a move, asking how many first if the goods are a stack.
+	 *
+	 * An instance goes immediately: it carries its own condition, so it is one thing and there is
+	 * nothing to ask. A stack fires <c>OnQuantityRequested</c> and waits for
+	 * <c>ConfirmQuantity</c> — always, rather than behind a modifier key, because a modifier is
+	 * invisible until somebody tells you about it and the prompt arrives pre-filled with everything.
+	 */
+	void BeginTransfer(const FSpaceMMOInventoryLine& Source, int64 ToInventoryId);
+
+	/** Called by the Blueprint's quantity prompt. Clamped, so a typed number cannot invent goods. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
+	void ConfirmQuantity(int32 Quantity);
+
+	/** Called by the Blueprint's quantity prompt when the player backs out. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
+	void CancelQuantity();
+
+	/** Marks every row in a container as a drop target, or clears it with 0. */
+	void SetDropTargetContainer(int64 InventoryId);
+
+	/** Builds one row widget from a line. Used for the list and for the thing under the cursor. */
+	USpaceMMOInventoryRow* MakeRow(const FSpaceMMOInventoryLine& Line);
+
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
+
+	/**
+	 * Asks the Blueprint to show its quantity prompt.
+	 *
+	 * The prompt is entirely the designer's — a slider, a box, a row of buttons — because how you
+	 * ask for a number is a look rather than a rule. C++ supplies the name and the most that can be
+	 * moved, and waits for ConfirmQuantity or CancelQuantity.
+	 */
+	UFUNCTION(BlueprintImplementableEvent, Category = "SpaceMMO|HUD")
+	void OnQuantityRequested(const FString& ItemName, int32 MaxQuantity);
 
 	/** The container rows are added to. */
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -116,6 +246,14 @@ protected:
 	TSubclassOf<USpaceMMOInventoryRow> RowClass;
 
 private:
+	/** The move waiting on a quantity, if any. */
+	FSpaceMMOInventoryLine PendingSource;
+
+	int64 PendingDestination = 0;
+
+	/** Rows currently lit as a drop target, so the highlight can be cleared without a search. */
+	int64 HighlightedContainer = 0;
+
 	/** What the rows were last built from, so they are rebuilt only when something changed. */
 	FString RowSignature;
 

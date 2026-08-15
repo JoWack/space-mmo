@@ -1165,8 +1165,28 @@ is enough to build and exercise the drag interaction against.
 affordance and roughly doubles the work; seeing what you own and where is a real screen on its own,
 and it is the half that is missing today.
 
-**Transfer, when it lands, is drag between groups** — Joe's preference, 13 August. More work than a
-keyed affordance, and worth it.
+**Transfer is drag between groups** — Joe's preference, 13 August — and is written as of 15 August,
+awaiting its Blueprint half.
+
+**Every line carries its container, headings included.** That is what makes a whole group a drop
+target without a widget per group to drop onto, and it fell out of building rather than out of the
+sketch. Grouping is keyed on inventory id rather than kind and station, because two hangars at one
+station would otherwise merge and leave a drop with nowhere unambiguous to land.
+
+`CanDrop` is pure and static so all four rules are testable without a mouse: cargo must be
+draggable, the destination reachable, and — the one easy to get wrong — a drop back into the
+container the goods are already in is refused. That would send the server a move from a place to
+itself and redraw identically, which reads as the drop being lost.
+
+**The quantity prompt belongs to the Blueprint.** C++ fires `OnQuantityRequested(Name, Max)` and
+waits for `ConfirmQuantity` or `CancelQuantity`; how you ask for a number is a look rather than a
+rule. Always asked for a stack rather than behind a modifier key, because a modifier is invisible
+until somebody tells you about it — and the prompt arrives pre-filled, so moving everything is still
+one keystroke. Instances skip it entirely and move whole.
+
+**Opening `I` releases the mouse**, since dragging needs a cursor and the game holds it. Closing
+gives it back only if opening was what took it: somebody who pressed `M` for their own reasons
+should not have it snatched back.
 
 **Distant hangars are listed and greyed, not hidden.** The API refuses transfers when the character
 is not docked there (`RefuseIfNotPresentAsync`), so they are genuinely unusable from elsewhere — but
@@ -1469,6 +1489,22 @@ is destroyed — that rule only becomes real once holds belong to ships.
 **Wants an ADR.** It settles how players get their first ship, which is an onboarding decision as
 much as an inventory one, and the roadmap-reconciliation rule exists because exactly this kind of
 decision went unwritten before.
+
+## 116 — Drag goods onto the market to sell them
+
+**Pending. Planned 15 August**, while building 108's transfer.
+
+Dropping a stack onto the station overlay's market tab to list it is the obvious next thing after
+dragging between containers, and the plumbing was left general for it: the drag operation carries a
+whole inventory line rather than an id, and `CanDrop` takes a source and a target rather than being
+written against inventory groups.
+
+What it needs beyond that: a drop target on the market tab, a price affordance — listing is not just
+"how many" but "at what" — and a decision about whether dropping opens the existing list-for-sale
+path or a new one. Also worth settling whether the reverse works, dragging from the book to buy,
+which is a different and more dangerous gesture.
+
+Wants the panels paired to be much use, which they now are: hangar on the right, market on the left.
 
 ## 96 — Author world content graphically
 

@@ -199,11 +199,38 @@ enum class EBackendInventoryKind : uint8
 	StationHangar = 2,
 };
 
+/**
+ * One container a character owns, whether or not anything is in it.
+ *
+ * Listed separately from contents because contents cannot describe an empty container, and a
+ * transfer is addressed by inventory id — so a container a client cannot name is one it cannot move
+ * goods into. The first haul anybody makes goes into a hold that is empty by definition.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendInventoryContainer
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 InventoryId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendInventoryKind Kind = EBackendInventoryKind::CharacterCarried;
+
+	/** Which station holds it, or zero for anything not at one. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 StationId = 0;
+};
+
 /** One stack in a character's inventory. */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendInventoryItem
 {
 	GENERATED_BODY()
+
+	/** Which container it sits in. A transfer is addressed by this, not by kind and station. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 InventoryId = 0;
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 ItemDefId = 0;
@@ -565,6 +592,10 @@ USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendItemInstance
 {
 	GENERATED_BODY()
+
+	/** Which container it sits in. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 InventoryId = 0;
 
 	/** Server-side id. What a transfer names. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")

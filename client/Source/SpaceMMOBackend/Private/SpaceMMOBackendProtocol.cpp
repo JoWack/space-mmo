@@ -87,6 +87,43 @@ FString FSpaceMMOBackendProtocol::MakeCreateCharacterBody(const FString& Name, c
 	return Output;
 }
 
+FString FSpaceMMOBackendProtocol::MakeTransferBody(
+	const int64 FromInventoryId,
+	const int64 ToInventoryId,
+	const int32 ItemDefId,
+	const int32 Quantity)
+{
+	FString Output;
+
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+
+	Writer->WriteObjectStart();
+	Writer->WriteValue(TEXT("fromInventoryId"), FromInventoryId);
+	Writer->WriteValue(TEXT("toInventoryId"), ToInventoryId);
+	Writer->WriteValue(TEXT("itemDefId"), ItemDefId);
+	Writer->WriteValue(TEXT("quantity"), Quantity);
+	Writer->WriteObjectEnd();
+	Writer->Close();
+
+	return Output;
+}
+
+FString FSpaceMMOBackendProtocol::MakeTransferInstanceBody(
+	const int64 ItemInstanceId, const int64 ToInventoryId)
+{
+	FString Output;
+
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+
+	Writer->WriteObjectStart();
+	Writer->WriteValue(TEXT("itemInstanceId"), ItemInstanceId);
+	Writer->WriteValue(TEXT("toInventoryId"), ToInventoryId);
+	Writer->WriteObjectEnd();
+	Writer->Close();
+
+	return Output;
+}
+
 bool FSpaceMMOBackendProtocol::ReadInt64(
 	const TSharedPtr<FJsonObject>& Object, const FString& Field, int64& OutValue)
 {
@@ -301,10 +338,12 @@ bool FSpaceMMOBackendProtocol::ParseSkills(const FString& Json, TArray<FBackendS
 bool FSpaceMMOBackendProtocol::ParseInventory(
 	const FString& Json,
 	TArray<FBackendInventoryItem>& OutItems,
-	TArray<FBackendItemInstance>& OutInstances)
+	TArray<FBackendItemInstance>& OutInstances,
+	TArray<FBackendInventoryContainer>& OutContainers)
 {
 	OutItems.Reset();
 	OutInstances.Reset();
+	OutContainers.Reset();
 
 	// An object with two lists, where this used to be a bare array of stacks. Anything that does
 	// not stack -- a tool, a weapon, a hull -- was simply absent before, so a player could craft
@@ -345,6 +384,8 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 
 		int64 ItemDefId = 0;
 		int64 Quantity = 0;
+
+		ReadInt64(Object, TEXT("inventoryId"), Item.InventoryId);
 
 		if (ReadInt64(Object, TEXT("itemDefId"), ItemDefId))
 		{
@@ -404,6 +445,8 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 
 			int64 Number = 0;
 
+			ReadInt64(Object, TEXT("inventoryId"), Instance.InventoryId);
+
 			if (ReadInt64(Object, TEXT("id"), Number))
 			{
 				Instance.Id = Number;
@@ -430,6 +473,42 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 			}
 
 			OutInstances.Add(Instance);
+		}
+	}
+
+	// Absent rather than empty is tolerated for the same reason as instances: an older server leaves
+	// a client that can see its goods but not move them, rather than one that sees nothing.
+	const TArray<TSharedPtr<FJsonValue>>* ContainerValues = nullptr;
+
+	if (Envelope->TryGetArrayField(TEXT("containers"), ContainerValues) && ContainerValues != nullptr)
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *ContainerValues)
+		{
+			const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+			FBackendInventoryContainer Container;
+
+			if (!Object.IsValid()
+				|| !ReadInt64(Object, TEXT("inventoryId"), Container.InventoryId))
+			{
+				// An id is the whole point of a container here: it is what a transfer is addressed
+				// by, and one without an id is a destination nothing can name.
+				continue;
+			}
+
+			int64 Number = 0;
+
+			if (ReadInt64(Object, TEXT("kind"), Number))
+			{
+				Container.Kind = ToEnum(Number, EBackendInventoryKind::CharacterCarried, 2);
+			}
+
+			if (ReadInt64(Object, TEXT("stationId"), Number))
+			{
+				Container.StationId = static_cast<int32>(Number);
+			}
+
+			OutContainers.Add(Container);
 		}
 	}
 

@@ -347,6 +347,7 @@ bool FSpaceMMOBackendParseSkillsAndInventoryTest::RunTest(const FString& Paramet
 
 	TArray<FBackendInventoryItem> Items;
 	TArray<FBackendItemInstance> Instances;
+	TArray<FBackendInventoryContainer> Containers;
 
 	// Two lists, because owning something takes two shapes. This was a bare array of stacks, and
 	// anything with condition — every tool, weapon and hull — was simply absent from it, so a
@@ -359,7 +360,8 @@ bool FSpaceMMOBackendParseSkillsAndInventoryTest::RunTest(const FString& Paramet
 			{"id":77,"itemDefId":9,"itemKey":"crude_mining_laser","name":"Crude Mining Laser",
 			 "condition":87,"kind":2,"stationId":3}]})"),
 		Items,
-		Instances);
+		Instances,
+		Containers);
 
 	TestEqual(TEXT("One stack"), Items.Num(), 1);
 	TestEqual(TEXT("Item key"), Items[0].ItemKey, TEXT("ferrite_ore"));
@@ -375,11 +377,12 @@ bool FSpaceMMOBackendParseSkillsAndInventoryTest::RunTest(const FString& Paramet
 	// inventory, which is the milder of the two failures.
 	TArray<FBackendInventoryItem> OnlyStacks;
 	TArray<FBackendItemInstance> NoInstances;
+	TArray<FBackendInventoryContainer> NoContainers;
 
 	TestTrue(
 		TEXT("An envelope without instances still parses"),
 		FSpaceMMOBackendProtocol::ParseInventory(
-			TEXT(R"({"stacks":[]})"), OnlyStacks, NoInstances));
+			TEXT(R"({"stacks":[]})"), OnlyStacks, NoInstances, NoContainers));
 
 	TArray<FBackendSkill> NoSkills;
 

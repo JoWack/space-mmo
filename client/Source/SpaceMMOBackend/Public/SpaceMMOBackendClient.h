@@ -89,6 +89,14 @@ public:
 	 */
 	const TArray<FBackendItemInstance>& GetItemInstances() const { return ItemInstances; }
 
+	/**
+	 * Every container the character owns, whether or not anything is in it.
+	 *
+	 * Needed because a transfer is addressed by inventory id and contents cannot describe an empty
+	 * container — which is where a first haul goes.
+	 */
+	const TArray<FBackendInventoryContainer>& GetContainers() const { return Containers; }
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	int32 GetSelectedCharacterId() const { return SelectedCharacterId; }
 
@@ -237,6 +245,33 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
 	void StartJob(int32 CharacterId, int32 RecipeId, int32 StationId, int32 Runs);
+
+	/**
+	 * Moves goods between two of this character's own containers.
+	 *
+	 * <strong>Every rule lives on the server.</strong> Ownership of both containers, presence at any
+	 * station hangar involved, and the cost basis travelling with the goods are all enforced there
+	 * (task 99) — so a refusal is the normal way to learn a move was not allowed, and its reason is
+	 * worth showing rather than swallowing.
+	 *
+	 * Inventory is refetched on success rather than adjusted locally. A client that moved its own
+	 * copy would be right nearly always, and "nearly" is how a display starts disagreeing with the
+	 * database.
+	 */
+	void TransferStack(
+		int32 CharacterId,
+		int64 FromInventoryId,
+		int64 ToInventoryId,
+		int32 ItemDefId,
+		int32 Quantity,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
+	/** Moves one non-stackable item. It carries its own condition, so it moves whole. */
+	void TransferInstance(
+		int32 CharacterId,
+		int64 ItemInstanceId,
+		int64 ToInventoryId,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
 	void ClaimJob(int32 CharacterId, int64 JobId);
@@ -420,6 +455,8 @@ private:
 	TArray<FBackendInventoryItem> Inventory;
 
 	TArray<FBackendItemInstance> ItemInstances;
+
+	TArray<FBackendInventoryContainer> Containers;
 
 	UPROPERTY()
 	TArray<FBackendResourceNode> Deposits;

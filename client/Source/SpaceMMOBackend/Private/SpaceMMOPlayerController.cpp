@@ -829,6 +829,28 @@ void ASpaceMMOPlayerController::ToggleInventoryScreen()
 
 	bInventoryScreenOpen = !bInventoryScreenOpen;
 
+	// Dragging needs a cursor, and the game holds the mouse by default. Opening the screen releases
+	// it; closing gives it back — but only if this was what took it. Somebody who pressed M to get
+	// their cursor for their own reasons should not have it snatched back by closing a screen they
+	// happened to open afterwards.
+	if (bInventoryScreenOpen)
+	{
+		bMouseWasCapturedBeforeInventory = bMouseCaptured;
+
+		if (bMouseCaptured)
+		{
+			bMouseCaptured = false;
+
+			ApplyMouseCapture();
+		}
+	}
+	else if (bMouseWasCapturedBeforeInventory && !bMouseCaptured)
+	{
+		bMouseCaptured = true;
+
+		ApplyMouseCapture();
+	}
+
 	// Asked for on opening rather than polled. What a player owns changes on the server -- a job
 	// claimed, a sale settled, another character hauling -- and a screen opened to work out where
 	// something went is the worst possible moment to be showing a stale copy.
