@@ -4,6 +4,7 @@ using SpaceMMO.Data.Progression;
 using SpaceMMO.Data.Industry;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Gathering;
 using SpaceMMO.Data.Quests;
 using SpaceMMO.Domain.Progression;
@@ -318,14 +319,26 @@ public sealed class GatheringService(SpaceMmoDbContext database)
             return;
         }
 
-        bool owned = await _database.ItemInstances.AnyAsync(
+        // On their person, not merely owned.
+        //
+        // This used to accept the tool anywhere the character owned it, and task 94 recorded why it
+        // could not be tightened: nothing routed anything into a carried inventory, so requiring the
+        // laser to be carried would have made mining impossible rather than stricter. Both halves of
+        // that are now false — a character has pockets and can move things into them — so the check
+        // is what it was always meant to be. A laser in a hangar on another planet is not a laser
+        // you are holding.
+        //
+        // Condition above zero, still: a broken tool is not a tool, and accepting one would promise
+        // a gather that the rest of this method then refuses.
+        bool carried = await _database.ItemInstances.AnyAsync(
             instance => instance.ItemDefId == toolDefId
                 && instance.DestroyedAt == null
                 && instance.Condition > 0
-                && instance.Inventory!.CharacterId == characterId,
+                && instance.Inventory!.CharacterId == characterId
+                && instance.Inventory.Kind == InventoryKind.CharacterCarried,
             cancellationToken);
 
-        if (!owned)
+        if (!carried)
         {
             // Both, because the message is read by a person and the key is read by code.
             var tool = await _database.ItemDefs

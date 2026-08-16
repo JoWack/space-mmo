@@ -97,7 +97,8 @@ void USpaceMMOGatheringComponent::HandlePawnRestarted(APawn* Pawn)
 
 void USpaceMMOGatheringComponent::BindInput(UInputComponent* InputComponent)
 {
-	if (InputComponent == nullptr || bInputBound)
+	// Compared against the component actually bound, not a flag: possession replaces it.
+	if (InputComponent == nullptr || BoundInput.Get() == InputComponent)
 	{
 		return;
 	}
@@ -105,7 +106,7 @@ void USpaceMMOGatheringComponent::BindInput(UInputComponent* InputComponent)
 	InputComponent->BindAction(
 		TEXT("Gather"), IE_Pressed, this, &USpaceMMOGatheringComponent::RequestGather);
 
-	bInputBound = true;
+	BoundInput = InputComponent;
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Gather key bound on %s by component %s (input %s)."),
 		*GetNameSafe(GetOwner()), *GetName(), *GetNameSafe(InputComponent));

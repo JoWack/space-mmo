@@ -20,7 +20,22 @@ void USpaceMMODockingComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (const APawn* Pawn = Cast<APawn>(GetOwner()))
+	if (APawn* Pawn = Cast<APawn>(GetOwner()))
+	{
+		BindInput(Pawn->InputComponent);
+
+		// And again whenever the pawn is possessed. A ship is boarded, left and boarded again, and
+		// each possession builds a fresh input component -- so binding once at BeginPlay leaves the
+		// key attached to a dead one. That is why G worked twice and then did nothing at all, with
+		// no message, because no handler ran to produce one.
+		Pawn->ReceiveRestartedDelegate.AddDynamic(
+			this, &USpaceMMODockingComponent::HandlePawnRestarted);
+	}
+}
+
+void USpaceMMODockingComponent::HandlePawnRestarted(APawn* Pawn)
+{
+	if (Pawn != nullptr)
 	{
 		BindInput(Pawn->InputComponent);
 	}
@@ -28,7 +43,9 @@ void USpaceMMODockingComponent::BeginPlay()
 
 void USpaceMMODockingComponent::BindInput(UInputComponent* InputComponent)
 {
-	if (bInputBound || InputComponent == nullptr)
+	// Compared against the component actually bound, not a flag. Possession replaces the input
+	// component, and a flag cannot tell "already bound" from "bound to something that is gone".
+	if (InputComponent == nullptr || BoundInput.Get() == InputComponent)
 	{
 		return;
 	}
@@ -36,7 +53,7 @@ void USpaceMMODockingComponent::BindInput(UInputComponent* InputComponent)
 	InputComponent->BindAction(
 		TEXT("Dock"), IE_Pressed, this, &USpaceMMODockingComponent::RequestToggleDock);
 
-	bInputBound = true;
+	BoundInput = InputComponent;
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Dock key bound on %s."), *GetNameSafe(GetOwner()));
 }

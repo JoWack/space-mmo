@@ -177,6 +177,37 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Gathering_WithTheToolLeftInAHangar_IsRefused()
+    {
+        // Owning the laser is not holding it. Task 94 recorded that this check could not be
+        // tightened, because nothing routed anything into a carried inventory and requiring the tool
+        // on the character would have made mining impossible rather than stricter. Both halves of
+        // that stopped being true once pockets existed and goods could be moved into them.
+        await using (SpaceMmoDbContext seed = _fixture.CreateContext())
+        {
+            var inventories = new InventoryService(seed);
+
+            Inventory hangar = await inventories.GetOrCreateStationHangarAsync(_alice, _stationId);
+
+            seed.ItemInstances.Add(new ItemInstance
+            {
+                ItemDefId = _laserId,
+                InventoryId = hangar.Id,
+                Condition = 100,
+                AcquisitionValue = Credits.FromWholeCredits(200),
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+            await seed.SaveChangesAsync();
+        }
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await Assert.ThrowsAsync<MissingToolException>(() =>
+            new GatheringService(context).GatherAsync(_alice, _toolGatedNodeId));
+    }
+
+    [Fact]
     public async Task Gathering_WithTheRequiredTool_IsAllowed()
     {
         await GiveToolAsync(_alice);
@@ -491,12 +522,14 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         var inventories = new InventoryService(context);
 
-        Inventory hangar = await inventories.GetOrCreateStationHangarAsync(characterId, _stationId);
+        // On their person. Mining requires the tool carried, not merely owned: a laser in a hangar on
+        // another planet is not a laser you are holding.
+        Inventory carried = await inventories.GetOrCreateCarriedAsync(characterId);
 
         context.ItemInstances.Add(new ItemInstance
         {
             ItemDefId = _laserId,
-            InventoryId = hangar.Id,
+            InventoryId = carried.Id,
             Condition = 100,
             AcquisitionValue = Credits.FromWholeCredits(200),
             CreatedAt = DateTimeOffset.UtcNow,

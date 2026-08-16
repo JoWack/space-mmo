@@ -144,8 +144,14 @@ private:
 	UFUNCTION(Server, Reliable)
 	void ServerGather();
 
-	/** Guards against double-binding, since binding is attempted from several places. */
-	bool bInputBound = false;
+	/**
+	 * Which input component the key is bound on, so a replaced one can be bound again.
+	 *
+	 * <strong>Not a bool.</strong> A flag cannot tell "already bound" from "bound to something that
+	 * has been replaced", and possession builds a new input component every time — which is how the
+	 * docking key came to do nothing at all after a ship was boarded twice.
+	 */
+	TWeakObjectPtr<class UInputComponent> BoundInput;
 
 	/** When the last request went out, so a hammered key does not become a queue of round trips. */
 	double LastRequestSeconds = -1000.0;

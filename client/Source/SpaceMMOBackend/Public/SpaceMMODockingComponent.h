@@ -32,6 +32,10 @@ public:
 	/** Binds the dock key to whatever input component the pawn ends up with. */
 	void BindInput(UInputComponent* InputComponent);
 
+	/** Possession is what creates the input component, so that is when binding can succeed. */
+	UFUNCTION()
+	void HandlePawnRestarted(APawn* Pawn);
+
 	/** Which character this pawn acts for. Zero until the player is identified. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Docking")
 	int32 CharacterId = 0;
@@ -73,5 +77,13 @@ private:
 
 	double SecondsSinceRangeCheck = 0.0;
 
-	bool bInputBound = false;
+	/**
+	 * Which input component the key is bound on, so a replaced one can be bound again.
+	 *
+	 * <strong>Not a bool.</strong> A flag records that binding happened once and then refuses to do
+	 * it again — but possession creates a <em>new</em> input component, so a ship that is boarded,
+	 * left and boarded again ends up with its key bound to a dead one. The symptom is the worst kind:
+	 * the key does nothing, silently, because no handler runs to say anything.
+	 */
+	TWeakObjectPtr<class UInputComponent> BoundInput;
 };

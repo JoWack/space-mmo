@@ -1538,6 +1538,41 @@ which is a different and more dangerous gesture.
 
 Wants the panels paired to be much use, which they now are: hangar on the right, market on the left.
 
+## 117 — A key bound to a dead input component says nothing at all
+
+**Done, 16 August.** Found by Joe: docked at DeepDock, flew to the capital and docked, undocked,
+flew back — and `G` did nothing, with no message of any kind.
+
+`USpaceMMODockingComponent` bound the key once in `BeginPlay` and guarded with a bool. **Possession
+builds a new `InputComponent`**, so boarding a ship, leaving it and boarding again left the binding
+attached to a dead one, and the bool stopped it ever rebinding. Nothing ran, which is why nothing was
+said — every branch of `ServerDock` reports something, including "Nothing in docking range".
+
+It survives the first two docks because the ship a player spawns in is possessed at spawn. It is the
+disembark-and-reboard cycle that swaps the component.
+
+**The gathering component had already learned half of this.** Its comment reads "Missing this was why
+the key did nothing at all" — it hooks `ReceiveRestartedDelegate`, but still guarded with a bool, so
+it would have broken the same way on a re-possessed pawn. Both now record *which* input component
+they are bound to and rebind when it is replaced. A flag cannot tell "already bound" from "bound to
+something that is gone".
+
+## 118 — Mining needs the tool on you, not merely owned
+
+**Done, 16 August.** Found by Joe: mining worked with the laser sitting in a hangar.
+
+`GatheringService.GuardToolAsync` asked only that the character own an undestroyed instance with
+condition above zero, anywhere. Task 94 recorded exactly why it could not be tightened at the time:
+nothing routed anything into a carried inventory and there was no way to move a laser onto a
+character, so requiring it carried would have made mining impossible rather than stricter.
+
+Both halves of that stopped being true this week — characters have pockets (108) and goods can be
+dragged into them. The check now requires the tool in the character's carried inventory.
+
+A laser already sitting in a hangar must be dragged into CARRIED before it can be used, which is a
+real behaviour change rather than a silent fix. Equipment slots will narrow this further when they
+exist; carried is the honest middle step.
+
 ## 96 — Author world content graphically
 
 **Pending.** Raised 11 August; ADR-0011 makes it pressing, because a cave is a shape rather than a
