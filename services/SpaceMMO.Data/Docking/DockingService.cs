@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Entities;
 
+using SpaceMMO.Data.Inventories;
+
 namespace SpaceMMO.Data.Docking;
 
 /// <summary>Thrown when a character does not exist.</summary>
@@ -34,9 +36,11 @@ public sealed class UnknownStationException(int stationId)
 /// ultimately the player. The game server already knows where every ship is because it moved them.
 /// </para>
 /// </remarks>
-public sealed class DockingService(SpaceMmoDbContext database)
+public sealed class DockingService(SpaceMmoDbContext database, InventoryService inventories)
 {
     private readonly SpaceMmoDbContext _database = database;
+
+    private readonly InventoryService _inventories = inventories;
 
     /// <summary>Docks a character at a station, replacing any previous docking.</summary>
     /// <exception cref="UnknownCharacterException">If the character does not exist.</exception>
@@ -60,6 +64,19 @@ public sealed class DockingService(SpaceMmoDbContext database)
         {
             throw new UnknownStationException(stationId);
         }
+
+        // Storage exists from the moment a player arrives, not from the moment something lands in
+        // it.
+        //
+        // Hangars were created only when goods appeared -- by gathering, by a craft, by a market
+        // fill -- so a station nobody had traded at had no container at all. That was invisible
+        // while goods teleported to one station, and became "I am docked at DeepDock and cannot put
+        // anything down" the moment a player could move goods by hand.
+        //
+        // Docking is the right moment: it is exactly when a character gains access to a station's
+        // storage, and it costs nothing to have. The factory's own comment says auto-creation exists
+        // so that renting storage is not a step standing between a player and trading.
+        await _inventories.GetOrCreateStationHangarAsync(characterId, stationId, cancellationToken);
 
         // Replaces rather than refuses. Flying from one station to another and docking is an
         // ordinary thing to do, and making it an error would mean every client had to undock

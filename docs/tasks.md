@@ -1161,6 +1161,16 @@ definition.
 instance, so a hold has nothing to hang from. **Transfer is therefore carried ↔ hangar only**, which
 is enough to build and exercise the drag interaction against.
 
+**Docking creates the hangar, 16 August.** Found by Joe: docked at DeepDock, the inventory showed no
+DeepDock entry, so there was nowhere to drop goods. Nothing was misreporting — a hangar was only ever
+created when goods *arrived* (gathering, industry, a market fill), so a station nobody had traded at
+had no container to list. Invisible while everything teleported to station 1 (111), and immediately
+visible once a player could move goods by hand.
+
+`DockAsync` now ensures one. Docking is the moment a character gains access to a station's storage,
+and the factory's own comment says auto-creation exists so renting storage is not a step between a
+player and trading.
+
 **Read-only first, decided 13 August.** Moving goods needs a selection model and a quantity
 affordance and roughly doubles the work; seeing what you own and where is a real screen on its own,
 and it is the half that is missing today.

@@ -664,15 +664,22 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	//
 	// Only assigned on a change. Slate compares and skips an identical value, but saying so here
 	// stops the next reader wondering whether this costs a frame.
-	auto Show = [](UUserWidget* Widget, const bool bWanted)
+	// HitTestInvisible for anything a player only reads: a readout that swallowed clicks would make
+	// the world behind it unclickable. Visible for anything they act on — and note the enum means
+	// "not hit-testable, self *and all children*", so a screen marked HitTestInvisible silently
+	// stops every row inside it receiving a mouse event. That is exactly how the inventory screen
+	// came to be undraggable while looking perfectly normal.
+	auto Show = [](
+		UUserWidget* Widget,
+		const bool bWanted,
+		const ESlateVisibility WhenShown = ESlateVisibility::HitTestInvisible)
 	{
 		if (Widget == nullptr)
 		{
 			return;
 		}
 
-		const ESlateVisibility Wanted =
-			bWanted ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+		const ESlateVisibility Wanted = bWanted ? WhenShown : ESlateVisibility::Collapsed;
 
 		if (Widget->GetVisibility() != Wanted)
 		{
@@ -694,7 +701,10 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 
 	// So is what you own, and where it is is the whole point -- so I works in flight too, which is
 	// where a hauler most wants to know what is still sitting in a hangar.
-	Show(InventoryScreen, bInventoryScreenOpen);
+	//
+	// Visible rather than HitTestInvisible: goods are dragged between its containers, and a screen
+	// that cannot be hit-tested cannot be dragged from.
+	Show(InventoryScreen, bInventoryScreenOpen, ESlateVisibility::Visible);
 
 	// Open together, they take a side each and stop covering one another. That pairing is the whole
 	// point while transferring: goods move between a hangar and a hold, and reading one with the
@@ -726,19 +736,9 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 
 	LastDockedStationId = Station;
 
-	// Visible rather than HitTestInvisible: this is the one HUD element meant to be interacted
-	// with, and it is the only one that should take a click when mouse capture is released.
-	if (StationOverlay != nullptr)
-	{
-		const ESlateVisibility Wanted = bStationOverlayOpen
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed;
-
-		if (StationOverlay->GetVisibility() != Wanted)
-		{
-			StationOverlay->SetVisibility(Wanted);
-		}
-	}
+	// Visible for the same reason as the inventory screen: it is acted on rather than read, and 116
+	// plans to drop goods onto its market tab.
+	Show(StationOverlay, bStationOverlayOpen, ESlateVisibility::Visible);
 }
 
 void ASpaceMMOPlayerController::GetStationPanels(

@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Docking;
 using SpaceMMO.Data.Entities;
+using SpaceMMO.Data.Inventories;
 using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Universe;
 using Xunit;
 
@@ -34,7 +36,8 @@ public sealed class DockingServiceTests(DatabaseFixture fixture) : IAsyncLifetim
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private static DockingService Service(SpaceMmoDbContext context) => new(context);
+    private static DockingService Service(SpaceMmoDbContext context) =>
+        new(context, new InventoryService(context));
 
     [Fact]
     public async Task Docking_records_where_the_character_is()
@@ -47,6 +50,52 @@ public sealed class DockingServiceTests(DatabaseFixture fixture) : IAsyncLifetim
         Assert.Equal(
             _placedStationId,
             await Service(verify).DockedStationIdAsync(_characterId));
+    }
+
+    [Fact]
+    public async Task Docking_gives_the_character_somewhere_to_put_things()
+    {
+        // Hangars used to appear only when goods did -- gathered, crafted, or bought. A station
+        // nobody had traded at therefore had no container at all, which was invisible while goods
+        // teleported to one station and became "I am docked here and cannot put anything down" the
+        // moment a player could move goods by hand.
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            Assert.False(
+                await context.Inventories.AnyAsync(
+                    i => i.CharacterId == _characterId && i.StationId == _placedStationId),
+                "no hangar should exist before docking");
+        }
+
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            await Service(context).DockAsync(_characterId, _placedStationId);
+        }
+
+        await using (SpaceMmoDbContext verify = _fixture.CreateContext())
+        {
+            Assert.True(
+                await verify.Inventories.AnyAsync(
+                    i => i.CharacterId == _characterId
+                        && i.StationId == _placedStationId
+                        && i.Kind == InventoryKind.StationHangar),
+                "docking should create the hangar");
+        }
+
+        // Docking again must not make a second one: the factory is get-or-create, and two hangars at
+        // one station would split a player's goods across containers that look identical.
+        await using (SpaceMmoDbContext again = _fixture.CreateContext())
+        {
+            await Service(again).DockAsync(_characterId, _placedStationId);
+        }
+
+        await using (SpaceMmoDbContext count = _fixture.CreateContext())
+        {
+            Assert.Equal(
+                1,
+                await count.Inventories.CountAsync(
+                    i => i.CharacterId == _characterId && i.StationId == _placedStationId));
+        }
     }
 
     [Fact]
