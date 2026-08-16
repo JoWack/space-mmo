@@ -283,7 +283,6 @@ void USpaceMMOBackendClient::FetchDockedStation(const int32 CharacterId)
 void USpaceMMOBackendClient::GatherAsServer(
 	const int32 CharacterId,
 	const int64 ResourceNodeId,
-	const int32 StationId,
 	FOnGatherComplete OnComplete,
 	FOnGatherFailed OnRefused)
 {
@@ -296,8 +295,8 @@ void USpaceMMOBackendClient::GatherAsServer(
 	}
 
 	const FString Body = FString::Printf(
-		TEXT("{\"characterId\":%d,\"resourceNodeId\":%lld,\"stationId\":%d}"),
-		CharacterId, ResourceNodeId, StationId);
+		TEXT("{\"characterId\":%d,\"resourceNodeId\":%lld}"),
+		CharacterId, ResourceNodeId);
 
 	// bAuthenticated false: the game server presents its own credential, never a player's token,
 	// and holds no session to present even if it wanted to.

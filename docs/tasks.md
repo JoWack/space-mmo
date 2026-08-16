@@ -1339,13 +1339,35 @@ player" — and it is sent as the storage station for gathering *and* as the sta
 started anywhere in the system is really run at station 1, which is self-consistent and therefore
 invisible until somebody docks elsewhere and looks.
 
-The fix is to send `DockedStationId()`. **It must not land before a client can move goods**, because
-on its own it makes crafting possible only where the materials already happen to be, with no in-game
-remedy — transfer exists over HTTP (99) and the inventory screen shipped read-only (108). Order:
-transfer affordance, then this.
+**Done, 16 August**, once transfer existed to make it bearable. The recorded fix — "send
+`DockedStationId()`" — turned out to be right for only half of it.
 
-Blocked on 108's transfer half — and note that transfer itself is limited to carried and hangar
-until 115 gives ships their holds.
+**Crafting** is a station service, so it uses where the player is docked and refuses locally with
+"Dock at a station to start a job" when they are not.
+
+**Gathering** happens at a rock, on foot, where `DockedStationId()` is always 0. There is no station
+to choose, which is precisely why the client invented a fixed one — so gathered material now goes
+into the character's own hands, which is ADR-0012's fifth point. The station left the whole gather
+path: the request record, the service method, the client call and the JSON body. A parameter that is
+ignored is a lie the next reader has to unpick.
+
+**Crafting also draws on what the player is carrying**, decided 16 August. Choosing a recipe while
+docked moves whatever is missing from their pockets into that hangar and then crafts, in one
+transaction. That keeps the rule Joe settled in 112 — transfer, then craft — while removing the
+chore. Only while docked at that station: without the check, starting a job somewhere a character is
+nowhere near would haul goods out of their hands and across the system, which is 114's hole and
+worse, because it would move things.
+
+Two things worth keeping from building it:
+
+- **131 data tests passed after the destination of every gathered item changed.** Nothing asserted
+  where ore lands. `GatheredMaterial_GoesIntoTheCharactersHands` now pins the container's kind, its
+  owner, and that it has no station.
+- **`AddAsync` and `RemoveAsync` leave saving to the caller**, and the consumption below finds its
+  stack with a database query. Topping up a hangar that already held some of an input works by
+  accident — the query returns the very entity just changed — but topping up one that held none
+  leaves the new row in the change tracker where the query cannot see it, and the job fails for want
+  of material sitting in the same transaction. The top-up flushes before the consume reads.
 
 ## 112 — Goods are held, not teleported
 

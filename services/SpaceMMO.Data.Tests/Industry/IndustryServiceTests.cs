@@ -55,6 +55,51 @@ public sealed class IndustryServiceTests(DatabaseFixture fixture) : IAsyncLifeti
     // ── Starting a job ───────────────────────────────────────────────────────
 
     [Fact]
+    public async Task StartingAJob_DrawsOnWhatThePlayerIsCarrying()
+    {
+        // What a player means by "I have the materials": they are standing in the station holding
+        // the ore. Making them drag it into the hangar first is a chore, not a decision -- so the
+        // transfer still happens, and still leaves an honest record of where the goods went, it is
+        // just not a job for the player.
+        await ClearHangarAsync(_oreId);
+        await CarryAsync(_oreId, 20);
+        await DockAsync(_stationId);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await new IndustryService(context)
+            .StartJobAsync(_characterId, _refinePlateRecipeId, _stationId, runs: 1);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        // Consumed, wherever it started: the pockets are empty and the job is running.
+        Assert.Equal(0, await HeldAsync(verify, _oreId));
+        Assert.Equal(IndustryJobState.Running, (await verify.IndustryJobs.SingleAsync()).State);
+    }
+
+    [Fact]
+    public async Task StartingAJob_DoesNotReachIntoPocketsFromSomewhereElse()
+    {
+        // The dangerous half. Without the docking check, starting a job at a station a character is
+        // nowhere near would haul goods out of their hands and across the system -- which is task
+        // 114's hole, and worse, because it would actually move things.
+        await ClearHangarAsync(_oreId);
+        await CarryAsync(_oreId, 20);
+        await DockAsync(null);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await Assert.ThrowsAsync<InsufficientItemsException>(() =>
+            new IndustryService(context)
+                .StartJobAsync(_characterId, _refinePlateRecipeId, _stationId, runs: 1));
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        // Still in their hands, untouched.
+        Assert.Equal(20, await HeldAsync(verify, _oreId));
+    }
+
+    [Fact]
     public async Task StartingAJob_ConsumesInputsAndChargesTheFee()
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();
@@ -562,6 +607,47 @@ public sealed class IndustryServiceTests(DatabaseFixture fixture) : IAsyncLifeti
 
         Inventory hangar = await inventories.GetOrCreateStationHangarAsync(_characterId, _stationId);
         await inventories.AddAsync(hangar.Id, itemDefId, quantity, Credits.Zero);
+
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>Empties one item out of the hangar, so a test can prove where material came from.</summary>
+    private async Task ClearHangarAsync(int itemDefId)
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        var inventories = new InventoryService(context);
+
+        Inventory hangar = await inventories.GetOrCreateStationHangarAsync(_characterId, _stationId);
+
+        int held = await inventories.QuantityOfAsync(hangar.Id, itemDefId);
+
+        if (held > 0)
+        {
+            await inventories.RemoveAsync(hangar.Id, itemDefId, held);
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>Puts material in the character's own hands rather than the hangar.</summary>
+    private async Task CarryAsync(int itemDefId, int quantity)
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        var inventories = new InventoryService(context);
+
+        Inventory carried = await inventories.GetOrCreateCarriedAsync(_characterId);
+        await inventories.AddAsync(carried.Id, itemDefId, quantity, Credits.Zero);
+
+        await context.SaveChangesAsync();
+    }
+
+    /// <summary>Docks the character, since crafting only reaches into pockets where they stand.</summary>
+    private async Task DockAsync(int? stationId)
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        Character character = await context.Characters.SingleAsync(c => c.Id == _characterId);
+        character.DockedStationId = stationId;
 
         await context.SaveChangesAsync();
     }

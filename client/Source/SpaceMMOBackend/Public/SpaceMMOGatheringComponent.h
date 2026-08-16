@@ -54,10 +54,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Gathering")
 	int32 CharacterId = 0;
 
-	/** Where gathered material is stored. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Gathering")
-	int32 StationId = 0;
-
 	/**
 	 * Binds the gather key on whichever input component the owning pawn ends up with.
 	 *

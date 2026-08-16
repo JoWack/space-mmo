@@ -4,7 +4,12 @@ using SpaceMMO.Data.Industry;
 
 namespace SpaceMMO.Api.Endpoints;
 
-public sealed record GatherRequest(int CharacterId, long ResourceNodeId, int StationId);
+/// <remarks>
+/// No station. Gathered material goes into the character's own hands (ADR-0012), so there is nothing
+/// to choose — and asking for one meant the client invented a fixed answer, which put every player's
+/// ore in station 1 whatever planet they were standing on.
+/// </remarks>
+public sealed record GatherRequest(int CharacterId, long ResourceNodeId);
 
 /// <summary>
 /// Resource extraction — the only place material enters the economy.
@@ -70,7 +75,7 @@ public static class GatheringEndpoints
         try
         {
             GatherResult result = await gathering.GatherAsync(
-                request.CharacterId, request.ResourceNodeId, request.StationId, cancellation);
+                request.CharacterId, request.ResourceNodeId, cancellation);
 
             // An empty result is a success, not an error: it means not enough time has passed, or
             // the node is spent. Both are ordinary states a client renders rather than reports.

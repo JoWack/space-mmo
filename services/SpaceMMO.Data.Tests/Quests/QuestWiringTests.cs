@@ -61,7 +61,7 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_characterId, _nodeId, _stationId);
+            .GatherAsync(_characterId, _nodeId);
 
         Assert.True(result.Quantity > 0);
 
@@ -97,7 +97,7 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_characterId, _nodeId, _stationId);
+            .GatherAsync(_characterId, _nodeId);
 
         Assert.True(result.Quantity > 0);
 
@@ -154,7 +154,7 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
-        await new GatheringService(context).GatherAsync(_characterId, _nodeId, _stationId);
+        await new GatheringService(context).GatherAsync(_characterId, _nodeId);
 
         await using SpaceMmoDbContext verify = _fixture.CreateContext();
 

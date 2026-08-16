@@ -149,6 +149,66 @@ public sealed class IndustryService(SpaceMmoDbContext database)
             throw new InsufficientFundsException(characterId, fee, character.Balance);
         }
 
+        // Bring what is missing across from the player's own hands before consuming anything.
+        //
+        // Crafting draws on the hangar and on what you are carrying, which is what a player means
+        // by "I have the materials" — they are standing in the station holding the ore. Doing it
+        // here rather than making them drag it across first keeps the rule Joe asked for (transfer,
+        // then craft) while removing the chore: the transfer still happens, and still leaves an
+        // honest record of where the goods went, it is just not a job for the player.
+        //
+        // <strong>Only while docked here.</strong> Without that, starting a job at a station a
+        // character is nowhere near would haul goods out of their pockets and across the system,
+        // which is the same hole task 114 describes and worse, because it would move things.
+        //
+        // Through TransferAsync so the cost basis travels with the material (task 99). Material
+        // that arrived as though it had cost nothing pays nothing when it is lost (ADR-0006).
+        if (character.DockedStationId == stationId)
+        {
+            Inventory carried = await _inventories.GetOrCreateCarriedAsync(
+                characterId, cancellationToken);
+
+            foreach (RecipeInput input in recipe.Inputs)
+            {
+                int needed = input.Quantity * runs;
+
+                int alreadyHere = await _inventories.QuantityOfAsync(
+                    hangar.Id, input.ItemDefId, cancellationToken);
+
+                if (alreadyHere >= needed)
+                {
+                    continue;
+                }
+
+                int carrying = await _inventories.QuantityOfAsync(
+                    carried.Id, input.ItemDefId, cancellationToken);
+
+                // Whatever closes the gap, or everything carried if that is not enough. Falling
+                // short here is not an error: the consumption below reports it, and it reports it
+                // against the material actually missing rather than against a transfer.
+                int moving = Math.Min(needed - alreadyHere, carrying);
+
+                if (moving > 0)
+                {
+                    await _inventories.TransferAsync(
+                        carried.Id, hangar.Id, input.ItemDefId, moving, cancellationToken);
+                }
+            }
+
+            // Flushed before anything reads it back.
+            //
+            // AddAsync and RemoveAsync mutate tracked entities and leave saving to the caller, and
+            // the consumption below finds its stack with a database query. Where the hangar already
+            // held some of an input that works by accident -- the query returns the very entity the
+            // top-up just changed -- but where it held none, the new row exists only in the change
+            // tracker and the query cannot see it. The job then fails for want of material that is
+            // sitting in the same transaction.
+            //
+            // Still atomic: this is inside the transaction opened above, so a later failure rolls
+            // the move back with everything else.
+            await _database.SaveChangesAsync(cancellationToken);
+        }
+
         // Consume every input first, so a shortfall on the last one aborts before anything is
         // charged. The transaction would roll it back anyway; failing early keeps the error
         // pointing at the actual missing material.

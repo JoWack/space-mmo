@@ -288,10 +288,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
 	FString GetCharacterBalance() const;
 
-	/** Where this player's gathered material goes. Not yet chosen per player. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Identity")
-	int32 StationId = 1;
-
 private:
 	/**
 	 * Begins the client-side half: sign in if needed, then present the token to the server.

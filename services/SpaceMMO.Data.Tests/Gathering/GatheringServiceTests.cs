@@ -55,7 +55,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_alice, _sharedNodeId, _stationId);
+            .GatherAsync(_alice, _sharedNodeId);
 
         // A character who has never gathered starts fully rested: 20 banked ticks at 1 unit each.
         Assert.Equal(20, result.Quantity);
@@ -73,12 +73,35 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task GatheredMaterial_GoesIntoTheCharactersHands()
+    {
+        // Not a station's storage. Gathering happens at a rock, on foot, nowhere near anywhere to
+        // dock -- so there is no station to choose, and asking the client for one meant it invented
+        // a fixed answer: every player's ore appeared at station 1 whatever planet they stood on,
+        // which deleted the reason to fly anywhere (task 111, ADR-0012).
+        //
+        // Nothing caught that change when it was made, because no test said where ore lands. This
+        // one does.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new GatheringService(context).GatherAsync(_alice, _sharedNodeId);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Inventory holding = await verify.Inventories
+            .SingleAsync(i => i.StackedItems.Any(x => x.ItemDefId == _oreId));
+
+        Assert.Equal(InventoryKind.CharacterCarried, holding.Kind);
+        Assert.Equal(_alice, holding.CharacterId);
+        Assert.Null(holding.StationId);
+    }
+
+    [Fact]
     public async Task GatheredMaterial_EntersAtZeroCostBasis()
     {
         // It took labour, not credits. That zero is what makes a hull built from self-gathered ore
         // cost only its manufacturing fees (ADR-0006).
         await using SpaceMmoDbContext context = _fixture.CreateContext();
-        await new GatheringService(context).GatherAsync(_alice, _sharedNodeId, _stationId);
+        await new GatheringService(context).GatherAsync(_alice, _sharedNodeId);
 
         await using SpaceMmoDbContext verify = _fixture.CreateContext();
 
@@ -93,11 +116,11 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         // The server rate limit. A client in a tight loop extracts no more than one calling at the
         // tick interval.
         await using SpaceMmoDbContext first = _fixture.CreateContext();
-        await new GatheringService(first).GatherAsync(_alice, _sharedNodeId, _stationId);
+        await new GatheringService(first).GatherAsync(_alice, _sharedNodeId);
 
         await using SpaceMmoDbContext second = _fixture.CreateContext();
         GatherResult result = await new GatheringService(second)
-            .GatherAsync(_alice, _sharedNodeId, _stationId);
+            .GatherAsync(_alice, _sharedNodeId);
 
         Assert.True(result.IsEmpty);
 
@@ -112,7 +135,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         for (int i = 0; i < 10; i++)
         {
             await using SpaceMmoDbContext context = _fixture.CreateContext();
-            await new GatheringService(context).GatherAsync(_alice, _sharedNodeId, _stationId);
+            await new GatheringService(context).GatherAsync(_alice, _sharedNodeId);
         }
 
         await using SpaceMmoDbContext verify = _fixture.CreateContext();
@@ -128,7 +151,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_alice, _sharedNodeId, _stationId);
+            .GatherAsync(_alice, _sharedNodeId);
 
         // Level 50 takes 3 per tick against a beginner's 1.
         Assert.Equal(60, result.Quantity);
@@ -142,7 +165,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
         MissingToolException refused = await Assert.ThrowsAsync<MissingToolException>(() =>
-            new GatheringService(context).GatherAsync(_alice, _toolGatedNodeId, _stationId));
+            new GatheringService(context).GatherAsync(_alice, _toolGatedNodeId));
 
         // The message reaches the player's screen verbatim, so it is part of the behaviour rather
         // than a detail. It read "This recipe requires a crude_mining_laser" until deposits could
@@ -160,7 +183,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_alice, _toolGatedNodeId, _stationId);
+            .GatherAsync(_alice, _toolGatedNodeId);
 
         Assert.False(result.IsEmpty);
     }
@@ -174,7 +197,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
         SkillTooLowException error = await Assert.ThrowsAsync<SkillTooLowException>(() =>
-            new GatheringService(context).GatherAsync(_alice, hardNodeId, _stationId));
+            new GatheringService(context).GatherAsync(_alice, hardNodeId));
 
         Assert.Equal(40, error.Required);
     }
@@ -189,7 +212,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_alice, smallNodeId, _stationId);
+            .GatherAsync(_alice, smallNodeId);
 
         // Capped by what the node holds, not by the entitlement.
         Assert.Equal(5, result.Quantity);
@@ -205,14 +228,14 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         await using (SpaceMmoDbContext deplete = _fixture.CreateContext())
         {
-            await new GatheringService(deplete).GatherAsync(_alice, smallNodeId, _stationId);
+            await new GatheringService(deplete).GatherAsync(_alice, smallNodeId);
         }
 
         await ResetGatherClockAsync(_alice);
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_alice, smallNodeId, _stationId);
+            .GatherAsync(_alice, smallNodeId);
 
         Assert.True(result.IsEmpty);
     }
@@ -226,7 +249,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         await using (SpaceMmoDbContext deplete = _fixture.CreateContext())
         {
-            await new GatheringService(deplete).GatherAsync(_alice, smallNodeId, _stationId);
+            await new GatheringService(deplete).GatherAsync(_alice, smallNodeId);
         }
 
         await BackdateRespawnAsync(smallNodeId);
@@ -234,7 +257,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_alice, smallNodeId, _stationId);
+            .GatherAsync(_alice, smallNodeId);
 
         Assert.Equal(5, result.Quantity);
     }
@@ -246,12 +269,12 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
     {
         await using (SpaceMmoDbContext first = _fixture.CreateContext())
         {
-            await new GatheringService(first).GatherAsync(_alice, _sharedNodeId, _stationId);
+            await new GatheringService(first).GatherAsync(_alice, _sharedNodeId);
         }
 
         await using (SpaceMmoDbContext second = _fixture.CreateContext())
         {
-            await new GatheringService(second).GatherAsync(_bob, _sharedNodeId, _stationId);
+            await new GatheringService(second).GatherAsync(_bob, _sharedNodeId);
         }
 
         await using SpaceMmoDbContext verify = _fixture.CreateContext();
@@ -270,12 +293,12 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
     {
         await using (SpaceMmoDbContext first = _fixture.CreateContext())
         {
-            await new GatheringService(first).GatherAsync(_alice, _perCharacterNodeId, _stationId);
+            await new GatheringService(first).GatherAsync(_alice, _perCharacterNodeId);
         }
 
         await using (SpaceMmoDbContext second = _fixture.CreateContext())
         {
-            await new GatheringService(second).GatherAsync(_bob, _perCharacterNodeId, _stationId);
+            await new GatheringService(second).GatherAsync(_bob, _perCharacterNodeId);
         }
 
         await using SpaceMmoDbContext verify = _fixture.CreateContext();
@@ -299,7 +322,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         // nodes flip to per-character with an UPDATE and no migration.
         await using (SpaceMmoDbContext shared = _fixture.CreateContext())
         {
-            await new GatheringService(shared).GatherAsync(_alice, _sharedNodeId, _stationId);
+            await new GatheringService(shared).GatherAsync(_alice, _sharedNodeId);
         }
 
         await using (SpaceMmoDbContext flip = _fixture.CreateContext())
@@ -313,7 +336,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         GatherResult result = await new GatheringService(context)
-            .GatherAsync(_bob, _sharedNodeId, _stationId);
+            .GatherAsync(_bob, _sharedNodeId);
 
         await using SpaceMmoDbContext verify = _fixture.CreateContext();
 
@@ -341,8 +364,8 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
 
         Task<GatherResult>[] tasks =
         [
-            Task.Run(() => aliceService.GatherAsync(_alice, smallNodeId, _stationId)),
-            Task.Run(() => bobService.GatherAsync(_bob, smallNodeId, _stationId)),
+            Task.Run(() => aliceService.GatherAsync(_alice, smallNodeId)),
+            Task.Run(() => bobService.GatherAsync(_bob, smallNodeId)),
         ];
 
         GatherResult[] results = await Task.WhenAll(tasks);
@@ -386,7 +409,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
                 var service = new GatheringService(context);
                 int id = characterId;
 
-                tasks.Add(Task.Run(() => service.GatherAsync(id, smallNodeId, _stationId)));
+                tasks.Add(Task.Run(() => service.GatherAsync(id, smallNodeId)));
             }
 
             GatherResult[] results = await Task.WhenAll(tasks);

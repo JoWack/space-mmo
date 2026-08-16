@@ -192,7 +192,6 @@ void USpaceMMOGatheringComponent::ServerGather_Implementation()
 	Backend->GatherAsServer(
 		CharacterId,
 		Deposit->GetNode().Id,
-		StationId,
 		USpaceMMOBackendClient::FOnGatherComplete::CreateLambda(
 			[WeakThis, ItemName](const FBackendGatherResult& Result)
 			{

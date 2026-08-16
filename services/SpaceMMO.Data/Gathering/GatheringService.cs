@@ -87,7 +87,6 @@ public sealed class GatheringService(SpaceMmoDbContext database)
     public async Task<GatherResult> GatherAsync(
         int characterId,
         long resourceNodeId,
-        int stationIdForStorage,
         CancellationToken cancellationToken = default)
     {
         await using var transaction =
@@ -142,14 +141,22 @@ public sealed class GatheringService(SpaceMmoDbContext database)
             state.RespawnAt = now.AddSeconds(node.RespawnSeconds);
         }
 
-        Inventory hangar = await _inventories.GetOrCreateStationHangarAsync(
-            characterId, stationIdForStorage, cancellationToken);
+        // Into the character's own hands, not a station's storage.
+        //
+        // Gathering happens at a rock, on foot, nowhere near anywhere to dock — so there is no
+        // station to choose and asking the client for one meant it invented a fixed answer. Every
+        // player's ore appeared in station 1 whatever planet they were standing on, which is
+        // invisible until somebody looks (task 111) and quietly deletes the reason to fly.
+        //
+        // ADR-0012: goods are held, and moving them somewhere is a deliberate act.
+        Inventory carried = await _inventories.GetOrCreateCarriedAsync(
+            characterId, cancellationToken);
 
         // Gathered material enters at zero cost basis: it took labour, not credits. That zero is
         // what makes a hull built from self-gathered ore cost only its manufacturing fees
         // (ADR-0006).
         await _inventories.AddAsync(
-            hangar.Id, node.ItemDefId, quantity, Credits.Zero, cancellationToken);
+            carried.Id, node.ItemDefId, quantity, Credits.Zero, cancellationToken);
 
         long xp = quantity * GatheringYield.XpPerUnit;
         await AwardXpAsync(characterId, node.SkillId, xp, cancellationToken);

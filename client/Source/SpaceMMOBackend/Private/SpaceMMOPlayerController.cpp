@@ -329,7 +329,25 @@ void ASpaceMMOPlayerController::StartSelectedJob()
 
 	// One run. Batching is a real feature — it is how a player makes forty plates without forty
 	// keypresses — but it needs a way to choose a count, and there is no UI to choose one in.
-	Client->StartJob(CharacterId, Available[SelectedRecipeIndex].Id, StationId, 1);
+	// Where the player actually is, not a fixed station.
+	//
+	// This used to send a hardcoded 1, and IndustryService uses that one station for both halves --
+	// it consumes the inputs from that hangar and deposits the output back into it. So a job started
+	// anywhere in the system was really run at the capital, which is self-consistent and therefore
+	// invisible until somebody docks elsewhere and looks (task 111).
+	const int32 Station = DockedStationId();
+
+	if (Station == 0)
+	{
+		// Refused here rather than by the server, because the reason is about where the player is
+		// and they can see that for themselves the moment it is said.
+		ShowTransientMessage(
+			TEXT("Dock at a station to start a job"), ESpaceMMOMessageTone::Warning);
+
+		return;
+	}
+
+	Client->StartJob(CharacterId, Available[SelectedRecipeIndex].Id, Station, 1);
 }
 
 void ASpaceMMOPlayerController::ClaimReadyJob()
@@ -1464,7 +1482,6 @@ void ASpaceMMOPlayerController::RefreshPossessedPawn()
 			Possessed->FindComponentByClass<USpaceMMOGatheringComponent>())
 		{
 			Gathering->CharacterId = CharacterId;
-			Gathering->StationId = StationId;
 
 			// Logged because this is the last link in the chain and the only one that was
 			// previously invisible: identity could resolve correctly and still fail to reach the

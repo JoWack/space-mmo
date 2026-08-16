@@ -118,7 +118,6 @@ void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 		Cast<ASpaceMMOPlayerController>(Pawn->GetController()))
 	{
 		Gathering->CharacterId = Controller->GetCharacterId();
-		Gathering->StationId = Controller->StationId;
 
 		if (Gathering->CharacterId != 0)
 		{
@@ -199,16 +198,11 @@ void USpaceMMODepositSubsystem::HandleDepositsLoaded(const int32 BodyId)
 	}
 
 	int32 SelfTestCharacterId = 0;
-	int32 SelfTestStationId = 0;
-
-	FParse::Value(FCommandLine::Get(), TEXT("GatherCharacterId="), SelfTestCharacterId);
-	FParse::Value(FCommandLine::Get(), TEXT("GatherStationId="), SelfTestStationId);
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("SELFTEST: gathering %s as character %d."),
 		*PlacedDeposits[0]->GetNode().Key, SelfTestCharacterId);
 
-	Backend->GatherAsServer(
-		SelfTestCharacterId, PlacedDeposits[0]->GetNode().Id, SelfTestStationId);
+	Backend->GatherAsServer(SelfTestCharacterId, PlacedDeposits[0]->GetNode().Id);
 }
 
 void USpaceMMODepositSubsystem::AttachDocking(AActor* Actor)

@@ -126,7 +126,6 @@ public:
 	void GatherAsServer(
 		int32 CharacterId,
 		int64 ResourceNodeId,
-		int32 StationId,
 		FOnGatherComplete OnComplete = FOnGatherComplete(),
 		FOnGatherFailed OnRefused = FOnGatherFailed());
 
