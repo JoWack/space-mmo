@@ -1,5 +1,7 @@
 #include "SpaceMMOBackendClient.h"
 
+#include "GenericPlatform/GenericPlatformHttp.h"
+
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -814,6 +816,36 @@ void USpaceMMOBackendClient::FetchBook(const int32 StationId, const int32 ItemDe
 			Self->BookItemDefId = ItemDefId;
 
 			Self->OnIndustryChanged.Broadcast();
+		});
+}
+
+void USpaceMMOBackendClient::FetchMarketListings(const int32 StationId, const FString& Search)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	// Escaped, because a search box accepts whatever somebody types and an ampersand or a space
+	// would otherwise end the query string early or produce a malformed URL.
+	const FString Query = Search.IsEmpty()
+		? FString()
+		: FString::Printf(TEXT("&search=%s"), *FGenericPlatformHttp::UrlEncode(Search));
+
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/market/listings?stationId=%d%s"), StationId, *Query),
+		FString(),
+		false,
+		[WeakThis](const FString& Body)
+		{
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				TArray<FBackendMarketListing> Parsed;
+
+				FSpaceMMOBackendProtocol::ParseMarketListings(Body, Parsed);
+
+				Self->MarketListings = MoveTemp(Parsed);
+
+				Self->OnCharacterStateLoaded.Broadcast();
+			}
 		});
 }
 

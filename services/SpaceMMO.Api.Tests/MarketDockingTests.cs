@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using SpaceMMO.Api.Endpoints;
 using SpaceMMO.Data;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Domain.Characters;
@@ -104,6 +105,57 @@ public sealed class MarketDockingTests(ApiDatabaseFixture fixture) : IAsyncLifet
 
         // Absent, because it cannot be ordered at all.
         Assert.DoesNotContain("Shuttle Hull", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Listings_carry_the_guaranteed_price_for_goods_a_faction_stands_behind()
+    {
+        // The suggestion the order prompt offers when nobody is trading an item, which is the case
+        // this whole screen exists for. It used to ride on a held stack, so it appeared only for
+        // goods the player already owned -- present or absent for a reason nobody could see.
+        await using (SpaceMmoDbContext seed = _fixture.CreateContext())
+        {
+            seed.ItemDefs.AddRange(
+                new ItemDef
+                {
+                    Key = "scrap_alloy",
+                    Name = "Scrap Alloy",
+                    Category = ItemCategory.Refined,
+                    VolumeM3 = 0.3,
+                    FactionBuyPrice = Credits.FromWholeCredits(7),
+                },
+                new ItemDef
+                {
+                    Key = "curio_shard",
+                    Name = "Curio Shard",
+                    Category = ItemCategory.Component,
+                    VolumeM3 = 0.05,
+                });
+
+            await seed.SaveChangesAsync();
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/market/listings?stationId={_stationId}", UriKind.Relative));
+
+        HttpResponseMessage response = await _client!.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        List<MarketListingResponse> listings =
+            (await response.Content.ReadFromJsonAsync<List<MarketListingResponse>>())!;
+
+        MarketListingResponse guaranteed = listings.Single(l => l.ItemKey == "scrap_alloy");
+        MarketListingResponse none = listings.Single(l => l.ItemKey == "curio_shard");
+
+        // Minor units, not whole credits: the wire carries hundredths, and a client that read this
+        // as 7 would suggest seven hundredths of a credit.
+        Assert.Equal(700, guaranteed.GuaranteedPriceMinorUnits);
+
+        // Null rather than zero. Nothing stands behind this, which is a different claim from a
+        // standing order that pays nothing, and the prompt shows no suggestion at all for it.
+        Assert.Null(none.GuaranteedPriceMinorUnits);
     }
 
     [Fact]

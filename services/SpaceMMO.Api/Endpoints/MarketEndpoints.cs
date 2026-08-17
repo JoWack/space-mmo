@@ -60,13 +60,19 @@ public sealed record BookEntryResponse(long OrderId, OrderSide Side, long PriceM
 /// all. Listing them would offer a player something they cannot act on.
 /// </para>
 /// </remarks>
+/// <param name="GuaranteedPriceMinorUnits">
+/// What a standing order will always pay for this, or null if none does. The floor a player can
+/// always sell into, which is most of what makes it worth showing beside a market price that may not
+/// exist yet.
+/// </param>
 public sealed record MarketListingResponse(
     int ItemDefId,
     string ItemKey,
     string Name,
     long? BestAskMinorUnits,
     long? BestBidMinorUnits,
-    int QuantityForSale);
+    int QuantityForSale,
+    long? GuaranteedPriceMinorUnits);
 
 /// <summary>
 /// The order book: placing, cancelling, and reading it.
@@ -359,7 +365,12 @@ public static class MarketEndpoints
                 // Cheapest sell and highest buy: the two prices a player would actually transact at.
                 asks.Count > 0 ? asks.Min(a => a.Price) : null,
                 bids.Count > 0 ? bids.Max(b => b.Price) : null,
-                asks.Sum(a => a.Quantity));
+                asks.Sum(a => a.Quantity),
+
+                // Sent for every row rather than only for items the player holds. The client would
+                // otherwise have this figure only for goods already owned -- it rides on a stack --
+                // so the suggestion would appear and vanish for reasons nobody could see.
+                item.FactionBuyPrice != null ? item.FactionBuyPrice.Value.MinorUnits : null);
         })];
 
         return Results.Ok(listings);

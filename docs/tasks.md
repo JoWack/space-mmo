@@ -1218,13 +1218,41 @@ Wants: what is in each container, drag or a pick-quantity affordance, and the re
 
 ## 109 — Market screen
 
-**Pending.** Supersedes the workaround half of 105.
+**Done 16 August.** Supersedes the workaround half of 105, which is now closed.
 
-Today the book can only be seen for an item the player already holds, because the fetch is keyed to
-their selected holding. A market screen at a station should show what is for sale regardless of what
-the viewer owns, which is the whole point of a market.
+The book could only be seen for an item the player already held, because the fetch was keyed to their
+selected holding. `GET /market/listings?stationId=&search=` now answers with the **whole tradeable
+catalogue** — `Raw`, `Refined`, `Component`, `Consumable` — not just items somebody happens to be
+trading, and the screen lists all of it with best ask, best bid, quantity for sale and the faction
+guaranteed price. Selecting a row fetches its book into the existing panel.
 
-`economy-design.md` §7 already names price history as the source for this.
+**The catalogue is the whole catalogue on purpose.** Listing only what has orders is the smaller
+query and was the obvious build, but it makes the market unusable in exactly the case a new economy
+is always in: nothing is for sale, so nothing is listed, so nobody can place the **buy order** that
+would tell a producer the demand exists. An empty market that cannot be seeded is a dead one. Ruled
+out 16 August.
+
+Two suggestions are offered when placing an order, and both are suggestions rather than defaults —
+the price field is always typeable:
+
+- **match market** — the current best ask or bid, present only when somebody is trading it
+- **guaranteed** — the faction price, present only for goods a faction stands behind, and only when
+  selling, because standing orders buy and never sell
+
+An item with neither is priced by hand, which is the normal case for anything new.
+
+**Ruled out: `Min`/`Max` over `Price.MinorUnits` in the EF query.** It compiles — the property is
+behind a value converter — and then 500s at runtime. Aggregation is done in memory over the
+station's open orders instead. Anything similar over a converted property will fail the same way.
+
+**Ruled out: showing a missing price as `0.00 cr`.** Free and zero are different claims, and a market
+that says an unpriced good is free is worse than one that says nothing. Missing renders `—`, and
+quantity renders blank rather than `0`. `SpaceMMO.HUD.MarketNoPriceIsNotAZeroPrice` fails if the dash
+ever collapses back into a formatted zero — verified by collapsing it, 16 August.
+
+`economy-design.md` §7 already names price history as the source for this; not used yet.
+
+Follow-on: 116 (drag a stack onto the market to sell it) is still open.
 
 ## 110 — Menus
 
@@ -1235,15 +1263,17 @@ on a command line, or by taking the first one on the account.
 
 ## 105 — You can only see the book for something you already own
 
-**Decided 13 August: a station's market screen shows everything for sale there, and has a search.**
-Both halves, not one or the other — browsing answers "what is there?", search answers "who has the
-thing I came for?", and a market with only one of them fails whichever question the player actually
-arrived with.
+**Closed 16 August by 109.** Decided 13 August: a station's market screen shows everything for sale
+there, and has a search. Both halves, not one or the other — browsing answers "what is there?",
+search answers "who has the thing I came for?", and a market with only one of them fails whichever
+question the player actually arrived with.
 
 That rules out the third option below (listing only what the station has asks for) as the whole
-answer, though it remains what browsing shows when nothing is searched.
+answer. It did not survive as the browsing view either: 109 lists the whole tradeable catalogue,
+because a station with no orders yet would otherwise show an empty screen nobody could seed a buy
+order from.
 
-Implementation is part of 109. Found by playtest, 12 August.
+Found by playtest, 12 August.
 
 Player A listed ferrite ore; player B saw `asks: none  bids: none` until B docked at the trading hub
 and cycled their holdings, at which point it appeared.

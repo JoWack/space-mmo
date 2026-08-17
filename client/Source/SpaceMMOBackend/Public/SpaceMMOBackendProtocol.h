@@ -128,6 +128,10 @@ public:
 	/** Renders int64 minor units as credits, e.g. 123456 as "1,234.56". */
 	static FString FormatCredits(int64 MinorUnits);
 
+	/** Every tradeable item at a station, with whatever the market is doing with each. */
+	static bool ParseMarketListings(
+		const FString& Json, TArray<FBackendMarketListing>& OutListings);
+
 	/**
 	 * Parses a JSON array of resource deposits.
 	 *

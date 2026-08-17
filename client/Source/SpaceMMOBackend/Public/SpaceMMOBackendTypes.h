@@ -361,6 +361,64 @@ struct SPACEMMOBACKEND_API FBackendBookEntry
 	int32 QuantityRemaining = 0;
 };
 
+/**
+ * One tradeable item, and what a station's market is doing with it.
+ *
+ * <strong>The whole tradeable catalogue, not only what is for sale.</strong> A player who wants
+ * ferrite and holds none could not previously discover that a market for it existed (task 105), and
+ * somebody placing a buy order needs to find an item precisely because nobody is selling it.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendMarketListing
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int32 ItemDefId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	FString ItemKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	FString Name;
+
+	/**
+	 * Cheapest anyone will sell for, and whether anybody is.
+	 *
+	 * A flag rather than a sentinel price, because zero is a legal price — asks are floored at one
+	 * minor unit but a bid of nothing is expressible, and "free" must never be confused with
+	 * "nobody is offering".
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int64 BestAskMinorUnits = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	bool bHasAsk = false;
+
+	/** Most anyone will pay, and whether anybody will. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int64 BestBidMinorUnits = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	bool bHasBid = false;
+
+	/** How much is actually available to buy right now. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int32 QuantityForSale = 0;
+
+	/**
+	 * What a standing order will always pay, and whether one exists.
+	 *
+	 * The floor a player can always sell into. Worth showing beside a market price precisely because
+	 * it is there when no market price is — an item nobody is trading yet still has a number.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int64 GuaranteedPriceMinorUnits = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	bool bHasGuaranteed = false;
+};
+
 /** One material a recipe consumes, per run. */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendRecipeInput

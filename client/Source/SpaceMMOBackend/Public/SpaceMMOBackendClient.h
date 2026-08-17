@@ -288,6 +288,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Market")
 	void FetchBook(int32 StationId, int32 ItemDefId);
 
+	/**
+	 * Loads every tradeable item at a station, optionally filtered.
+	 *
+	 * Filtered by the server rather than here: the catalogue grows with content and a client that
+	 * fetched all of it to search locally would be shipping the whole item list to filter three
+	 * rows out of it.
+	 */
+	void FetchMarketListings(int32 StationId, const FString& Search);
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
+	const TArray<FBackendMarketListing>& GetMarketListings() const { return MarketListings; }
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
 	const TArray<FBackendBookEntry>& GetBook() const { return Book; }
 
@@ -483,6 +495,8 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendBookEntry> Book;
+
+	TArray<FBackendMarketListing> MarketListings;
 
 	/** Which item Book holds orders for. Zero until one has been read. */
 	int32 BookItemDefId = 0;

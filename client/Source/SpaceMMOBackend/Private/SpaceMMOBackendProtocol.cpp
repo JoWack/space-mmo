@@ -87,6 +87,58 @@ FString FSpaceMMOBackendProtocol::MakeCreateCharacterBody(const FString& Name, c
 	return Output;
 }
 
+bool FSpaceMMOBackendProtocol::ParseMarketListings(
+	const FString& Json, TArray<FBackendMarketListing>& OutListings)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutListings.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+		FBackendMarketListing Listing;
+
+		if (!Object.IsValid() || !Object->TryGetStringField(TEXT("itemKey"), Listing.ItemKey))
+		{
+			continue;
+		}
+
+		Object->TryGetStringField(TEXT("name"), Listing.Name);
+
+		int64 Number = 0;
+
+		if (ReadInt64(Object, TEXT("itemDefId"), Number))
+		{
+			Listing.ItemDefId = static_cast<int32>(Number);
+		}
+
+		// Null for an item nobody is trading, which is most of the catalogue — and null is not zero.
+		// Zero is a legal price, so a sentinel would make "free" and "nobody is offering" the same
+		// thing on screen.
+		Listing.bHasAsk = ReadInt64(Object, TEXT("bestAskMinorUnits"), Listing.BestAskMinorUnits);
+		Listing.bHasBid = ReadInt64(Object, TEXT("bestBidMinorUnits"), Listing.BestBidMinorUnits);
+
+		if (ReadInt64(Object, TEXT("quantityForSale"), Number))
+		{
+			Listing.QuantityForSale = static_cast<int32>(Number);
+		}
+
+		Listing.bHasGuaranteed =
+			ReadInt64(Object, TEXT("guaranteedPriceMinorUnits"), Listing.GuaranteedPriceMinorUnits);
+
+		OutListings.Add(Listing);
+	}
+
+	return true;
+}
+
 FString FSpaceMMOBackendProtocol::MakeTransferBody(
 	const int64 FromInventoryId,
 	const int64 ToInventoryId,
