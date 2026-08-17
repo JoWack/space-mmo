@@ -124,6 +124,29 @@ Green tests are not the claim. The claim is that a specific wrong behaviour woul
   which trains whoever is authoring to bump the number without reading why it moved. Count
   against the pack.
 
+## When a fix is a class of bug, fix its siblings the same day
+
+A bug that could only ever happen in one place is an instance. A bug that happens because of how
+something in the engine or the codebase *works* has siblings, and they are cheap to find on the day
+you understand it and expensive to find later, one playtest at a time.
+
+`G` stopped docking after a ship was boarded, left and boarded again — no message, because the key
+was bound to an input component possession had replaced, so no handler ran at all. The gathering
+component had met this before and its comment says so: "Missing this was why the key did nothing at
+all." It had been fixed there and nowhere else, and only half fixed even there — it hooked the
+restart but still guarded with a bool, which cannot tell "already bound" from "bound to something
+that is gone". One playtest to find, five minutes to fix in both.
+
+- **Ask what else does this.** Grep for the pattern, not the symptom: the same delegate, the same
+  guard, the same call with the same wrong argument. Two components binding input the same way are
+  two instances of one bug.
+- **A note that says "this cannot be fixed yet" is a prediction to re-read.** Task 94 recorded that
+  the mining tool gate had to accept a laser anywhere, because nothing could move one onto a
+  character. That stopped being true the day carried inventories landed, and the note is what made
+  the fix five minutes rather than an argument.
+- **Fixing the sibling is not scope creep**, and it is not the same as going looking for work. It is
+  finishing the fix you already made.
+
 ## Project facts that have each cost a session
 
 - **Re-cook the dedicated server after code changes.** A stale staged build fails as a
