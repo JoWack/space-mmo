@@ -360,11 +360,21 @@ void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float 
 	{
 		if (USpaceMMOBackendClient* Client = MarketClient())
 		{
-			if (!bRequestedListings)
-			{
-				bRequestedListings = true;
+			const ASpaceMMOPlayerController* Docked =
+				Cast<ASpaceMMOPlayerController>(GetOwningPlayer());
 
-				RefreshMarketListings();
+			const int32 Station = Docked != nullptr ? Docked->DockedStationId() : 0;
+
+			// Forgotten on undocking, so returning to the same station asks again rather than
+			// showing whatever the book looked like before the player went away and traded.
+			if (Station != ListedStationId)
+			{
+				ListedStationId = Station;
+
+				if (Station != 0)
+				{
+					RefreshMarketListings();
+				}
 			}
 
 			const TArray<FSpaceMMOMarketRowText> Listings =

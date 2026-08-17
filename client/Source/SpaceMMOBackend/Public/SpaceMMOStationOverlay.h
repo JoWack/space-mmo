@@ -265,8 +265,14 @@ private:
 	/** The order waiting on a price and an amount. */
 	int32 PendingOrderItemDefId = 0;
 
-	/** So the catalogue is asked for once rather than every tick. */
-	bool bRequestedListings = false;
+	/**
+	 * Which station the catalogue was asked for, or 0.
+	 *
+	 * A bool here asked once and never again, which is right until the player docks somewhere else:
+	 * the second station would show the first one's goods, at the first one's prices, and look
+	 * entirely plausible doing it. Holding the station instead makes moving a reason to refetch.
+	 */
+	int32 ListedStationId = 0;
 
 	/** So a missing container or RowClass is said once rather than sixty times a second. */
 	bool bWarnedAboutWiring = false;
