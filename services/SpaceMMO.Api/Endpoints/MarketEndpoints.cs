@@ -2,9 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Data;
 using SpaceMMO.Data.Docking;
+using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Data.Market;
 using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Market;
 
 namespace SpaceMMO.Api.Endpoints;
@@ -39,6 +41,34 @@ public sealed record FactionSaleResponse(
 public sealed record BookEntryResponse(long OrderId, OrderSide Side, long PriceMinorUnits, int QuantityRemaining);
 
 /// <summary>
+/// One tradeable item, and what the market at a station is doing with it.
+/// </summary>
+/// <param name="BestAskMinorUnits">Cheapest anyone will sell for, or null if nobody is selling.</param>
+/// <param name="BestBidMinorUnits">Most anyone will pay, or null if nobody is buying.</param>
+/// <param name="QuantityForSale">How much is actually available to buy right now.</param>
+/// <remarks>
+/// <para>
+/// <strong>The whole tradeable catalogue, not only what is for sale.</strong> A player who wants
+/// ferrite and holds none could previously not discover that a market for it existed — the book was
+/// only reachable for items they already owned (task 105). Listing only items with live orders would
+/// fix half of that and leave the other half: somebody who wants to place a <em>buy</em> order needs
+/// to find an item precisely because nobody is selling it.
+/// </para>
+/// <para>
+/// Stackable categories only. The order book moves quantities out of a hangar, so tools, hulls,
+/// armour and weapons — which exist as instances carrying their own condition — cannot be ordered at
+/// all. Listing them would offer a player something they cannot act on.
+/// </para>
+/// </remarks>
+public sealed record MarketListingResponse(
+    int ItemDefId,
+    string ItemKey,
+    string Name,
+    long? BestAskMinorUnits,
+    long? BestBidMinorUnits,
+    int QuantityForSale);
+
+/// <summary>
 /// The order book: placing, cancelling, and reading it.
 /// </summary>
 /// <remarks>
@@ -55,6 +85,7 @@ public static class MarketEndpoints
         group.MapPost("/orders", PlaceAsync);
         group.MapPost("/orders/cancel", CancelAsync);
         group.MapGet("/book", BookAsync);
+        group.MapGet("/listings", ListingsAsync);
 
         // Separate from /orders because it is not an order. There is no book, no counterparty and
         // no matching: the faction takes the material at a fixed price and the credits are created
@@ -249,6 +280,91 @@ public static class MarketEndpoints
     /// Public and unauthenticated. Market depth is information every player is meant to trade on,
     /// and hiding it behind a login would only mean everyone scrapes it with one.
     /// </remarks>
+    /// <summary>
+    /// Every tradeable item and what the market at one station is doing with it.
+    /// </summary>
+    /// <remarks>
+    /// Unauthenticated, like the book: what is for sale at a public market is public, and hiding it
+    /// behind a login would only mean everyone scrapes it with one.
+    /// </remarks>
+    private static async Task<IResult> ListingsAsync(
+        int stationId,
+        string? search,
+        SpaceMmoDbContext database,
+        CancellationToken cancellation)
+    {
+        // Named explicitly rather than through ItemCategoryExtensions.IsStackable, which is a C#
+        // method the query provider cannot translate. Kept beside a test that fails if the two ever
+        // disagree, because a silent divergence would show players items they cannot order.
+        ItemCategory[] tradeable =
+        [
+            ItemCategory.Raw,
+            ItemCategory.Refined,
+            ItemCategory.Component,
+            ItemCategory.Consumable,
+        ];
+
+        IQueryable<ItemDef> items = database.ItemDefs
+            .Where(d => tradeable.Contains(d.Category));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            string term = search.Trim();
+
+            // Case-insensitive on both the name a player reads and the key they might know from
+            // content, so searching "ferrite" and "ferrite_ore" both land.
+            items = items.Where(d =>
+                EF.Functions.ILike(d.Name, $"%{term}%") || EF.Functions.ILike(d.Key, $"%{term}%"));
+        }
+
+        List<ItemDef> matched = await items.OrderBy(d => d.Name).ToListAsync(cancellation);
+
+        int[] ids = [.. matched.Select(d => d.Id)];
+
+        // One aggregate pass rather than a query per item: a catalogue search can match dozens, and
+        // a round trip each would make typing feel like the screen had stalled.
+        // One query for the station's live orders, then grouped here.
+        //
+        // Aggregated in memory rather than by the database, because Price is a value object behind a
+        // converter and Min/Max over it does not translate — the query compiles happily and fails at
+        // runtime as a 500. The volume makes this a non-question: these are the open orders at one
+        // station, not a history.
+        List<(int ItemDefId, OrderSide Side, long Price, int Quantity)> live =
+        [
+            .. (await database.MarketOrders
+                .Where(o => o.StationId == stationId
+                    && o.QuantityRemaining > 0
+                    && ids.Contains(o.ItemDefId))
+                .Select(o => new
+                {
+                    o.ItemDefId,
+                    o.Side,
+                    Price = o.Price.MinorUnits,
+                    o.QuantityRemaining,
+                })
+                .ToListAsync(cancellation))
+                .Select(o => (o.ItemDefId, o.Side, o.Price, o.QuantityRemaining)),
+        ];
+
+        List<MarketListingResponse> listings = [.. matched.Select(item =>
+        {
+            var asks = live.Where(l => l.ItemDefId == item.Id && l.Side == OrderSide.Sell).ToList();
+            var bids = live.Where(l => l.ItemDefId == item.Id && l.Side == OrderSide.Buy).ToList();
+
+            return new MarketListingResponse(
+                item.Id,
+                item.Key,
+                item.Name,
+
+                // Cheapest sell and highest buy: the two prices a player would actually transact at.
+                asks.Count > 0 ? asks.Min(a => a.Price) : null,
+                bids.Count > 0 ? bids.Max(b => b.Price) : null,
+                asks.Sum(a => a.Quantity));
+        })];
+
+        return Results.Ok(listings);
+    }
+
     private static async Task<IResult> BookAsync(
         int stationId,
         int itemDefId,

@@ -58,6 +58,81 @@ public sealed class MarketDockingTests(ApiDatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Listings_show_the_whole_tradeable_catalogue()
+    {
+        // The fix for task 105. A player who wants ferrite and holds none could not previously
+        // discover that a market for it existed, because the book was only reachable for items they
+        // already owned. Listing only what is for sale would fix half of that -- somebody placing a
+        // buy order needs to find an item precisely because nobody is selling it.
+        await using (SpaceMmoDbContext seed = _fixture.CreateContext())
+        {
+            // Stackable, so it can be ordered; and a hull, which cannot, because the book moves
+            // quantities out of a hangar while a hull exists as an instance carrying its own
+            // condition. Offering one would be offering something no player can act on.
+            seed.ItemDefs.AddRange(
+                new ItemDef
+                {
+                    Key = "silicate_dust",
+                    Name = "Silicate Dust",
+                    Category = ItemCategory.Raw,
+                    VolumeM3 = 0.1,
+                },
+                new ItemDef
+                {
+                    Key = "shuttle_hull",
+                    Name = "Shuttle Hull",
+                    Category = ItemCategory.Hull,
+                    VolumeM3 = 40,
+                });
+
+            await seed.SaveChangesAsync();
+        }
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/market/listings?stationId={_stationId}", UriKind.Relative));
+
+        HttpResponseMessage response = await _client!.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string body = await response.Content.ReadAsStringAsync();
+
+        // Present although nobody has ever traded it here.
+        Assert.Contains("Silicate Dust", body, StringComparison.Ordinal);
+        Assert.Contains("Ferrite Plate", body, StringComparison.Ordinal);
+
+        // Absent, because it cannot be ordered at all.
+        Assert.DoesNotContain("Shuttle Hull", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Listings_can_be_searched_by_name_or_key()
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/market/listings?stationId={_stationId}&search=FERR", UriKind.Relative));
+
+        HttpResponseMessage response = await _client!.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // Case-insensitive, and matching the key as well as the name, so a player who knows either
+        // finds the item.
+        Assert.Contains("Ferrite Plate", await response.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        using var miss = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/market/listings?stationId={_stationId}&search=nothinglikethis", UriKind.Relative));
+
+        HttpResponseMessage empty = await _client.SendAsync(miss);
+
+        // A search that matches nothing is an answer, not a failure: nobody trades that here.
+        Assert.Equal(HttpStatusCode.OK, empty.StatusCode);
+        Assert.DoesNotContain("Ferrite", await empty.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Listing_from_orbit_is_refused()
     {
         HttpResponseMessage response = await PlaceOrderAsync(_stationId);
