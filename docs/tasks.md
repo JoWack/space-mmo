@@ -1101,15 +1101,48 @@ layout above is agreed; the individual widgets are not yet.
 
 ## 107 — Sign in from the game
 
-**Pending.**
+**Built 18 August; awaiting its Widget Blueprint.**
 
-There is no login screen. Credentials are read from `secrets/player-login.txt`, and `play.bat`
-explains why: command lines mangle values here, and `-BackendEmail=someone@gmail.com` has arrived as
-`someone@gmail .com`, producing a 401 that looks exactly like a wrong password.
+Credentials were read from `secrets/player-login.txt`, and `play.bat` explains why: command lines
+mangle values here, and `-BackendEmail=someone@gmail.com` has arrived as `someone@gmail .com`,
+producing a 401 that looks exactly like a wrong password. A fine developer affordance and not
+something a player can be asked to do.
 
-That is a fine developer affordance and not something a player can be asked to do. Needs a screen, and
-a decision about where a token lives between sessions — `USpaceMMOBackendClient` deliberately does
-not persist one today.
+**An overlay, not a menu level.** It sits on top of whatever the world is doing and hides once there
+is a session. A separate map is several times the work and is task 110's job; building one here
+would be doing 110 badly in advance and unpicking it later.
+
+**Decided: the credentials file wins over everything, including a remembered session.** It exists so
+that two clients on one desktop can be two different players, and a remembered token would quietly
+make both of them whoever signed in last — which is the one thing that arrangement is for. So the
+order is: file or command line, then a remembered session, then the screen, then today's behaviour
+if no screen is configured. That last case is what every automated run is in.
+
+**Decided: a "remember me" tick, on by default, writing the session to `Saved/session.txt`.** A
+bearer token in a plain file is a real cost, and it is why this is a choice rather than automatic:
+anything that can read the file can act as the account until the token expires. The alternative was
+retyping a password on every launch of a game played on one person's own machine. Worth revisiting
+if there is ever a shipped build.
+
+**Expiry is checked on restore rather than left to the first 401.** A silently restored dead token
+gives a game that looks signed in and refuses everything, which is the least explicable state to be
+in — and the screen exists precisely to be shown instead.
+
+**Deferred to 110: character select.** Today's behaviour stands — `-CharacterId=` if given, otherwise
+the first character on the account. A picker built here is the thing 110 would replace.
+
+While the screen is up the mouse is released and every other HUD element is hidden: a HUD over a
+world you have no character for is a set of readouts about nobody.
+
+`SpaceMMO.HUD.LoginSaysWhichThingWentWrong` covers the wording, which is the part with decisions in
+it: a 401 becomes "Wrong email or password", nothing at all becomes "Could not reach the server"
+rather than a blank line, and anything else is shown as the server said it. The last matters here
+specifically — an API refusing to start over an unapplied migration has already once read as "cannot
+identify my character" and cost a session.
+
+**Not covered by tests: the gate itself.** Precedence, the remembered-session round trip and the
+screen coming down on success all need a world, a game instance and a filesystem, and are playtest
+only.
 
 ## 108 — Inventory and transfer screen
 

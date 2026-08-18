@@ -5,6 +5,9 @@
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOBackendProtocol.h"
 
@@ -482,6 +485,92 @@ void USpaceMMOBackendClient::LogIn(const FString& Email, const FString& Password
 		FSpaceMMOBackendProtocol::MakeCredentialsBody(Email, Password),
 		false,
 		[this](const FString& Body) { HandleSession(Body); });
+}
+
+namespace
+{
+	/** Where a remembered session lives. Saved/, so it is neither committed nor synced. */
+	FString RememberedSessionPath()
+	{
+		return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("session.txt"));
+	}
+}
+
+void USpaceMMOBackendClient::RememberSession() const
+{
+	if (!Session.IsValid())
+	{
+		return;
+	}
+
+	// Three lines rather than JSON, matching secrets/player-login.txt. There is nothing here worth
+	// a parser, and a format somebody can read and delete by hand is a feature for a credential.
+	const FString Contents = FString::Printf(
+		TEXT("%d") LINE_TERMINATOR TEXT("%s") LINE_TERMINATOR TEXT("%s") LINE_TERMINATOR,
+		Session.AccountId,
+		*Session.Token,
+		*Session.ExpiresAt.ToIso8601());
+
+	if (!FFileHelper::SaveStringToFile(Contents, *RememberedSessionPath()))
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Could not write %s; this session will not be remembered."),
+			*RememberedSessionPath());
+
+		return;
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Session remembered for account %d."), Session.AccountId);
+}
+
+bool USpaceMMOBackendClient::RestoreRememberedSession()
+{
+	TArray<FString> Lines;
+
+	if (!FFileHelper::LoadFileToStringArray(Lines, *RememberedSessionPath()) || Lines.Num() < 3)
+	{
+		return false;
+	}
+
+	FBackendSession Restored;
+	Restored.AccountId = FCString::Atoi(*Lines[0].TrimStartAndEnd());
+	Restored.Token = Lines[1].TrimStartAndEnd();
+
+	FDateTime::ParseIso8601(*Lines[2].TrimStartAndEnd(), Restored.ExpiresAt);
+
+	if (!Restored.IsValid())
+	{
+		return false;
+	}
+
+	// Checked here rather than left to the first 401. An expired token restored silently produces a
+	// game that looks signed in and refuses everything, which is the least explicable state to be
+	// in -- and the login screen exists precisely to be shown instead.
+	if (Restored.ExpiresAt <= FDateTime::UtcNow())
+	{
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Remembered session expired at %s; asking again."), *Restored.ExpiresAt.ToIso8601());
+
+		IFileManager::Get().Delete(*RememberedSessionPath());
+
+		return false;
+	}
+
+	Session = Restored;
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Restored a remembered session for account %d."), Session.AccountId);
+
+	OnSessionChanged.Broadcast(true);
+
+	return true;
+}
+
+void USpaceMMOBackendClient::SignOut()
+{
+	IFileManager::Get().Delete(*RememberedSessionPath());
+
+	LogOut();
 }
 
 void USpaceMMOBackendClient::LogOut()

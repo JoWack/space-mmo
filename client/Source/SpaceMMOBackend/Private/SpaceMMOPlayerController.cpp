@@ -12,6 +12,7 @@
 #include "SpaceMMOFlightReadout.h"
 #include "SpaceMMOHudSettings.h"
 #include "SpaceMMOInventoryScreen.h"
+#include "SpaceMMOLoginScreen.h"
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMODepositPrompt.h"
 #include "SpaceMMOGatheringComponent.h"
@@ -143,6 +144,9 @@ void ASpaceMMOPlayerController::CreateHud()
 	InventoryScreen = CreateHudWidget<USpaceMMOInventoryScreen>(
 		this, Settings->InventoryScreen, TEXT("inventory screen"));
 
+	LoginScreen = CreateHudWidget<USpaceMMOLoginScreen>(
+		this, Settings->LoginScreen, TEXT("login screen"));
+
 	// Decide what belongs on screen now, rather than on the first tick.
 	//
 	// AddToViewport leaves a widget visible, and until something says otherwise every screen here is
@@ -179,7 +183,10 @@ void ASpaceMMOPlayerController::ApplyMouseCapture()
 	// alternative -- each screen remembering what the mouse was doing before it opened -- needs one
 	// flag per screen, and two open at once then disagree about who restores what: closing the
 	// inventory would snatch the cursor back while the station overlay was still waiting for a click.
-	const bool bScreenWantsCursor = bInventoryScreenOpen || bStationOverlayOpen;
+	// The login screen counts too, and outranks everything: a captured cursor cannot reach a text
+	// box, so a sign-in screen without this is one nobody can type into.
+	const bool bScreenWantsCursor =
+		bAwaitingSignIn || bInventoryScreenOpen || bStationOverlayOpen;
 
 	if (bMouseCaptured && !bScreenWantsCursor)
 	{
@@ -595,6 +602,25 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 			Widget->SetVisibility(Wanted);
 		}
 	};
+
+	// Nothing else while somebody is still signing in. A HUD over a world they have no character for
+	// is a set of readouts about nobody, and the ship behind it is one they cannot be flying.
+	//
+	// Visible rather than SelfHitTestInvisible, unlike the paired panels: this one is meant to
+	// swallow clicks, because it is the only thing on screen that should be reachable.
+	Show(LoginScreen, bAwaitingSignIn, ESlateVisibility::Visible);
+
+	if (bAwaitingSignIn)
+	{
+		Show(FlightReadout, false);
+		Show(OnFootReadout, false);
+		Show(DepositPrompt, false);
+		Show(SkillsScreen, false);
+		Show(InventoryScreen, false);
+		Show(StationOverlay, false);
+
+		return;
+	}
 
 	// Exactly one of these two, never both: they share a corner deliberately, because a pilot and
 	// somebody on foot are never the same moment.
@@ -1057,13 +1083,43 @@ void ASpaceMMOPlayerController::BeginIdentifying()
 	FString Email;
 	FString Password;
 
-	if (!FindCredentials(Email, Password))
+	// The credentials file wins over everything, including a remembered session. It exists so that
+	// two clients on one desktop can be two different players, and a remembered token would quietly
+	// make both of them whoever signed in last -- which is the one thing that arrangement is for.
+	const bool bHaveCredentials = FindCredentials(Email, Password);
+
+	if (!bHaveCredentials && Backend->RestoreRememberedSession())
 	{
-		// Not an error yet. Without credentials this connection simply has no identity, and every
-		// action that needs one says so at the point it is needed rather than here.
+		PresentCredentials();
+
+		return;
+	}
+
+	if (!bHaveCredentials)
+	{
+		// A screen to ask on, or nothing to ask with. Without one this connection simply has no
+		// identity and every action that needs one says so where it is needed -- which is the state
+		// the automated runs and any machine without a Widget Blueprint are in.
+		if (LoginScreen != nullptr)
+		{
+			bAwaitingSignIn = true;
+
+			Backend->OnSessionChanged.AddDynamic(
+				this, &ASpaceMMOPlayerController::HandleSessionChanged);
+
+			// Released, and the world hidden behind the screen. A captured cursor cannot reach a
+			// text box, and a sign-in nobody can type into is worse than no screen at all.
+			ApplyMouseCapture();
+			UpdateHudContext();
+
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("No credentials found; asking for a sign-in."));
+
+			return;
+		}
+
 		UE_LOG(LogSpaceMMOBackend, Log,
-			TEXT("No credentials found; this connection will have no character. "
-				 "Write email and password on two lines in secrets\\player-login.txt."));
+			TEXT("No credentials found and no login screen configured; this connection will have "
+				 "no character."));
 
 		return;
 	}
@@ -1144,6 +1200,16 @@ void ASpaceMMOPlayerController::HandleSessionChanged(const bool bIsSignedIn)
 	if (!bIsSignedIn)
 	{
 		return;
+	}
+
+	// Whichever way the session arrived -- typed, restored, or from the credentials file -- the
+	// screen has done its job and the world comes back.
+	if (bAwaitingSignIn)
+	{
+		bAwaitingSignIn = false;
+
+		ApplyMouseCapture();
+		UpdateHudContext();
 	}
 
 	const UWorld* World = GetWorld();

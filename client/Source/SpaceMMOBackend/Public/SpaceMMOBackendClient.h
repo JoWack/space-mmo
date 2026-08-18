@@ -58,6 +58,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
 	void LogIn(const FString& Email, const FString& Password);
 
+	/**
+	 * Writes the current session to disk so the next launch does not ask again.
+	 *
+	 * <strong>A bearer token in a plain file.</strong> That is a real cost and it is the reason this
+	 * is a choice rather than something done automatically: anything that can read the file can act
+	 * as this account until the token expires. It goes in <c>Saved/</c> rather than beside the
+	 * source, so it is neither committed nor synced.
+	 *
+	 * The alternative was retyping a password on every launch of a game somebody plays on their own
+	 * machine, which is worse for a hobby project and better for a shipped one. Revisit when there
+	 * is a shipped one.
+	 */
+	void RememberSession() const;
+
+	/**
+	 * Restores a session written by RememberSession, if one is there and has not expired.
+	 *
+	 * @return True when a usable session was restored, so the caller can skip asking.
+	 */
+	bool RestoreRememberedSession();
+
+	/** Forgets a remembered session and signs out. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Identity")
+	void SignOut();
+
 	/** Forgets the session locally. The token stays valid server-side until it expires. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
 	void LogOut();

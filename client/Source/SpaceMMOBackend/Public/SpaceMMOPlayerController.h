@@ -172,6 +172,19 @@ public:
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOInventoryScreen> InventoryScreen;
 
+	/** The sign-in screen, or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOLoginScreen> LoginScreen;
+
+	/**
+	 * Whether the player still has to sign in.
+	 *
+	 * Set when BeginIdentifying finds no credentials anywhere and a login screen exists to ask on.
+	 * Everything else stays hidden while this is true: a HUD over a world you have no character for
+	 * is a set of readouts about nobody.
+	 */
+	bool bAwaitingSignIn = false;
+
 	/**
 	 * Whether the skills screen is open.
 	 *

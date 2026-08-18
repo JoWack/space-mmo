@@ -82,5 +82,16 @@ public:
 		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOInventoryScreen"))
 	FSoftClassPath InventoryScreen;
 
+	/**
+	 * The sign-in screen. Must derive from <c>USpaceMMOLoginScreen</c>.
+	 *
+	 * Unset means the game behaves exactly as it did before task 107: credentials come from
+	 * secrets/player-login.txt or the command line, and a machine with neither simply has no
+	 * character. That is a working state, and it is the one every automated run is in.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOLoginScreen"))
+	FSoftClassPath LoginScreen;
+
 	virtual FName GetCategoryName() const override { return TEXT("Game"); }
 };
