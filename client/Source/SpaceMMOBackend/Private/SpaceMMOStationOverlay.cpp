@@ -6,6 +6,7 @@
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOBackendProtocol.h"
+#include "SpaceMMOInventoryScreen.h"
 #include "SpaceMMOPlayerController.h"
 
 void USpaceMMOTextRow::SetLine(const FString& Line)
@@ -417,7 +418,87 @@ void USpaceMMOStationOverlay::RefreshMarketListings()
 	}
 }
 
+FString USpaceMMOStationOverlay::RefuseSellDrop(
+	const FSpaceMMOInventoryLine& Line, const bool bInCatalogue)
+{
+	if (Line.bIsHeading)
+	{
+		return TEXT("Drag a stack, not a whole container");
+	}
+
+	// An instance is one object with its own condition -- a hull, a mining laser -- and the book
+	// moves quantities rather than objects. Listing one would be offering something no order could
+	// fill. This is the same line the catalogue is drawn on.
+	if (Line.InstanceId != 0 || Line.ItemDefId == 0 || Line.Quantity <= 0)
+	{
+		return TEXT("The market only trades stackable goods");
+	}
+
+	// The rule the API enforces rather than a guess at it, and the same one that dims the row.
+
+
+	// The rule the API enforces rather than a guess at it, and the same one that dims the row.
+	if (!Line.bReachable)
+	{
+		return TEXT("Those goods are at another station");
+	}
+
+	if (!bInCatalogue)
+	{
+		return TEXT("Nothing here trades that");
+	}
+
+	return FString();
+}
+
+bool USpaceMMOStationOverlay::NativeOnDrop(
+	const FGeometry& Geometry, const FDragDropEvent& Event, UDragDropOperation* Operation)
+{
+	const USpaceMMOInventoryDrag* Drag = Cast<USpaceMMOInventoryDrag>(Operation);
+
+	// Only onto the market. The other tabs have their own meaning for a drop or none at all, and
+	// swallowing it here would lose the stack somewhere the player was not looking.
+	if (Drag == nullptr || !bMarketTab)
+	{
+		return false;
+	}
+
+	ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer());
+
+	const USpaceMMOBackendClient* Client = MarketClient();
+
+	if (Controller == nullptr || Client == nullptr)
+	{
+		return false;
+	}
+
+	const bool bInCatalogue = Client->GetMarketListings().ContainsByPredicate(
+		[&Drag](const FBackendMarketListing& L) { return L.ItemDefId == Drag->Line.ItemDefId; });
+
+	if (const FString Refusal = RefuseSellDrop(Drag->Line, bInCatalogue); !Refusal.IsEmpty())
+	{
+		// Said rather than swallowed. A refused drop and a missed one look identical.
+		Controller->ShowTransientMessage(Refusal, ESpaceMMOMessageTone::Warning);
+
+		return true;
+	}
+
+	// The same two steps a player would take by hand: pick the item, then open the sell prompt --
+	// which is where the price is decided, because a drop says what and how many but never at what.
+	SelectMarketItem(Drag->Line.ItemDefId);
+
+	OpenOrderPrompt(true, Drag->Line.Quantity);
+
+	return true;
+}
+
 void USpaceMMOStationOverlay::BeginOrder(const bool bSell)
+{
+	// Nothing dragged, so the prompt starts on everything they could back.
+	OpenOrderPrompt(bSell, 0);
+}
+
+void USpaceMMOStationOverlay::OpenOrderPrompt(const bool bSell, const int32 StartingQuantity)
 {
 	const USpaceMMOBackendClient* Client = MarketClient();
 
@@ -473,6 +554,11 @@ void USpaceMMOStationOverlay::BeginOrder(const bool bSell)
 
 	const int64 MarketPrice = bSell ? Listing->BestAskMinorUnits : Listing->BestBidMinorUnits;
 
+	// What the prompt opens on: the stack that was dragged, clamped to what could actually back the
+	// order, or everything when it was opened from a button. Dragging 120 out of a hangar while
+	// carrying 40 more offers 120 and lets it be raised -- the drag said which stack, not a limit.
+	const int32 Starting = StartingQuantity > 0 ? FMath::Min(StartingQuantity, Held) : Held;
+
 	// Sell side only. A standing order buys raw material; it does not sell any, so there is no
 	// guaranteed price to pay when placing a buy order.
 	OnOrderRequested(
@@ -480,6 +566,7 @@ void USpaceMMOStationOverlay::BeginOrder(const bool bSell)
 		bSell,
 		Held > 0,
 		Held,
+		Starting,
 		MarketPrice,
 		bHasMarket,
 		Listing->GuaranteedPriceMinorUnits,

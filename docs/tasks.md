@@ -1589,19 +1589,37 @@ decision went unwritten before.
 
 ## 116 — Drag goods onto the market to sell them
 
-**Pending. Planned 15 August**, while building 108's transfer.
+**Done 18 August.** Planned 15 August while building 108's transfer; the plumbing was deliberately
+left general for it, and none of it needed changing: the drag operation carries a whole inventory line
+rather than an id, and the pairing that makes the gesture possible — market left, inventory right —
+was already there.
 
-Dropping a stack onto the station overlay's market tab to list it is the obvious next thing after
-dragging between containers, and the plumbing was left general for it: the drag operation carries a
-whole inventory line rather than an id, and `CanDrop` takes a source and a target rather than being
-written against inventory groups.
+Dropping a stack anywhere on the market tab selects that item in the catalogue and opens the sell
+prompt with the dragged quantity filled in.
 
-What it needs beyond that: a drop target on the market tab, a price affordance — listing is not just
-"how many" but "at what" — and a decision about whether dropping opens the existing list-for-sale
-path or a new one. Also worth settling whether the reverse works, dragging from the book to buy,
-which is a different and more dangerous gesture.
+**Decided: the whole tab is the target, not the catalogue list.** A big target is easier to hit and
+nothing else on that tab could mean anything by a drop. Drops on Industry and Quests are ignored
+rather than swallowed — a stack disappearing into a tab nobody was looking at is worse than nothing
+happening.
 
-Wants the panels paired to be much use, which they now are: hangar on the right, market on the left.
+**Decided: the drop reuses the by-hand path rather than getting its own.** It selects the item and
+opens the same prompt the Sell button opens. A second listing route would be a second place for the
+price to be wrong, and the price is the part a drop cannot express: it says *what* and *how many*,
+never *at what*.
+
+**Decided: the prompt opens on the dragged stack, capped at everything that could back the order.**
+Dragging 120 out of a hangar while carrying 40 more offers 120 and allows raising it — the drag named
+a stack, not a limit. `OnOrderRequested` gained a `DefaultQuantity` pin for this.
+
+**Ruled out: dragging from the book to buy.** Flagged as the more dangerous gesture when this was
+planned, and 119 gave every book row its own `Buy 4` button — so the gesture would add a way to spend
+credits by accident and no capability at all.
+
+**Every refusal says why.** A silent refusal is indistinguishable from a drop that missed the panel,
+and each of these is something the player did on purpose: a container heading, an instance (a hull or
+a laser — one object with its own condition, where the book moves quantities), goods at another
+station, an empty stack, or something nobody trades here. `RefuseSellDrop` is pure and returns the
+reason rather than a bool; removing the reachability check fails its test.
 
 ## 117 — A key bound to a dead input component says nothing at all
 

@@ -346,6 +346,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
 	void TakeBookOrder(int64 OrderId);
 
+	/**
+	 * Why a dragged stack cannot be listed here, or empty if it can. Pure, static and tested.
+	 *
+	 * A reason rather than a bool, because every one of these refusals is something the player did
+	 * deliberately and would otherwise watch fail silently — dragging a hull onto a market that
+	 * cannot trade it looks exactly like a drop that missed.
+	 */
+	static FString RefuseSellDrop(
+		const struct FSpaceMMOInventoryLine& Line, bool bInCatalogue);
+
 	/** Withdraws one. Called by a row's cancel button. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
 	void CancelRestingOrder(int64 OrderId);
@@ -411,6 +421,19 @@ public:
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
 
+	/**
+	 * Accepts a stack dragged out of the inventory screen, and offers to sell it.
+	 *
+	 * The whole tab rather than the catalogue list alone: a big target is easier to hit and there is
+	 * nothing else on this tab a drop could mean. Selecting the item and opening the sell prompt
+	 * reuses the path a player would take by hand — a second listing route would be a second place
+	 * for the price to be wrong.
+	 */
+	virtual bool NativeOnDrop(
+		const FGeometry& Geometry,
+		const FDragDropEvent& Event,
+		UDragDropOperation* Operation) override;
+
 	/** Where the player is docked, so the overlay says which station this is. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> StationNameText;
@@ -421,6 +444,8 @@ protected:
 	 * @param bCanSell        False when the player holds none of it, so Sell can be greyed rather
 	 *                        than offering an order they cannot back.
 	 * @param HeldQuantity    The most they could sell.
+	 * @param DefaultQuantity The amount to start on — what was dragged, or everything held when the
+	 *                        prompt was opened from a button rather than a drop.
 	 * @param bHasMarket      Whether a market price exists to suggest at all.
 	 * @param bHasGuaranteed  Whether a standing order exists. Sell side only — factions buy raw
 	 *                        material, they do not sell it.
@@ -431,6 +456,7 @@ protected:
 		bool bSell,
 		bool bCanSell,
 		int32 HeldQuantity,
+		int32 DefaultQuantity,
 		int64 MarketPriceMinorUnits,
 		bool bHasMarket,
 		int64 GuaranteedPriceMinorUnits,
@@ -475,6 +501,9 @@ protected:
 	TSubclassOf<USpaceMMOTextRow> RowClass;
 
 private:
+	/** Opens the order prompt, starting on a given amount, or on everything when that is zero. */
+	void OpenOrderPrompt(bool bSell, int32 StartingQuantity);
+
 	/** The backend subsystem, or null. */
 	class USpaceMMOBackendClient* MarketClient() const;
 
