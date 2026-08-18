@@ -494,17 +494,38 @@ not exist in a server configuration, so the scene lighting had to move behind `#
 ### Running the automation tests
 
 ```bash
-"/d/Programming/UnrealEngine/UE_5.8/Engine/Binaries/Win64/UnrealEditor-Cmd.exe" \
-  "D:\Programming\SpaceMMO\client\SpaceMMO.uproject" \
-  -ExecCmds="Automation RunTests SpaceMMO" \
-  -testexit="Automation Test Queue Empty" \
-  -unattended -nopause -nosplash -log
+scripts/tests.bat                     # everything
+scripts/tests.bat SpaceMMO.HUD        # one category
+scripts/tests.bat SpaceMMO 176        # everything, and assert the count
 ```
 
-Three flag details, each of which cost a debugging cycle:
+**Use the script rather than calling the editor directly**, and read its `PASS`/`FAIL` line. It
+exits non-zero on a failure, on a short run, and on a wrong count. Nothing else here does — see
+task 113, and `scripts/tests.ps1`, which explains why at length.
 
-- **`-testexit` is required.** Putting `Quit` in `-ExecCmds` exits as soon as tests are *queued*,
-  so the editor shuts down before any run — and exits 0, reporting success having done nothing.
+The short version is that neither way of ending an automation run works properly:
+
+- **`-testexit` force-exits.** It is a log watcher (`FOutputDeviceTestExit`,
+  `LaunchEngineLoop.cpp:397`) and the next tick calls `RequestExit(Force=true)` — no clean
+  shutdown, no guaranteed flush, so the log can lose the last tests and the completion line. It
+  also leaves `GIsCriticalError` unset, so **the editor exits 0 even when tests fail**
+  (`AutomationCommandline.cpp:491`). Its exit code has never meant anything.
+- **`Automation SoftQuit` shuts down cleanly** and writes a complete log — then hangs partway
+  through editor shutdown and never exits. Measured 18 August: 29 minutes on a two-test run.
+
+So the script runs with `SoftQuit`, waits for the completion line, and kills the editor itself. The
+log is the source of truth and the script's exit code is the contract.
+
+Three more flag details, each of which cost a debugging cycle:
+
+- **Plain `Quit` in `-ExecCmds` is the engine's quit command, not the automation one.** It exits as
+  soon as tests are queued — before any run, reporting success having done nothing. `Automation
+  SoftQuit` is the one that waits, and the engine re-queues it behind a pending run.
+- **Quote `-ExecCmds` yourself when launching from PowerShell.** `Start-Process -ArgumentList`
+  drops the quotes, the value arrives split on spaces, and the editor starts, reports "Ready to
+  start automation", queues nothing and idles indefinitely — which reads as a slow suite rather
+  than a broken command line. Check `LogInit: Command Line:` before believing a flag arrived; the
+  script asserts it now.
 - **`-nullrhi` crashes UE 5.8** on a `TNotNull` assertion immediately after engine init. It is the
   obvious flag for headless runs and it does not work.
 - **`-NoShaderCompile` trips `Assertion failed: AllowShaderCompiling()`.** The editor must be able

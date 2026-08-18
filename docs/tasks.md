@@ -1488,36 +1488,52 @@ M4's premise is hauling.
 
 ## 113 — The automation run sometimes stops two tests early, and looks green doing it
 
-**Pending. Observed twice on 14 August**, and worth fixing before it costs somebody a wrong
-conclusion.
+**Understood and fixed, 18 August.** Observed twice on 14 August; the cause was in the engine and
+took reading rather than reproducing, which is just as well because it never reproduced on demand.
 
-The full suite occasionally ends during the second-to-last test — `SpaceMMO.Walk.ReachesTopSpeed`
-both times — with **exit code 0, zero failures, and no completion line**. Counting
-`Result={Success}` alone gives a plausible-looking number (163 or 166 instead of 165) and reports
-success, which is how it went unnoticed the first time: it was written off as a log-flush artifact,
-and it is not.
+**It was the flag that ends the run.** `-testexit` is a log watcher — `FOutputDeviceTestExit`,
+`LaunchEngineLoop.cpp:397` — that substring-matches every line from any thread and then calls
+`RequestExit(Force=true)` on the next engine tick. A forced exit means no clean shutdown and no
+guaranteed log flush, so losing the last test results and the completion line is not an anomaly, it
+is what that code does. The "log-flush artefact" it was written off as the first time was exactly
+right about the mechanism and wrong to dismiss it.
 
-What is known:
+**The worse half nobody had noticed: the exit code never meant anything.** Nothing on that path sets
+`GIsCriticalError`, so the editor exits 0 with failing tests (`AutomationCommandline.cpp:491-504`).
+Every "exit code 0" in this repository's history carried no information; the failure count came from
+grepping the log by hand, which is the only reason failures were ever caught.
 
-- **Not the test.** `SpaceMMO.Walk` run alone passed 6 of 6 with the completion line, three times.
-  `ReachesTopSpeed` is 720 calls to a pure function with no world and no rendering.
-- **Not reproducible on demand.** Three consecutive full runs afterwards each reported
-  `Queue Empty 165 tests performed`, 0 failures.
-- **Always at the tail**, one or two tests from the end, which points at shutdown rather than at
-  whatever test happens to be running. Seen three times by 14 August: twice ending during
-  `ReachesTopSpeed` (second to last) and once during `TurnsAboutTheNormal` (last). Both belong to
-  `SpaceMMO.Walk`, which is simply what runs last alphabetically — and both pass when that category
-  runs alone.
-- No crash dump, no assert, no error line — the log simply stops.
+**Ruled out: `Automation SoftQuit` on its own.** It is the right command — the engine re-queues it
+behind a pending run, sets `GIsCriticalError` from the reports, and shuts down gracefully, so the log
+is complete and the completion line is written. It then hangs partway through editor shutdown and
+never exits. Measured 18 August: 29 minutes on a two-test run, killed by hand.
 
-**The mitigation is already in use and should stay:** assert the
-`...Automation Test Queue Empty N tests performed` line and the expected N, never a bare count of
-successes. A count cannot distinguish "all passed" from "stopped early having passed everything it
-reached", and those are very different claims.
+**Ruled out: plain `Quit` in `-ExecCmds`**, which is what `setup.md` used to warn about. It is the
+*engine's* quit console command rather than the automation one, which is why it exits before any
+test runs — a naming collision, not a flaw in the approach, and the reason `-testexit` was reached
+for in the first place.
 
-Worth doing eventually: run with `-stdout -FullStdOutLogOutput` and capture the exit path, or bisect
-by running the suite minus the last category. Low priority while the completion-line check holds,
-but it undermines every "N tests pass" claim until it is understood.
+So `scripts/tests.ps1` runs with `SoftQuit`, waits for the completion line, and supplies the
+terminator itself. The log is the source of truth and the script's exit code is the contract; the
+editor's is untrustworthy under either flag.
+
+It also asserts things that have each cost time here:
+
+- **The completion line**, never a count of `Result={Success}`. A count cannot tell "all passed"
+  from "stopped early having passed everything it reached", and it over-counts anyway — 166 for a
+  165-test suite, because cluster lines match too.
+- **`LogInit: Command Line:` contains `RunTests`.** `Start-Process -ArgumentList` drops the quotes
+  around `-ExecCmds`, the value arrives split on spaces, and the editor starts, reports "Ready to
+  start automation", queues nothing and idles indefinitely. That reads as a slow suite; it cost
+  twenty minutes before the check existed. This is the machine's argument-mangling hazard again.
+- **The expected count**, when given.
+
+The log is deleted before each run, so a run that dies early cannot be read as the previous one's
+result, and a truncated run is copied aside with its last twelve lines printed — a forced exit
+leaves no error to read, so that is the only evidence there would be.
+
+**Verified by planting a failing test**: the runner reports `FAIL`, names it, and exits 1. The full
+suite reports `PASS: 176 tests, 0 failures` and exits 0.
 
 ## 114 — Docking survives a restart but the ship does not
 
