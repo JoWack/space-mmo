@@ -586,6 +586,14 @@ FString USpaceMMOStationOverlay::CreditsText(const int64 MinorUnits)
 void USpaceMMOStationOverlay::ConfirmOrderInCredits(
 	const bool bSell, const FString& Price, const int32 Quantity)
 {
+	// Nothing pending, so there is nothing to price. ConfirmOrder already ignores this case and
+	// says nothing; complaining about the price first turned a stray call into a message about a
+	// market, which is how flying along pressing a key produced "'0' is not a price".
+	if (PendingOrderItemDefId == 0)
+	{
+		return;
+	}
+
 	int64 MinorUnits = 0;
 
 	if (!FSpaceMMOBackendProtocol::ParseCredits(Price, MinorUnits) || MinorUnits <= 0)
