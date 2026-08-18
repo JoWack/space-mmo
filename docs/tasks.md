@@ -1252,6 +1252,41 @@ ever collapses back into a formatted zero — verified by collapsing it, 16 Augu
 
 `economy-design.md` §7 already names price history as the source for this; not used yet.
 
+**`H`, `N` and `B` are retired**, with their handlers, their bindings and their `DefaultInput.ini`
+mappings. They cycled a holding, listed ten of it at a guessed price and bought the best ask — the
+only way to reach a market before there was a screen. The catalogue replaced all three, and
+`SellableHoldings`, `TryGetSelectedHolding` and `ListingPriceFor` went with them. Those keys are free.
+
+**The book panel follows the catalogue selection, and nothing else.** It was fed by both that and the
+player's selected holding, and the holding won on every two-second poll — so clicking a row fetched
+the right book and had its heading rewritten with the old item's name a frame later. On screen that
+read as the prices flashing and reverting. It also now distinguishes *loading* from *nobody is
+trading this*, because rendering the previous item's orders under a new name is a price for the
+wrong thing.
+
+**Prices are typed as credits.** `ConfirmOrderInCredits` parses "20.00" exactly, digit by digit
+rather than through a float. The conversion was the Widget Blueprint's job for exactly one playtest,
+and the first order placed through it went in at a hundredth of the intended price — no error, a
+plausible figure, real money. That order is what produced 119.
+
+**The book is rows, not text.** Quantity and price have their own columns, and each resting order
+carries a button labelled with what the *player* would be doing — `Buy 4` under SELLING, `Sell 100`
+under BUYING. Taking one places the opposite side at that order's price for its remaining quantity:
+it buys the **price**, not the order, because matching is price-time priority and somebody resting at
+the same price who got there first fills instead. Same goods, same price.
+
+**Your own rows show but cannot be taken.** The book carries an `IsYours` bool — a flag rather than a
+name, decided 17 August: who placed an order is nobody's business, and the only thing the client
+needs is whether taking it would be a self-trade. It is ownership-checked, so it cannot be used to
+work out who owns what one order at a time. Without it, clicking Buy on your own ask places a buy
+that cannot cross and simply rests — which is how an ask at 0.01 cr and a bid at 20.00 cr came to sit
+on one book looking like a broken market.
+
+`BuildMarketPanel` and the old `MarketRows` text panel are gone with it. The `bLoaded` distinction it
+carried moved into `BuildBookRows` rather than being deleted: an empty book and an unanswered one
+look identical and mean opposites, and two frames of "no market exists" for an actively traded item
+is a conclusion a player would act on.
+
 Follow-on: 116 (drag a stack onto the market to sell it) is still open.
 
 ## 110 — Menus
@@ -1602,6 +1637,46 @@ dragged into them. The check now requires the tool in the character's carried in
 A laser already sitting in a hangar must be dragged into CARRIED before it can be used, which is a
 real behaviour change rather than a silent fix. Equipment slots will narrow this further when they
 exist; carried is the honest middle step.
+
+## 119 — An order you placed cannot be found or withdrawn
+
+**Built 17 August; the Widget Blueprint half is Joe's and outstanding.** Found by Joe the same day,
+holding an order he could not get rid of.
+
+Nothing lists a character's own orders, and nothing in the client calls cancel — so once an order is
+placed it rests until it fills or expires, whatever it says. Joe placed a sell order at 0.01 cr
+through the pre-credits-parsing prompt and had no way to withdraw it.
+
+`MarketService.CancelOrderAsync` exists and works, and `POST /market/orders/cancel` is wired to it.
+The missing pieces are: an endpoint answering "what have I got resting?", a client fetch, somewhere
+to show them, and a cancel action.
+
+**Not merely a convenience.** Sell orders reserve goods and buy orders lock credits, so an order
+nobody can withdraw is inventory and money permanently out of a player's reach. Every wrong price is
+permanent until expiry.
+
+**Decided: every station's orders, with the far ones marked rather than hidden.** Orders are placed at
+a place (ADR-0008) and the server already lets any owner cancel from anywhere — it checks ownership,
+not docking. Scoping the list to where the player is standing would hide precisely the order they
+opened it to find.
+
+**Decided: cancel without confirmation.** Nothing is destroyed — escrow returns to the balance and
+goods to the hangar — so a misclick costs queue position, and a prompt on every withdrawal would be
+noise on the common case.
+
+`GET /market/my-orders?characterId=` answers with every open order, the station named, what is left
+resting rather than what was placed, and what each is holding. A fourth overlay tab on `4` lists them
+with a cancel per row and a footer naming the total locked.
+
+**Worth knowing: a `Select` projection over a `Credits` property translates fine.** Only `Min`/`Max`
+aggregation over one does not (see 109). The endpoint was tested for a 200 specifically because that
+distinction is invisible at compile time.
+
+**The list latched, exactly as the catalogue had.** `bRequestedMyOrders` was set once and never
+cleared, so a newly placed order did not appear. That is the second instance of one bug — a bool
+standing in for "have I asked yet" cannot tell "asked" from "asked, and the answer is now stale".
+Opening the tab clears it and placing an order refetches. Worth grepping for the pattern before
+adding a third.
 
 ## 96 — Author world content graphically
 

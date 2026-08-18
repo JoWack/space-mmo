@@ -124,6 +124,9 @@ public:
 	void ShowIndustryTab();
 	void ShowQuestsTab();
 
+	/** And 4, for the orders this character has resting anywhere. */
+	void ShowMyOrdersTab();
+
 	/**
 	 * The three panels the station overlay renders, and where the player is.
 	 *
@@ -133,7 +136,6 @@ public:
 	 */
 	void GetStationPanels(
 		FString& OutStationName,
-		TArray<FString>& OutMarket,
 		TArray<FString>& OutIndustry,
 		TArray<FString>& OutQuests) const;
 
@@ -184,9 +186,6 @@ public:
 	/** Whether the inventory screen is open. Same reasoning as bSkillsScreenOpen. */
 	bool bInventoryScreenOpen = false;
 
-	/** So closing the inventory only recaptures the mouse if opening it was what released one. */
-	bool bMouseWasCapturedBeforeInventory = false;
-
 	/** So docking somewhere new can open the overlay, and undocking can close it. */
 	int32 LastDockedStationId = 0;
 
@@ -204,19 +203,6 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Identity")
 	static FString GroupDigits(int64 Value);
-
-	/**
-	 * Builds the market panel: what is selected, what it would list at, and the book around it.
-	 *
-	 * Pure and static like the others. Both sides are sorted towards the spread — asks ascending,
-	 * bids descending — because book order puts the least relevant price at the top of each side,
-	 * which is backwards for somebody deciding whether to trade.
-	 */
-	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
-	static TArray<FString> BuildMarketPanel(
-		const FString& ItemName,
-		const TArray<FBackendBookEntry>& Book,
-		int64 ListingPriceMinorUnits);
 
 	/**
 	 * Holdings that could back a sell order here: stocked station hangars, sorted as the panel
@@ -348,11 +334,15 @@ private:
 	void ToggleMouseCapture();
 
 	/**
-	 * Whether the game currently owns the mouse. On by default.
+	 * Whether the player wants the game to own the mouse. On by default.
 	 *
 	 * The release key exists because two clients share one desktop during testing, and a captured
 	 * cursor cannot reach the other window. Alt-tab also works; this is the version that does not
 	 * make the first client lose focus.
+	 *
+	 * <strong>A preference, not the current state.</strong> An open screen overrides it without
+	 * changing it, so closing the screen restores whatever the player had chosen — see
+	 * <c>ApplyMouseCapture</c>.
 	 */
 	bool bMouseCaptured = true;
 
@@ -369,12 +359,6 @@ private:
 	/** Accepts the first quest the server says is available. */
 	void AcceptNextQuest();
 
-	/** <see cref="FilterSellable"/> over what the backend last sent. */
-	TArray<FBackendInventoryItem> SellableHoldings() const;
-
-	bool TryGetSelectedHolding(FBackendInventoryItem& OutItem) const;
-
-	/** Stand-in for a price box. Well clear of the faction floor, which exists to be the worst deal. */
 	/**
 	 * The station the market keys off: where this character is docked, or zero.
 	 *
@@ -383,22 +367,10 @@ private:
 	 * so asking with the right one is the client's job, not a hope.
 	 */
 
-	static int64 ListingPriceFor(const FBackendInventoryItem& Item);
-
-	void CycleHolding();
-
 	void RefreshBook();
 
-	void ListSelectedForSale();
-
-	void BuyBestAsk();
-
 	/** Which sellable holding the H key has landed on. */
-	int32 SelectedHoldingIndex = 0;
-
 	/** Units per market action. Small, like the faction parcel, and for the same reason. */
-	static constexpr int32 MarketParcel = 10;
-
 	/**
 	 * Units sold per press. Deliberately small.
 	 *

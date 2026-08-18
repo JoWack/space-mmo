@@ -12,6 +12,15 @@ enum class ESpaceMMOStationTab : uint8
 	Market,
 	Industry,
 	Quests,
+
+	/**
+	 * What this character has resting on a book, anywhere.
+	 *
+	 * The one tab that is not about the station being stood in. It is here rather than on its own
+	 * screen because it is read while trading and acted on the same way, but the orders it lists may
+	 * be anywhere -- see task 119.
+	 */
+	MyOrders,
 };
 
 /**
@@ -91,6 +100,156 @@ private:
 	TWeakObjectPtr<class USpaceMMOStationOverlay> OwningOverlay;
 };
 
+/** One row of the book: either a side heading, or an order somebody could take. */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FSpaceMMOBookRowText
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	int64 OrderId = 0;
+
+	/** True for "SELLING" and "BUYING". Headings carry no price and no button. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bIsHeading = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Heading;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Quantity;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Price;
+
+	/** "Buy 4" or "Sell 100" — sized to this row, because taking it fills exactly this much. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString ActionLabel;
+
+	/**
+	 * Whether the button does anything.
+	 *
+	 * False on your own orders. Matching refuses a self-trade, so taking one places an order that
+	 * cannot cross and simply rests — a crossed book that looks like a broken market.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bCanTake = false;
+};
+
+/** One book row's widget. Its own, because each carries a button. */
+UCLASS()
+class SPACEMMOBACKEND_API USpaceMMOBookRow : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void SetRow(const FSpaceMMOBookRowText& Row);
+
+	void SetOwningOverlay(class USpaceMMOStationOverlay* Overlay) { OwningOverlay = Overlay; }
+
+	/** Takes this order. Wire the row's button to it. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
+	void Take();
+
+	/** Bind the button's visibility to this, and its enabled state to bCanTake. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bIsHeading = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bCanTake = false;
+
+protected:
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> HeadingText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> QuantityText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> PriceText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> ActionText;
+
+private:
+	FSpaceMMOBookRowText Row;
+
+	TWeakObjectPtr<class USpaceMMOStationOverlay> OwningOverlay;
+};
+
+/** One of your resting orders, already worded. */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FSpaceMMOMyOrderRowText
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	int64 OrderId = 0;
+
+	/** "SELL" or "BUY". */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Side;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Item;
+
+	/** What is left resting, not what was placed. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Quantity;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Price;
+
+	/** Where it rests. Shown on every row, because an order elsewhere is the one worth finding. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Station;
+
+	/** Whether it rests somewhere other than here, for marking the row. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bElsewhere = false;
+};
+
+/** One resting order's widget. Its own, because each row carries a cancel. */
+UCLASS()
+class SPACEMMOBACKEND_API USpaceMMOMyOrderRow : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void SetRow(const FSpaceMMOMyOrderRowText& Row);
+
+	void SetOwningOverlay(class USpaceMMOStationOverlay* Overlay) { OwningOverlay = Overlay; }
+
+	/** Withdraws this order. Wire the row's cancel button to it. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
+	void Cancel();
+
+	/** Bind a marker to this: the order rests at a different station. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bElsewhere = false;
+
+protected:
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> SideText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> ItemText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> QuantityText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> PriceText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StationText;
+
+private:
+	FSpaceMMOMyOrderRowText Row;
+
+	TWeakObjectPtr<class USpaceMMOStationOverlay> OwningOverlay;
+};
+
 /**
  * One line of text in a panel.
  *
@@ -146,8 +305,56 @@ public:
 	static TArray<FSpaceMMOMarketRowText> BuildMarketRows(
 		const TArray<FBackendMarketListing>& Listings);
 
+	/**
+	 * Words the resting-order list. Pure, static and tested without a widget or a server.
+	 *
+	 * Quantity is what is left rather than what was placed: a partly filled order is exactly the one
+	 * whose original size would mislead somebody deciding whether to withdraw it.
+	 */
+	static TArray<FSpaceMMOMyOrderRowText> BuildMyOrderRows(
+		const TArray<FBackendMyOrder>& Orders, int32 HereStationId);
+
+	/**
+	 * The line under the list: how much is resting, and what it is holding.
+	 *
+	 * The figure that makes a forgotten order matter. Sell orders hold goods and buy orders hold
+	 * credits, so an order nobody remembers is stock and money out of the player's reach -- and
+	 * without this they would only discover it by coming up short somewhere else.
+	 */
+	static FString BuildMyOrdersFooter(const TArray<FBackendMyOrder>& Orders);
+
+	/**
+	 * Words the book. Pure, static and tested without a widget or a server.
+	 *
+	 * Asks cheapest first and bids richest first: each side leads with the price nearest the spread,
+	 * which is the one somebody deciding whether to trade would actually get.
+	 *
+	 * <c>bLoaded</c> separates two things that look identical and mean opposites: nobody is trading
+	 * this, and nobody has answered yet. A fetch is in flight for a frame or two after a click, and
+	 * an empty book shown during it invites somebody to conclude a market does not exist.
+	 */
+	static TArray<FSpaceMMOBookRowText> BuildBookRows(
+		const TArray<FBackendBookEntry>& Book, bool bLoaded);
+
+	/**
+	 * Takes a resting order: places the opposite side at its price, for its remaining quantity.
+	 *
+	 * <strong>It buys the price, not the order.</strong> Matching is price-time priority, so if
+	 * somebody else is resting at the same price and got there first, theirs fills instead. Same
+	 * goods at the same price — naming one order would be a different market design.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
+	void TakeBookOrder(int64 OrderId);
+
+	/** Withdraws one. Called by a row's cancel button. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
+	void CancelRestingOrder(int64 OrderId);
+
 	/** Picks the item whose book is shown below the list. */
 	void SelectMarketItem(int32 ItemDefId);
+
+	/** Which item's book is being shown, or 0 for none. */
+	int32 GetSelectedItemDefId() const { return SelectedItemDefId; }
 
 	/** What the search box holds. Set from the Blueprint; refetches when it changes. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
@@ -163,6 +370,23 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
 	void BeginOrder(bool bSell);
+
+	/**
+	 * Called by the Blueprint's order prompt, with the price exactly as the player typed it.
+	 *
+	 * <strong>Prefer this to ConfirmOrder.</strong> Credits are stored in hundredths so that adding
+	 * prices is exact, but that is a storage decision and no part of the interface should be doing
+	 * arithmetic around it. Left to the Blueprint, the first order placed went in at a hundredth of
+	 * the price intended: no error, a plausible figure, real money.
+	 *
+	 * A price that is not a number is refused and says so, rather than being placed as zero.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
+	void ConfirmOrderInCredits(bool bSell, const FString& Price, int32 Quantity);
+
+	/** Renders minor units the way the market shows them, for the prompt's suggestion buttons. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|HUD")
+	static FString CreditsText(int64 MinorUnits);
 
 	/** Called by the Blueprint's order prompt. Price is in minor units; 100 to the credit. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
@@ -180,6 +404,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bQuestsTab = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bMyOrdersTab = false;
 
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
@@ -209,6 +436,25 @@ protected:
 		int64 GuaranteedPriceMinorUnits,
 		bool bHasGuaranteed);
 
+	/** The book under the catalogue, as rows rather than lines. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UPanelWidget> BookRows;
+
+	/** What one book row looks like. Set this in the Widget Blueprint's class defaults. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	TSubclassOf<USpaceMMOBookRow> BookRowClass;
+
+	/** The resting-order list, and its summary line. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UPanelWidget> MyOrderRows;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> MyOrdersFooterText;
+
+	/** What one resting-order row looks like. Set this in the Widget Blueprint's class defaults. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	TSubclassOf<USpaceMMOMyOrderRow> MyOrderRowClass;
+
 	/** The market's item list, above the book. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UPanelWidget> MarketListingRows;
@@ -218,9 +464,6 @@ protected:
 	TSubclassOf<USpaceMMOMarketRow> MarketRowClass;
 
 	/** One container per tab. Rows are rebuilt into whichever is showing. */
-	UPROPERTY(meta = (BindWidgetOptional))
-	TObjectPtr<class UPanelWidget> MarketRows;
-
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UPanelWidget> IndustryRows;
 
@@ -250,12 +493,20 @@ private:
 	 * still have nothing new to say — and tearing down a few dozen widgets on each one would be
 	 * waste that shows up as a stutter rather than as a number.
 	 */
-	FString MarketSignature;
 	FString IndustrySignature;
 	FString QuestSignature;
 
 	/** What the listing rows were last built from. */
 	FString ListingSignature;
+
+	/** And the resting-order rows. */
+	FString MyOrdersSignature;
+
+	/** And the book rows. */
+	FString BookSignature;
+
+	/** So the order list is asked for on opening the tab rather than every tick. */
+	bool bRequestedMyOrders = false;
 
 	/** Which item's book is shown, or 0. */
 	int32 SelectedItemDefId = 0;

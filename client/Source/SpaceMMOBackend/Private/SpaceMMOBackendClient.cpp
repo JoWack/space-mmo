@@ -790,11 +790,18 @@ void USpaceMMOBackendClient::FetchBook(const int32 StationId, const int32 ItemDe
 {
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
 
+	// Sent so the server can mark the player's own rows. Authenticated for the same reason -- the
+	// book is public, but answering "is this order yours?" for an arbitrary character would not be.
+	const FString Mine = SelectedCharacterId != 0
+		? FString::Printf(TEXT("&characterId=%d"), SelectedCharacterId)
+		: FString();
+
 	Send(
 		TEXT("GET"),
-		FString::Printf(TEXT("/market/book?stationId=%d&itemDefId=%d"), StationId, ItemDefId),
+		FString::Printf(
+			TEXT("/market/book?stationId=%d&itemDefId=%d%s"), StationId, ItemDefId, *Mine),
 		FString(),
-		false,
+		SelectedCharacterId != 0,
 		[WeakThis, ItemDefId](const FString& Body)
 		{
 			USpaceMMOBackendClient* Self = WeakThis.Get();
@@ -884,6 +891,63 @@ void USpaceMMOBackendClient::PlaceOrder(
 			Self->SelectCharacter(CharacterId);
 			Self->FetchCharacters();
 			Self->FetchBook(StationId, ItemDefId);
+
+			// And the player's own list, because what they just placed belongs on it -- whether it
+			// rested whole, filled in part, or vanished into an existing order.
+			Self->FetchMyOrders(CharacterId);
+		});
+}
+
+void USpaceMMOBackendClient::FetchMyOrders(const int32 CharacterId)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/market/my-orders?characterId=%d"), CharacterId),
+		FString(),
+		true,
+		[WeakThis](const FString& Body)
+		{
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				TArray<FBackendMyOrder> Parsed;
+
+				FSpaceMMOBackendProtocol::ParseMyOrders(Body, Parsed);
+
+				Self->MyOrders = MoveTemp(Parsed);
+
+				Self->OnCharacterStateLoaded.Broadcast();
+			}
+		});
+}
+
+void USpaceMMOBackendClient::CancelOrder(const int32 CharacterId, const int64 OrderId)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/market/orders/cancel"),
+		FSpaceMMOBackendProtocol::MakeCancelOrderBody(CharacterId, OrderId),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			USpaceMMOBackendClient* Self = WeakThis.Get();
+
+			if (Self == nullptr)
+			{
+				return;
+			}
+
+			Self->OnIndustryMessage.Broadcast(TEXT("Order withdrawn"), true);
+
+			// Cancelling returns escrow to a balance or goods to a hangar, so both the list and what
+			// the character owns have moved. Asked for rather than adjusted here: the server decides
+			// how much came back, and a client that guessed would be wrong on a partly filled order.
+			Self->FetchMyOrders(CharacterId);
+			Self->SelectCharacter(CharacterId);
+			Self->FetchCharacters();
 		});
 }
 

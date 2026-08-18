@@ -87,6 +87,85 @@ FString FSpaceMMOBackendProtocol::MakeCreateCharacterBody(const FString& Name, c
 	return Output;
 }
 
+bool FSpaceMMOBackendProtocol::ParseMyOrders(
+	const FString& Json, TArray<FBackendMyOrder>& OutOrders)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutOrders.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+		FBackendMyOrder Order;
+
+		// An order with no id cannot be withdrawn, and every row here offers a cancel.
+		if (!Object.IsValid() || !ReadInt64(Object, TEXT("orderId"), Order.OrderId)
+			|| Order.OrderId <= 0)
+		{
+			continue;
+		}
+
+		Object->TryGetStringField(TEXT("stationName"), Order.StationName);
+		Object->TryGetStringField(TEXT("itemName"), Order.ItemName);
+
+		int64 Scratch = 0;
+
+		if (ReadInt64(Object, TEXT("stationId"), Scratch))
+		{
+			Order.StationId = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("itemDefId"), Scratch))
+		{
+			Order.ItemDefId = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("side"), Scratch))
+		{
+			Order.Side = ToEnum(Scratch, EBackendOrderSide::Buy, 1);
+		}
+
+		ReadInt64(Object, TEXT("priceMinorUnits"), Order.PriceMinorUnits);
+		ReadInt64(Object, TEXT("escrowedMinorUnits"), Order.EscrowedMinorUnits);
+
+		if (ReadInt64(Object, TEXT("quantityRemaining"), Scratch))
+		{
+			Order.QuantityRemaining = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("reservedQuantity"), Scratch))
+		{
+			Order.ReservedQuantity = static_cast<int32>(Scratch);
+		}
+
+		OutOrders.Add(Order);
+	}
+
+	return true;
+}
+
+FString FSpaceMMOBackendProtocol::MakeCancelOrderBody(const int32 CharacterId, const int64 OrderId)
+{
+	FString Output;
+
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+
+	Writer->WriteObjectStart();
+	Writer->WriteValue(TEXT("characterId"), CharacterId);
+	Writer->WriteValue(TEXT("orderId"), OrderId);
+	Writer->WriteObjectEnd();
+	Writer->Close();
+
+	return Output;
+}
+
 bool FSpaceMMOBackendProtocol::ParseMarketListings(
 	const FString& Json, TArray<FBackendMarketListing>& OutListings)
 {
@@ -859,6 +938,8 @@ bool FSpaceMMOBackendProtocol::ParseBook(
 			Entry.QuantityRemaining = static_cast<int32>(Scratch);
 		}
 
+		Object->TryGetBoolField(TEXT("isYours"), Entry.bIsYours);
+
 		OutEntries.Add(Entry);
 	}
 
@@ -954,6 +1035,87 @@ FString FSpaceMMOBackendProtocol::FormatCredits(const int64 MinorUnits)
 	const FString Sign = MinorUnits < 0 ? TEXT("-") : TEXT("");
 
 	return FString::Printf(TEXT("%s%s.%02lld"), *Sign, *Grouped, Fraction);
+}
+
+bool FSpaceMMOBackendProtocol::ParseCredits(const FString& Text, int64& OutMinorUnits)
+{
+	OutMinorUnits = 0;
+
+	// Whatever a player types around the number: thousands separators from copying a figure off the
+	// screen, a trailing unit, spaces. None of it changes what they meant.
+	FString Clean = Text;
+	Clean.TrimStartAndEndInline();
+	Clean.ReplaceInline(TEXT(","), TEXT(""));
+	Clean.ReplaceInline(TEXT(" "), TEXT(""));
+
+	if (Clean.EndsWith(TEXT("cr"), ESearchCase::IgnoreCase))
+	{
+		Clean.LeftChopInline(2);
+	}
+
+	if (Clean.IsEmpty())
+	{
+		return false;
+	}
+
+	const bool bNegative = Clean.StartsWith(TEXT("-"));
+
+	if (bNegative || Clean.StartsWith(TEXT("+")))
+	{
+		Clean.RightChopInline(1);
+	}
+
+	FString Whole;
+	FString Fraction;
+
+	if (!Clean.Split(TEXT("."), &Whole, &Fraction))
+	{
+		Whole = Clean;
+	}
+
+	// Parsed digit by digit rather than through a float. "20.10" as a double is not twenty and a
+	// tenth, and multiplying that by a hundred is how an order goes in a unit under what was typed.
+	auto DigitsOnly = [](const FString& Part)
+	{
+		for (const TCHAR Character : Part)
+		{
+			if (!FChar::IsDigit(Character))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	};
+
+	if (!DigitsOnly(Whole) || !DigitsOnly(Fraction) || (Whole.IsEmpty() && Fraction.IsEmpty()))
+	{
+		return false;
+	}
+
+	// Padded to hundredths, and anything finer is refused rather than rounded away: a player who
+	// typed three decimals meant something this cannot express, and quietly charging them a
+	// different price is worse than saying so.
+	if (Fraction.Len() > 2)
+	{
+		return false;
+	}
+
+	while (Fraction.Len() < 2)
+	{
+		Fraction.AppendChar(TEXT('0'));
+	}
+
+	const int64 WholeUnits = Whole.IsEmpty() ? 0 : FCString::Atoi64(*Whole);
+
+	OutMinorUnits = WholeUnits * 100 + FCString::Atoi64(*Fraction);
+
+	if (bNegative)
+	{
+		OutMinorUnits = -OutMinorUnits;
+	}
+
+	return true;
 }
 
 bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(

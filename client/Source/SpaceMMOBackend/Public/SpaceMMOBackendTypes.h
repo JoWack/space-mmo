@@ -359,6 +359,17 @@ struct SPACEMMOBACKEND_API FBackendBookEntry
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
 	int32 QuantityRemaining = 0;
+
+	/**
+	 * Whether this is the player's own order.
+	 *
+	 * A flag rather than a name: who placed an order is nobody's business, and the only thing the
+	 * client needs is whether taking it would be a self-trade. Matching refuses those, so a buy
+	 * placed against your own ask cannot cross it and simply rests -- leaving a crossed book that
+	 * reads as a broken market rather than as a rule.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	bool bIsYours = false;
 };
 
 /**
@@ -417,6 +428,52 @@ struct SPACEMMOBACKEND_API FBackendMarketListing
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
 	bool bHasGuaranteed = false;
+};
+
+/**
+ * One of your own orders, still resting on a book somewhere.
+ *
+ * <strong>Every station, not only the one being stood in.</strong> Placing an order needs a place
+ * (ADR-0008); finding one you have forgotten is the opposite case, and it is the case that matters,
+ * because a resting order holds goods or credits the player cannot otherwise reach.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendMyOrder
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int64 OrderId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int32 StationId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	FString StationName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int32 ItemDefId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	FString ItemName;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	EBackendOrderSide Side = EBackendOrderSide::Buy;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int64 PriceMinorUnits = 0;
+
+	/** What is left, not what was placed: a partly filled order is the one that would mislead. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int32 QuantityRemaining = 0;
+
+	/** Credits locked against it. Zero for a sell order. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int64 EscrowedMinorUnits = 0;
+
+	/** Goods held against it. Zero for a buy order. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	int32 ReservedQuantity = 0;
 };
 
 /** One material a recipe consumes, per run. */

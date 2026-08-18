@@ -322,6 +322,23 @@ public:
 		int64 LimitPriceMinorUnits,
 		int32 Quantity);
 
+	/**
+	 * Loads every order this character has resting, at every station.
+	 *
+	 * Not scoped to where they are standing. Placing an order needs a place (ADR-0008) and finding
+	 * one you have forgotten is the opposite problem — the order is holding goods or credits, and
+	 * working out which station you left it at is the thing you needed the list for.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Market")
+	void FetchMyOrders(int32 CharacterId);
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
+	const TArray<FBackendMyOrder>& GetMyOrders() const { return MyOrders; }
+
+	/** Withdraws one, returning its escrow or its goods. Refreshes the list and the character. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Market")
+	void CancelOrder(int32 CharacterId, int64 OrderId);
+
 	/** Loads the journal and the list of quests that could be taken. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Quests")
 	void FetchQuests(int32 CharacterId);
@@ -497,6 +514,8 @@ private:
 	TArray<FBackendBookEntry> Book;
 
 	TArray<FBackendMarketListing> MarketListings;
+
+	TArray<FBackendMyOrder> MyOrders;
 
 	/** Which item Book holds orders for. Zero until one has been read. */
 	int32 BookItemDefId = 0;

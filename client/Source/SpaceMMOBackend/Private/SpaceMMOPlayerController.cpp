@@ -175,7 +175,13 @@ void ASpaceMMOPlayerController::ApplyMouseCapture()
 		return;
 	}
 
-	if (bMouseCaptured)
+	// A screen you click on outranks the preference, and gives it back untouched on closing. The
+	// alternative -- each screen remembering what the mouse was doing before it opened -- needs one
+	// flag per screen, and two open at once then disagree about who restores what: closing the
+	// inventory would snatch the cursor back while the station overlay was still waiting for a click.
+	const bool bScreenWantsCursor = bInventoryScreenOpen || bStationOverlayOpen;
+
+	if (bMouseCaptured && !bScreenWantsCursor)
 	{
 		// Set in code as well as in DefaultInput.ini. The ini values are defaults for a viewport,
 		// and anything that changes input mode later -- a menu, a level transition, the editor's
@@ -200,6 +206,17 @@ void ASpaceMMOPlayerController::ToggleMouseCapture()
 	bMouseCaptured = !bMouseCaptured;
 
 	ApplyMouseCapture();
+
+	// What actually happened, not what was asked for. An open screen keeps the cursor either way,
+	// and "Mouse captured" over a cursor still sitting on the screen reads as a broken key.
+	const bool bHeldByScreen = bInventoryScreenOpen || bStationOverlayOpen;
+
+	if (bMouseCaptured && bHeldByScreen)
+	{
+		ShowNotice(TEXT("Mouse stays free while a screen is open"), false);
+
+		return;
+	}
 
 	ShowNotice(
 		bMouseCaptured ? TEXT("Mouse captured") : TEXT("Mouse released - M to recapture"),
@@ -247,6 +264,9 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			TEXT("StationTabQuests"), IE_Pressed, this, &ASpaceMMOPlayerController::ShowQuestsTab);
 
 		InputComponent->BindAction(
+			TEXT("StationTabMyOrders"), IE_Pressed, this, &ASpaceMMOPlayerController::ShowMyOrdersTab);
+
+		InputComponent->BindAction(
 			TEXT("CycleRecipe"), IE_Pressed, this, &ASpaceMMOPlayerController::CycleRecipe);
 
 		InputComponent->BindAction(
@@ -260,15 +280,6 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 
 		InputComponent->BindAction(
 			TEXT("AcceptQuest"), IE_Pressed, this, &ASpaceMMOPlayerController::AcceptNextQuest);
-
-		InputComponent->BindAction(
-			TEXT("CycleHolding"), IE_Pressed, this, &ASpaceMMOPlayerController::CycleHolding);
-
-		InputComponent->BindAction(
-			TEXT("ListForSale"), IE_Pressed, this, &ASpaceMMOPlayerController::ListSelectedForSale);
-
-		InputComponent->BindAction(
-			TEXT("BuyFromMarket"), IE_Pressed, this, &ASpaceMMOPlayerController::BuyBestAsk);
 
 		InputComponent->BindAction(
 			TEXT("ToggleMouseCapture"),
@@ -392,141 +403,21 @@ TArray<FBackendInventoryItem> ASpaceMMOPlayerController::FilterSellable(
 	return Sellable;
 }
 
-TArray<FBackendInventoryItem> ASpaceMMOPlayerController::SellableHoldings() const
-{
-	const USpaceMMOBackendClient* Client = Backend();
-
-	return Client != nullptr
-		? FilterSellable(Client->GetInventory())
-		: TArray<FBackendInventoryItem>();
-}
-
-bool ASpaceMMOPlayerController::TryGetSelectedHolding(FBackendInventoryItem& OutItem) const
-{
-	const TArray<FBackendInventoryItem> Sellable = SellableHoldings();
-
-	if (Sellable.Num() == 0)
-	{
-		return false;
-	}
-
-	OutItem = Sellable[FMath::Clamp(SelectedHoldingIndex, 0, Sellable.Num() - 1)];
-
-	return true;
-}
-
-int64 ASpaceMMOPlayerController::ListingPriceFor(const FBackendInventoryItem& Item)
-{
-	// Ten times what a faction pays, or ten credits for something no faction buys.
-	//
-	// A placeholder for a price box, and deliberately well clear of the faction floor: the floor
-	// exists to be the worst deal available, so a listing at or near it would teach a player that
-	// trading with other people is not worth the trouble.
-	return Item.FactionBuyPriceMinorUnits > 0
-		? Item.FactionBuyPriceMinorUnits * 10
-		: 1000;
-}
-
-void ASpaceMMOPlayerController::CycleHolding()
-{
-	const int32 Count = SellableHoldings().Num();
-
-	if (Count == 0)
-	{
-		return;
-	}
-
-	SelectedHoldingIndex = (SelectedHoldingIndex + 1) % Count;
-
-	RefreshBook();
-}
-
 void ASpaceMMOPlayerController::RefreshBook()
 {
 	USpaceMMOBackendClient* Client = Backend();
 
-	FBackendInventoryItem Selected;
+	// Whatever the market screen is showing, which is the only thing that can be looked at. This
+	// used to re-ask for the player's selected holding every two seconds, on the poll -- so clicking
+	// a catalogue row fetched the right book and had it overwritten by the old one moments later.
+	// On screen that read as the prices flashing and reverting rather than as two fetches disagreeing.
+	const int32 ItemDefId =
+		StationOverlay != nullptr ? StationOverlay->GetSelectedItemDefId() : 0;
 
-	if (Client != nullptr && TryGetSelectedHolding(Selected))
+	if (Client != nullptr && ItemDefId != 0)
 	{
-		Client->FetchBook(DockedStationId(), Selected.ItemDefId);
+		Client->FetchBook(DockedStationId(), ItemDefId);
 	}
-}
-
-void ASpaceMMOPlayerController::ListSelectedForSale()
-{
-	USpaceMMOBackendClient* Client = Backend();
-
-	FBackendInventoryItem Selected;
-
-	if (Client == nullptr || CharacterId == 0 || !TryGetSelectedHolding(Selected))
-	{
-		ShowNotice(TEXT("Nothing at this station to sell"), false);
-
-		return;
-	}
-
-	Client->PlaceOrder(
-		CharacterId,
-		DockedStationId(),
-		Selected.ItemDefId,
-		EBackendOrderSide::Sell,
-		ListingPriceFor(Selected),
-		FMath::Min(Selected.Quantity, MarketParcel));
-}
-
-void ASpaceMMOPlayerController::BuyBestAsk()
-{
-	USpaceMMOBackendClient* Client = Backend();
-
-	FBackendInventoryItem Selected;
-
-	if (Client == nullptr || CharacterId == 0 || !TryGetSelectedHolding(Selected))
-	{
-		return;
-	}
-
-	// The book on screen might be another item's if a request is still in flight. Buying against
-	// the wrong one would spend real credits on something the player never looked at.
-	if (Client->GetBookItemDefId() != Selected.ItemDefId)
-	{
-		ShowNotice(TEXT("Book still loading"), false);
-
-		return;
-	}
-
-	const FBackendBookEntry* Best = nullptr;
-
-	for (const FBackendBookEntry& Entry : Client->GetBook())
-	{
-		if (Entry.Side != EBackendOrderSide::Sell || Entry.QuantityRemaining <= 0)
-		{
-			continue;
-		}
-
-		if (Best == nullptr || Entry.PriceMinorUnits < Best->PriceMinorUnits)
-		{
-			Best = &Entry;
-		}
-	}
-
-	if (Best == nullptr)
-	{
-		ShowNotice(TEXT("Nothing on sale here"), false);
-
-		return;
-	}
-
-	// A limit at the best ask rather than a market order. The engine crosses it immediately against
-	// that ask, and if somebody else takes it first this rests on the book instead of chasing the
-	// price upward — which is what a market order would do and is never what anybody meant.
-	Client->PlaceOrder(
-		CharacterId,
-		DockedStationId(),
-		Selected.ItemDefId,
-		EBackendOrderSide::Buy,
-		Best->PriceMinorUnits,
-		FMath::Min(Best->QuantityRemaining, MarketParcel));
 }
 
 void ASpaceMMOPlayerController::AcceptNextQuest()
@@ -720,9 +611,15 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// So is what you own, and where it is is the whole point -- so I works in flight too, which is
 	// where a hauler most wants to know what is still sitting in a hangar.
 	//
-	// Visible rather than HitTestInvisible: goods are dragged between its containers, and a screen
-	// that cannot be hit-tested cannot be dragged from.
-	Show(InventoryScreen, bInventoryScreenOpen, ESlateVisibility::Visible);
+	// SelfHitTestInvisible, which is the third thing and the one that is actually wanted here: rows
+	// inside it still take clicks and drags, but the screen itself does not.
+	//
+	// Visible looks equivalent and is not. Both screens fill the viewport, so the one added last --
+	// this one -- is on top of the whole window, including the half where it draws nothing, and a
+	// hit-testable root there consumes every click meant for the station overlay underneath. The
+	// symptom is precise and misleading: the market panel is visible, the cursor is over it, and
+	// nothing responds, while the same panel works perfectly when opened alone.
+	Show(InventoryScreen, bInventoryScreenOpen, ESlateVisibility::SelfHitTestInvisible);
 
 	// Open together, they take a side each and stop covering one another. That pairing is the whole
 	// point while transferring: goods move between a hangar and a hold, and reading one with the
@@ -754,14 +651,13 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 
 	LastDockedStationId = Station;
 
-	// Visible for the same reason as the inventory screen: it is acted on rather than read, and 116
-	// plans to drop goods onto its market tab.
-	Show(StationOverlay, bStationOverlayOpen, ESlateVisibility::Visible);
+	// SelfHitTestInvisible for the same reason as the inventory screen: rows, tabs, a search box and
+	// two order buttons are all clicked, but the empty half of a full-screen root must not be.
+	Show(StationOverlay, bStationOverlayOpen, ESlateVisibility::SelfHitTestInvisible);
 }
 
 void ASpaceMMOPlayerController::GetStationPanels(
 	FString& OutStationName,
-	TArray<FString>& OutMarket,
 	TArray<FString>& OutIndustry,
 	TArray<FString>& OutQuests) const
 {
@@ -786,14 +682,6 @@ void ASpaceMMOPlayerController::GetStationPanels(
 		}
 	}
 
-	// The same pure builders the debug panel uses. They are the only automated coverage the HUD's
-	// wording has, and rendering their output rather than replacing them is what keeps it.
-	FBackendInventoryItem Selling;
-
-	OutMarket = TryGetSelectedHolding(Selling)
-		? BuildMarketPanel(Selling.Name, Client->GetBook(), ListingPriceFor(Selling))
-		: BuildMarketPanel(FString(), TArray<FBackendBookEntry>(), 0);
-
 	OutIndustry = BuildIndustryPanel(
 		Client->GetRecipes(), Client->GetJobs(), Client->GetInventory(), SelectedRecipeIndex);
 
@@ -810,6 +698,10 @@ void ASpaceMMOPlayerController::ToggleStationOverlay()
 	}
 
 	bStationOverlayOpen = !bStationOverlayOpen;
+
+	// The same reason the inventory screen does it: rows are clicked, prices are typed and buttons
+	// are pressed here, none of which a captured cursor can reach.
+	ApplyMouseCapture();
 
 	UpdateHudContext();
 }
@@ -838,6 +730,14 @@ void ASpaceMMOPlayerController::ShowQuestsTab()
 	}
 }
 
+void ASpaceMMOPlayerController::ShowMyOrdersTab()
+{
+	if (StationOverlay != nullptr && bStationOverlayOpen)
+	{
+		StationOverlay->SetTab(ESpaceMMOStationTab::MyOrders);
+	}
+}
+
 void ASpaceMMOPlayerController::ToggleInventoryScreen()
 {
 	if (InventoryScreen == nullptr)
@@ -847,27 +747,11 @@ void ASpaceMMOPlayerController::ToggleInventoryScreen()
 
 	bInventoryScreenOpen = !bInventoryScreenOpen;
 
-	// Dragging needs a cursor, and the game holds the mouse by default. Opening the screen releases
-	// it; closing gives it back — but only if this was what took it. Somebody who pressed M to get
-	// their cursor for their own reasons should not have it snatched back by closing a screen they
-	// happened to open afterwards.
-	if (bInventoryScreenOpen)
-	{
-		bMouseWasCapturedBeforeInventory = bMouseCaptured;
-
-		if (bMouseCaptured)
-		{
-			bMouseCaptured = false;
-
-			ApplyMouseCapture();
-		}
-	}
-	else if (bMouseWasCapturedBeforeInventory && !bMouseCaptured)
-	{
-		bMouseCaptured = true;
-
-		ApplyMouseCapture();
-	}
+	// Dragging needs a cursor, and the game holds the mouse by default. ApplyMouseCapture reads the
+	// screen flags, so this neither takes nor restores the preference -- somebody who pressed M for
+	// their own reasons still has the cursor after closing this, and somebody who did not gets the
+	// game back.
+	ApplyMouseCapture();
 
 	// Asked for on opening rather than polled. What a player owns changes on the server -- a job
 	// claimed, a sale settled, another character hauling -- and a screen opened to work out where
@@ -950,75 +834,6 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 	}
 
 	Client->FetchJobs(CharacterId);
-}
-
-TArray<FString> ASpaceMMOPlayerController::BuildMarketPanel(
-	const FString& ItemName,
-	const TArray<FBackendBookEntry>& Book,
-	const int64 ListingPriceMinorUnits)
-{
-	TArray<FString> Lines;
-
-	Lines.Add(TEXT("-- Market --  H item  N list 10  B buy"));
-
-	if (ItemName.IsEmpty())
-	{
-		Lines.Add(TEXT("   nothing here a station can sell"));
-
-		return Lines;
-	}
-
-	Lines.Add(FString::Printf(
-		TEXT("   %s   N lists @ %s cr"),
-		*ItemName,
-		*FSpaceMMOBackendProtocol::FormatCredits(ListingPriceMinorUnits)));
-
-	// Asks ascending, so the first is what a buyer would pay; bids descending, so the first is what
-	// a seller would get. Showing them in book order instead would put the least relevant price at
-	// the top of each side, which is the wrong way round for someone deciding whether to trade.
-	TArray<FBackendBookEntry> Asks = Book.FilterByPredicate(
-		[](const FBackendBookEntry& E) { return E.Side == EBackendOrderSide::Sell; });
-
-	TArray<FBackendBookEntry> Bids = Book.FilterByPredicate(
-		[](const FBackendBookEntry& E) { return E.Side == EBackendOrderSide::Buy; });
-
-	Asks.Sort([](const FBackendBookEntry& A, const FBackendBookEntry& B)
-		{ return A.PriceMinorUnits < B.PriceMinorUnits; });
-
-	Bids.Sort([](const FBackendBookEntry& A, const FBackendBookEntry& B)
-		{ return A.PriceMinorUnits > B.PriceMinorUnits; });
-
-	auto AppendSide = [&Lines](const TCHAR* Label, const TArray<FBackendBookEntry>& Side)
-	{
-		if (Side.Num() == 0)
-		{
-			Lines.Add(FString::Printf(TEXT("      %s: none"), Label));
-
-			return;
-		}
-
-		FString Row;
-
-		// Three deep. A debug panel that printed a whole book would push everything else off the
-		// screen, and the prices that matter are the ones nearest the spread.
-		for (int32 Index = 0; Index < FMath::Min(3, Side.Num()); ++Index)
-		{
-			Row += FString::Printf(
-				TEXT("  %s x%d"),
-				*FSpaceMMOBackendProtocol::FormatCredits(Side[Index].PriceMinorUnits),
-				Side[Index].QuantityRemaining);
-		}
-
-		Lines.Add(FString::Printf(TEXT("      %s:%s"), Label, *Row));
-	};
-
-	// "sell orders" and "buy orders" rather than "asks" and "bids". The book's own vocabulary is
-	// exact and the domain uses it throughout, but a player reading a station screen should not have
-	// to know which side of a spread they are on to work out which number they would be paid.
-	AppendSide(TEXT("sell orders"), Asks);
-	AppendSide(TEXT("buy orders"), Bids);
-
-	return Lines;
 }
 
 TArray<FString> ASpaceMMOPlayerController::BuildQuestPanel(

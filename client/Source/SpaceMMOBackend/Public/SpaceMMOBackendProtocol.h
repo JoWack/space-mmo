@@ -128,6 +128,22 @@ public:
 	/** Renders int64 minor units as credits, e.g. 123456 as "1,234.56". */
 	static FString FormatCredits(int64 MinorUnits);
 
+	/**
+	 * Reads what a player typed as credits, e.g. "1,234.56" as 123456. False if it is not a price.
+	 *
+	 * The inverse of FormatCredits, and it exists so that no part of the interface has to know money
+	 * is stored in hundredths. It was left to the Widget Blueprint to multiply by a hundred, and the
+	 * first order placed through it went in at a hundredth of the intended price -- which is exactly
+	 * the failure this class of conversion produces: no error, a plausible number, real money.
+	 */
+	static bool ParseCredits(const FString& Text, int64& OutMinorUnits);
+
+	/** Every order a character has resting, at any station. */
+	static bool ParseMyOrders(const FString& Json, TArray<FBackendMyOrder>& OutOrders);
+
+	/** The body for withdrawing one. */
+	static FString MakeCancelOrderBody(int32 CharacterId, int64 OrderId);
+
 	/** Every tradeable item at a station, with whatever the market is doing with each. */
 	static bool ParseMarketListings(
 		const FString& Json, TArray<FBackendMarketListing>& OutListings);

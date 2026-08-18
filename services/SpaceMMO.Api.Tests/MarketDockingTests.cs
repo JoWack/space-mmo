@@ -159,6 +159,123 @@ public sealed class MarketDockingTests(ApiDatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task My_orders_lists_what_is_resting_and_where()
+    {
+        // Task 119. Nothing listed a character's own orders, so an order placed at the wrong price
+        // rested until it expired -- with its credits or its goods locked the whole time.
+        await DockAsync(_stationId);
+
+        HttpResponseMessage placed = await PlaceOrderAsync(_stationId);
+
+        Assert.Equal(HttpStatusCode.OK, placed.StatusCode);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/market/my-orders?characterId={_characterId}", UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        // The status is the assertion that matters here. Price is a value object behind a converter,
+        // and projecting through one compiles and then fails at runtime -- which is exactly how the
+        // listings aggregate shipped a 500 that no compile caught.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        List<MyOrderResponse> orders =
+            (await response.Content.ReadFromJsonAsync<List<MyOrderResponse>>())!;
+
+        MyOrderResponse order = Assert.Single(orders);
+
+        Assert.Equal(100, order.PriceMinorUnits);
+        Assert.Equal(1, order.QuantityRemaining);
+        Assert.Equal("Ferrite Plate", order.ItemName);
+
+        // Named, so the client can say where without holding its own station lookup.
+        Assert.Equal("Here", order.StationName);
+
+        // A buy order locks money rather than goods, and the panel has to say which -- that figure
+        // is the whole reason a forgotten order matters.
+        Assert.Equal(100, order.EscrowedMinorUnits);
+        Assert.Equal(0, order.ReservedQuantity);
+    }
+
+    [Fact]
+    public async Task My_orders_refuses_somebody_elses_character()
+    {
+        // The list names where a character's goods and credits are locked up. Ownership is checked
+        // for the same reason placing is: character ids are sequential integers.
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/market/my-orders?characterId={_characterId + 9_999}", UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client!.SendAsync(request);
+
+        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Book_marks_your_own_orders_without_naming_anybody()
+    {
+        // The client greys out taking your own order, because matching refuses a self-trade -- a buy
+        // placed against your own ask cannot cross it and simply rests, leaving a crossed book that
+        // reads as a broken market. That is how a 0.01 cr ask and a 20.00 cr bid sat side by side.
+        await DockAsync(_stationId);
+        await PlaceOrderAsync(_stationId);
+
+        using var mine = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri(
+                $"/market/book?stationId={_stationId}&itemDefId={_itemDefId}&characterId={_characterId}",
+                UriKind.Relative));
+
+        mine.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage owned = await _client!.SendAsync(mine);
+
+        Assert.Equal(HttpStatusCode.OK, owned.StatusCode);
+
+        List<BookEntryResponse> entries =
+            (await owned.Content.ReadFromJsonAsync<List<BookEntryResponse>>())!;
+
+        Assert.True(Assert.Single(entries).IsYours);
+
+        // Anonymous still reads the book -- prices are the public part -- and simply owns nothing.
+        using var anonymous = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri($"/market/book?stationId={_stationId}&itemDefId={_itemDefId}", UriKind.Relative));
+
+        HttpResponseMessage public_ = await _client.SendAsync(anonymous);
+
+        Assert.Equal(HttpStatusCode.OK, public_.StatusCode);
+
+        List<BookEntryResponse> anonymousEntries =
+            (await public_.Content.ReadFromJsonAsync<List<BookEntryResponse>>())!;
+
+        Assert.False(Assert.Single(anonymousEntries).IsYours);
+    }
+
+    [Fact]
+    public async Task Book_refuses_to_answer_for_somebody_elses_character()
+    {
+        // Otherwise a public list becomes a way to work out who owns what, one order at a time --
+        // which is exactly what leaving the name out was meant to prevent.
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            new Uri(
+                $"/market/book?stationId={_stationId}&itemDefId={_itemDefId}&characterId={_characterId + 9_999}",
+                UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client!.SendAsync(request);
+
+        Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Listings_can_be_searched_by_name_or_key()
     {
         using var request = new HttpRequestMessage(

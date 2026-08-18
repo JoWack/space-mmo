@@ -38,7 +38,17 @@ public sealed record SellToFactionBody(int CharacterId, int StationId, int ItemD
 public sealed record FactionSaleResponse(
     int QuantitySold, long PaidMinorUnits, long WithheldMinorUnits, bool WasCapped);
 
-public sealed record BookEntryResponse(long OrderId, OrderSide Side, long PriceMinorUnits, int QuantityRemaining);
+/// <param name="IsYours">
+/// Whether this order is the caller's own, so the client can grey out taking it.
+/// </param>
+/// <remarks>
+/// A flag rather than a name. Who placed an order is not the client's business -- and the one thing
+/// it actually needs is whether taking it would be a self-trade, which matching refuses
+/// (<c>MatchingEngine</c>). Without this a player clicking Buy on their own ask places a buy that
+/// cannot cross it and simply rests, leaving a crossed book that looks like a broken market.
+/// </remarks>
+public sealed record BookEntryResponse(
+    long OrderId, OrderSide Side, long PriceMinorUnits, int QuantityRemaining, bool IsYours);
 
 /// <summary>
 /// One tradeable item, and what the market at a station is doing with it.
@@ -65,6 +75,33 @@ public sealed record BookEntryResponse(long OrderId, OrderSide Side, long PriceM
 /// always sell into, which is most of what makes it worth showing beside a market price that may not
 /// exist yet.
 /// </param>
+/// <summary>One of your own orders, still resting on a book somewhere.</summary>
+/// <param name="OrderId">What to pass to cancel.</param>
+/// <param name="StationId">Where it rests.</param>
+/// <param name="StationName">Named, so the client need not hold a station lookup to say where.</param>
+/// <param name="ItemName">What is being traded.</param>
+/// <param name="Side">Buy or sell.</param>
+/// <param name="PriceMinorUnits">The unit price it rests at.</param>
+/// <param name="QuantityRemaining">
+/// What is left, not what was placed. A partly filled order is exactly the one whose original
+/// quantity would mislead.
+/// </param>
+/// <param name="EscrowedMinorUnits">Credits locked against it. Zero for a sell order.</param>
+/// <param name="ReservedQuantity">Goods held against it. Zero for a buy order.</param>
+/// <param name="ExpiresAt">When it lapses on its own.</param>
+public sealed record MyOrderResponse(
+    long OrderId,
+    int StationId,
+    string StationName,
+    int ItemDefId,
+    string ItemName,
+    OrderSide Side,
+    long PriceMinorUnits,
+    int QuantityRemaining,
+    long EscrowedMinorUnits,
+    int ReservedQuantity,
+    DateTimeOffset ExpiresAt);
+
 public sealed record MarketListingResponse(
     int ItemDefId,
     string ItemKey,
@@ -92,6 +129,12 @@ public static class MarketEndpoints
         group.MapPost("/orders/cancel", CancelAsync);
         group.MapGet("/book", BookAsync);
         group.MapGet("/listings", ListingsAsync);
+
+        // Every station, not just the one being stood in. Placing an order needs a place (ADR-0008)
+        // and cancelling one deliberately does not -- CancelAsync checks ownership alone -- because
+        // an order you have forgotten is goods and credits out of reach, and being made to work out
+        // where you left it before you may withdraw it is a punishment for forgetting.
+        group.MapGet("/my-orders", MyOrdersAsync);
 
         // Separate from /orders because it is not an order. There is no book, no counterparty and
         // no matching: the faction takes the material at a fixed price and the credits are created
@@ -293,6 +336,44 @@ public static class MarketEndpoints
     /// Unauthenticated, like the book: what is for sale at a public market is public, and hiding it
     /// behind a login would only mean everyone scrapes it with one.
     /// </remarks>
+    private static async Task<IResult> MyOrdersAsync(
+        int characterId,
+        HttpContext context,
+        Caller caller,
+        SpaceMmoDbContext database,
+        CancellationToken cancellation)
+    {
+        OwnershipResult owned =
+            await caller.OwnedCharacterAsync(context, characterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        // Open orders only. A filled or cancelled one is history, and history belongs in a trade
+        // log rather than in a list whose every row offers a cancel button.
+        List<MyOrderResponse> orders = await database.MarketOrders
+            .Where(o => o.CharacterId == characterId && o.QuantityRemaining > 0)
+            .OrderBy(o => o.Station!.Name)
+            .ThenBy(o => o.ItemDef!.Name)
+            .Select(o => new MyOrderResponse(
+                o.Id,
+                o.StationId,
+                o.Station!.Name,
+                o.ItemDefId,
+                o.ItemDef!.Name,
+                o.Side,
+                o.Price.MinorUnits,
+                o.QuantityRemaining,
+                o.EscrowedCredits.MinorUnits,
+                o.ReservedQuantity,
+                o.ExpiresAt))
+            .ToListAsync(cancellation);
+
+        return Results.Ok(orders);
+    }
+
     private static async Task<IResult> ListingsAsync(
         int stationId,
         string? search,
@@ -379,9 +460,25 @@ public static class MarketEndpoints
     private static async Task<IResult> BookAsync(
         int stationId,
         int itemDefId,
+        int? characterId,
+        HttpContext context,
+        Caller caller,
         SpaceMmoDbContext database,
         CancellationToken cancellation)
     {
+        // Optional, and checked when given. A book is public -- reading prices is the point of one --
+        // but answering "is order 41 yours?" for an arbitrary character would turn a public list into
+        // a way to work out who owns what, which is the thing the name was left out to avoid.
+        if (characterId is { } mine)
+        {
+            OwnershipResult owned = await caller.OwnedCharacterAsync(context, mine, cancellation);
+
+            if (owned.Status != OwnershipStatus.Owned)
+            {
+                return owned.ToProblem();
+            }
+        }
+
         List<BookEntryResponse> entries = await database.MarketOrders
             .Where(o => o.StationId == stationId
                 && o.ItemDefId == itemDefId
@@ -389,7 +486,11 @@ public static class MarketEndpoints
             .OrderBy(o => o.Side)
             .ThenBy(o => o.Price)
             .Select(o => new BookEntryResponse(
-                o.Id, o.Side, o.Price.MinorUnits, o.QuantityRemaining))
+                o.Id,
+                o.Side,
+                o.Price.MinorUnits,
+                o.QuantityRemaining,
+                characterId != null && o.CharacterId == characterId))
             .ToListAsync(cancellation);
 
         return Results.Ok(entries);
