@@ -148,6 +148,8 @@ public sealed class MarketService(SpaceMmoDbContext database)
 
         if (request.Side == OrderSide.Sell)
         {
+            await TopUpFromPocketsAsync(request, hangar, cancellationToken);
+
             // Throws if the seller does not hold the goods, before anything else is written. The
             // returned cost basis travels with the reservation so that cancelling puts the goods
             // back at what they originally cost rather than at zero.
@@ -400,6 +402,75 @@ public sealed class MarketService(SpaceMmoDbContext database)
             CreatedAt = at,
         });
 
+        await _database.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Moves what a seller is carrying into the station hangar, when they are standing in it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An order fills from the hangar, so strictly a seller must put their goods down first. That is
+    /// the rule and it stays the rule — but making the player drag a stack across a screen to satisfy
+    /// it is a chore, not a decision: they are standing in the station holding the ore, and "I have
+    /// this to sell" is what they mean. So the transfer still happens, and still leaves an honest
+    /// record of where the goods went; it is simply not a job for the player.
+    /// </para>
+    /// <para>
+    /// This is the same rule crafting follows, for the same reason — see
+    /// <c>IndustryService.StartJobAsync</c>. Two ways to answer "do I have this?" at one station
+    /// would be one way too many.
+    /// </para>
+    /// <para>
+    /// <strong>Only while docked here.</strong> Otherwise selling at a station a character is
+    /// nowhere near would reach into their pockets across the system.
+    /// </para>
+    /// </remarks>
+    private async Task TopUpFromPocketsAsync(
+        PlaceOrderRequest request, Inventory hangar, CancellationToken cancellationToken)
+    {
+        int? dockedStationId = await _database.Characters
+            .Where(c => c.Id == request.CharacterId)
+            .Select(c => c.DockedStationId)
+            .SingleAsync(cancellationToken);
+
+        if (dockedStationId != request.StationId)
+        {
+            return;
+        }
+
+        int alreadyHere = await _inventories.QuantityOfAsync(
+            hangar.Id, request.ItemDefId, cancellationToken);
+
+        if (alreadyHere >= request.Quantity)
+        {
+            return;
+        }
+
+        Inventory carried = await _inventories.GetOrCreateCarriedAsync(
+            request.CharacterId, cancellationToken);
+
+        int carrying = await _inventories.QuantityOfAsync(
+            carried.Id, request.ItemDefId, cancellationToken);
+
+        // Whatever closes the gap, or everything carried if that is not enough. Falling short is
+        // not an error here: the removal below reports it, and reports it against the goods
+        // actually missing rather than against a transfer.
+        int moving = Math.Min(request.Quantity - alreadyHere, carrying);
+
+        if (moving <= 0)
+        {
+            return;
+        }
+
+        // Through TransferAsync so the cost basis travels with the goods (task 99).
+        await _inventories.TransferAsync(
+            carried.Id, hangar.Id, request.ItemDefId, moving, cancellationToken);
+
+        // Flushed before the removal reads it back. AddAsync and RemoveAsync mutate tracked
+        // entities and leave saving to the caller, while the removal finds its stack with a
+        // database query -- so a hangar that held none of this would have a row visible only in
+        // the change tracker, and the sale would fail for want of goods in the same transaction.
         await _database.SaveChangesAsync(cancellationToken);
     }
 

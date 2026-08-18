@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Entities;
+using SpaceMMO.Data.Inventories;
 using SpaceMMO.Data.Market;
 using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Economy;
@@ -54,6 +55,90 @@ public sealed class MarketServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.Equal(10, result.QuantityResting);
         Assert.False(result.IsFullyFilled);
         Assert.Empty(result.TradeIds);
+    }
+
+    [Fact]
+    public async Task PlaceOrder_SellingWhatIsOnlyInPockets_MovesItAcrossWhileDockedHere()
+    {
+        // The buyer is used because the seeded sellers already have a full hangar, and this is about
+        // somebody who has just mined and is standing in the station holding the ore. Greying Sell
+        // out for them reads as a broken button rather than as a rule about where goods live.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        Character trader = await context.Characters.SingleAsync(c => c.Id == _buyerId);
+        trader.DockedStationId = _stationId;
+
+        var pockets = new Inventory
+        {
+            CharacterId = _buyerId,
+            Kind = InventoryKind.CharacterCarried,
+            CapacityM3 = 0,
+        };
+
+        context.Inventories.Add(pockets);
+        await context.SaveChangesAsync();
+
+        context.InventoryItems.Add(new InventoryItem
+        {
+            InventoryId = pockets.Id,
+            ItemDefId = _itemDefId,
+            Quantity = 30,
+        });
+
+        await context.SaveChangesAsync();
+
+        var service = new MarketService(context);
+
+        PlaceOrderResult result = await service.PlaceOrderAsync(
+            new PlaceOrderRequest(_buyerId, _stationId, _itemDefId, OrderSide.Sell, Cr(250), 10));
+
+        Assert.Equal(10, result.QuantityResting);
+
+        // Taken out of the pockets, not duplicated: 30 carried, 10 sold, 20 left. The order holds
+        // the other ten, so the hangar keeps none of them either.
+        int carried = await context.InventoryItems
+            .Where(i => i.InventoryId == pockets.Id && i.ItemDefId == _itemDefId)
+            .Select(i => i.Quantity)
+            .SingleAsync();
+
+        Assert.Equal(20, carried);
+    }
+
+    [Fact]
+    public async Task PlaceOrder_SellingFromPocketsWhileDockedElsewhere_IsRefused()
+    {
+        // The other half of the rule, and the one worth a test: pockets are reachable because the
+        // character is standing in the station. Somewhere else, an order here must not reach across
+        // the system into them -- that would be task 114's hole, except moving goods.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        Character trader = await context.Characters.SingleAsync(c => c.Id == _buyerId);
+        trader.DockedStationId = null;
+
+        var pockets = new Inventory
+        {
+            CharacterId = _buyerId,
+            Kind = InventoryKind.CharacterCarried,
+            CapacityM3 = 0,
+        };
+
+        context.Inventories.Add(pockets);
+        await context.SaveChangesAsync();
+
+        context.InventoryItems.Add(new InventoryItem
+        {
+            InventoryId = pockets.Id,
+            ItemDefId = _itemDefId,
+            Quantity = 30,
+        });
+
+        await context.SaveChangesAsync();
+
+        var service = new MarketService(context);
+
+        await Assert.ThrowsAsync<InsufficientItemsException>(
+            () => service.PlaceOrderAsync(
+                new PlaceOrderRequest(_buyerId, _stationId, _itemDefId, OrderSide.Sell, Cr(250), 10)));
     }
 
     [Fact]
