@@ -1016,7 +1016,7 @@ void USpaceMMOBackendClient::ResolveCharacterAsServer(
 		UE_LOG(LogSpaceMMOBackend, Warning,
 			TEXT("Cannot identify players: this machine holds no service credential."));
 
-		OnResolved.ExecuteIfBound(0, 0, FString());
+		OnResolved.ExecuteIfBound(0, 0, FString(), 0);
 
 		return;
 	}
@@ -1038,13 +1038,16 @@ void USpaceMMOBackendClient::ResolveCharacterAsServer(
 
 			if (!FSpaceMMOBackendProtocol::ParseResolvedCharacter(ResponseBody, Resolved))
 			{
-				OnResolved.ExecuteIfBound(0, 0, FString());
+				OnResolved.ExecuteIfBound(0, 0, FString(), 0);
 
 				return;
 			}
 
 			OnResolved.ExecuteIfBound(
-				Resolved.AccountId, Resolved.CharacterId, Resolved.CharacterName);
+				Resolved.AccountId,
+				Resolved.CharacterId,
+				Resolved.CharacterName,
+				Resolved.DockedStationId);
 		},
 		ServiceSecret);
 }

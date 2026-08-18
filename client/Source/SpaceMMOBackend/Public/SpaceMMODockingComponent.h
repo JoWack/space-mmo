@@ -44,12 +44,33 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Docking")
 	int32 GetDockedStationId() const { return DockedStationId; }
 
+	/**
+	 * Puts a ship back at the station its character was left docked at.
+	 *
+	 * <strong>Server-side, and it moves the ship rather than clearing the record.</strong> The
+	 * record survives a restart and the ship does not: a character who quit while docked used to
+	 * respawn at a default position with the backend still saying they were at a station, so the
+	 * station overlay opened from anywhere and presence -- which is enforced against the record
+	 * alone -- made a restart a free trip to that market (task 114).
+	 *
+	 * Undocking on login would also close that, in one line, and was rejected: it discards state
+	 * the player had and leaves somebody who quit inside a station floating outside it.
+	 *
+	 * The station may not exist in the world yet. Station actors are spawned from backend data and
+	 * identity resolves on its own schedule, so this records the intent and the tick below carries
+	 * it out once the actor appears — and says so, or says it gave up.
+	 */
+	void ResumeDockedAt(int32 StationId);
+
 protected:
 	virtual void BeginPlay() override;
 
 private:
 	/** One key, toggling. Docking when docked and undocking when not are both no-ops worth avoiding. */
 	void RequestToggleDock();
+
+	/** Places the ship at ResumeStationId if that station exists yet. True when it did. */
+	bool TryResume();
 
 	UFUNCTION(Server, Reliable)
 	void ServerToggleDock();
@@ -66,6 +87,21 @@ private:
 
 	/** Server-side only. Which station we believe this character is at. */
 	int32 DockedStationId = 0;
+
+	/** A station to be put back at once it exists in the world, or 0. */
+	int32 ResumeStationId = 0;
+
+	/** How long the resume has been waiting for its station actor. */
+	double SecondsWaitingToResume = 0.0;
+
+	/**
+	 * How long to wait before giving up on it, in seconds.
+	 *
+	 * Bounded, and loud when it expires. A resume that silently never happens leaves the player
+	 * exactly where this task found them -- somewhere else, with the record saying otherwise -- and
+	 * nothing on screen to distinguish it from the bug being fixed.
+	 */
+	static constexpr double ResumeTimeoutSeconds = 30.0;
 
 	/**
 	 * How often the server re-checks that a docked ship is still alongside.

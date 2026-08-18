@@ -137,7 +137,7 @@ public:
 	FString GetSessionToken() const { return Session.Token; }
 
 	/** Reports a resolved identity, or zero when the backend refused. */
-	DECLARE_DELEGATE_ThreeParams(FOnCharacterResolved, int32 /*AccountId*/, int32 /*CharacterId*/, const FString& /*Name*/);
+	DECLARE_DELEGATE_FourParams(FOnCharacterResolved, int32 /*AccountId*/, int32 /*CharacterId*/, const FString& /*Name*/, int32 /*DockedStationId*/);
 
 	/**
 	 * Asks the backend whether a token really entitles its bearer to a character.

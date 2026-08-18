@@ -1145,6 +1145,16 @@ bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(
 
 	OutResolved.CharacterId = static_cast<int32>(CharacterId);
 
+	// Null for anybody in flight, which is most of the time. Absent reads as zero -- "put them
+	// wherever they spawn" -- rather than as a station, because a sentinel here would land every
+	// new character at whichever station happened to hold it.
+	int64 Docked = 0;
+
+	if (ReadInt64(Object, TEXT("dockedStationId"), Docked))
+	{
+		OutResolved.DockedStationId = static_cast<int32>(Docked);
+	}
+
 	Object->TryGetStringField(TEXT("characterName"), OutResolved.CharacterName);
 
 	return true;

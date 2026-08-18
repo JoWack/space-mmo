@@ -1537,32 +1537,58 @@ suite reports `PASS: 176 tests, 0 failures` and exits 0.
 
 ## 114 — Docking survives a restart but the ship does not
 
-**Pending. Found by Joe, 14 August**: docked at DeepDock, closed the game, restarted. `G` correctly
-said nothing was in range — and `Tab` still opened DeepDock's station overlay.
+**Built 18 August, option 1.** Found by Joe, 14 August: docked at DeepDock, closed the game,
+restarted. `G` correctly said nothing was in range — and `Tab` still opened DeepDock's overlay.
 
-Nothing there is misreporting. `Character.DockedStationId` is persisted (`Entities/Characters.cs:86`),
-so the character really is still docked; the ship is simply respawned at a default position rather
-than at the station it is docked to. The record and the world disagree, and the station overlay is
-only the first thing to notice.
+`Character.DockedStationId` is persisted, so the character really was still docked; the ship was
+respawned at a default position. The record and the world disagreed, and because presence is
+enforced against the record alone (`RefuseIfNotPresentAsync` asks `IsDockedAtAsync` and never asks
+where the ship is), a restart was a free trip to that station's market and hangar.
 
-**The sharper consequence is that presence is enforced against the record alone.**
-`RefuseIfNotPresentAsync` asks `DockingService.IsDockedAtAsync` and never asks where the ship is
-(`CharacterEndpoints.cs:490`). So a player who quits while docked resumes with full market and
-hangar access to that station from anywhere in the system — a restart is a free trip. Harmless while
-one person is playing and exactly the shape of thing that stops being harmless later.
+**Chosen: spawn a docked character at their station.** It keeps the fiction, keeps the record true,
+and is the only one of the two options that closes the presence hole rather than papering over it.
+It also gives 107's login screen somewhere sensible to hand off to.
 
-Two ways, and it is a design choice rather than a fix:
+**Ruled out: undocking on login.** One line, and it discards state the player had — leaving somebody
+who quit inside a station floating outside it.
 
-1. **Spawn a docked character at their station.** Keeps the fiction, keeps the record true, and is
-   what a player would expect — you log back in where you left off. Needs the spawn path to place a
-   pawn against a station's position rather than a default one.
-2. **Undock on login.** One line, loses the state, and leaves a player who quit inside a station
-   floating outside it.
+The docked station rides along with **identity resolution** rather than being fetched separately:
+`/accounts/resolve-character` is the one call the game server already makes at the moment a
+connection becomes a character, and that is exactly when the answer is needed. `ResolvedCharacter`
+gained `DockedStationId`, null for anyone in flight — null rather than a sentinel, because a zero
+that meant a station would land every new character at whichever station held that id.
 
-Worth preferring 1. It also gives 107's login screen somewhere sensible to hand off to, and it is
-the only one of the two that closes the presence hole rather than papering over it.
+### What the implementation ran into
 
-Not caused by the HUD work; the station overlay made a long-standing seam visible.
+**The station may not exist in the world yet.** Station actors are spawned from backend data and
+identity resolves on its own schedule, so `ResumeDockedAt` records the intent and the component's
+tick carries it out once the actor appears. It logs when it does — moving somebody's ship without
+being asked is not a thing to do silently — and gives up loudly after 30 seconds, because a resume
+that waits forever leaves the player exactly where this task found them with nothing to tell that
+from the original bug.
+
+**The resume has to run above the existing range check**, which returns early while
+`DockedStationId` is zero. That is precisely a freshly spawned ship's state, so a resume waiting on
+it would have waited forever.
+
+**Placed at the station's own position, not offset beside it.** Docked means at the station, and it
+is the only placement guaranteed to sit inside that station's own docking range — a guessed offset
+would fall outside the range of any station whose range is smaller than the guess, and the range
+check would undock them again on the next pass.
+
+### What is verified, and what is not
+
+The API half has tests: `It_says_where_the_character_is_docked` and
+`A_character_in_flight_is_docked_nowhere`.
+
+**The resume itself has none.** It needs a world with station actors, a possessed ship and a
+resolved identity, which the headless suite has none of. It is covered by playtest only, and the log
+lines exist so that a playtest can tell "put back" from "gave up" from "never ran".
+
+**The presence hole is closed only while the resume succeeds.** If it times out, the record is still
+true and the ship is still elsewhere — the same hole, now loud instead of silent. Closing it
+properly would mean the API knowing where the ship is, which it cannot; that is a bigger seam and
+belongs with 115.
 
 ## 115 — A ship is a thing you earn, and its hold belongs to it
 

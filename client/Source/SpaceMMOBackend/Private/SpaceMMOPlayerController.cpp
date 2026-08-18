@@ -1242,7 +1242,10 @@ void ASpaceMMOPlayerController::ServerIdentify_Implementation(
 		ClaimedCharacterId,
 		USpaceMMOBackendClient::FOnCharacterResolved::CreateLambda(
 			[WeakThis, ClaimedCharacterId](
-				const int32 AccountId, const int32 ResolvedCharacterId, const FString& Name)
+				const int32 AccountId,
+				const int32 ResolvedCharacterId,
+				const FString& Name,
+				const int32 DockedStationId)
 			{
 				ASpaceMMOPlayerController* Controller = WeakThis.Get();
 
@@ -1263,7 +1266,7 @@ void ASpaceMMOPlayerController::ServerIdentify_Implementation(
 					return;
 				}
 
-				Controller->AdoptIdentity(ResolvedCharacterId, Name);
+				Controller->AdoptIdentity(ResolvedCharacterId, Name, DockedStationId);
 
 				UE_LOG(LogSpaceMMOBackend, Log,
 					TEXT("Connection identified as character %d (%s) on account %d."),
@@ -1272,10 +1275,16 @@ void ASpaceMMOPlayerController::ServerIdentify_Implementation(
 }
 
 void ASpaceMMOPlayerController::AdoptIdentity(
-	const int32 ResolvedCharacterId, const FString& ResolvedName)
+	const int32 ResolvedCharacterId,
+	const FString& ResolvedName,
+	const int32 ResolvedDockedStationId)
 {
 	CharacterId = ResolvedCharacterId;
 	CharacterName = ResolvedName;
+
+	// Where they were left. Handed to the docking component below, which is the thing that can put
+	// the ship back there -- see USpaceMMODockingComponent::ResumeDockedAt and task 114.
+	ResumeAtStationId = ResolvedDockedStationId;
 
 	RefreshPossessedPawn();
 
@@ -1319,6 +1328,13 @@ void ASpaceMMOPlayerController::RefreshPossessedPawn()
 			Possessed->FindComponentByClass<USpaceMMODockingComponent>())
 		{
 			Docking->CharacterId = CharacterId;
+
+			// Where the backend says this character was left, which is not where the pawn spawned.
+			// The component puts the ship there once the station exists in the world.
+			if (ResumeAtStationId != 0)
+			{
+				Docking->ResumeDockedAt(ResumeAtStationId);
+			}
 
 			// And bind here too. On a client the component arrives by replication, and its own
 			// BeginPlay can run before the pawn has an input component to bind to.

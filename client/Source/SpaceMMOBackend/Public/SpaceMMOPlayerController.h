@@ -186,6 +186,14 @@ public:
 	/** Whether the inventory screen is open. Same reasoning as bSkillsScreenOpen. */
 	bool bInventoryScreenOpen = false;
 
+	/**
+	 * Where the backend says this character was left docked, or 0.
+	 *
+	 * Held because identity and possession race: a pawn can arrive before or after the answer does,
+	 * and whichever is last has to be the one that puts the ship back at the station.
+	 */
+	int32 ResumeAtStationId = 0;
+
 	/** So docking somewhere new can open the overlay, and undocking can close it. */
 	int32 LastDockedStationId = 0;
 
@@ -315,7 +323,8 @@ private:
 	void ServerIdentify(const FString& Token, int32 ClaimedCharacterId);
 
 	/** Applies a resolved identity and tells anything that was waiting for it. */
-	void AdoptIdentity(int32 ResolvedCharacterId, const FString& ResolvedName);
+	void AdoptIdentity(
+		int32 ResolvedCharacterId, const FString& ResolvedName, int32 ResolvedDockedStationId);
 
 	/** Pushes the identity onto whatever the player is currently possessing. */
 	void RefreshPossessedPawn();

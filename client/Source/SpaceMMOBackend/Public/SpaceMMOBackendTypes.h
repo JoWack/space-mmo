@@ -671,6 +671,16 @@ struct SPACEMMOBACKEND_API FBackendResolvedCharacter
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	FString CharacterName;
+
+	/**
+	 * Where this character was left docked, or 0.
+	 *
+	 * Carried on identity because that is the moment it is needed: a docked character has to be put
+	 * back at their station rather than at a default spawn, or the record and the world disagree and
+	 * a restart becomes a free trip to a market they are nowhere near (task 114).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 DockedStationId = 0;
 };
 
 /** A planet or moon, as the server describes it. */

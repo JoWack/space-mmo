@@ -4,6 +4,7 @@ using SpaceMMO.Api.Endpoints;
 using SpaceMMO.Data;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Domain.Characters;
+using SpaceMMO.Domain.Universe;
 using Xunit;
 
 namespace SpaceMMO.Api.Tests;
@@ -128,6 +129,68 @@ public sealed class ResolveCharacterTests(ApiDatabaseFixture fixture) : IAsyncLi
             await ResolveAsync("not-the-secret", _ownerToken, _ownedCharacterId);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task It_says_where_the_character_is_docked()
+    {
+        // Task 114. A character who quit while docked used to come back at a default spawn while
+        // the record still said they were at a station -- so the station overlay opened from
+        // anywhere and a restart was a free trip to the market. The game server puts them back at
+        // their station instead, and this is where it learns which one.
+        int stationId;
+
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            Body home = context.Bodies.First();
+
+            var station = new Station
+            {
+                Key = "station_resolve_test",
+                Name = "Somewhere",
+                StarSystemId = home.StarSystemId,
+                BodyId = home.Id,
+                Kind = StationKind.TradingHub,
+                DockingRangeKilometres = 5.0,
+            };
+
+            context.Stations.Add(station);
+            await context.SaveChangesAsync();
+
+            Character character = context.Characters.Single(c => c.Id == _ownedCharacterId);
+
+            character.DockedStationId = station.Id;
+
+            await context.SaveChangesAsync();
+
+            stationId = station.Id;
+        }
+
+        HttpResponseMessage response =
+            await ResolveAsync(ApiFactory.TestServiceSecret, _ownerToken, _ownedCharacterId);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        ResolvedCharacter resolved =
+            (await response.Content.ReadFromJsonAsync<ResolvedCharacter>())!;
+
+        Assert.Equal(stationId, resolved.DockedStationId);
+    }
+
+    [Fact]
+    public async Task A_character_in_flight_is_docked_nowhere()
+    {
+        // Null rather than zero, and the client reads it as "put them wherever they spawn". A
+        // sentinel station id here would place every new character at whichever station had it.
+        HttpResponseMessage response =
+            await ResolveAsync(ApiFactory.TestServiceSecret, _ownerToken, _ownedCharacterId);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        ResolvedCharacter resolved =
+            (await response.Content.ReadFromJsonAsync<ResolvedCharacter>())!;
+
+        Assert.Null(resolved.DockedStationId);
     }
 
     private async Task<HttpResponseMessage> ResolveAsync(

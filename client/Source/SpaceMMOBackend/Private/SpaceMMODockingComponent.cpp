@@ -8,6 +8,7 @@
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMORenderOrigin.h"
+#include "SpaceMMOShipPawn.h"
 #include "SpaceMMOStationActor.h"
 
 USpaceMMODockingComponent::USpaceMMODockingComponent()
@@ -132,6 +133,84 @@ void USpaceMMODockingComponent::ClientDockResult_Implementation(
 	}
 }
 
+void USpaceMMODockingComponent::ResumeDockedAt(const int32 StationId)
+{
+	const AActor* Owner = GetOwner();
+
+	// Server-side, like everything else here. The client's copy of this component has no authority
+	// over where the ship is, and moving it there would be corrected by replication a frame later.
+	if (Owner == nullptr || !Owner->HasAuthority() || StationId == 0)
+	{
+		return;
+	}
+
+	// Already there, which is the ordinary case for anyone who docked during this session.
+	if (DockedStationId == StationId)
+	{
+		return;
+	}
+
+	ResumeStationId = StationId;
+	SecondsWaitingToResume = 0.0;
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Character %d was left docked at station %d; waiting for it to exist to put the ship "
+			"back there."),
+		CharacterId, StationId);
+}
+
+bool USpaceMMODockingComponent::TryResume()
+{
+	APawn* Ship = Cast<APawn>(GetOwner());
+
+	UWorld* World = GetWorld();
+
+	if (Ship == nullptr || World == nullptr)
+	{
+		return false;
+	}
+
+	for (TActorIterator<ASpaceMMOStationActor> It(World); It; ++It)
+	{
+		const ASpaceMMOStationActor* Station = *It;
+
+		if (Station == nullptr || Station->GetStation().Id != ResumeStationId)
+		{
+			continue;
+		}
+
+		// At the station's own position rather than beside it. Docked means at the station, and it
+		// is the only placement guaranteed to be inside its own docking range -- an offset guessed
+		// here would be outside the range of any station whose range is smaller than the guess, and
+		// the range check below would undock them again on the next pass.
+		if (ASpaceMMOShipPawn* ShipPawn = Cast<ASpaceMMOShipPawn>(Ship))
+		{
+			ShipPawn->SetSystemPosition(Station->GetSystemPosition());
+		}
+		else
+		{
+			// Not a ship. Nothing to move, but the record is still true and the range check needs
+			// to know about it, so this is not a failure.
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Character %d resumed docked at %s while not in a ship; left where they are."),
+				CharacterId, *Station->GetStation().Name);
+		}
+
+		DockedStationId = ResumeStationId;
+		ResumeStationId = 0;
+
+		// Said out loud, because this is a thing that moves a player's ship without being asked to
+		// and the alternative to saying so is a teleport nobody can account for.
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Put character %d back at %s (station %d), where they were left docked."),
+			CharacterId, *Station->GetStation().Name, DockedStationId);
+
+		return true;
+	}
+
+	return false;
+}
+
 void USpaceMMODockingComponent::TickComponent(
 	const float DeltaTime,
 	const ELevelTick TickType,
@@ -141,7 +220,34 @@ void USpaceMMODockingComponent::TickComponent(
 
 	const AActor* Owner = GetOwner();
 
-	if (Owner == nullptr || !Owner->HasAuthority() || DockedStationId == 0)
+	if (Owner == nullptr || !Owner->HasAuthority())
+	{
+		return;
+	}
+
+	// Before the range check, and separate from it. The range check does nothing while
+	// DockedStationId is zero, which is exactly the state a freshly spawned ship is in -- so a
+	// resume that waited for it would wait forever.
+	if (ResumeStationId != 0)
+	{
+		SecondsWaitingToResume += DeltaTime;
+
+		if (!TryResume() && SecondsWaitingToResume >= ResumeTimeoutSeconds)
+		{
+			// Loud, and it gives up rather than retrying forever. A station that never appears
+			// means the world and the backend disagree about what exists, which is worth knowing
+			// about on its own -- and a silent wait leaves the player exactly where task 114 found
+			// them, with no way to tell that from the bug.
+			UE_LOG(LogSpaceMMOBackend, Warning,
+				TEXT("Gave up putting character %d back at station %d after %.0f seconds: no such "
+					"station exists in this world."),
+				CharacterId, ResumeStationId, ResumeTimeoutSeconds);
+
+			ResumeStationId = 0;
+		}
+	}
+
+	if (DockedStationId == 0)
 	{
 		return;
 	}

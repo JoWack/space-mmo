@@ -15,7 +15,15 @@ public sealed record SessionResponse(int AccountId, string Token, DateTimeOffset
 public sealed record ResolveCharacterRequest(string Token, int CharacterId);
 
 /// <summary>Who the game server may treat that connection as.</summary>
-public sealed record ResolvedCharacter(int AccountId, int CharacterId, string CharacterName);
+/// <param name="DockedStationId">
+/// Where the character is docked, or null. Carried here because this is the one call the game
+/// server already makes at the moment a connection becomes a character, and it is the moment the
+/// answer is needed: a docked character has to be put back at their station rather than at a
+/// default spawn (task 114). Fetching it separately would be a second round trip for a field that
+/// lives on the record already being read.
+/// </param>
+public sealed record ResolvedCharacter(
+    int AccountId, int CharacterId, string CharacterName, int? DockedStationId);
 
 /// <summary>
 /// Account registration and login.
@@ -91,7 +99,8 @@ public static class AccountEndpoints
         // A distinct answer here would tell a caller which character ids exist.
         return character is null
             ? Results.NotFound()
-            : Results.Ok(new ResolvedCharacter(accountId.Value, character.Id, character.Name));
+            : Results.Ok(new ResolvedCharacter(
+                accountId.Value, character.Id, character.Name, character.DockedStationId));
     }
 
     private static async Task<IResult> RegisterAsync(
