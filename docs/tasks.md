@@ -1929,28 +1929,60 @@ can call with an `FDynamicMesh3`, which needs no renderer.
 
 ## 122 — One patch is not a planet
 
-**Pending. Raised 18 August.** The deferred half of the terrain plan, described in prose in 84, 86
-and `setup.md` for a week and never given a number — which is exactly the failure the roadmap rules
-exist to catch.
+**Premise corrected and deferred, 19 August, on measurement.** Raised 18 August from prose in 84, 86
+and `setup.md`; most of what that prose said had stopped being true.
 
-Terrain exists as **one** 1.4 km patch, appearing within 32 km of the planet's centre, with the
-smooth sphere everywhere else. From altitude that is a small square on an otherwise featureless
-world, and its rim is a cliff where the patch stands proud of the sphere.
+### What was believed, and is not
 
-**That edge must not be hidden by tapering the patch down to the sphere.** The mesh would then
+**"One 1.4 km patch, with its rim a visible cliff."** The patch has not been a fixed size for some
+time: `PatchDegreesForAltitude` sizes it to the viewer's horizon with a 1.2× margin, clamped between
+4 and 60 degrees. At walking altitude it is about 1.4 km across; at the top of the atmosphere it is a
+60 degree cap.
+
+**"A small square on an otherwise featureless world."** The globe is hidden whenever a patch exists,
+and the patch always reaches past the horizon — so in the atmosphere the globe is never visible, and
+above it the patch is released and only the globe draws. **The two are never on screen together**, so
+there is no rim to see and no seam to hide.
+
+Both of those were true when written. Neither survived the patch becoming adaptive and
+`SpaceMMO.HideGlobeUnderPatch` defaulting to 1.
+
+### What is actually true, measured
+
+The patch keeps a fixed 129×129 resolution while its area grows, so vertex spacing grows with
+altitude — and the question that matters is how far the drawn mesh strays from the height function
+the server resolves contact against:
+
+| patch | vertex spacing | mean error | worst error |
+|-------|---------------|------------|-------------|
+| 4° (walking) | 21.8 m | 0.5 m | 2.7 m |
+| 9° | 48.9 m | 1.1 m | 6.4 m |
+| 20° | 106.9 m | 2.5 m | 14.7 m |
+| 40° | 200.9 m | 4.8 m | 28.2 m |
+| 60° (top of atmosphere) | 270.6 m | 6.7 m | 54.8 m |
+
+**Half a metre where a player stands.** The error only grows where the viewer is kilometres away and
+cannot resolve it, and it shrinks continuously on the way down — so a ship descending is never shown
+smooth ground it then collides with. The patch at 60° (270 m spacing) also hands over to the globe
+(327 m) at a similar resolution, so leaving the atmosphere should not pop.
+
+### So this is deferred rather than built
+
+Cube-sphere LOD remains the right long-term answer and is a large build. Nothing measured here
+justifies it yet: the mesh is faithful where fidelity is perceivable, and the failure modes the task
+was written about do not occur.
+
+**Reopen it when one of these is true**, which are the things that would actually change the numbers:
+
+- Terrain gains detail finer than about 20 m, which is where the 4° patch stops resolving it. Raising
+  `BaseFrequency` past 12 or adding octaves does exactly that.
+- A planet is authored much larger than 20 km, since spacing scales with radius.
+- Somebody needs to see terrain detail from orbit — the globe samples every 327 m and always will.
+- Caves (89) land, since an overhang cannot be expressed by either mesh at any resolution.
+
+**Ruled out, and still ruled out:** tapering the patch rim down to the sphere. The mesh would then
 disagree with the height function the server resolves contact against, and players would stand on
-ground the server believes is elsewhere. `SpaceMMO.Patch.SitsOnTheTerrain` exists to catch precisely
-that, and this is the one shortcut that is ruled out rather than merely unattractive.
-
-The real answer is cube-sphere LOD: the sphere subdivided into faces that refine towards the viewer,
-so there is no patch and no rim, only ground at the resolution somebody is close enough to see.
-
-Cheap mitigations meanwhile, both already known: raise `PatchAngularRadiusDegrees` so the rim is
-further away, or lower `MaxElevationKilometres` so the step down is smaller.
-
-**Less urgent than it looks while 120 is in hand.** On foot the horizon is 283 m, so a 1.4 km patch is
-already more world than can be seen. This is a flying problem, and it becomes pressing when somebody
-is meant to fly somewhere and land on it deliberately.
+ground the server believes is elsewhere. `SpaceMMO.Patch.SitsOnTheTerrain` exists to catch that.
 
 ### Both belong to M7, which did not exist until this was written
 
