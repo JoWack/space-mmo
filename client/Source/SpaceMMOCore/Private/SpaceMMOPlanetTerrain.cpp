@@ -300,6 +300,55 @@ FGroundContact FPlanetTerrain::ResolveContact(
 	return Contact;
 }
 
+FVector2D FPlanetTerrain::SurfaceUV(const FVector& Direction)
+{
+	const FVector Unit = Direction.GetSafeNormal();
+
+	const double AbsX = FMath::Abs(Unit.X);
+	const double AbsY = FMath::Abs(Unit.Y);
+	const double AbsZ = FMath::Abs(Unit.Z);
+
+	// Which cube face this direction points at: the largest component wins, which is the same rule
+	// that decides which face a point belongs to when the cube is projected outward.
+	double Across = 0.0;
+	double Down = 0.0;
+	double Largest = 0.0;
+
+	if (AbsX >= AbsY && AbsX >= AbsZ)
+	{
+		Largest = AbsX;
+		Across = Unit.Y;
+		Down = Unit.Z;
+	}
+	else if (AbsY >= AbsZ)
+	{
+		Largest = AbsY;
+		Across = Unit.X;
+		Down = Unit.Z;
+	}
+	else
+	{
+		Largest = AbsZ;
+		Across = Unit.X;
+		Down = Unit.Y;
+	}
+
+	if (Largest <= UE_DOUBLE_SMALL_NUMBER)
+	{
+		return FVector2D::ZeroVector;
+	}
+
+	// Onto the face, then from -1..1 into 0..1.
+	//
+	// Deliberately not the inverse of CubeToSphere's warp. That warp exists to even out the area of
+	// the tessellation, and undoing it exactly would need a root-solve per vertex for a texture
+	// coordinate nobody measures. What matters is that every caller computes the same number from
+	// the same direction, which this does whether or not it is the exact inverse.
+	return FVector2D(
+		((Across / Largest) + 1.0) * 0.5,
+		((Down / Largest) + 1.0) * 0.5);
+}
+
 FVector FPlanetTerrain::CubeToSphere(const FVector& CubePoint)
 {
 	const double X2 = CubePoint.X * CubePoint.X;

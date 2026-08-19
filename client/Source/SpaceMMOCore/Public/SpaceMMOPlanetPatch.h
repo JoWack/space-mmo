@@ -49,6 +49,28 @@ struct SPACEMMOCORE_API FPlanetPatchMesh
 	/** Outward vertex normals. */
 	TArray<FVector> Normals;
 
+	/**
+	 * Surface coordinates for texturing, per vertex.
+	 *
+	 * The parameterisation was always here and was thrown away: the builder computes a U and a V to
+	 * place every vertex and then discarded both. Kept in 0..1 rather than pre-multiplied by a tiling
+	 * factor, so the material owns how large a texture reads and this owns only where a point is.
+	 */
+	TArray<FVector2D> SurfaceUVs;
+
+	/**
+	 * What the ground is like at each vertex: X is height, Y is steepness, both 0..1.
+	 *
+	 * Height is the fraction of the planet's maximum relief, so 0 is the nominal radius and 1 is the
+	 * highest ground can go. Steepness is 1 - dot(normal, up), so 0 is level and 1 is a cliff.
+	 *
+	 * Computed here rather than in the material because both numbers come from the height function,
+	 * which the shader has no access to -- and deriving steepness from a world normal in the shader
+	 * would need the planet's centre passed in as a parameter, which is one more thing that can be
+	 * set to the wrong value (see task 120, which lost an afternoon to exactly that).
+	 */
+	TArray<FVector2D> GroundKinds;
+
 	/** Triangle indices, three per triangle, wound counter-clockwise seen from outside. */
 	TArray<int32> Triangles;
 

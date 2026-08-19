@@ -77,6 +77,15 @@ FPlanetPatchMesh FPlanetPatch::Build(
 
 	Result.Positions.Reserve(Resolution * Resolution);
 	Result.Normals.SetNumZeroed(Resolution * Resolution);
+	Result.SurfaceUVs.Reserve(Resolution * Resolution);
+
+	// Kept because steepness needs a normal, and the patch accumulates its normals from the faces
+	// that share each vertex -- so they do not exist until every triangle does.
+	TArray<FVector> Directions;
+	TArray<double> Radii;
+
+	Directions.Reserve(Resolution * Resolution);
+	Radii.Reserve(Resolution * Resolution);
 
 	for (int32 Row = 0; Row < Resolution; ++Row)
 	{
@@ -91,6 +100,15 @@ FPlanetPatchMesh FPlanetPatch::Build(
 			const FSystemCoordinate Point(Planet.Centre.Kilometres + (Direction * Radius));
 
 			Result.Positions.Add(Point.ToLocalCentimetres(Result.Origin));
+
+			// The same function the globe calls, from the same direction. The patch's rim is where
+			// one mesh hands over to the other, and a parameterisation of its own would draw a line
+			// of jumped texture right around it.
+			Result.SurfaceUVs.Add(FPlanetTerrain::SurfaceUV(Direction));
+
+			// Height now; steepness once the normals exist, which is after the triangles.
+			Directions.Add(Direction);
+			Radii.Add(Radius);
 		}
 	}
 
@@ -145,6 +163,23 @@ FPlanetPatchMesh FPlanetPatch::Build(
 		Result.Normals[Index] = Result.Normals[Index].IsNearlyZero()
 			? (Result.Positions[Index] + (Centre * 1000.0)).GetSafeNormal()
 			: Result.Normals[Index].GetSafeNormal();
+	}
+
+	// Steepness last, now that every normal is final.
+	Result.GroundKinds.Reserve(Result.Normals.Num());
+
+	for (int32 Index = 0; Index < Result.Normals.Num(); ++Index)
+	{
+		const double Rise = Radii[Index] - Planet.RadiusKilometres;
+
+		const double Height = Terrain.MaxElevationKilometres > 0.0
+			? FMath::Clamp(Rise / Terrain.MaxElevationKilometres, 0.0, 1.0)
+			: 0.0;
+
+		const double Steepness = FMath::Clamp(
+			1.0 - FVector::DotProduct(Result.Normals[Index], Directions[Index]), 0.0, 1.0);
+
+		Result.GroundKinds.Add(FVector2D(Height, Steepness));
 	}
 
 	return Result;

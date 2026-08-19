@@ -407,6 +407,70 @@ void ASpaceMMOPlanetActor::BeginPlay()
 			: 0.0);
 }
 
+namespace
+{
+	/**
+	 * Writes the two UV layers a terrain material reads: where a point is, and what it is like.
+	 *
+	 * Layer 0 carries cube-face coordinates in 0..1 and layer 1 carries height and steepness, both
+	 * 0..1. Neither is pre-multiplied by a tiling factor -- the material owns how large a texture
+	 * reads, and this owns only what is true of the ground.
+	 *
+	 * Both meshes go through here rather than each writing its own, because the globe and the patch
+	 * are two samplings of one surface and a material fed differently by each would draw a line
+	 * around the patch where they meet.
+	 */
+	void WriteTerrainUVs(
+		FDynamicMesh3& Mesh,
+		const TArray<FVector2D>& SurfaceUVs,
+		const TArray<FVector2D>& GroundKinds)
+	{
+		FDynamicMeshAttributeSet* const Attributes = Mesh.Attributes();
+
+		if (Attributes == nullptr || SurfaceUVs.Num() == 0)
+		{
+			return;
+		}
+
+		// Two layers, and asked for explicitly: a mesh starts with one and the second is where the
+		// ground's own description goes.
+		Attributes->SetNumUVLayers(2);
+
+		const TArray<FVector2D>* const Sources[2] = { &SurfaceUVs, &GroundKinds };
+
+		for (int32 Layer = 0; Layer < 2; ++Layer)
+		{
+			FDynamicMeshUVOverlay* const UVs = Attributes->GetUVLayer(Layer);
+
+			const TArray<FVector2D>& Source = *Sources[Layer];
+
+			if (UVs == nullptr || Source.Num() < Mesh.MaxVertexID())
+			{
+				continue;
+			}
+
+			UVs->ClearElements();
+
+			TArray<int32> Elements;
+			Elements.Reserve(Source.Num());
+
+			for (const FVector2D& Value : Source)
+			{
+				Elements.Add(UVs->AppendElement(FVector2f(Value)));
+			}
+
+			for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+			{
+				const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
+
+				UVs->SetTriangle(
+					TriangleId,
+					FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
+			}
+		}
+	}
+}
+
 void ASpaceMMOPlanetActor::BuildGlobe()
 {
 	// A dedicated server has no renderer, and a hundred thousand triangles per planet is a large
@@ -473,6 +537,8 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 				FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
 		}
 	}
+
+	WriteTerrainUVs(Mesh, Globe.SurfaceUVs, Globe.GroundKinds);
 
 	// Known-good geometry, made patch-shaped. Nothing about how these vertices were generated
 	// changes -- only how many of them survive.
@@ -967,6 +1033,8 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 				FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
 		}
 	}
+
+	WriteTerrainUVs(Mesh, Patch.SurfaceUVs, Patch.GroundKinds);
 
 	const bool bWantsGlobeComponent = GPatchIntoGlobe > 0.5f;
 

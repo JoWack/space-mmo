@@ -32,6 +32,38 @@ double FPlanetGlobe::VisibleCapDegrees(
 	return FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Ratio, -1.0, 1.0)));
 }
 
+namespace
+{
+	/**
+	 * How high and how steep the ground is at one point, each 0..1.
+	 *
+	 * Height is the fraction of the planet's maximum relief; steepness is one minus the dot of the
+	 * surface normal with straight up, so level ground is zero and a cliff approaches one.
+	 *
+	 * Shared by the globe and the patch deliberately. They are two samplings of one height function
+	 * and a material that banded them differently would put a visible line around the patch, which
+	 * is the same class of disagreement task 86 exists to prevent.
+	 */
+	FVector2D GroundKindAt(
+		const FPlanetConfig& Planet,
+		const FPlanetTerrainConfig& Terrain,
+		const FVector& Direction,
+		const FVector& Normal,
+		const double SurfaceRadiusKilometres)
+	{
+		const double Rise = SurfaceRadiusKilometres - Planet.RadiusKilometres;
+
+		const double Height = Terrain.MaxElevationKilometres > 0.0
+			? FMath::Clamp(Rise / Terrain.MaxElevationKilometres, 0.0, 1.0)
+			: 0.0;
+
+		const double Steepness =
+			FMath::Clamp(1.0 - FVector::DotProduct(Normal, Direction), 0.0, 1.0);
+
+		return FVector2D(Height, Steepness);
+	}
+}
+
 FPlanetGlobeMesh FPlanetGlobe::Build(
 	const FPlanetConfig& Planet,
 	const FPlanetTerrainConfig& Terrain,
@@ -81,8 +113,16 @@ FPlanetGlobeMesh FPlanetGlobe::Build(
 				Result.Positions.Add(
 					Direction * Radius * SpaceMMO::Coordinates::CentimetresPerKilometre);
 
-				Result.Normals.Add(FPlanetTerrain::SurfaceNormal(
-					Planet, Terrain, Direction, SampleAngleDegrees));
+				const FVector Normal = FPlanetTerrain::SurfaceNormal(
+					Planet, Terrain, Direction, SampleAngleDegrees);
+
+				Result.Normals.Add(Normal);
+
+				// From the direction, not from this loop's own U and V. The patch computes the same
+				// number the same way, so the two agree exactly where one hands over to the other.
+				Result.SurfaceUVs.Add(FPlanetTerrain::SurfaceUV(Direction));
+
+				Result.GroundKinds.Add(GroundKindAt(Planet, Terrain, Direction, Normal, Radius));
 			}
 		}
 

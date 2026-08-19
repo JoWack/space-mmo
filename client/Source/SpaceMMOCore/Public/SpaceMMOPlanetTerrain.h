@@ -229,6 +229,21 @@ public:
 	static FVector CubeToSphere(const FVector& CubePoint);
 
 	/**
+	 * Where a direction lands on the planet's texture, as cube-face coordinates in 0..1.
+	 *
+	 * <strong>Shared by the globe and the patch, and that is the whole point.</strong> They are two
+	 * samplings of one surface drawn at different resolutions, and the patch's rim is where one
+	 * hands over to the other. Two parameterisations that disagreed by any amount would put a
+	 * visible line of jumped texture around every patch — the same class of disagreement task 86
+	 * exists to prevent, and the same reason both already call one height function rather than two.
+	 *
+	 * Per face rather than per planet: the six faces meet exactly, so a tiling texture crosses a
+	 * cube edge without a seam, and a refined tile under LOD (122) is a sub-rectangle of its
+	 * parent's range.
+	 */
+	static FVector2D SurfaceUV(const FVector& Direction);
+
+	/**
 	 * Fractal noise on the unit sphere, in <c>[0, 1]</c>.
 	 *
 	 * Exposed because it is the piece worth testing on its own: if this is not continuous, every
