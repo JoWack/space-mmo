@@ -1425,6 +1425,15 @@ Worth doing early in the milestone rather than late: it decides where combat may
 building weapons first would mean tuning them in a world with no rules about where they may be
 fired.
 
+# Found while building, and not yet in a milestone
+
+Everything below turned up while something else was being built, or was split out of a task that
+had grown two halves. They are filed here rather than under M6 — which is where they had drifted,
+combat tasks and gathering bugs and test tooling under one heading — because a milestone is a claim
+about what the game will be able to do, and none of these are that yet.
+
+Several belong in a milestone the roadmap does not currently name; see the note under 121 and 122.
+
 ## 111 — Gathering and industry ignore where you are
 
 **Pending. Found by Joe, 14 August**, refining at DeepDock and watching the output appear at the
@@ -1644,6 +1653,11 @@ player starts on foot with no ship at all, and the whole opening — where you a
 questline asks first, what the flight tutorial is — follows from that. This is the largest
 consequence and none of it is written down anywhere yet.
 
+**The spawn half of that is now task 120**, split out on 18 August because it depends on nothing else
+here and the terrain work depends on it: iterating on how the ground looks costs a 32 km descent
+while every session starts in orbit. What stays in 115 is summoning, active-ship state, and the
+questline that hands over the first hull.
+
 **"Active ship" is new state.** A character may own several hulls; exactly one is the one they are
 flying or would summon. Nothing models that today, and the hold's accessibility rule depends on it.
 
@@ -1770,6 +1784,100 @@ cleared, so a newly placed order did not appear. That is the second instance of 
 standing in for "have I asked yet" cannot tell "asked" from "asked, and the answer is now stale".
 Opening the tab clears it and placing an order refetches. Worth grepping for the pattern before
 adding a third.
+
+## 120 — Start on foot, on the planet
+
+**Pending. Split out of 115 on 18 August**, because it is the part of ADR-0012 that nothing else
+depends on and everything visual does.
+
+`SpaceMMOGameMode` sets `DefaultPawnClass = ASpaceMMOShipPawn`, so every connection spawns flying.
+ADR-0012 says nobody starts with a ship; this is that sentence, and only that sentence. Summoning,
+active-ship state and the questline stay in 115.
+
+**Why first, and why it is not just tidiness.** Terrain is only visible within 32 km of the planet's
+centre and the patch is 1.4 km across, so today every look at the ground costs a descent. On foot the
+horizon is 283 m and the patch is simply the world — which turns "does this material read right"
+from a flight into a glance. Every task below is iterated on by looking, and this is what makes
+looking cheap.
+
+What it needs: the default pawn becomes `ASpaceMMOCharacterPawn`, spawned against the height function
+at a starting direction rather than at a default position — the `-SpawnCharacter` path in
+`SpawnTestScene` already does exactly this and is the working reference.
+
+**Keep a way into a ship.** Flight is the most-tested thing in the project and losing casual access to
+it while terrain work is happening would be a poor trade. Boarding already works; what is needed is
+something to board, so a dev spawn stays until 115 makes summoning real.
+
+Blocked by nothing. Blocks nothing formally, and makes 121 and 122 far cheaper.
+
+## 121 — The ground is untextured
+
+**Pending. Raised 18 August**, from reading rather than a playtest: both terrain meshes are assigned
+`/Engine/BasicShapes/BasicShapeMaterial`, which is the engine's grey placeholder, and neither builder
+writes UVs at all — `ReportPatch` already prints `0 UV layers` and has done since it was written.
+
+So this is not "the material is wrong", it is "there has never been one".
+
+**The decision to make first: triplanar, or generated UVs.**
+
+- **Triplanar projection** needs no UVs, which suits a mesh that has none and a surface that is a
+  sphere. Spherical UV mapping pinches at the poles, and a cube-sphere patch has no natural seam to
+  cut. It costs three texture samples per pixel instead of one.
+- **Generated UVs** are cheaper to render and mean touching both mesh builders, plus deciding what
+  the mapping is at a patch boundary — where two samplings of one height function already have to
+  agree (86).
+
+**Recommendation: triplanar.** It is the smaller change, it avoids inventing a UV scheme for a
+surface that will get LOD later (122), and nothing about it forecloses UVs afterwards.
+
+**Worth settling with it:** whether the material varies by elevation or slope — rock on the steep
+parts, something else on the flat — because that is most of what makes terrain read as terrain rather
+than as a coloured hill, and the height function already knows both numbers.
+
+**The trap this walks into.** Lighting has cost this project three wrong diagnoses before, and a
+material change is indistinguishable from a lighting change from a screenshot. `ShowFlag.Lighting 0`
+separates "unlit but drawn" from "not drawn", and blown-out white ore beside black ground already
+proved once that shadows cannot be the whole story. Instrument before theorising.
+
+## 122 — One patch is not a planet
+
+**Pending. Raised 18 August.** The deferred half of the terrain plan, described in prose in 84, 86
+and `setup.md` for a week and never given a number — which is exactly the failure the roadmap rules
+exist to catch.
+
+Terrain exists as **one** 1.4 km patch, appearing within 32 km of the planet's centre, with the
+smooth sphere everywhere else. From altitude that is a small square on an otherwise featureless
+world, and its rim is a cliff where the patch stands proud of the sphere.
+
+**That edge must not be hidden by tapering the patch down to the sphere.** The mesh would then
+disagree with the height function the server resolves contact against, and players would stand on
+ground the server believes is elsewhere. `SpaceMMO.Patch.SitsOnTheTerrain` exists to catch precisely
+that, and this is the one shortcut that is ruled out rather than merely unattractive.
+
+The real answer is cube-sphere LOD: the sphere subdivided into faces that refine towards the viewer,
+so there is no patch and no rim, only ground at the resolution somebody is close enough to see.
+
+Cheap mitigations meanwhile, both already known: raise `PatchAngularRadiusDegrees` so the rim is
+further away, or lower `MaxElevationKilometres` so the step down is smaller.
+
+**Less urgent than it looks while 120 is in hand.** On foot the horizon is 283 m, so a 1.4 km patch is
+already more world than can be seen. This is a flying problem, and it becomes pressing when somebody
+is meant to fly somewhere and land on it deliberately.
+
+### Neither 121 nor 122 has a milestone to live in
+
+The roadmap goes M6 combat, M7 depth — "careers, repeatable quest content, the repair loop, caves".
+Caves are terrain representation and settlements are world content, so M7 is already half about the
+world without saying so, and nothing anywhere names how the world *looks*. M2 records terrain as
+done, which is true in the sense that it exists and false in every sense a player would mean.
+
+This is the same shape as the two reconciliation failures already recorded in `README.md`: a
+milestone nobody wrote down cannot be prioritised, deferred deliberately, or noticed as missing.
+
+**Proposed, and Joe's call:** a milestone between combat and depth — the world worth being in —
+holding 121, 122, 89 (caves), 96 (authoring) and 97 (settlements), with careers, repeatable quests
+and the repair loop moving to the milestone after it. Not done unilaterally: renumbering a roadmap
+is a decision, and this file exists because those get lost when they are made in passing.
 
 ## 96 — Author world content graphically
 
