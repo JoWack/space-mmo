@@ -24,7 +24,7 @@ class UDynamicMeshComponent;
  * the patch widens with altitude until it covers everything in view, and the globe is hidden for
  * exactly as long as the patch exists.
  */
-UCLASS()
+UCLASS(Config = Game)
 class SPACEMMOCORE_API ASpaceMMOPlanetActor : public AActor
 {
 	GENERATED_BODY()
@@ -36,6 +36,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Planet")
 	FPlanetConfig GetPlanetConfig() const { return Planet; }
+
 
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Planet")
 	void SetPlanetConfig(const FPlanetConfig& NewConfig);
@@ -66,8 +67,24 @@ public:
 		double MinimumDegrees = 4.0,
 		double MaximumDegrees = 60.0);
 
+	/**
+	 * The material both terrain meshes draw with, or unset for the engine's grey placeholder.
+	 *
+	 * <strong>Config, so a material can be swapped without a rebuild.</strong> The planet is spawned
+	 * at runtime rather than placed in a level, so there is no actor in the editor to set this on --
+	 * and iterating on how ground looks means trying a value, looking at it, and trying another,
+	 * which a compile in the middle of would make expensive enough to stop doing.
+	 *
+	 * Set it in DefaultGame.ini under [/Script/SpaceMMOCore.SpaceMMOPlanetActor].
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Planet")
+	FSoftObjectPath TerrainMaterial;
+
 protected:
 	virtual void BeginPlay() override;
+
+	/** Puts the configured material on both meshes, or leaves the placeholder and says why. */
+	void ApplyTerrainMaterial();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
 	FPlanetConfig Planet;

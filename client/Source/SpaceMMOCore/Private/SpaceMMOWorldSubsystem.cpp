@@ -133,6 +133,20 @@ FPlanetTerrainConfig USpaceMMOWorldSubsystem::StartingPlanetTerrain()
 	Terrain.Seed = 20260801;
 	Terrain.MaxElevationKilometres = 0.5;
 
+	// Twelve features per radius rather than two, which is what gives the ground slopes at all.
+	//
+	// Relief was always half a kilometre and that is not what was wrong: spread over two features
+	// per radius it made broad swells, and the steepest ground anywhere on the planet was 5.9
+	// degrees. Measured, by sweeping the parameter and reading the result rather than looking at
+	// it -- 12 gives 31.8 degrees, and lifts the height range inside a single 1.4 km patch from
+	// 0.31..0.37 to 0.37..0.78. Both matter: a material that bands on height or steepness has
+	// nothing to work with when neither varies across everything a player can see.
+	//
+	// 24 gives 47 degrees and 48 gives 70 if this reads too gentle. Going the other way makes the
+	// planet smooth again and silently stops any slope-based material from doing anything, which
+	// is what TerrainHasSlopesToShade exists to catch.
+	Terrain.BaseFrequency = 12.0;
+
 	return Terrain;
 }
 

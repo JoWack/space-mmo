@@ -1852,63 +1852,80 @@ possessed pawn, none of which the headless suite has. The log line is the instru
 
 ## 121 — The ground is untextured
 
-**Pending. Raised 18 August**, from reading rather than a playtest: both terrain meshes are assigned
-`/Engine/BasicShapes/BasicShapeMaterial`, which is the engine's grey placeholder, and neither builder
-writes UVs at all — `ReportPatch` has printed `0 UV layers` since it was written.
+**Done 19 August**, confirmed by playtest: banding by height, rock on the slopes, hills that read as
+hills. Textures themselves are deferred — the blend is colours, and UV0 is in place for whenever a
+texture wants tiling.
 
-So this is not "the material is wrong", it is "there has never been one".
+Both terrain meshes were assigned `/Engine/BasicShapes/BasicShapeMaterial` and neither builder wrote
+UVs at all. So this was never "the material is wrong", it was "there has never been one".
 
 ### Decided: generated UVs, not triplanar
 
-**I recommended triplanar and the recommendation was wrong.** Joe pushed back on both the performance
-argument and the claim that 122 would invalidate UV work, and was right on both counts.
+**I recommended triplanar and was wrong.** The globe is a cube-sphere already computing a `U` and a
+`V` per vertex to place it, and discarding both. And LOD subdivides *within* a face, so a refined
+tile's UVs are a sub-rectangle of its parent's — the parameterisation survives 122 by construction.
+The error was conflating a cube-sphere with equirectangular mapping, which is the projection that
+pinches at the poles. This project has never used that.
 
-The globe is a **cube-sphere**: six faces, each a `Resolution × Resolution` grid, and
-`FPlanetGlobe::Build` already computes a `U` and a `V` per vertex to place it — literally those
-names — and then discards them. The patch is the same shape around a viewer direction. UVs are not
-work to invent here; they are a value already in hand that nothing writes down.
+Triplanar keeps a narrow place on near-vertical ground, blended from the steepness channel rather
+than replacing the base. Not built.
 
-**And LOD makes cube-face UVs easier, not harder.** Subdivision happens within a face, so a child
-tile's UV range is a sub-rectangle of its parent's — the parameterisation is hierarchical and
-survives refinement by construction. That is the standard approach for cube-sphere planets.
+### What the meshes carry
 
-The error was conflating a cube-sphere with **equirectangular** mapping, which is the one that
-pinches at the poles and has no good seam. This project has never used that, and the pole problem I
-was avoiding does not exist here.
+`FPlanetTerrain::SurfaceUV(Direction)` gives cube-face coordinates in 0..1, and the globe and patch
+both call it with the same direction — so the patch rim, where one hands over to the other, has no
+seam. `MeshesCarryTheirUVs` fails if either builder invents its own.
 
-**Where triplanar still earns its place, and it is narrow:** a face projection stretches on
-near-vertical ground, so cliffs smear. The production answer is UVs as the base with a projected
-layer blended in only where the slope is steep — which falls out of the slope variation below rather
-than being a separate mechanism. An addition later, not a foundation.
+Height and steepness go in the **vertex colour**, R and G. `ColorSpaceMode` defaults to `NoTransform`,
+so 0..1 data passes through without an sRGB conversion mangling it.
 
-### Decided: the material varies by slope and elevation
+**They were in UV1 first, and that did not work.** The mesh carried them correctly — 32768 triangles
+across two layers, confirmed by the patch report — and the scene proxy forwards every layer it finds,
+confirmed by reading `DynamicMeshSceneProxy.h`. A material reading `TexCoord[1]` still got a constant.
+Rather than keep chasing where an index stops matching, vertex colour is the channel the engine and
+every terrain material already agree on for blend weights, and it has no index to get wrong.
 
-Rock on the steep parts, something else on the flat, and bands with height. The height function
-already knows both numbers, and that variation is most of what separates terrain from a coloured
-hill.
+### The terrain had no slopes to shade
+
+**The steepest ground on the planet was 5.9 degrees.** Relief was always half a kilometre and that was
+never the problem: spread over `BaseFrequency = 2` it made broad swells. A material blending rock onto
+cliffs had no cliffs, and one banding on height saw 0.31..0.37 across everything visible from the
+ground. Both drew a flat colour, and neither was wrong.
+
+Found by sweeping the parameter and measuring the built mesh — nothing about it was visible from the
+configuration. `BaseFrequency = 12` gives 31.8 degrees and lifts the local height range to 0.37..0.78.
+24 gives 47 degrees and 48 gives 70 if it ever reads too gentle. `HasSlopesToShade` fails if the
+planet is flattened again.
+
+### Two encodings that were correct and invisible
+
+**Steepness was `1 - dot(normal, up)`.** A 32 degree hillside reads 0.15 that way, which is
+indistinguishable from flat on screen. It is the sine of the slope angle now: the same hillside reads
+0.53.
+
+**Neither channel spans its range**, so the material remaps. Height occupies 0.37..0.78 and steepness
+0..0.53, and a `SmoothStep` — 0.35..0.80 for height, 0.15..0.45 for steepness — is what turns a
+correct-but-flat blend into visible ground. That belongs in the material rather than the mesh: the
+ranges are per planet, and clamping them in C++ would throw away what a different world needs.
 
 ### Every planet looks different, and the data already says which
 
-`data/universe/origin.json` holds five bodies — Terra, Ares, Verdance, Grimhold and The Capital — and
-each has concept art with an explicit palette and material list: Terra oceanic with aged concrete and
-corroded metal, Ares red oxide and dust, Verdance forest with amber bioluminescence, Grimhold black
-slag and basalt, the Capital a built world.
+`data/universe/origin.json` holds five bodies and each has concept art with an explicit palette. **The
+material belongs in `data/` per body**, on the same authority chain as everything else. Not built: the
+first pass is one hardcoded look, agreed with Joe, so the shader could be got right without a seed
+cycle on every tweak.
 
-**So the material is per body and belongs in `data/`**, not hardcoded in the client. That is the same
-authority chain everything else follows — `data/` → seed → API → client — and it is what stops the
-look of a planet and the facts about it drifting apart. It also gives 96 a second reason to exist:
-a palette per body is content, and content is authored.
+`TerrainMaterial` is a `Config` property on `ASpaceMMOPlanetActor`, so swapping a material needs no
+rebuild — set it in `DefaultGame.ini`. It logs what it configured and what it loaded, on every path
+including the one that does nothing, because a material that failed to arrive and code that never ran
+otherwise leave identical evidence.
 
-**Not decided yet:** whether the first pass hardcodes one planet's look to get the shader right and
-moves it to `data/` afterwards, or does both at once. The first is smaller and the second avoids
-writing a thing twice.
+### Still outstanding
 
-### The trap this walks into
-
-Lighting has cost this project three wrong diagnoses before, and a material change is
-indistinguishable from a lighting change in a screenshot. `ShowFlag.Lighting 0` separates "unlit but
-drawn" from "not drawn", and blown-out white ore beside black ground already proved once that shadows
-cannot be the whole story. Instrument before theorising.
+**Nothing asserts the ground kinds reach the vertex colour.** The builders are tested and the mesh
+conversion is not — which is the exact gap that let the UV1 version measure perfectly at every step
+and show a constant on screen. It needs the conversion pulled out of the actor into something a test
+can call with an `FDynamicMesh3`, which needs no renderer.
 
 ## 122 — One patch is not a planet
 

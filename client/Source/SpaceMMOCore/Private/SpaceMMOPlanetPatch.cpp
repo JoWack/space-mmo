@@ -176,8 +176,11 @@ FPlanetPatchMesh FPlanetPatch::Build(
 			? FMath::Clamp(Rise / Terrain.MaxElevationKilometres, 0.0, 1.0)
 			: 0.0;
 
-		const double Steepness = FMath::Clamp(
-			1.0 - FVector::DotProduct(Result.Normals[Index], Directions[Index]), 0.0, 1.0);
+		// The sine of the slope angle; see the note in the globe builder for why not 1 - cos.
+		const double Level = FMath::Clamp(
+			FVector::DotProduct(Result.Normals[Index], Directions[Index]), -1.0, 1.0);
+
+		const double Steepness = FMath::Sqrt(FMath::Max(0.0, 1.0 - (Level * Level)));
 
 		Result.GroundKinds.Add(FVector2D(Height, Steepness));
 	}

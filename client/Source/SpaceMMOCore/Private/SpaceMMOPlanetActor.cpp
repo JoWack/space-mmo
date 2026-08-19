@@ -371,6 +371,9 @@ ASpaceMMOPlanetActor::ASpaceMMOPlanetActor()
 	GroundPatch->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GroundPatch->SetVisibility(false);
 
+	// The placeholder, and only until something better is configured. Applied in BeginPlay rather
+	// than here, because a configured path cannot be loaded from a constructor that also runs while
+	// the class default object is being created.
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> SphereMaterial(
 		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 
@@ -381,9 +384,57 @@ ASpaceMMOPlanetActor::ASpaceMMOPlanetActor()
 	}
 }
 
+void ASpaceMMOPlanetActor::ApplyTerrainMaterial()
+{
+	// Said on every path, including the one that does nothing.
+	//
+	// The first version returned silently when nothing was configured, so a material that failed to
+	// arrive and code that never ran produced the same evidence: grey ground and no line in the log.
+	// That is the one thing a diagnostic must never do -- see the rule this project keeps relearning.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Terrain material configured as '%s'."),
+		TerrainMaterial.IsNull() ? TEXT("<unset>") : *TerrainMaterial.ToString());
+
+	if (TerrainMaterial.IsNull())
+	{
+		// A working state: the grey placeholder from the constructor stays, which is what every
+		// machine without an authored material is in, including the automated runs. Now it says so,
+		// and an unset value is distinguishable from a config that never reached this class.
+		return;
+	}
+
+	UMaterialInterface* const Material = Cast<UMaterialInterface>(TerrainMaterial.TryLoad());
+
+	// Named-but-wrong is worth saying out loud. From the outside a typo'd path and an unset one look
+	// identical -- grey ground either way -- and one of them is a mistake somebody wants telling
+	// about.
+	if (Material == nullptr)
+	{
+		UE_LOG(LogSpaceMMO, Warning,
+			TEXT("Terrain material '%s' did not load; the ground keeps the placeholder."),
+			*TerrainMaterial.ToString());
+
+		return;
+	}
+
+	if (Surface != nullptr)
+	{
+		Surface->SetMaterial(0, Material);
+	}
+
+	if (GroundPatch != nullptr)
+	{
+		GroundPatch->SetMaterial(0, Material);
+	}
+
+	UE_LOG(LogSpaceMMO, Log, TEXT("Terrain drawing with '%s'."), *TerrainMaterial.ToString());
+}
+
 void ASpaceMMOPlanetActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	ApplyTerrainMaterial();
 
 	BuildGlobe();
 
@@ -432,29 +483,16 @@ namespace
 			return;
 		}
 
-		// Two layers, and asked for explicitly: a mesh starts with one and the second is where the
-		// ground's own description goes.
-		Attributes->SetNumUVLayers(2);
-
-		const TArray<FVector2D>* const Sources[2] = { &SurfaceUVs, &GroundKinds };
-
-		for (int32 Layer = 0; Layer < 2; ++Layer)
+		// UV0 carries the surface parameterisation, for tiling a texture.
+		if (FDynamicMeshUVOverlay* const UVs = Attributes->PrimaryUV();
+			UVs != nullptr && SurfaceUVs.Num() >= Mesh.MaxVertexID())
 		{
-			FDynamicMeshUVOverlay* const UVs = Attributes->GetUVLayer(Layer);
-
-			const TArray<FVector2D>& Source = *Sources[Layer];
-
-			if (UVs == nullptr || Source.Num() < Mesh.MaxVertexID())
-			{
-				continue;
-			}
-
 			UVs->ClearElements();
 
 			TArray<int32> Elements;
-			Elements.Reserve(Source.Num());
+			Elements.Reserve(SurfaceUVs.Num());
 
-			for (const FVector2D& Value : Source)
+			for (const FVector2D& Value : SurfaceUVs)
 			{
 				Elements.Add(UVs->AppendElement(FVector2f(Value)));
 			}
@@ -464,6 +502,49 @@ namespace
 				const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
 
 				UVs->SetTriangle(
+					TriangleId,
+					FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
+			}
+		}
+
+		// Height and steepness go in the vertex colour, not a second UV channel.
+		//
+		// They were in UV1 first, and the mesh carried them correctly -- 32768 triangles across two
+		// layers, and the scene proxy forwards every layer it finds. A material reading TexCoord[1]
+		// still got a constant, and rather than keep chasing where an index stops matching, this is
+		// the channel the engine and every terrain material already agree on: VertexColor has no
+		// index to get wrong.
+		if (GroundKinds.Num() < Mesh.MaxVertexID())
+		{
+			return;
+		}
+
+		Attributes->EnablePrimaryColors();
+
+		if (FDynamicMeshColorOverlay* const Colors = Attributes->PrimaryColors())
+		{
+			Colors->ClearElements();
+
+			TArray<int32> Elements;
+			Elements.Reserve(GroundKinds.Num());
+
+			for (const FVector2D& Kind : GroundKinds)
+			{
+				// Red is height, green is steepness, and blue is left free for whatever the third
+				// thing turns out to be -- moisture, or a biome mask, when a planet needs one.
+				Elements.Add(Colors->AppendElement(
+					FVector4f(
+						static_cast<float>(Kind.X),
+						static_cast<float>(Kind.Y),
+						0.0f,
+						1.0f)));
+			}
+
+			for (const int32 TriangleId : Mesh.TriangleIndicesItr())
+			{
+				const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
+
+				Colors->SetTriangle(
 					TriangleId,
 					FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
 			}
@@ -620,6 +701,32 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 		Globe.Triangles.Num() / 3);
 
 	UE_LOG(LogSpaceMMO, Log, TEXT("  globe attributes: %s."), *GlobeAttributes);
+
+	// What the material actually has to work with, rather than what it is assumed to have.
+	//
+	// Both channels are 0..1 by construction, which says nothing about the range they occupy on a
+	// given planet -- and a blend keyed to a channel that only ever spans a hundredth reads as a
+	// flat colour no matter how the material is authored. Measured here because the alternative is
+	// inferring it from a screenshot, which is how this project has lost afternoons before.
+	if (Globe.GroundKinds.Num() > 0)
+	{
+		double LowestHeight = 1.0;
+		double HighestHeight = 0.0;
+		double Gentlest = 1.0;
+		double Steepest = 0.0;
+
+		for (const FVector2D& Kind : Globe.GroundKinds)
+		{
+			LowestHeight = FMath::Min(LowestHeight, Kind.X);
+			HighestHeight = FMath::Max(HighestHeight, Kind.X);
+			Gentlest = FMath::Min(Gentlest, Kind.Y);
+			Steepest = FMath::Max(Steepest, Kind.Y);
+		}
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("  globe ground kinds: height %.3f..%.3f, steepness %.3f..%.3f (of 0..1)."),
+			LowestHeight, HighestHeight, Gentlest, Steepest);
+	}
 
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("Planet globe: %d triangles, %s winding, a vertex every %.0f m of ground."),

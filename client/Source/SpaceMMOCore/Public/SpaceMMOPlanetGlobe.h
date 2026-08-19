@@ -46,7 +46,9 @@ struct SPACEMMOCORE_API FPlanetGlobeMesh
 	 * What the ground is like at each vertex: X is height, Y is steepness, both 0..1.
 	 *
 	 * Height is the fraction of the planet's maximum relief, so 0 is the nominal radius and 1 is the
-	 * highest ground can go. Steepness is 1 - dot(normal, up), so 0 is level and 1 is a cliff.
+	 * highest ground can go. Steepness is the sine of the slope angle: 0 level, 1 vertical, and 0.5
+	 * at thirty degrees. Sine rather than 1 - cos because the latter reads 0.15 on a 32 degree
+	 * hillside, which is invisible.
 	 *
 	 * Computed here rather than in the material because both numbers come from the height function,
 	 * which the shader has no access to -- and deriving steepness from a world normal in the shader

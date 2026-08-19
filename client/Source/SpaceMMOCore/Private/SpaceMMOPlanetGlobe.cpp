@@ -57,8 +57,15 @@ namespace
 			? FMath::Clamp(Rise / Terrain.MaxElevationKilometres, 0.0, 1.0)
 			: 0.0;
 
-		const double Steepness =
-			FMath::Clamp(1.0 - FVector::DotProduct(Normal, Direction), 0.0, 1.0);
+		// The sine of the slope angle, not one minus the cosine.
+		//
+		// Both are zero on the flat and one at vertical, and they distribute completely differently
+		// in between: a 32 degree hillside is 0.15 under 1 - cos and 0.53 under sin. The first is
+		// indistinguishable from flat on screen, which is exactly what it looked like -- a channel
+		// that was arriving correctly and had nothing visible to say.
+		const double Level = FMath::Clamp(FVector::DotProduct(Normal, Direction), -1.0, 1.0);
+
+		const double Steepness = FMath::Sqrt(FMath::Max(0.0, 1.0 - (Level * Level)));
 
 		return FVector2D(Height, Steepness);
 	}

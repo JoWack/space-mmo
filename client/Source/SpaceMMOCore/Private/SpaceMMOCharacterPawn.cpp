@@ -54,8 +54,14 @@ ASpaceMMOCharacterPawn::ASpaceMMOCharacterPawn()
 	}
 
 	// The engine cylinder is 100 cm tall with its origin at the centre, so a person-sized one is
-	// 1.8 units tall and lifted 90 cm to stand on its feet rather than sink to its waist.
-	Body->SetRelativeScale3D(FVector(0.4, 0.4, 0.9));
+	// scaled to 1.8 and lifted 90 cm: it then spans 0 to 180 cm above the root, standing on its
+	// feet with its head at 1.8 m and both cameras -- at 160 and 165 cm -- at eye height.
+	//
+	// The scale was 0.9, which is what this comment's arithmetic gives if the mesh is 200 cm tall.
+	// It is 100, measured: half height 50. So the character was 90 cm tall with its feet 45 cm
+	// above its own origin -- floating on the flat, and buried to the knees on anything sloped,
+	// which is two symptoms of one number.
+	Body->SetRelativeScale3D(FVector(0.4, 0.4, 1.8));
 	Body->SetRelativeLocation(FVector(0.0, 0.0, 90.0));
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -163,6 +169,44 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 		bOnGround = true;
 
 		Navigation.SystemPosition = Contact.Position;
+
+		// Raw facts, and nothing derived from them.
+		//
+		// Two attempts at computing "how far are the feet off the ground" were both wrong -- one
+		// measured along world Z on a character aligned to a sphere, the other used a bounding
+		// sphere radius as a stand-in for a cylinder's half height -- and each produced a confident
+		// number that disagreed with the screen. So this prints what is actually known and leaves
+		// the arithmetic to whoever is reading, which is the only version that cannot be subtly
+		// wrong.
+		if (!bReportedStandingGap && Body != nullptr)
+		{
+			bReportedStandingGap = true;
+
+			const UStaticMesh* const Mesh = Body->GetStaticMesh();
+
+			const FVector LocalExtent = Mesh != nullptr
+				? Mesh->GetBounds().BoxExtent
+				: FVector::ZeroVector;
+
+			const FVector LocalOrigin = Mesh != nullptr
+				? Mesh->GetBounds().Origin
+				: FVector::ZeroVector;
+
+			UE_LOG(LogSpaceMMO, Log,
+				TEXT("Standing gap: standing height %.1f cm; body relative Z %.1f cm, scale Z %.2f; "
+					"mesh local origin Z %.1f, half height %.1f cm -> scaled half height %.1f cm, "
+					"so mesh spans %.1f..%.1f cm above the root."),
+				StandingHeightKilometres * 100000.0,
+				Body->GetRelativeLocation().Z,
+				Body->GetRelativeScale3D().Z,
+				LocalOrigin.Z,
+				LocalExtent.Z,
+				LocalExtent.Z * Body->GetRelativeScale3D().Z,
+				Body->GetRelativeLocation().Z
+					+ ((LocalOrigin.Z - LocalExtent.Z) * Body->GetRelativeScale3D().Z),
+				Body->GetRelativeLocation().Z
+					+ ((LocalOrigin.Z + LocalExtent.Z) * Body->GetRelativeScale3D().Z));
+		}
 		WalkState.Velocity = Contact.Velocity;
 	}
 }

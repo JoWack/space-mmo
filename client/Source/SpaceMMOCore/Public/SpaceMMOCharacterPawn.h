@@ -127,12 +127,22 @@ protected:
 	FShipReconciliation Reconciliation;
 
 	/**
-	 * Distance from the character's centre to its feet, in kilometres.
+	 * How far the character's lowest point is from its origin, in kilometres.
 	 *
-	 * Ninety centimetres, so the placeholder capsule stands on the ground rather than half in it.
+	 * <strong>Zero, because this pawn's origin is its feet.</strong> The body mesh is offset upward
+	 * from the root and both cameras sit at eye height above it -- 160 and 165 cm -- so everything
+	 * here is built around an origin on the ground.
+	 *
+	 * It was ninety centimetres, documented as the distance from the character's centre to its feet,
+	 * which is the other convention entirely. Ground contact duly held the origin ninety centimetres
+	 * up and the whole character floated by exactly that: measured at 90.0 cm above the ground with
+	 * a standing height of 90.0 cm, which is the pair of numbers that named it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Character")
-	double StandingHeightKilometres = 0.0009;
+	double StandingHeightKilometres = 0.0;
+
+	/** So the standing-gap measurement is reported once rather than sixty times a second. */
+	bool bReportedStandingGap = false;
 
 	UPROPERTY(EditAnywhere, Category = "SpaceMMO|Character")
 	FVector StartingSystemPositionKilometres = FVector::ZeroVector;
