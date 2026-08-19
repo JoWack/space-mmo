@@ -69,6 +69,105 @@ WebApplication app = builder.Build();
 // A server that migrates and rewrites content every time it boots will eventually do that to a
 // production database during an unrelated restart. Making it a separate invocation means applying
 // content is always something somebody chose to do.
+// Changing an account's password, for when one has to be rotated.
+//
+//   dotnet run --project services/SpaceMMO.Api -- --set-password someone@example.com
+//
+// The new password is read from stdin rather than taken as an argument, because an argument ends up
+// in shell history, in process listings and in any log that records a command line -- which is the
+// same class of exposure that made this command necessary the first time.
+//
+// There is deliberately no HTTP endpoint for this yet. Changing a password over the wire needs the
+// old one, a rate limit and a decision about sessions surviving it, and none of that is settled;
+// this is the operator's tool, run by somebody who already has the database.
+if (args.Contains("--set-password", StringComparer.Ordinal))
+{
+    int emailIndex = Array.IndexOf(args, "--set-password") + 1;
+
+    if (emailIndex >= args.Length)
+    {
+        Console.Error.WriteLine("Usage: --set-password <email>");
+
+        return 1;
+    }
+
+    // Normalised exactly as registration does, because that is the form actually stored.
+    string email = args[emailIndex].Trim().ToLowerInvariant();
+
+    await using AsyncServiceScope passwordScope = app.Services.CreateAsyncScope();
+
+    SpaceMmoDbContext accounts =
+        passwordScope.ServiceProvider.GetRequiredService<SpaceMmoDbContext>();
+
+    Account? account = await accounts.Accounts.SingleOrDefaultAsync(a => a.Email == email);
+
+    if (account is null)
+    {
+        // Named plainly. This is an operator at a console who already has the database, not a login
+        // form -- the reason a login says nothing is to avoid telling a stranger which accounts
+        // exist, and there is no stranger here.
+        Console.Error.WriteLine($"No account with email {email}.");
+
+        return 1;
+    }
+
+    Console.Write("New password (not echoed): ");
+
+    var typed = new System.Text.StringBuilder();
+
+    // Read a key at a time so the terminal never shows it. Console.ReadLine would put the password
+    // on screen and leave it in the scrollback of whatever ran this.
+    while (true)
+    {
+        ConsoleKeyInfo key = Console.ReadKey(intercept: true);
+
+        if (key.Key == ConsoleKey.Enter)
+        {
+            Console.WriteLine();
+
+            break;
+        }
+
+        if (key.Key == ConsoleKey.Backspace)
+        {
+            if (typed.Length > 0)
+            {
+                typed.Length -= 1;
+            }
+
+            continue;
+        }
+
+        if (!char.IsControl(key.KeyChar))
+        {
+            typed.Append(key.KeyChar);
+        }
+    }
+
+    string password = typed.ToString();
+
+    // The same floor the register endpoint enforces. A rotation that quietly accepts something
+    // weaker than sign-up would is a hole in the one place somebody is thinking about passwords.
+    if (password.Length < 12)
+    {
+        Console.Error.WriteLine("Password must be at least 12 characters. Nothing was changed.");
+
+        return 1;
+    }
+
+    account.PasswordHash = PasswordHasher.Hash(password);
+
+    await accounts.SaveChangesAsync();
+
+    // Existing sessions still work: tokens are signed, not derived from the password. Said out loud
+    // because "I changed the password" and "everything holding a token is now locked out" are
+    // different claims and somebody rotating a leaked credential is owed the difference.
+    Console.WriteLine($"Password changed for {account.Email}.");
+    Console.WriteLine("Existing session tokens remain valid; delete client/Saved/session.txt to be sure.");
+
+    return 0;
+}
+
 if (args.Contains("--seed", StringComparer.Ordinal))
 {
     await using AsyncServiceScope scope = app.Services.CreateAsyncScope();
