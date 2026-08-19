@@ -481,6 +481,8 @@ void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerIn
 		TEXT("WalkRight"), this, &ASpaceMMOCharacterPawn::MoveRight);
 	PlayerInputComponent->BindAxis(
 		TEXT("WalkTurn"), this, &ASpaceMMOCharacterPawn::TurnRight);
+	PlayerInputComponent->BindAxis(
+		TEXT("WalkLook"), this, &ASpaceMMOCharacterPawn::LookUp);
 
 	PlayerInputComponent->BindAction(
 		TEXT("WalkJump"), IE_Pressed, this, &ASpaceMMOCharacterPawn::StartJump);
@@ -506,6 +508,37 @@ void ASpaceMMOCharacterPawn::MoveRight(const float Value)
 void ASpaceMMOCharacterPawn::TurnRight(const float Value)
 {
 	PendingInput.Turn = Value;
+}
+
+void ASpaceMMOCharacterPawn::LookUp(const float Value)
+{
+	if (FMath::IsNearlyZero(Value))
+	{
+		return;
+	}
+
+	// Clamped rather than wrapped. Past vertical the view rolls over and every subsequent movement
+	// reads inverted, which is indistinguishable from broken controls and has no recovery that is
+	// not itself surprising.
+	ViewPitchDegrees = FMath::Clamp(
+		ViewPitchDegrees + (Value * LookSensitivityDegrees),
+		-MaxLookPitchDegrees,
+		MaxLookPitchDegrees);
+
+	// On the boom, which already inherits the character's own orientation -- and the character's up
+	// is the ground's normal, not the world's. Adding pitch to a controller rotation instead would
+	// be pitching about an axis that means nothing on a sphere.
+	if (CameraBoom != nullptr)
+	{
+		CameraBoom->SetRelativeRotation(FRotator(ViewPitchDegrees, 0.0, 0.0));
+	}
+
+	// The first-person camera is on the root rather than the boom, so it has to be tilted too or
+	// looking up works in one view and silently does nothing in the other.
+	if (FirstPersonCamera != nullptr)
+	{
+		FirstPersonCamera->SetRelativeRotation(FRotator(ViewPitchDegrees, 0.0, 0.0));
+	}
 }
 
 void ASpaceMMOCharacterPawn::StartJump()

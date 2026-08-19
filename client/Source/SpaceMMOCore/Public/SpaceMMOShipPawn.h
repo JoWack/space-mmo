@@ -81,6 +81,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Ship")
 	void SetSystemPosition(const FSystemCoordinate& NewPosition);
 
+	/**
+	 * Where the ship will be when it begins play.
+	 *
+	 * Must be called on a deferred spawn, before FinishSpawning — the same contract as
+	 * <c>ASpaceMMOCharacterPawn::SetStartingSystemPosition</c>, and named the same way because the
+	 * two pawns had grown separate spellings of one idea and a caller had to know which was which.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Ship")
+	void SetStartingSystemPosition(const FVector& Kilometres)
+	{
+		StartingSystemPositionKilometres = Kilometres;
+	}
+
 	/** The system position that currently maps to Unreal's world origin. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	FSystemCoordinate GetRenderOrigin() const { return Navigation.RenderOrigin; }

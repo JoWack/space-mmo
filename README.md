@@ -197,10 +197,13 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md),
   [ADR-0009](docs/adr/0009-retaliation.md)), and death and insurance made real
   ([ADR-0006](docs/adr/0006-death-and-insurance.md))
-- **M7** — depth: careers, repeatable quest content, the repair loop, caves
-  ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md))
+- **M7** — a world worth being in: terrain that is textured rather than grey, cube-sphere LOD so a
+  planet is not one patch on a smooth ball, caves
+  ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md)), settlements, and authoring world
+  content graphically instead of by hand in JSON
+- **M8** — depth: careers, repeatable quest content, the repair loop
 
-Three corrections worth keeping, because each was wrong for a long time without anybody noticing.
+Four corrections worth keeping, because each was wrong for a long time without anybody noticing.
 
 **M4 used to read "universe scale: procedural galaxy, warp handoff, careers, security zones".**
 [ADR-0007](docs/adr/0007-one-handcrafted-system.md) deleted the first two outright — it calls them
@@ -211,6 +214,13 @@ updated, so the roadmap promised a galaxy the ADRs had already cancelled.
 eight combat and pilot skills, defers `constitution` and `stamina` XP "to the combat milestone", and
 three ADRs describe rules — who may shoot whom, what a security zone means, what dying costs — that
 have nothing to shoot with.
+
+**And there was no milestone for how the world looks**, while M2 recorded terrain as done. That is
+true in the sense that terrain exists and false in every sense a player would mean: the ground is
+the engine's grey placeholder material, neither mesh builder writes UVs at all, and a planet is one
+1.4 km patch on an otherwise smooth ball. Caves and settlements were sitting in M7 under "depth",
+which had quietly made that milestone half about the world without saying so. Added 18 August as
+M7, pushing careers and quest content to M8; the tasks are 121 and 122.
 
 **And there was no interface milestone**, while every screen in the game is
 `AddOnScreenDebugMessage` and there is no UMG or Slate anywhere in `client/`. The design bible

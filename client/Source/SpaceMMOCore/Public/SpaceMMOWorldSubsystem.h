@@ -1,6 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "SpaceMMOPlanetTerrain.h"
+#include "SpaceMMOPlanet.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "SpaceMMOWorldSubsystem.generated.h"
 
@@ -29,6 +31,21 @@ public:
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
+
+	/**
+	 * The starting planet's configuration, independent of whether it has been spawned yet.
+	 *
+	 * <strong>One definition, two readers.</strong> This subsystem builds the planet during
+	 * OnWorldBeginPlay, and the game mode has to place a character on that planet's surface — but
+	 * a connection is given a pawn before OnWorldBeginPlay runs, so asking the actor found nothing
+	 * and the character was dropped near the system origin, 59 km from the planet, falling.
+	 *
+	 * Waiting for the actor and correcting afterwards would work and would be a second mechanism
+	 * for a fact that is a constant. These are constants, so they are readable as constants.
+	 */
+	static FPlanetConfig StartingPlanet();
+
+	static FPlanetTerrainConfig StartingPlanetTerrain();
 
 	/**
 	 * Applies the lighting console variables when they change.

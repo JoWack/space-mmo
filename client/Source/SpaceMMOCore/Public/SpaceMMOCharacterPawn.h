@@ -155,6 +155,30 @@ private:
 	void MoveForward(float Value);
 	void MoveRight(float Value);
 	void TurnRight(float Value);
+
+	/**
+	 * Tilts the view up and down.
+	 *
+	 * <strong>The camera, not the character.</strong> Turning is part of the walk model because it
+	 * changes which way the body faces and the server simulates that; pitch changes nothing about
+	 * where somebody stands or walks, so putting it in FWalkInput would replicate a number the
+	 * simulation has no use for and add a field to a struct with headless tests over it.
+	 *
+	 * Clamped short of vertical, because a view that passes straight up flips the horizon over and
+	 * there is no way back from it that is not a second bug.
+	 */
+	void LookUp(float Value);
+
+	/** Degrees per unit of mouse movement. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	double LookSensitivityDegrees = 1.5;
+
+	/** How far the view may tilt from level, short of straight up or straight down. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	double MaxLookPitchDegrees = 85.0;
+
+	/** Where the view is tilted to. Local to whoever is looking; nothing else depends on it. */
+	double ViewPitchDegrees = 0.0;
 	void StartJump();
 	void StopJump();
 

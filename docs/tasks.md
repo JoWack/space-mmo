@@ -1432,7 +1432,10 @@ had grown two halves. They are filed here rather than under M6 — which is wher
 combat tasks and gathering bugs and test tooling under one heading — because a milestone is a claim
 about what the game will be able to do, and none of these are that yet.
 
-Several belong in a milestone the roadmap does not currently name; see the note under 121 and 122.
+Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, and
+the existing 89, 96 and 97. They are left in place here rather than moved, because a task's number is
+how it is referred to months later and shuffling blocks around a file this size is how content gets
+lost.
 
 ## 111 — Gathering and industry ignore where you are
 
@@ -1787,28 +1790,65 @@ adding a third.
 
 ## 120 — Start on foot, on the planet
 
-**Pending. Split out of 115 on 18 August**, because it is the part of ADR-0012 that nothing else
-depends on and everything visual does.
+**Done 18 August**, confirmed by playtest. Split out of 115 the same day.
 
-`SpaceMMOGameMode` sets `DefaultPawnClass = ASpaceMMOShipPawn`, so every connection spawns flying.
-ADR-0012 says nobody starts with a ship; this is that sentence, and only that sentence. Summoning,
+`SpaceMMOGameMode` set `DefaultPawnClass = ASpaceMMOShipPawn`, so every connection spawned flying.
+ADR-0012 says nobody starts with a ship; this is that sentence and only that sentence. Summoning,
 active-ship state and the questline stay in 115.
 
-**Why first, and why it is not just tidiness.** Terrain is only visible within 32 km of the planet's
-centre and the patch is 1.4 km across, so today every look at the ground costs a descent. On foot the
-horizon is 283 m and the patch is simply the world — which turns "does this material read right"
-from a flight into a glance. Every task below is iterated on by looking, and this is what makes
-looking cheap.
+The default pawn is now the character, spawned **deferred** and placed against the height function —
+deferred because `ASpaceMMOCharacterPawn::BeginPlay` resolves the ground and aligns to it, so a
+position set after `FinishSpawning` arrives too late and the first frame is spent somewhere else.
 
-What it needs: the default pawn becomes `ASpaceMMOCharacterPawn`, spawned against the height function
-at a starting direction rather than at a default position — the `-SpawnCharacter` path in
-`SpawnTestScene` already does exactly this and is the working reference.
+Placed above the surface and left to fall the last few metres, so ground contact catches the
+character rather than the spawn positioning it by hand — which is what actually demonstrates that the
+mesh and the height function agree. The drop clears `MaxElevationKilometres` as well as the radius,
+or a character starts inside a hill.
 
-**Keep a way into a ship.** Flight is the most-tested thing in the project and losing casual access to
-it while terrain work is happening would be a poor trade. Boarding already works; what is needed is
-something to board, so a dev spawn stays until 115 makes summoning real.
+A **starter ship** spawns 30 m away, unpossessed, for somebody to walk over and board. Scaffolding
+until 115: flight is the most-tested thing in the project and losing casual access to it would be a
+poor trade for a change about where a character stands. `bSpawnStarterShip` off is how "nobody starts
+with a ship" gets tested before the questline that grants one exists.
 
-Blocked by nothing. Blocks nothing formally, and makes 121 and 122 far cheaper.
+### Two things this cost, both about where a fact lives
+
+**The planet's position was written down twice.** The first attempt configured a starting centre on
+the game mode, copied from the old `-SpawnCharacter` scaffolding, which said 200 km while the planet
+had since moved to 60. The character spawned 121 km above the surface, resolved "up" perfectly
+correctly against a planet it was nowhere near, and fell through empty space with nothing on screen.
+
+**Then asking the planet actor did not work either**, because a connection is given its pawn *before*
+`USpaceMMOWorldSubsystem::OnWorldBeginPlay` has spawned the planet — 323 ms apart, measured from the
+log. The lookup found nothing, fell back to the placed transform, and dropped the character near the
+system origin instead.
+
+The planet's numbers were hardcoded inside the subsystem's spawn block, so they moved to
+`USpaceMMOWorldSubsystem::StartingPlanet()` and `StartingPlanetTerrain()`. The subsystem builds the
+planet from them and the game mode places a character from them: one definition, two readers, no
+ordering to get wrong. Waiting for the actor and correcting afterwards would also have worked and
+would have been a second mechanism for something that is a constant.
+
+**The log line was part of the problem.** It printed a distance from a centre it had been handed, so
+it read as correct while measuring from the wrong place — a diagnostic that agreed with the bug. It
+now names the planet and radius it measured against, which is what turned the second failure into a
+one-line diagnosis.
+
+### Also: you could not look up or down
+
+Found in the same playtest and not a regression — `DefaultInput.ini` bound `WalkTurn` to `MouseX` and
+nothing at all to `MouseY`. Looking up and down had never existed on foot; starting there is simply
+what made it obvious.
+
+`WalkLook` on `MouseY`, inverted, clamped to ±85°. It pitches the **camera, not the character**:
+turning belongs to the walk model because the server simulates which way a body faces, while pitch
+changes nothing about where somebody stands — putting it in `FWalkInput` would replicate a number the
+simulation cannot use and add a field to a struct with headless tests over it.
+
+Both cameras get the pitch. The first-person camera hangs off the character root rather than the
+boom, so tilting only the boom works in third person and silently does nothing in first.
+
+**No automated coverage**, and that is not fixable cheaply: it needs a world, a game mode and a
+possessed pawn, none of which the headless suite has. The log line is the instrument.
 
 ## 121 — The ground is untextured
 
@@ -1864,20 +1904,18 @@ further away, or lower `MaxElevationKilometres` so the step down is smaller.
 already more world than can be seen. This is a flying problem, and it becomes pressing when somebody
 is meant to fly somewhere and land on it deliberately.
 
-### Neither 121 nor 122 has a milestone to live in
+### Both belong to M7, which did not exist until this was written
 
-The roadmap goes M6 combat, M7 depth — "careers, repeatable quest content, the repair loop, caves".
-Caves are terrain representation and settlements are world content, so M7 is already half about the
-world without saying so, and nothing anywhere names how the world *looks*. M2 records terrain as
-done, which is true in the sense that it exists and false in every sense a player would mean.
+**Agreed 18 August: M7 is "a world worth being in"** — 121, 122, 89 (caves), 96 (authoring) and 97
+(settlements) — and careers, repeatable quest content and the repair loop moved to M8.
 
-This is the same shape as the two reconciliation failures already recorded in `README.md`: a
-milestone nobody wrote down cannot be prioritised, deferred deliberately, or noticed as missing.
+The roadmap went M6 combat, M7 depth, with caves and settlements filed under "depth" — which had
+quietly made that milestone half about the world without saying so, while nothing anywhere named how
+the world *looks*. M2 records terrain as done, true in the sense that it exists and false in every
+sense a player would mean.
 
-**Proposed, and Joe's call:** a milestone between combat and depth — the world worth being in —
-holding 121, 122, 89 (caves), 96 (authoring) and 97 (settlements), with careers, repeatable quests
-and the repair loop moving to the milestone after it. Not done unilaterally: renumbering a roadmap
-is a decision, and this file exists because those get lost when they are made in passing.
+That is the same shape as the reconciliation failures already recorded in `README.md`, and it is now
+the fourth one listed there.
 
 ## 96 — Author world content graphically
 

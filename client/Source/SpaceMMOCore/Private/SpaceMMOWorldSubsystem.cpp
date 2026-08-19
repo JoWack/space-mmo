@@ -100,6 +100,42 @@ bool USpaceMMOWorldSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 			|| World->WorldType == EWorldType::PIE);
 }
 
+FPlanetConfig USpaceMMOWorldSubsystem::StartingPlanet()
+{
+	// 20 km radius at 60 km.
+	//
+	// It was 200 km, which was unflyable: at the ship's acceleration that is around two and a half
+	// minutes of unbroken thrust, during which a distant sphere barely changes apparent size while
+	// the marker lattice streams past three kilometres apart. The planet looked stationary and
+	// everything else looked fast, which reads as the planet running away. Sixty kilometres is far
+	// enough to be a real approach and close enough to be worth making.
+	FPlanetConfig Config;
+	Config.Centre = FSystemCoordinate(60.0, 0.0, 0.0);
+	Config.RadiusKilometres = 20.0;
+	Config.SurfaceGravity = 981.0;
+	Config.AtmosphereHeightKilometres = 12.0;
+
+	return Config;
+}
+
+FPlanetTerrainConfig USpaceMMOWorldSubsystem::StartingPlanetTerrain()
+{
+	// Half a kilometre of relief on a 20 km world is 2.5% of the radius. Earth's tallest mountain
+	// is 0.14% of Earth's, so this planet is roughly eighteen times as rugged, and now that the
+	// whole globe is drawn from these numbers rather than approximated by a ball that is something
+	// you can see from orbit rather than a detail of the landing zone.
+	//
+	// Left as it is on purpose: the lighting was tuned against this terrain, and a peak several
+	// times the height of the horizon is what makes the ground read as ground on a planet this
+	// small. Lowering it toward 0.15 would make the planet rounder from space at the cost of
+	// flattening what a player walks on.
+	FPlanetTerrainConfig Terrain;
+	Terrain.Seed = 20260801;
+	Terrain.MaxElevationKilometres = 0.5;
+
+	return Terrain;
+}
+
 void USpaceMMOWorldSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
@@ -183,13 +219,7 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 		nullptr,
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
 	{
-		FPlanetConfig Config;
-		Config.Centre = FSystemCoordinate(60.0, 0.0, 0.0);
-		Config.RadiusKilometres = 20.0;
-		Config.SurfaceGravity = 981.0;
-		Config.AtmosphereHeightKilometres = 12.0;
-
-		PlanetActor->SetPlanetConfig(Config);
+		PlanetActor->SetPlanetConfig(StartingPlanet());
 
 		// Half a kilometre of relief on a 20 km world is 2.5% of the radius. Earth's tallest
 		// mountain is 0.14% of Earth's, so this planet is roughly eighteen times as rugged, and
@@ -200,11 +230,7 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 		// several times the height of the horizon is what makes the ground read as ground on a
 		// planet this small. Lowering it toward 0.15 would make the planet rounder from space at
 		// the cost of flattening what a player walks on.
-		FPlanetTerrainConfig Terrain;
-		Terrain.Seed = 20260801;
-		Terrain.MaxElevationKilometres = 0.5;
-
-		PlanetActor->SetTerrainConfig(Terrain);
+		PlanetActor->SetTerrainConfig(StartingPlanetTerrain());
 		PlanetActor->FinishSpawning(FTransform::Identity);
 	}
 
