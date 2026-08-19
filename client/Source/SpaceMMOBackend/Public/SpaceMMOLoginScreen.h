@@ -71,11 +71,17 @@ protected:
 
 	virtual void NativeDestruct() override;
 
-	/** The email box, so a restored address can be put back in it and focused. */
-	UPROPERTY(meta = (BindWidgetOptional))
+	/**
+	 * The two boxes, read by the Blueprint's sign-in button and cleared here after an attempt.
+	 *
+	 * <strong>BlueprintReadOnly as well as BindWidgetOptional.</strong> The bind makes the pointer
+	 * arrive; it does nothing about visibility, and a bare UPROPERTY is invisible to a graph — which
+	 * looks exactly like a name that does not match, since neither produces an error.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Identity", meta = (BindWidgetOptional))
 	TObjectPtr<class UEditableTextBox> EmailBox;
 
-	UPROPERTY(meta = (BindWidgetOptional))
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Identity", meta = (BindWidgetOptional))
 	TObjectPtr<class UEditableTextBox> PasswordBox;
 
 private:

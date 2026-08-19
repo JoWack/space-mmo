@@ -50,10 +50,13 @@ void ASpaceMMOPlayerController::BeginPlay()
 	// Only the machine sitting in front of the player has a token to present.
 	if (IsLocalController())
 	{
-		BeginIdentifying();
+		// The HUD first. BeginIdentifying decides whether to ask for a sign-in, and it cannot ask on
+		// a screen that does not exist yet -- which is what happened when this ran the other way
+		// round: it logged "no login screen configured" and the screen was created 128 ms later.
+		CreateHud();
 
 		ApplyMouseCapture();
-		CreateHud();
+		BeginIdentifying();
 	}
 }
 
@@ -197,6 +200,22 @@ void ASpaceMMOPlayerController::ApplyMouseCapture()
 		SetInputMode(FInputModeGameOnly());
 
 		bShowMouseCursor = false;
+
+		return;
+	}
+
+	// UIOnly while signing in, GameAndUI otherwise. The difference is that GameAndUI still delivers
+	// to the pawn, so every keystroke of an email was also rolling and pitching the ship behind the
+	// screen -- a player typing is not a player flying, and this is the only screen that is true of.
+	if (bAwaitingSignIn && LoginScreen != nullptr)
+	{
+		FInputModeUIOnly SignInInput;
+		SignInInput.SetWidgetToFocus(LoginScreen->TakeWidget());
+		SignInInput.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+
+		SetInputMode(SignInInput);
+
+		bShowMouseCursor = true;
 
 		return;
 	}
@@ -1080,6 +1099,14 @@ void ASpaceMMOPlayerController::BeginIdentifying()
 		return;
 	}
 
+	// Bound before deciding how the session will arrive, because every route ends in the same three
+	// answers and the two paths had already drifted: the login screen subscribed to the session and
+	// not to the character list, so signing in worked and then nothing followed it -- no identity,
+	// no inventory, no skills, and no error to say why.
+	Backend->OnSessionChanged.AddDynamic(this, &ASpaceMMOPlayerController::HandleSessionChanged);
+	Backend->OnCharactersLoaded.AddDynamic(this, &ASpaceMMOPlayerController::HandleCharactersLoaded);
+	Backend->OnFailed.AddDynamic(this, &ASpaceMMOPlayerController::HandleBackendFailed);
+
 	FString Email;
 	FString Password;
 
@@ -1104,9 +1131,6 @@ void ASpaceMMOPlayerController::BeginIdentifying()
 		{
 			bAwaitingSignIn = true;
 
-			Backend->OnSessionChanged.AddDynamic(
-				this, &ASpaceMMOPlayerController::HandleSessionChanged);
-
 			// Released, and the world hidden behind the screen. A captured cursor cannot reach a
 			// text box, and a sign-in nobody can type into is worse than no screen at all.
 			ApplyMouseCapture();
@@ -1128,10 +1152,6 @@ void ASpaceMMOPlayerController::BeginIdentifying()
 	// reason a login fails here, and it is invisible unless the value actually used is shown —
 	// which cost a debugging round when "joe@gmail.com" arrived as "joe@gmail".
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Signing in as %s."), *Email);
-
-	Backend->OnSessionChanged.AddDynamic(this, &ASpaceMMOPlayerController::HandleSessionChanged);
-	Backend->OnCharactersLoaded.AddDynamic(this, &ASpaceMMOPlayerController::HandleCharactersLoaded);
-	Backend->OnFailed.AddDynamic(this, &ASpaceMMOPlayerController::HandleBackendFailed);
 
 	Backend->LogIn(Email, Password);
 }

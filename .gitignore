@@ -74,3 +74,7 @@ UnrealEngineSource/
 # same value here for the dedicated server to pick up. Never committed: anyone
 # holding this can gather as any character in the game.
 secrets/
+
+# Credentials, wherever they are left. secrets/ is ignored already; this catches a copy
+# moved elsewhere, which is exactly how one reached a commit.
+player-login.txt
