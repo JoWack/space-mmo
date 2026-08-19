@@ -1854,30 +1854,61 @@ possessed pawn, none of which the headless suite has. The log line is the instru
 
 **Pending. Raised 18 August**, from reading rather than a playtest: both terrain meshes are assigned
 `/Engine/BasicShapes/BasicShapeMaterial`, which is the engine's grey placeholder, and neither builder
-writes UVs at all — `ReportPatch` already prints `0 UV layers` and has done since it was written.
+writes UVs at all — `ReportPatch` has printed `0 UV layers` since it was written.
 
 So this is not "the material is wrong", it is "there has never been one".
 
-**The decision to make first: triplanar, or generated UVs.**
+### Decided: generated UVs, not triplanar
 
-- **Triplanar projection** needs no UVs, which suits a mesh that has none and a surface that is a
-  sphere. Spherical UV mapping pinches at the poles, and a cube-sphere patch has no natural seam to
-  cut. It costs three texture samples per pixel instead of one.
-- **Generated UVs** are cheaper to render and mean touching both mesh builders, plus deciding what
-  the mapping is at a patch boundary — where two samplings of one height function already have to
-  agree (86).
+**I recommended triplanar and the recommendation was wrong.** Joe pushed back on both the performance
+argument and the claim that 122 would invalidate UV work, and was right on both counts.
 
-**Recommendation: triplanar.** It is the smaller change, it avoids inventing a UV scheme for a
-surface that will get LOD later (122), and nothing about it forecloses UVs afterwards.
+The globe is a **cube-sphere**: six faces, each a `Resolution × Resolution` grid, and
+`FPlanetGlobe::Build` already computes a `U` and a `V` per vertex to place it — literally those
+names — and then discards them. The patch is the same shape around a viewer direction. UVs are not
+work to invent here; they are a value already in hand that nothing writes down.
 
-**Worth settling with it:** whether the material varies by elevation or slope — rock on the steep
-parts, something else on the flat — because that is most of what makes terrain read as terrain rather
-than as a coloured hill, and the height function already knows both numbers.
+**And LOD makes cube-face UVs easier, not harder.** Subdivision happens within a face, so a child
+tile's UV range is a sub-rectangle of its parent's — the parameterisation is hierarchical and
+survives refinement by construction. That is the standard approach for cube-sphere planets.
 
-**The trap this walks into.** Lighting has cost this project three wrong diagnoses before, and a
-material change is indistinguishable from a lighting change from a screenshot. `ShowFlag.Lighting 0`
-separates "unlit but drawn" from "not drawn", and blown-out white ore beside black ground already
-proved once that shadows cannot be the whole story. Instrument before theorising.
+The error was conflating a cube-sphere with **equirectangular** mapping, which is the one that
+pinches at the poles and has no good seam. This project has never used that, and the pole problem I
+was avoiding does not exist here.
+
+**Where triplanar still earns its place, and it is narrow:** a face projection stretches on
+near-vertical ground, so cliffs smear. The production answer is UVs as the base with a projected
+layer blended in only where the slope is steep — which falls out of the slope variation below rather
+than being a separate mechanism. An addition later, not a foundation.
+
+### Decided: the material varies by slope and elevation
+
+Rock on the steep parts, something else on the flat, and bands with height. The height function
+already knows both numbers, and that variation is most of what separates terrain from a coloured
+hill.
+
+### Every planet looks different, and the data already says which
+
+`data/universe/origin.json` holds five bodies — Terra, Ares, Verdance, Grimhold and The Capital — and
+each has concept art with an explicit palette and material list: Terra oceanic with aged concrete and
+corroded metal, Ares red oxide and dust, Verdance forest with amber bioluminescence, Grimhold black
+slag and basalt, the Capital a built world.
+
+**So the material is per body and belongs in `data/`**, not hardcoded in the client. That is the same
+authority chain everything else follows — `data/` → seed → API → client — and it is what stops the
+look of a planet and the facts about it drifting apart. It also gives 96 a second reason to exist:
+a palette per body is content, and content is authored.
+
+**Not decided yet:** whether the first pass hardcodes one planet's look to get the shader right and
+moves it to `data/` afterwards, or does both at once. The first is smaller and the second avoids
+writing a thing twice.
+
+### The trap this walks into
+
+Lighting has cost this project three wrong diagnoses before, and a material change is
+indistinguishable from a lighting change in a screenshot. `ShowFlag.Lighting 0` separates "unlit but
+drawn" from "not drawn", and blown-out white ore beside black ground already proved once that shadows
+cannot be the whole story. Instrument before theorising.
 
 ## 122 — One patch is not a planet
 
