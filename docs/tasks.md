@@ -1988,6 +1988,42 @@ the two channels.
 nothing is written. A partly filled overlay would blend toward whatever the missing elements
 defaulted to and look deliberate.
 
+### What textures and flora will actually cost, sketched 19 August
+
+**Reasoning rather than a decision**, written down because it was asked after 96 landed — how do
+textures, grass and flora reach the game, and is that this tool or something else? Neither, mostly,
+and one rule decides it.
+
+**The rule: does the server need to know it exists?** ADR-0002's line, not a new one. If it does, it
+is content in `data/`, and 96's tool places it. If it is only ever looked at, it is client-side and
+no content, no serving and no tool is involved at all.
+
+**Textures are the cheap half, and this task already did the expensive part.** The material reads
+height and steepness per vertex and blends three authored colours from a body's `appearance`.
+Texturing means swapping those flat colours for samples driven by the *same two channels* — the
+plumbing exists, is tested, and does not move. What might reasonably become content later is a
+texture set per body, the way the colours already are: authored beside `appearance`, so what a world
+is made of is stated where its palette is rather than compiled in. That is the whole change, and 96's
+tool is not part of it, because it edits placement rather than appearance.
+
+**Flora should never be content.** Nothing collides with grass, nothing gathers it, and the server
+never adjudicates anything about it — so scatter it from the terrain function, seeded by direction,
+and every client derives an identical field for free. That is exactly the argument ADR-0002 makes
+about the ground itself. The hook already exists: the patch mesher rebuilds the ground under the
+viewer as they walk, and scattering instanced meshes from the same directions at the same moment
+gives stable flora with nothing replicated and nothing authored. UE's landscape grass system is not
+available here and never will be — there is no landscape, the ground is a dynamic mesh.
+
+**The exception is the whole point.** The moment a plant can be picked it stops being decoration and
+becomes a deposit: content, in `data/`, placed with 96's tool, which is a thing that already works.
+`verdant_amber` is gathered rather than mined precisely so one world plays differently from another.
+
+**And the trap to refuse:** "gatherable plants everywhere, procedurally" needs C# and C++ to agree
+bit for bit on where they are. ADR-0002 names that as the expensive thing to discover late, and
+ADR-0011 already declined it once for caves. The cheap answer, and the one consistent with both, is
+**authored gatherable points with procedural decoration scattered around them** — the player sees a
+meadow, the server knows about four plants in it.
+
 ## 122 — One patch is not a planet
 
 **Premise corrected and deferred, 19 August, on measurement.** Raised 18 August from prose in 84, 86
