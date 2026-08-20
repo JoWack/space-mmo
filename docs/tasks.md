@@ -2455,11 +2455,57 @@ become a playtest.
 
 **Still to do:**
 
-1. The animation blueprint itself: a blend space on ground speed by direction, and a jump state
-   machine gated on `IsOnGround` with the sign of vertical speed choosing rise from fall. The
-   library has everything it needs — `anim_Idle`, a full directional jog set, `anim_InPlace_Jump_L`,
-   `anim_FallLoop_01_L`, `LandingRoll`. Then set `CharacterAnimClass` in `DefaultGame.ini`; until
-   it is set, the character stands in its bind pose and the log says so.
+1. The animation blueprint itself. **Specified 20 August**, below, and not yet built.
+
+   Create it on the **FreeAnimationLibrary `SK_Mannequin`** — the skeleton the mesh was bound to,
+   not the `Characters/Mannequins` twin — at `/Game/Characters/Human/ABP_Human`. Set **Root Motion
+   Mode to No Root Motion Extraction** in its class defaults: the server owns where a character is,
+   and root motion is how a pose gets to argue with it.
+
+   **`BS_Human_Locomotion`**, a blend space on the same skeleton. Horizontal axis `Direction`,
+   -180..180, 4 divisions. Vertical axis `Speed`, 0..6, 3 divisions — metres per second, matching
+   what the pawn publishes, with the jog row at the 6 m/s the walk config caps at.
+
+   | Speed | -180 | -90 | 0 | +90 | +180 |
+   |---|---|---|---|---|---|
+   | 0 | `anim_Idle` | `anim_Idle` | `anim_Idle` | `anim_Idle` | `anim_Idle` |
+   | 2 | `anim_Walk_Bwd_Loop_L` | `anim_Walk_Left_Loop` | `anim_Walk_Fwd_Loop_L` | `anim_Walk_Right_Loop` | `anim_Walk_Bwd_Loop_L` |
+   | 6 | `anim_Jog_Loop_Bwd` | `anim_Jog_Loop_Left_L` | `anim_Jog_Loop_Fwd` | `anim_Jog_Loop_Right_L` | `anim_Jog_Loop_Bwd` |
+
+   Both ±180 columns hold the same backward asset so the blend has somewhere to go when direction
+   wraps. Every sample is an `_L` variant where there is a choice: those suffixes are which foot
+   leads, and mixing them inside one blend space is foot sliding wherever the blend crosses between
+   them.
+
+   **Event graph**, on Event Blueprint Update Animation: `Try Get Pawn Owner`, cast to
+   `SpaceMMOCharacterPawn`, and read `Speed` from `GetGroundSpeedMetresPerSecond`, `Direction` from
+   `GetMoveDirectionDegrees`, `VerticalSpeed` from `GetVerticalSpeedMetresPerSecond` and
+   `IsGrounded` from `IsOnGround`. A failed cast leaves them zero and the character idles, rather
+   than erroring every frame.
+
+   **State machine**: `Grounded` playing the blend space, `JumpStart` playing
+   `anim_InPlace_Jump_L` once, `Falling` looping `anim_FallLoop_01_L`.
+
+   | From → To | Condition | Blend |
+   |---|---|---|
+   | Grounded → JumpStart | `NOT IsGrounded AND VerticalSpeed > 0.1` | 0.05 |
+   | Grounded → Falling | `NOT IsGrounded AND VerticalSpeed <= 0.1` | 0.20 |
+   | JumpStart → Falling | `VerticalSpeed <= 0.0` | 0.15 |
+   | JumpStart → Grounded | `IsGrounded` | 0.10 |
+   | Falling → Grounded | `IsGrounded` | 0.15 |
+
+   The sign of vertical speed is what separates jumping from walking off a ledge, which is why it is
+   published with its sign rather than as a magnitude. `JumpStart → Grounded` looks redundant and is
+   not: a jump that lands before its takeoff animation finishes has nowhere else to go, and stays
+   stuck in the pose.
+
+   `anim_LandRoll_R` is deliberately unused. It is a full roll and reads as absurd after a small
+   hop; it is worth a fourth state later, gated on how hard the landing was, which is vertical speed
+   at the moment `IsOnGround` becomes true.
+
+   Then `CharacterAnimClass=/Game/Characters/Human/ABP_Human.ABP_Human_C` in `DefaultGame.ini`.
+   **The `_C` matters** — that is the generated class rather than the asset, and without it the load
+   fails and the character stands in its bind pose, which the log says out loud.
 2. Judge the model on the planet: whether `CharacterMeshRotation` is right, whether it stands on the
    ground rather than in it, and whether the third-person boom still frames a person rather than a
    cylinder. All three are config or a number, not a rebuild.
