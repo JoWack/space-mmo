@@ -130,6 +130,30 @@ Seeding is a separate command rather than something startup does, on purpose. A 
 migrates and rewrites content on every boot will eventually do that to a production database
 during an unrelated restart.
 
+### ⚠️ The standalone game reads config and assets once, at startup
+
+Editing `DefaultGame.ini`, an Animation Blueprint, or any other asset **while `play.bat` is running
+changes nothing in that session**, and the symptom is indistinguishable from the change not working.
+This cost two rounds of debugging on 20 August, both diagnosed the same way:
+
+```
+Log file open, 08/20/26 15:03:45     <- the run started here
+ABP_Human.uasset  last saved 16:02   <- the change was made here
+```
+
+Config is read at startup. Assets are read the first time something references them, and once an
+asset is in memory a later `LoadObject` returns the resident copy rather than re-reading the file —
+so even spawning a fresh pawn will not pick up an edited Animation Blueprint. The first case looked
+like `FSoftClassPath` failing to parse; the second looked like the wrong root motion mode. Both were
+just a running game.
+
+**Check the log's own first line against the file's timestamp before believing a fix did not work.**
+It is one command and it has been right twice:
+
+```bash
+head -1 client/Saved/Logs/SpaceMMO.log && stat -c '%y %n' client/Config/DefaultGame.ini
+```
+
 ### Placing deposits and stations by dragging them
 
 Task 96. **Tools → World Authoring** in the editor opens a panel that reads

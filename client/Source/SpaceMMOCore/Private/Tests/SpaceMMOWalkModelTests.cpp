@@ -604,4 +604,83 @@ bool FSpaceMMOCharacterStandsAtItsHeightTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+/**
+ * The direction a blend space is told about matches the key that was pressed.
+ *
+ * <strong>Every other test of this drives the maths with a velocity built by hand, and that is
+ * exactly the gap this project has been bitten through before</strong> — five green tests over a
+ * market panel all constructed their own inputs, and the one value the server actually sent was
+ * the one nobody passed in. So this one presses the key: it runs the real Step with a real input
+ * and asks what the animation graph would be handed.
+ *
+ * Written after a playtest reported strafing right playing the left animation, to settle whether
+ * the sign was wrong in the code or the samples were placed mirrored in the blend space. It was
+ * not the code, and this is what says so next time.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkStrafeReadsAsTheKeyPressedTest,
+	"SpaceMMO.Walk.StrafeReadsAsTheKeyPressed",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkStrafeReadsAsTheKeyPressedTest::RunTest(const FString& Parameters)
+{
+	const FVector Up = FVector(0.0, 0.0, 1.0);
+
+	struct FPress
+	{
+		const TCHAR* What;
+		FVector2D Move;
+		double Expected;
+	};
+
+	// Move.X is forward and Move.Y is right, as the pawn's MoveForward and MoveRight set them.
+	const TArray<FPress> Presses =
+	{
+		{ TEXT("W"), FVector2D(1.0, 0.0), 0.0 },
+		{ TEXT("D"), FVector2D(0.0, 1.0), 90.0 },
+		{ TEXT("A"), FVector2D(0.0, -1.0), -90.0 },
+		{ TEXT("S"), FVector2D(-1.0, 0.0), 180.0 },
+	};
+
+	for (const FPress& Press : Presses)
+	{
+		FWalkState State;
+
+		State.Rotation = FCharacterWalkModel::AlignToSurface(FQuat::Identity, Up);
+
+		FWalkInput Input;
+
+		Input.Move = Press.Move;
+
+		// Long enough to be moving properly rather than reading the first frame of acceleration.
+		for (int32 Step = 0; Step < 60; ++Step)
+		{
+			State = FCharacterWalkModel::Step(
+				State, Input, FWalkConfig(), Up, FVector::ZeroVector, true, 1.0 / 60.0);
+		}
+
+		TestTrue(
+			FString::Printf(TEXT("Holding %s actually moves"), Press.What),
+			FCharacterWalkModel::GroundSpeed(State, Up) > 100.0);
+
+		const double Direction = FCharacterWalkModel::MoveDirectionDegrees(State, Up);
+
+		// Backward sits on the wrap, where either sign is the same heading.
+		const double Measured =
+			FMath::IsNearlyEqual(FMath::Abs(Press.Expected), 180.0)
+				? FMath::Abs(Direction)
+				: Direction;
+
+		TestEqual(
+			FString::Printf(
+				TEXT("Holding %s reads as %.0f degrees"), Press.What, Press.Expected),
+			Measured,
+			FMath::Abs(Press.Expected) == 180.0 ? 180.0 : Press.Expected,
+			0.5);
+	}
+
+	return true;
+}
+
 #endif
