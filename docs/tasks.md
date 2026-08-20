@@ -2459,8 +2459,15 @@ become a playtest.
 
    Create it on the **FreeAnimationLibrary `SK_Mannequin`** — the skeleton the mesh was bound to,
    not the `Characters/Mannequins` twin — at `/Game/Characters/Human/ABP_Human`. Set **Root Motion
-   Mode to No Root Motion Extraction** in its class defaults: the server owns where a character is,
-   and root motion is how a pose gets to argue with it.
+   Mode to Ignore Root Motion** in its class defaults: the server owns where a character is, and
+   root motion is how a pose gets to argue with it.
+
+   **It is `Ignore Root Motion`, not `No Root Motion Extraction`**, and this spec said the wrong one
+   for a day. The engine's own comments settle it — `NoRootMotionExtraction` is "leave root motion in
+   animation", which keeps the root translation in the pose and walks the mesh away from the actor;
+   `IgnoreRootMotion` is "extract root motion but do not apply it", which is the one that holds the
+   mesh on the character. The symptom of getting it wrong is a character that drifts off the middle
+   of the screen while moving, and a backward animation that strikes its pose and then slides.
 
    **`BS_Human_Locomotion`**, a blend space on the same skeleton. Horizontal axis `Direction`,
    -180..180, 4 divisions. Vertical axis `Speed`, 0..6, 3 divisions — metres per second, matching
