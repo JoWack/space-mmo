@@ -8,6 +8,7 @@
 #include "SpaceMMOCharacterPawn.generated.h"
 
 class UCameraComponent;
+class USkeletalMeshComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
 
@@ -52,7 +53,7 @@ struct FCharacterNetState
  * knows nothing about actors and is tested by walking a full arc around a planet with no world
  * loaded at all.
  */
-UCLASS()
+UCLASS(Config = Game)
 class SPACEMMOCORE_API ASpaceMMOCharacterPawn : public APawn
 {
 	GENERATED_BODY()
@@ -82,6 +83,51 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
 	double GetSpeedMetresPerSecond() const { return WalkState.Velocity.Size() / 100.0; }
+
+	/**
+	 * Speed across the ground, in metres per second, ignoring any rise or fall.
+	 *
+	 * <strong>This is what an animation blend space should be driven by</strong>, not the total
+	 * speed above: a character falling off a cliff is moving quickly and walking nowhere, and
+	 * blending a run on total speed would have them sprinting in mid-air.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
+	double GetGroundSpeedMetresPerSecond() const
+	{
+		return FCharacterWalkModel::GroundSpeed(WalkState, SurfaceNormal) / 100.0;
+	}
+
+	/** Metres per second along the surface normal: positive rising, negative falling. */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
+	double GetVerticalSpeedMetresPerSecond() const
+	{
+		return FCharacterWalkModel::VerticalSpeed(WalkState, SurfaceNormal) / 100.0;
+	}
+
+	/**
+	 * Which way the character is travelling relative to the way it faces, in degrees.
+	 *
+	 * Zero ahead, +90 right, -90 left, ±180 back — the convention a directional blend space wants,
+	 * so strafing plays a sidestep rather than a forward run performed sideways.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
+	double GetMoveDirectionDegrees() const
+	{
+		return FCharacterWalkModel::MoveDirectionDegrees(WalkState, SurfaceNormal);
+	}
+
+	/**
+	 * The character's body, for an animation blueprint to be set on.
+	 *
+	 * <strong>Everything animation needs is already published above</strong> — ground speed,
+	 * direction, vertical speed, whether the feet are down — and all four are readable on a remote
+	 * player's pawn as well, because FollowServerState fills the same walk state from what the
+	 * server replicated. So an animation blueprint drives everybody's character from one set of
+	 * values, and none of it feeds back: animation is drawn, never simulated. The server owns where
+	 * a person is, and a pose must never be able to argue with it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
+	USkeletalMeshComponent* GetBodyMesh() const { return BodyMesh; }
 
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Character")
 	void ToggleCameraView();
@@ -151,6 +197,18 @@ protected:
 	bool bShowWalkDebug = true;
 
 private:
+	/** Puts the configured model and animation blueprint on the pawn, or says why it did not. */
+	void ApplyCharacterMesh();
+
+	/**
+	 * Applies which camera is live and what the body does about it.
+	 *
+	 * One function rather than two, because the two decisions are the same decision: in first
+	 * person the character is inside their own head, and a model drawn there fills the screen with
+	 * the underside of a jaw.
+	 */
+	void ApplyCameraView();
+
 	void SimulateStep(double DeltaSeconds);
 	void PublishNetState();
 	void ReconcileWithServer(double DeltaSeconds);
@@ -195,8 +253,52 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Character")
 	TObjectPtr<USceneComponent> CharacterRoot;
 
+	/**
+	 * The placeholder tube, kept and shown only when no character mesh is configured or it fails
+	 * to load.
+	 *
+	 * The same reasoning the deposit settings give for falling back to an engine cylinder: a
+	 * character that failed to render would still walk, still gather and still be invisible, which
+	 * reads as the player not existing and is far worse than an ugly stand-in.
+	 */
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Character")
 	TObjectPtr<UStaticMeshComponent> Body;
+
+	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Character")
+	TObjectPtr<USkeletalMeshComponent> BodyMesh;
+
+	/**
+	 * The character model, e.g. <c>/Game/Characters/Human/HumanCharacterRigged</c>.
+	 *
+	 * <strong>Config, so a model can be swapped without a rebuild.</strong> The same reason the
+	 * terrain material is config: deciding how something looks means trying a value, looking at it,
+	 * and trying another, and a compile in the middle of that loop is how people stop iterating.
+	 *
+	 * Set it in DefaultGame.ini under [/Script/SpaceMMOCore.SpaceMMOCharacterPawn]. Unset leaves
+	 * the placeholder tube, which is a working state and says so in the log.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	FSoftObjectPath CharacterMesh;
+
+	/** The animation blueprint to run on it. Unset leaves the model in its bind pose. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	FSoftClassPath CharacterAnimClass;
+
+	/**
+	 * How the model sits on the pawn, which no two exporters agree about.
+	 *
+	 * Config rather than compiled for exactly the reason above: whether a mesh faces +X or +Y, and
+	 * whether its origin is at its feet or its hips, is discovered by looking at it. Unreal's own
+	 * mannequin wants -90 degrees of yaw; a mesh exported facing forward wants none.
+	 *
+	 * The offset is measured from the pawn's origin, which <em>is</em> the character's feet — see
+	 * StandingHeightKilometres, which is zero for that reason.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	FRotator CharacterMeshRotation = FRotator(0.0, -90.0, 0.0);
+
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	FVector CharacterMeshOffset = FVector::ZeroVector;
 
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Character")
 	TObjectPtr<USpringArmComponent> CameraBoom;

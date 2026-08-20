@@ -134,4 +134,39 @@ public:
 
 	/** How far the character moves this step, in kilometres, ready to add to a system position. */
 	static FVector PositionDeltaKilometres(const FWalkState& State, double DeltaSeconds);
+
+	/**
+	 * Speed across the ground, ignoring any rise or fall. Centimetres per second.
+	 *
+	 * <strong>What a walk cycle should be played against, and not the same as the speed of the
+	 * velocity vector.</strong> A character stepping off a ledge is travelling fast downward while
+	 * moving nowhere across the ground; blending a run animation on total speed would have them
+	 * sprinting in mid-air, faster the further they fall.
+	 */
+	static double GroundSpeed(const FWalkState& State, const FVector& SurfaceNormal);
+
+	/**
+	 * Speed along the surface normal: positive rising, negative falling. Centimetres per second.
+	 *
+	 * The sign is the whole point — it is what tells a jump from a fall, and they are different
+	 * animations.
+	 */
+	static double VerticalSpeed(const FWalkState& State, const FVector& SurfaceNormal);
+
+	/**
+	 * Which way the character is travelling relative to the way it is facing, in degrees.
+	 *
+	 * Zero straight ahead, +90 to the right, -90 to the left, ±180 backwards — the convention a
+	 * directional blend space expects, so strafing plays a sidestep rather than a forward run
+	 * performed sideways.
+	 *
+	 * <strong>Measured in the character's own frame, against the surface normal.</strong> Doing it
+	 * against world axes would be right at one point on a planet and wrong everywhere else, which
+	 * is the mistake this codebase has made in one form or another several times: up is the ground's
+	 * normal, never Z.
+	 *
+	 * Zero when standing still, which is what a blend space wants when the speed weight is zero
+	 * anyway.
+	 */
+	static double MoveDirectionDegrees(const FWalkState& State, const FVector& SurfaceNormal);
 };

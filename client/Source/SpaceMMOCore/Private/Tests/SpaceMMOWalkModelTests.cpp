@@ -354,4 +354,198 @@ bool FSpaceMMOWalkTurnsAboutTheNormalTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+/**
+ * Ground speed is what the character crosses ground at, not how fast it is moving.
+ *
+ * <strong>The distinction is what stops a falling character sprinting in mid-air.</strong> An
+ * animation blend space driven by total speed plays a faster run the further somebody falls, which
+ * looks like a bug in the animation and is a bug in the number feeding it.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkGroundSpeedIgnoresFallingTest,
+	"SpaceMMO.Walk.GroundSpeedIgnoresFalling",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkGroundSpeedIgnoresFallingTest::RunTest(const FString& Parameters)
+{
+	const FVector Up = FVector::UpVector;
+
+	FWalkState State;
+
+	// Three metres a second forward, five falling.
+	State.Velocity = FVector(300.0, 0.0, -500.0);
+
+	TestEqual(
+		TEXT("Ground speed is the part across the ground"),
+		FCharacterWalkModel::GroundSpeed(State, Up),
+		300.0,
+		0.001);
+
+	TestEqual(
+		TEXT("Vertical speed is negative while falling"),
+		FCharacterWalkModel::VerticalSpeed(State, Up),
+		-500.0,
+		0.001);
+
+	State.Velocity = FVector(0.0, 0.0, 420.0);
+
+	TestEqual(
+		TEXT("Standing still and rising crosses no ground"),
+		FCharacterWalkModel::GroundSpeed(State, Up),
+		0.0,
+		0.001);
+
+	// The sign is the whole point: it is what tells a jump from a fall, and they are different
+	// animations. A magnitude would play the landing as somebody left the ground.
+	TestTrue(
+		TEXT("Vertical speed is positive while rising"),
+		FCharacterWalkModel::VerticalSpeed(State, Up) > 0.0);
+
+	return true;
+}
+
+/**
+ * Movement direction is measured against the way the character faces, and against the ground it is
+ * standing on.
+ *
+ * <strong>Both halves have cost this project a session in other forms.</strong> Measuring in world
+ * axes gives an answer that is right at one point on a planet and wrong everywhere else, which is
+ * the "up is the surface normal, never Z" lesson that the walk model, the camera and the terrain
+ * material have each had to learn separately. So this checks the same four headings twice: once
+ * standing at the north pole where up happens to be world Z, and once on the equator where it is
+ * not.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkMoveDirectionIsLocalTest,
+	"SpaceMMO.Walk.MoveDirectionIsLocal",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkMoveDirectionIsLocalTest::RunTest(const FString& Parameters)
+{
+	// Two places on a planet with nothing in common but the maths: on top, where up is world Z, and
+	// on the side, where it is world X and a world-axis implementation would be visibly wrong.
+	struct FStance
+	{
+		const TCHAR* Where;
+		FVector Up;
+		FVector Forward;
+	};
+
+	const TArray<FStance> Stances =
+	{
+		{ TEXT("at the pole"), FVector::UpVector, FVector::ForwardVector },
+		{ TEXT("on the equator"), FVector(1.0, 0.0, 0.0), FVector(0.0, 0.0, 1.0) },
+	};
+
+	for (const FStance& Stance : Stances)
+	{
+		const FVector Right = FVector::CrossProduct(Stance.Up, Stance.Forward);
+
+		FWalkState State;
+
+		State.Rotation = FRotationMatrix::MakeFromZX(Stance.Up, Stance.Forward).ToQuat();
+
+		const double Speed = 400.0;
+
+		State.Velocity = Stance.Forward * Speed;
+
+		TestEqual(
+			FString::Printf(TEXT("Walking forward reads as ahead %s"), Stance.Where),
+			FCharacterWalkModel::MoveDirectionDegrees(State, Stance.Up),
+			0.0,
+			0.01);
+
+		State.Velocity = Right * Speed;
+
+		TestEqual(
+			FString::Printf(TEXT("Strafing right reads as +90 %s"), Stance.Where),
+			FCharacterWalkModel::MoveDirectionDegrees(State, Stance.Up),
+			90.0,
+			0.01);
+
+		State.Velocity = -Right * Speed;
+
+		TestEqual(
+			FString::Printf(TEXT("Strafing left reads as -90 %s"), Stance.Where),
+			FCharacterWalkModel::MoveDirectionDegrees(State, Stance.Up),
+			-90.0,
+			0.01);
+
+		State.Velocity = -Stance.Forward * Speed;
+
+		TestEqual(
+			FString::Printf(TEXT("Walking backward reads as a half turn %s"), Stance.Where),
+			FMath::Abs(FCharacterWalkModel::MoveDirectionDegrees(State, Stance.Up)),
+			180.0,
+			0.01);
+
+		// The same world velocity, with the character turned to face it: the direction has to
+		// follow the body, not the world. This is what fails if the heading is ignored and the
+		// answer is computed from the velocity alone.
+		State.Velocity = Right * Speed;
+		State.Rotation = FRotationMatrix::MakeFromZX(Stance.Up, Right).ToQuat();
+
+		TestEqual(
+			FString::Printf(
+				TEXT("Turning to face the way you are moving reads as ahead %s"), Stance.Where),
+			FCharacterWalkModel::MoveDirectionDegrees(State, Stance.Up),
+			0.0,
+			0.01);
+	}
+
+	return true;
+}
+
+/**
+ * Falling straight down has no direction to report, and must not invent one.
+ *
+ * Zero rather than a stale or arbitrary angle, because a blend space reads it every frame including
+ * the frames where the speed weight is zero, and NaN in an animation graph is a character that
+ * disappears rather than an error anybody sees.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkMoveDirectionIsSafeWhenStillTest,
+	"SpaceMMO.Walk.MoveDirectionIsSafeWhenStill",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkMoveDirectionIsSafeWhenStillTest::RunTest(const FString& Parameters)
+{
+	FWalkState State;
+
+	State.Rotation = FQuat::Identity;
+	State.Velocity = FVector::ZeroVector;
+
+	TestEqual(
+		TEXT("Standing still reports no direction"),
+		FCharacterWalkModel::MoveDirectionDegrees(State, FVector::UpVector),
+		0.0,
+		0.001);
+
+	State.Velocity = FVector(0.0, 0.0, -900.0);
+
+	const double Falling =
+		FCharacterWalkModel::MoveDirectionDegrees(State, FVector::UpVector);
+
+	TestEqual(TEXT("Falling straight down reports no direction"), Falling, 0.0, 0.001);
+	TestFalse(TEXT("And it is a number"), FMath::IsNaN(Falling));
+
+	// A degenerate normal is what a cliff face or an unresolved frame can hand this, and it must
+	// not produce a NaN that propagates into the pose.
+	State.Velocity = FVector(300.0, 0.0, 0.0);
+
+	const double Degenerate =
+		FCharacterWalkModel::MoveDirectionDegrees(State, FVector::ZeroVector);
+
+	TestFalse(TEXT("A zero normal still produces a number"), FMath::IsNaN(Degenerate));
+
+	TestEqual(
+		TEXT("A zero normal falls back to the plain speed"),
+		FCharacterWalkModel::GroundSpeed(State, FVector::ZeroVector),
+		300.0,
+		0.001);
+
+	return true;
+}
+
 #endif

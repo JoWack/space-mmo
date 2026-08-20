@@ -1,9 +1,12 @@
 #include "SpaceMMOCharacterPawn.h"
 
+#include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "GameFramework/SpringArmComponent.h"
@@ -37,12 +40,12 @@ ASpaceMMOCharacterPawn::ASpaceMMOCharacterPawn()
 	// would let the solver fight the authoritative position and win intermittently.
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> BodyMesh(
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaceholderMesh(
 		TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 
-	if (BodyMesh.Succeeded())
+	if (PlaceholderMesh.Succeeded())
 	{
-		Body->SetStaticMesh(BodyMesh.Object);
+		Body->SetStaticMesh(PlaceholderMesh.Object);
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BodyMaterial(
@@ -63,6 +66,24 @@ ASpaceMMOCharacterPawn::ASpaceMMOCharacterPawn()
 	// which is two symptoms of one number.
 	Body->SetRelativeScale3D(FVector(0.4, 0.4, 1.8));
 	Body->SetRelativeLocation(FVector(0.0, 0.0, 90.0));
+
+	// The real body, sharing the placeholder's root and its convention: the pawn's origin is the
+	// character's feet, so a model whose own origin is at its feet needs no offset at all.
+	BodyMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BodyMesh"));
+	BodyMesh->SetupAttachment(CharacterRoot);
+
+	// Collision off for the same reason the placeholder's is: position is owned by the walk model
+	// and ground contact, and a solver given an opinion here would fight the authoritative one and
+	// win intermittently.
+	BodyMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Animation is drawn, not simulated. Ticking the pose after physics keeps it out of the way of
+	// anything that decides where the character actually is.
+	BodyMesh->PrimaryComponentTick.TickGroup = TG_PostPhysics;
+
+	// Hidden until a mesh is actually configured, so an unset path shows the tube rather than
+	// nothing at all.
+	BodyMesh->SetVisibility(false);
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(CharacterRoot);
@@ -105,6 +126,11 @@ void ASpaceMMOCharacterPawn::BeginPlay()
 		Navigation.SystemPosition = FSystemCoordinate(FVector(StartX, StartY, StartZ));
 		Navigation.RenderOrigin = Navigation.SystemPosition;
 	}
+
+	// Before the ground is resolved, because it changes what is drawn rather than where anything
+	// is, and a warning about a missing model is worth having in the log above the first frame.
+	ApplyCharacterMesh();
+	ApplyCameraView();
 
 	// Resolve the ground before the first step so the character starts standing on the surface with
 	// its up already correct, rather than upright in world space and snapping on frame one.
@@ -178,34 +204,55 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 		// number that disagreed with the screen. So this prints what is actually known and leaves
 		// the arithmetic to whoever is reading, which is the only version that cannot be subtly
 		// wrong.
-		if (!bReportedStandingGap && Body != nullptr)
+		if (!bReportedStandingGap)
 		{
 			bReportedStandingGap = true;
 
-			const UStaticMesh* const Mesh = Body->GetStaticMesh();
+			// Whichever body is actually being drawn.
+			//
+			// It measured the placeholder unconditionally, which stopped being the right answer
+			// the moment a character model could be configured: the tube is hidden then, and the
+			// diagnostic would have gone on confidently describing a cylinder nobody can see while
+			// the visible character floated or sank. A measurement that silently measures the
+			// wrong thing is worse than none, because it answers anyway.
+			const bool bUsingModel =
+				BodyMesh != nullptr
+				&& BodyMesh->GetSkeletalMeshAsset() != nullptr
+				&& BodyMesh->IsVisible();
 
-			const FVector LocalExtent = Mesh != nullptr
-				? Mesh->GetBounds().BoxExtent
-				: FVector::ZeroVector;
+			const USceneComponent* const Drawn = bUsingModel
+				? static_cast<USceneComponent*>(BodyMesh)
+				: static_cast<USceneComponent*>(Body);
 
-			const FVector LocalOrigin = Mesh != nullptr
-				? Mesh->GetBounds().Origin
-				: FVector::ZeroVector;
+			if (Drawn != nullptr)
+			{
+				// Local bounds, so this is the mesh's own shape rather than where it happens to be
+				// standing this frame -- the same reason the static version read the asset's
+				// bounds rather than the component's world ones.
+				const FBoxSphereBounds Local = bUsingModel
+					? BodyMesh->GetSkeletalMeshAsset()->GetBounds()
+					: (Body->GetStaticMesh() != nullptr
+						? Body->GetStaticMesh()->GetBounds()
+						: FBoxSphereBounds(ForceInit));
 
-			UE_LOG(LogSpaceMMO, Log,
-				TEXT("Standing gap: standing height %.1f cm; body relative Z %.1f cm, scale Z %.2f; "
-					"mesh local origin Z %.1f, half height %.1f cm -> scaled half height %.1f cm, "
-					"so mesh spans %.1f..%.1f cm above the root."),
-				StandingHeightKilometres * 100000.0,
-				Body->GetRelativeLocation().Z,
-				Body->GetRelativeScale3D().Z,
-				LocalOrigin.Z,
-				LocalExtent.Z,
-				LocalExtent.Z * Body->GetRelativeScale3D().Z,
-				Body->GetRelativeLocation().Z
-					+ ((LocalOrigin.Z - LocalExtent.Z) * Body->GetRelativeScale3D().Z),
-				Body->GetRelativeLocation().Z
-					+ ((LocalOrigin.Z + LocalExtent.Z) * Body->GetRelativeScale3D().Z));
+				const FVector Scale = Drawn->GetRelativeScale3D();
+
+				UE_LOG(LogSpaceMMO, Log,
+					TEXT("Standing gap: drawing the %s; standing height %.1f cm; relative Z %.1f cm, "
+						"scale Z %.2f; mesh local origin Z %.1f, half height %.1f cm -> scaled half "
+						"height %.1f cm, so mesh spans %.1f..%.1f cm above the root."),
+					bUsingModel ? TEXT("character model") : TEXT("placeholder tube"),
+					StandingHeightKilometres * 100000.0,
+					Drawn->GetRelativeLocation().Z,
+					Scale.Z,
+					Local.Origin.Z,
+					Local.BoxExtent.Z,
+					Local.BoxExtent.Z * Scale.Z,
+					Drawn->GetRelativeLocation().Z
+						+ ((Local.Origin.Z - Local.BoxExtent.Z) * Scale.Z),
+					Drawn->GetRelativeLocation().Z
+						+ ((Local.Origin.Z + Local.BoxExtent.Z) * Scale.Z));
+			}
 		}
 		WalkState.Velocity = Contact.Velocity;
 	}
@@ -506,8 +553,107 @@ void ASpaceMMOCharacterPawn::ToggleCameraView()
 {
 	bFirstPerson = !bFirstPerson;
 
-	ThirdPersonCamera->SetActive(!bFirstPerson);
-	FirstPersonCamera->SetActive(bFirstPerson);
+	ApplyCameraView();
+}
+
+void ASpaceMMOCharacterPawn::ApplyCameraView()
+{
+	if (ThirdPersonCamera != nullptr)
+	{
+		ThirdPersonCamera->SetActive(!bFirstPerson);
+	}
+
+	if (FirstPersonCamera != nullptr)
+	{
+		FirstPersonCamera->SetActive(bFirstPerson);
+	}
+
+	// The body goes away in first person: the camera is inside the character's head, and a model
+	// drawn there fills the screen with the underside of a jaw and the inside of a torso.
+	//
+	// Only ever this pawn's own body, and only on the machine looking through its eyes. bFirstPerson
+	// is set by a key press, which only the locally controlled pawn receives, so another player's
+	// character is never hidden by their choice of view.
+	const bool bBodyVisible = !bFirstPerson;
+
+	if (BodyMesh != nullptr && BodyMesh->GetSkeletalMeshAsset() != nullptr)
+	{
+		BodyMesh->SetVisibility(bBodyVisible);
+	}
+	else if (Body != nullptr)
+	{
+		Body->SetVisibility(bBodyVisible);
+	}
+}
+
+void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
+{
+	if (BodyMesh == nullptr)
+	{
+		return;
+	}
+
+	// Said on every path, including the one that does nothing. An unset model and code that never
+	// ran produce the same evidence -- a tube -- and only one of them is somebody's mistake.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Character model configured as '%s', animation as '%s'."),
+		CharacterMesh.IsNull() ? TEXT("<unset>") : *CharacterMesh.ToString(),
+		CharacterAnimClass.IsNull() ? TEXT("<unset>") : *CharacterAnimClass.ToString());
+
+	if (CharacterMesh.IsNull())
+	{
+		return;
+	}
+
+	USkeletalMesh* const Mesh = Cast<USkeletalMesh>(CharacterMesh.TryLoad());
+
+	// Named-but-wrong is worth saying out loud: from the outside a typo and an unset path look
+	// identical, and one of them is a mistake somebody wants telling about.
+	if (Mesh == nullptr)
+	{
+		UE_LOG(LogSpaceMMO, Warning,
+			TEXT("Character model '%s' did not load; the placeholder stays."),
+			*CharacterMesh.ToString());
+
+		return;
+	}
+
+	BodyMesh->SetSkeletalMeshAsset(Mesh);
+	BodyMesh->SetRelativeRotation(CharacterMeshRotation);
+	BodyMesh->SetRelativeLocation(CharacterMeshOffset);
+	BodyMesh->SetVisibility(true);
+
+	// The tube has done its job. Hidden rather than destroyed, so a model that fails to load on a
+	// later run still has something to fall back to.
+	if (Body != nullptr)
+	{
+		Body->SetVisibility(false);
+	}
+
+	if (!CharacterAnimClass.IsNull())
+	{
+		UClass* const AnimClass = CharacterAnimClass.TryLoadClass<UAnimInstance>();
+
+		if (AnimClass == nullptr)
+		{
+			// A model in its bind pose is a T-posed statue sliding around the planet, which is a
+			// working state on the way to an animated one -- but not one to arrive at silently.
+			UE_LOG(LogSpaceMMO, Warning,
+				TEXT("Animation blueprint '%s' did not load; '%s' stands in its bind pose."),
+				*CharacterAnimClass.ToString(), *Mesh->GetName());
+		}
+		else
+		{
+			BodyMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+			BodyMesh->SetAnimInstanceClass(AnimClass);
+		}
+	}
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Character drawing as '%s', rotated %s, offset %s."),
+		*Mesh->GetName(),
+		*CharacterMeshRotation.ToCompactString(),
+		*CharacterMeshOffset.ToCompactString());
 }
 
 void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

@@ -152,3 +152,69 @@ FVector FCharacterWalkModel::PositionDeltaKilometres(const FWalkState& State, co
 
 	return (State.Velocity * DeltaSeconds) / SpaceMMO::Coordinates::CentimetresPerKilometre;
 }
+
+double FCharacterWalkModel::GroundSpeed(const FWalkState& State, const FVector& SurfaceNormal)
+{
+	const FVector Up = SurfaceNormal.GetSafeNormal();
+
+	if (Up.IsNearlyZero())
+	{
+		return State.Velocity.Size();
+	}
+
+	// The part of the velocity lying in the tangent plane, which is the only part that moves the
+	// character across ground somebody is watching them walk on.
+	const FVector Across = State.Velocity - (Up * FVector::DotProduct(State.Velocity, Up));
+
+	return Across.Size();
+}
+
+double FCharacterWalkModel::VerticalSpeed(const FWalkState& State, const FVector& SurfaceNormal)
+{
+	const FVector Up = SurfaceNormal.GetSafeNormal();
+
+	if (Up.IsNearlyZero())
+	{
+		return 0.0;
+	}
+
+	return FVector::DotProduct(State.Velocity, Up);
+}
+
+double FCharacterWalkModel::MoveDirectionDegrees(
+	const FWalkState& State, const FVector& SurfaceNormal)
+{
+	const FVector Up = SurfaceNormal.GetSafeNormal();
+
+	if (Up.IsNearlyZero())
+	{
+		return 0.0;
+	}
+
+	const FVector Across = State.Velocity - (Up * FVector::DotProduct(State.Velocity, Up));
+
+	if (Across.IsNearlyZero())
+	{
+		return 0.0;
+	}
+
+	// The heading, flattened onto the same tangent plane the movement was. An orientation aligned
+	// to the surface already has its forward in that plane, but one handed a normal from a cliff
+	// face may not, and a forward with a component along the normal would tilt the whole frame.
+	const FVector Forward =
+		(State.Rotation.GetForwardVector()
+			- (Up * FVector::DotProduct(State.Rotation.GetForwardVector(), Up))).GetSafeNormal();
+
+	if (Forward.IsNearlyZero())
+	{
+		return 0.0;
+	}
+
+	// Right = Up x Forward, which is Unreal's handedness: X cross Y is Z, so Z cross X is Y.
+	const FVector Right = FVector::CrossProduct(Up, Forward);
+
+	return FMath::RadiansToDegrees(
+		FMath::Atan2(
+			FVector::DotProduct(Across, Right),
+			FVector::DotProduct(Across, Forward)));
+}

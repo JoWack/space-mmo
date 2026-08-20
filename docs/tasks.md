@@ -1484,7 +1484,7 @@ combat tasks and gathering bugs and test tooling under one heading — because a
 about what the game will be able to do, and none of these are that yet.
 
 Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
-and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
+125, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
 number is how it is referred to months later and shuffling blocks around a file this size is how
 content gets lost.
 
@@ -2402,6 +2402,74 @@ is a reuse rather than a rewrite.
 **What this does not do**, said plainly so it is not mistaken for the town: it puts a distinguishable
 building where each station is. It does not lay out a settlement, does not place props, and does not
 level the ground under one.
+
+## 125 — The character is a tube
+
+**In progress. Raised 20 August** by Joe, wanting the game to look like a game. Belongs to **M7 — a
+world worth being in**.
+
+**Built so far: the pawn can wear a model.** A `USkeletalMeshComponent` on
+`ASpaceMMOCharacterPawn`, with the model, the animation blueprint and how the mesh sits on the pawn
+all read from `DefaultGame.ini` — the same reasoning as the terrain material and the deposit meshes:
+deciding how something looks means trying a value and looking at it, and a rebuild in the middle of
+that loop is how people stop iterating. The placeholder cylinder stays as a fallback when nothing is
+configured or the model fails to load, for the reason the deposit settings give: an invisible
+character reads as the player not existing, which is far worse than an ugly one.
+
+**Two things that made this much cheaper than expected, both verified rather than assumed:**
+
+- **The rig uses UE5 mannequin bone names** — `pelvis`, `spine_01`..`spine_05`, `thigh_/calf_/foot_`,
+  five spine bones and not four. Read out of the imported skeleton asset rather than guessed. So the
+  mesh could simply be bound to the skeleton the animation library already uses, and no retargeting
+  was needed at all. Confirmed working by Joe the same day: the library's animations preview on the
+  character.
+- **There are two `SK_Mannequin` skeletons in the project**, one under `Characters/Mannequins` and
+  one under `FreeAnimationLibrary/Demo`, and the animations are bound to the second. Binding to the
+  wrong twin would have left everything looking correct with no animation playable. Found by reading
+  which skeleton `anim_Jog_Loop_Fwd` actually references.
+
+Assigning the skeleton added the rig's face bones (`c_eye_*`, `eyelid_*`, `c_jawbone_x`) to the
+library's `SK_Mannequin`, which is a tracked vendor asset. Nothing animates them, so they hold their
+bind pose; re-importing that library would drop them and need the dialog answering again.
+
+**What the animation blueprint has to read, and it is all published now:**
+`GetGroundSpeedMetresPerSecond`, `GetMoveDirectionDegrees`, `GetVerticalSpeedMetresPerSecond` and
+`IsOnGround`, all `BlueprintPure` on the pawn and all backed by pure statics on
+`FCharacterWalkModel` with headless tests. Three details in there are the ones worth not
+rediscovering:
+
+- **Ground speed is not speed.** A character stepping off a ledge is moving fast and walking
+  nowhere; a blend space driven by total speed sprints harder the further it falls.
+- **Direction is measured against the surface normal, never world Z.** The same lesson the walk
+  model, the camera and the terrain material each learned separately. `MoveDirectionIsLocal` checks
+  all four headings twice — once at a pole where up happens to be world Z, once on the equator where
+  it is not — and was verified by substituting world up and watching only the equator case fail.
+- **Vertical speed keeps its sign**, because that is what tells a jump from a fall, and they are
+  different animations.
+
+Animation is drawn, never simulated: the server owns where a person is, and no pose may argue with
+it. Nothing here uses root motion, and every value an animation blueprint reads is filled on remote
+pawns too — `FollowServerState` writes the same walk state from what the server replicated, so other
+players animate rather than sliding about in a bind pose. Checked by reading it, before it could
+become a playtest.
+
+**Still to do:**
+
+1. The animation blueprint itself: a blend space on ground speed by direction, and a jump state
+   machine gated on `IsOnGround` with the sign of vertical speed choosing rise from fall. The
+   library has everything it needs — `anim_Idle`, a full directional jog set, `anim_InPlace_Jump_L`,
+   `anim_FallLoop_01_L`, `LandingRoll`. Then set `CharacterAnimClass` in `DefaultGame.ini`; until
+   it is set, the character stands in its bind pose and the log says so.
+2. Judge the model on the planet: whether `CharacterMeshRotation` is right, whether it stands on the
+   ground rather than in it, and whether the third-person boom still frames a person rather than a
+   cylinder. All three are config or a number, not a rebuild.
+3. **First person hides the whole body**, agreed with Joe rather than hiding only the head. Wired,
+   unlooked at.
+
+**Not fixed, and worth knowing:** the rig carries Auto-Rig Pro controller bones (`c_` prefix) and a
+stray `OBroot`, which are Blender-side scaffolding rather than anything the game needs to evaluate.
+Re-exporting with deform bones only would make the skeleton leaner. It costs nothing today, so it is
+recorded rather than done.
 
 ---
 
