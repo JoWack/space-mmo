@@ -415,6 +415,22 @@ deposits so a cave deposit takes its height from the cave rather than from an au
 and a carry-through field on the C# side that is never evaluated. See 96 — a cave is a shape, and
 authoring shapes by hand in JSON is the part that will hurt.
 
+**The lookup this needs has a second customer, and it is not a cave.** Noted 19 August, from the
+question of how a settlement gets built (see 97). A town needs level ground under it on a curved,
+noisy planet, which means the height field being overridden inside an authored region — the same
+sentence as a cave, with a different shape inside it. Both need the client and the dedicated server
+to agree, because a player walks on both.
+
+So the interface worth building is not `IsThereACaveHere` but something closer to **"what does the
+ground do here"**: an authored region, a rule for how it modifies the height field, and one place
+every consumer asks. ADR-0011's consequence that "whatever reads the cave lookup does not care how
+the lookup answers" already points this way; this is the same argument for the shape of the *question*
+rather than the answer.
+
+Worth knowing before the interface is drawn rather than after. Two customers in mind is cheap;
+retrofitting the second is not — and a settlement pad is a much simpler modifier than a cave, so it
+is a good first implementation of a lookup that has to work for both.
+
 **96 is built now, and it does not solve this yet.** The editor utility places deposits and stations
 by dragging them, and it reads and writes `data/universe/origin.json` without disturbing a byte of
 what it did not change — so the machinery for authoring graphically exists. What it cannot do is
@@ -1467,10 +1483,10 @@ had grown two halves. They are filed here rather than under M6 — which is wher
 combat tasks and gathering bugs and test tooling under one heading — because a milestone is a claim
 about what the game will be able to do, and none of these are that yet.
 
-Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, and
-the existing 89, 96 and 97. They are left in place here rather than moved, because a task's number is
-how it is referred to months later and shuffling blocks around a file this size is how content gets
-lost.
+Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
+and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
+number is how it is referred to months later and shuffling blocks around a file this size is how
+content gets lost.
 
 ## 111 — Gathering and industry ignore where you are
 
@@ -2258,6 +2274,70 @@ the entire visible difference between a trading hub and a town is work that does
 Also worth deciding rather than drifting into: whether a settlement is one station with a bigger
 footprint, or several stations of existing kinds placed close together — `Housing` and `Social`
 already describe parts of what a town is, and a cluster might get there with no new kind at all.
+
+### How a town is likely to be built, sketched 19 August
+
+**Not a decision — reasoning, written down so it is not re-derived.** It came out of a question Joe
+asked after 96 was built: how do custom assets, walls, fountains and crafting stations get into a
+city? Three layers, and the split follows the rule ADR-0002 already set — *does the server need to
+know it exists?*
+
+1. **What the server must know is content**, in `data/`, placed with 96's tool: the station entries.
+   Key, kind, direction, docking range. Crafting, storage and the market are station-scoped
+   interactions and the spine already exists — `InventoryKind.StationHangar` is a per-station
+   inventory carrying a `StationId`, and market orders are per station. A "bank" is close to free.
+   `Housing` is an enum value with no behaviour behind it.
+2. **What the server must never know is assets**: walls, a fountain, what the place looks like.
+3. **The join is one anchor.** Five separately placed cubes will not read as a town. The likely shape
+   is a prefab — one Blueprint or level instance holding the props — anchored to a *single* authored
+   direction, with its interactive parts referencing station keys. `data/` owns where it is and what
+   can be done there; the `.uasset` owns what it looks like. That stays one source of truth only as
+   long as there is exactly one authored anchor: **the prefab must never carry a second opinion about
+   position**, which is the same failure 96 exists to prevent, one level up.
+
+**The hard part, and it is not the assets.** A prefab is flat and a planet is not. A town on a
+hillside needs the ground levelled where it sits, which means the height field has to be overridden
+inside an authored region — and the client and the dedicated server must agree about it, because a
+player walks on it. That is ADR-0011's machinery pointed at a different problem, and it is why 89
+should know this exists before it designs its lookup. See the note there.
+
+**The cheap first step is 124**, which gives a station a mesh per kind and needs none of the above.
+
+## 124 — A station is an engine cube, whatever kind it is
+
+**Pending. Raised 19 August**, out of the same question as the sketch in 97. Belongs to **M7 — a
+world worth being in**, which already names settlements.
+
+**Verified, not inferred:** the client treats `kind` as an opaque `FString` and uses it in exactly
+one place — a log line at `SpaceMMOStationActor.cpp:122`. Every station in the game is the same
+engine cube, scaled and lifted onto the terrain, whether it is a trading hub, a spaceport or
+somebody's house. 97 already said this and it is still true: the enum, the JSON and the serving cost
+almost nothing, and the entire visible difference is work that does not exist.
+
+**This is a solved shape in this codebase, so solve it the same way.** Deposits had the identical
+problem — one hard-coded engine cylinder for every material — and `USpaceMMODepositSettings` fixed
+it: item key to soft mesh reference, in `DefaultGame.ini`, so a new ore is a settings entry rather
+than a recompile and the mapping lands somewhere a diff will show it. Two details from that class are
+worth copying rather than rediscovering:
+
+- **Key by the authored key, never by the database id.** Ids are assigned by whichever database
+  seeded last; a mapping keyed by id points at the wrong building the first time the database is
+  rebuilt in a different order.
+- **Soft references**, so a world with one station does not pay to load every model in the
+  catalogue.
+
+Keyed by `StationKind` first — there are five and they are what a look would follow — with an
+optional per-key override, so one named station can differ without inventing a kind for it. That
+override is also what a settlement's anchor would use later.
+
+`FDepositPlacement::UniformScale` and `BaseLift` already absorb the two things that differ between
+any two models somebody exports — how large it was authored, and where its pivot sits — as pure
+statics with tests. A station wants exactly the same arithmetic at a different target size, so this
+is a reuse rather than a rewrite.
+
+**What this does not do**, said plainly so it is not mistaken for the town: it puts a distinguishable
+building where each station is. It does not lay out a settlement, does not place props, and does not
+level the ground under one.
 
 ---
 
