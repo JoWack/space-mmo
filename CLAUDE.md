@@ -110,6 +110,35 @@ that it ran, make changing it force whatever recomputation it affects, and make 
 it replaced. A measurement that can silently not happen is worse than none, because it answers
 anyway.
 
+## Measure the thing that is built, not the thing that configures it
+
+Three faults in one day were correct code, correct configuration, and correct measurements at every
+stage except the one nobody took. Each was invisible in the source and obvious in one number read
+off the built mesh.
+
+- **Steepness was stored as `1 - dot(normal, up)`.** A 32-degree hillside reads 0.15 that way, which
+  is indistinguishable from flat. Nothing was wrong; the encoding simply had no range. It is the
+  sine of the slope angle now, and the same hillside reads 0.53.
+- **The planet had no slopes at all.** Half a kilometre of relief sounds dramatic and, spread over
+  two features per radius, made swells whose steepest ground anywhere was 5.9 degrees. A material
+  blending rock onto cliffs had no cliffs. Found by sweeping the frequency and measuring the mesh,
+  not by looking at the terrain settings, which said nothing about it.
+- **Height and steepness were written into a UV channel materials read as a constant.** The mesh
+  carried them correctly, the scene proxy forwarded them, every count and range was right, and the
+  ground was one flat colour.
+
+The common shape: **a value that is correct and unusable looks exactly like a value that is
+correct and working**, from every direction except reading it out of the finished artefact.
+
+So when something renders wrong and the inputs check out, build the mesh in a test and print what
+is actually on it. `SpaceMMO.Terrain.HasSlopesToShade`, `GroundKindsReachTheMesh` and
+`BodyPalettesSuitTheirTerrain` are all that measurement, kept — and the last one reads the authored
+JSON, because a threshold tuned against one planet silently compresses another into a corner.
+
+**A test that only counts is not this test.** The first version of the mesh-attribute check asserted
+that UVs existed and would have passed with the patch using its own parameterisation and a visible
+seam around it. Assert the value, not its presence.
+
 ## Tests: write the one that fails for the right reason
 
 Green tests are not the claim. The claim is that a specific wrong behaviour would be caught.
@@ -164,6 +193,17 @@ that is gone". One playtest to find, five minutes to fix in both.
   corrupts UTF-8 silently. Use the editing tools.
 - **The client holds a build lock while running.** Builds fail with "Unable to build while Live
   Coding is active" until it is closed.
+- **Run the tests with `scripts/tests.bat`**, and read its `PASS`/`FAIL` line. It exits non-zero on a
+  failure, a short run or a wrong count; the editor's own exit code has never meant anything, and
+  `-testexit` force-exits so a run can lose its last tests silently (task 113).
+- **A green test run after a failed build is not a result.** The old binary answers, and it answers
+  the question you asked before the change. Check the build said `Result: Succeeded` before believing
+  what the run says — this cost a false verification the day the runner was written.
+- **Never `git add -A` in this repository.** Credentials live in `secrets/` and get moved out of it
+  while testing sign-in, which is exactly when a sweeping add takes them. One reached a pushed commit
+  on 18 August; `.gitignore` now names `player-login.txt` anywhere in the tree, and the password had
+  to be rotated regardless — a rewrite removes a file from a branch, not from every clone that
+  fetched it.
 
 ## Reporting
 

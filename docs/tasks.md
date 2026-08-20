@@ -834,8 +834,16 @@ row says is the same decision at a smaller scale.
 
 ## 106 — A real HUD
 
-**In progress. Layout agreed with Joe, 12 August — Option A, contextual. The flying readout is
-built and confirmed on screen; the other three contexts are not started.**
+**Done.** Layout agreed with Joe, 12 August — Option A, contextual — and every context built and
+confirmed on screen since: the flight readout, the on-foot identity block, the deposit prompt above
+the reticle, skills on `K`, the station overlay with its four tabs, the inventory screen on `I`, and
+transient messages. The debug panel it replaced is retired.
+
+Two things it taught that outlived it, both now in `CLAUDE.md`: a widget cannot restore its own
+visibility once it has dropped it, because Slate drives `NativeTick` from `Paint` — which is why
+`UpdateHudContext` lives on the controller and not in the widgets. And `HitTestInvisible` means
+"self *and all children*", which is how the inventory screen came to be undraggable while looking
+entirely normal.
 
 Done so far:
 
@@ -1101,7 +1109,8 @@ layout above is agreed; the individual widgets are not yet.
 
 ## 107 — Sign in from the game
 
-**Built 18 August; awaiting its Widget Blueprint.**
+**Done 19 August**, confirmed by playtest across every case: a wrong password, an unreachable
+server, a successful sign-in, and a remembered session surviving a relaunch.
 
 Credentials were read from `secrets/player-login.txt`, and `play.bat` explains why: command lines
 mangle values here, and `-BackendEmail=someone@gmail.com` has arrived as `someone@gmail .com`,
@@ -1142,11 +1151,30 @@ identify my character" and cost a session.
 
 **Not covered by tests: the gate itself.** Precedence, the remembered-session round trip and the
 screen coming down on success all need a world, a game instance and a filesystem, and are playtest
-only.
+only. That showed: the playtest found three faults nothing else could have.
+
+- **The screen subscribed to one delegate where the credentials path subscribes to three**, so
+  signing in produced a session and then nothing — no identity, no inventory, no skills, and no error
+  saying why. All three are bound once before either path chooses how the session arrives, which is
+  the only arrangement where they cannot drift apart again.
+- **The ship flew while somebody typed their email.** `FInputModeGameAndUI` still delivers to the
+  pawn. The login screen is `UIOnly` — the only screen here that should be modal, because you can
+  reasonably fly with an inventory open and cannot reasonably fly while typing a password.
+- **The HUD was created after identity resolved**, so `BeginIdentifying` could not ask for a sign-in
+  on a screen that did not exist yet. It logged "no login screen configured" and the screen was
+  created 128 ms later.
+
+And one that was not a playtest fault but wasted the same evening: the two text boxes were a bare
+`UPROPERTY`, which is invisible to a Blueprint graph. `BindWidget` makes the pointer arrive and does
+nothing about visibility, and neither produces an error — so it looks exactly like a name that does
+not match.
 
 ## 108 — Inventory and transfer screen
 
-**Pending. Decided 13 August: its own overlay, opened with `I`** (verified free against
+**Done.** Blueprints wired and confirmed by playtest: reading holdings, dragging between containers,
+and a quantity prompt on the drop. Distant hangars are listed and dimmed.
+
+**Decided 13 August: its own overlay, opened with `I`** (verified free against
 `DefaultInput.ini`), rather than a section inside the docked overlay.
 
 **This changes what the docked overlay is, and the change is an improvement.** Two keyed overlays
@@ -1163,7 +1191,7 @@ So the split is now:
 Holdings therefore leaves the docked overlay entirely; 106's agreed shape listed it there and this
 supersedes that.
 
-**Written 14 August, awaiting its Blueprints.** `USpaceMMOInventoryScreen` +
+**Written 14 August.** `USpaceMMOInventoryScreen` +
 `USpaceMMOInventoryRow`, opened with `I` — which works in flight as well as on foot, since knowing
 what is still sitting in a hangar is most useful while deciding where to fly. Opening refreshes from
 the backend rather than polling: a screen opened to work out where something went is the worst
@@ -1439,8 +1467,8 @@ lost.
 
 ## 111 — Gathering and industry ignore where you are
 
-**Pending. Found by Joe, 14 August**, refining at DeepDock and watching the output appear at the
-capital.
+**Done 16 August**, confirmed by playtest. Found by Joe, 14 August, refining at DeepDock and watching
+the output appear at the capital.
 
 `ASpaceMMOPlayerController::StationId` is a hardcoded `1` — its own comment says "Not yet chosen per
 player" — and it is sent as the storage station for gathering *and* as the station for `StartJob`.
@@ -1750,8 +1778,8 @@ exist; carried is the honest middle step.
 
 ## 119 — An order you placed cannot be found or withdrawn
 
-**Built 17 August; the Widget Blueprint half is Joe's and outstanding.** Found by Joe the same day,
-holding an order he could not get rid of.
+**Done 17 August**, Blueprints wired and confirmed by playtest. Found by Joe the same day, holding an
+order he could not get rid of.
 
 Nothing lists a character's own orders, and nothing in the client calls cancel — so once an order is
 placed it rests until it fills or expires, whatever it says. Joe placed a sell order at 0.01 cr

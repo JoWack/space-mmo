@@ -190,8 +190,8 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   visible ✅, deposits say what they need ✅
 - **M4** — goods that move and gear that matters: items between inventories, ship holds, hauling
   planet-locked materials by flying them, equippable tools, weapons and armour
-- **M5** — an interface: a real HUD instead of debug text, signing in from the game rather than a
-  file, inventory and transfer screens, a market screen, and menus
+- **M5** — an interface: a real HUD instead of debug text ✅, signing in from the game rather than a
+  file ✅, inventory and transfer screens ✅, a market screen ✅, and menus
 - **M6** — combat, and the rules that already assume it: personal and ship weapons, the
   `combat` and `pilot` skill trees, security zones and pairwise aggression
   ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md),
