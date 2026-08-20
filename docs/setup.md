@@ -130,6 +130,37 @@ Seeding is a separate command rather than something startup does, on purpose. A 
 migrates and rewrites content on every boot will eventually do that to a production database
 during an unrelated restart.
 
+### Placing deposits and stations by dragging them
+
+Task 96. **Tools → World Authoring** in the editor opens a panel that reads
+`data/universe/origin.json`, draws the chosen body, and stands a marker on every deposit and
+station authored on it. Drag a marker with the ordinary translate gizmo and it re-derives its
+direction from the body's centre and snaps back onto the ground; the rest of an entry — item,
+skill, required tool, quantity — is edited in the marker's Details panel. *Write to origin.json*
+rewrites only what changed.
+
+**Choose the body that `BodyKey` in `client/Config/DefaultGame.ini` names** — `body_capital` today.
+That one key decides the terrain, the palette, and which body's deposits and stations the game
+places, so it is the only body whose content you will see in a playtest. Authoring on any other one
+is authoring for later.
+
+Three things worth knowing before using it:
+
+- **The globe is a scale model, not the planet.** It is drawn at 500 m so it fits in a viewport,
+  with relief shrunk by the same factor against the 20 km the game actually draws (task 123). A
+  direction is scale-free, so what you place is exactly where it lands in game;
+  `SpaceMMO.Authoring.PreviewIsTheDrawnPlanetToScale` is what keeps that claim honest.
+- **Nothing reaches the file until you press Write**, and nothing reaches the game until you
+  re-seed. The panel says so after every write, because forgetting the seed produces a world that
+  looks right in the editor and does not exist in the game.
+- **Deleting a marker with the Delete key does not remove the entry.** Deleting simply removes the
+  actor, so the write would not mention it and the deposit would stay in the file. Use *Remove
+  selected*, which marks the row; the panel refuses to write at all if it finds a marker was
+  deleted instead.
+
+The preview actors are transient and never saved into a level: `data/` stays the only source of
+truth, which is the constraint the whole tool is built around.
+
 ### After cooking, the project belongs to the source engine
 
 `BuildCookRun` rebuilds `SpaceMMOEditor` against the **source** engine and writes it into

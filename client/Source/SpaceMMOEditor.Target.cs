@@ -13,5 +13,9 @@ public class SpaceMMOEditorTarget : TargetRules
 
 		ExtraModuleNames.Add("SpaceMMOCore");
 		ExtraModuleNames.Add("SpaceMMOBackend");
+
+		// Editor-only authoring tools (task 96). Named here as well as in the .uproject so the
+		// editor target builds it even when the project's module list is not consulted.
+		ExtraModuleNames.Add("SpaceMMOAuthoring");
 	}
 }

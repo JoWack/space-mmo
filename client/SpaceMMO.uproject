@@ -13,6 +13,11 @@
 			"Name": "SpaceMMOBackend",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "SpaceMMOAuthoring",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
 		}
 	],
 	"Plugins": [

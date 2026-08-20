@@ -415,6 +415,13 @@ deposits so a cave deposit takes its height from the cave rather than from an au
 and a carry-through field on the C# side that is never evaluated. See 96 — a cave is a shape, and
 authoring shapes by hand in JSON is the part that will hurt.
 
+**96 is built now, and it does not solve this yet.** The editor utility places deposits and stations
+by dragging them, and it reads and writes `data/universe/origin.json` without disturbing a byte of
+what it did not change — so the machinery for authoring graphically exists. What it cannot do is
+author a cave, because a cave has no schema to write and no shape gizmo to drag. This task decides
+the first, and gets the second cheaply once it has: the tool's document layer is agnostic about what
+kind of thing an entry is.
+
 A height field is a function of direction and cannot express an overhang, let alone a cave. Whatever
 is added must keep the property that makes the current model work: the server and every client agree
 about the ground without shipping any of it (ADR-0002). Three ways to do that, and they differ mostly
@@ -2084,10 +2091,39 @@ Earth-scale subtlety — a flight change worth making deliberately rather than i
 
 **Only one planet is spawned.** Five bodies are authored and one is drawn.
 
+**Which body that is was two settings until 19 August, and they disagreed.** The planet actor took
+`BodyKey` from `DefaultGame.ini` and drew `body_ares`; `USpaceMMODepositSubsystem` had a second
+`BodyKey`, hard-coded to `body_capital` and not config at all, and placed that body's deposits and
+stations. So the playtest world was Ares' terrain populated from the Capital, and neither setting
+looked wrong from where it was written — the only evidence was `Placed 4 deposit(s) on body_capital`
+in a client log next to a planet shaped like Ares.
+
+Nothing about it was visible in play, either: the deposits stood on the ground correctly, because
+placement asks the terrain function where the ground is and it answers for whatever planet it is
+given. Content authored on the drawn body simply never appeared, and content authored on the
+populated one appeared on terrain it was never placed against.
+
+Found by building 96 and asking the obvious question — *which body do I author on to see it in a
+playtest?* — which needed two files and a log to answer honestly.
+
+**Now one key.** `USpaceMMODepositSubsystem::SceneBodyKey()` asks the planet in the world what it
+is drawing and falls back to the configured default when it runs first. `DefaultGame.ini` names
+`body_capital`, because that is where the onboarding chain lives: scrap to gather bare-handed, then
+ferrite to mine once the laser is crafted. Ares has one level-15 ore behind a tool and nothing to
+start on, which `SpaceMMO.Authoring.ConfiguredBodyIsPlayable` now asserts against whatever the key
+names — verified by flipping it back to Ares and watching it go red.
+
+The cost, accepted: the ground looks gentler. The Capital is frequency 6.0 against Ares' 12.0 and
+0.35 km of relief against 0.5, and the terrain material was tuned against Ares' ruggedness (task
+121). If it reads flat, the frequency is content and can be raised — 121 recorded 12 giving 31.8
+degrees of slope and 24 giving 47.
+
 ## 96 — Author world content graphically
 
-**Pending.** Raised 11 August; ADR-0011 makes it pressing, because a cave is a shape rather than a
-point and typing a shape into JSON by hand is worse than typing a position.
+**Options 1 and 2 built, 19 August. Option 3 stays rejected.** Raised 11 August; ADR-0011 makes it
+pressing, because a cave is a shape rather than a point and typing a shape into JSON by hand is
+worse than typing a position — and shapes are the part option 2 does *not* yet answer, because
+caves have no schema to author against until 89 starts.
 
 **The constraint, and it is not negotiable:** `data/*.json` stays the source of truth. Content
 reaches the game as `data/` → `--seed` → Postgres → C# API → HTTP → client, and the API is the
@@ -2111,16 +2147,79 @@ Three approaches, cheapest first:
    Confirmed the same day by authoring a ferrite deposit at the character's spawn point, which is
    the loop this replaces guessing unit vectors for. It does not help with shape, which is what 89
    will need.
-2. **An editor utility that reads and writes `data/`.** Loads `origin.json`, spawns a preview actor
-   per deposit, station and cave on a body, lets them be dragged and shaped, and serialises back.
-   This is the real answer to "can I adjust it graphically", and it is bounded work: UE already has
-   `FJsonSerializer`, and the project already runs an editor MCP plugin, so editor tooling is not
-   foreign here.
+2. **An editor utility that reads and writes `data/`. Built 19 August.** A new editor-only module,
+   `client/Source/SpaceMMOAuthoring`, opened from **Tools → World Authoring**. It reads
+   `origin.json`, draws the chosen body, stands a marker on every deposit and station on it, and
+   writes back what moved. Deposits and stations only: a cave has no schema to author against until
+   89 starts, and inventing one here would have been deciding 89 by accident.
+
+   **It writes by splicing text, not by serialising.** This is the decision the rest of it hangs
+   off. Nearly half of `origin.json` is `$comment` keys carrying the reasoning behind every
+   placement, and `FJsonSerializer` would reorder keys, restyle every number and put all 324 lines
+   into one diff — destroying the reasoning while looking like it worked. So a moved deposit
+   rewrites the six numbers of its own direction and leaves every other byte alone.
+   `MovingRewritesOnlyTheDirection` asserts exactly one line differs, which is the only version of
+   that check that would notice.
+
+   **The preview is a scale model at 500 m, not the planet.** Directions are scale-free, so any
+   radius places identically — but not every radius *shows* the same thing. Half a kilometre of
+   relief on Ares' authored 339 km is 0.15% of the radius: a smooth ball with nothing to place
+   anything against. The game draws 20 km, where the same relief is 2.5%, so the preview shrinks
+   both together and keeps the silhouette a player actually sees.
+   `PreviewIsTheDrawnPlanetToScale` measures the ground in both models rather than trusting the
+   settings, and fails if relief is ever scaled against the authored radius instead.
+
+   **What it does:** move existing entries; add new deposits and stations, placed where the
+   viewport camera is looking, with their fields edited in the marker's ordinary Details panel;
+   and remove entries. Nothing reaches disk until *Write*, so *Discard* is simply rebuilding the
+   preview from the file, and a session that ends in a crash has changed no content.
+
+   **What it refuses to write**, naming the row: an empty or duplicated key, a deposit with no item
+   or skill, an item or skill key that is not in `data/items/core.json` or `data/skills/core.json`,
+   a planet-locked material that would end up on a second body (ADR-0008), a non-positive quantity,
+   respawn, level or docking range, and a direction of zero. It also refuses if the file changed on
+   disk since it was read, or if the result would not parse.
+
+   **Two things found while building it, both worth keeping:**
+
+   - **Unreal's JSON reader accepts a trailing comma and .NET's does not.** Removing the last entry
+     of an array leaves the entry before it ending in one, and a test asserting "the result still
+     parses" went green against that bug — the editor reads the file it wrote quite happily, and
+     the C# seeder is the machine that matters. `HasDanglingComma` is now checked by the tests and
+     by the panel before it saves. Found by deliberately introducing the bug and watching the test
+     stay green, which is the only reason it was found at all.
+   - **The labels rendered mirrored.** The text component's facing axis was pointed away from the
+     camera rather than at it, and the default text material is two-sided — so a label facing away
+     is not invisible, it is legible and backwards, which reads as a broken font rather than as a
+     rotation. Settled by reading `TextRenderComponent.cpp:1118-1126`, which builds the glyph quads
+     in the local YZ plane with the surface normal at +X: the component's +X must point at the eye.
+     Found by playtest, because no headless run draws anything.
+   - **Deleting a marker with the Delete key is not the same as removing an entry.** The actor goes
+     away, so the write simply does not mention it and the deposit stays in the file — a deletion
+     that silently does nothing. The panel now refuses to write when it finds a marker was deleted,
+     and says to use *Remove selected* instead.
 3. **Author in a level and export.** Rejected on the same grounds as above: two sources of truth,
    and the export is required regardless, so the level buys nothing.
 
 Whatever is built, **re-seed after editing** — `dotnet run --project services/SpaceMMO.Api -- --seed`
-is the only thing that applies changes under `data/`, and restarting the API does not.
+is the only thing that applies changes under `data/`, and restarting the API does not. The panel
+prints that line after every write for the same reason.
+
+**Not verified by a headless run, and cannot be:** that the globe and the markers actually draw,
+that dragging a marker snaps it to the ground, that the labels face the camera, and that the menu
+entry appears. Everything the tool decides is tested — the parse, the splice, the removal, the
+insertion, the comment preservation, the scale of the preview — but the editor half is looked at,
+not asserted. See the checklist in the segment report.
+
+**It found a real bug in its first hour**, which is the argument for having built it: asking which
+body to author against to see the result in a playtest turned out to need two files and a client log
+to answer, because the drawn body and the populated body were separate settings that disagreed. See
+123 — there is one key now.
+
+**What 89 will need on top of this:** a cave is a volume, so it needs a shape gizmo rather than a
+point marker, and a schema to write. The document layer is deliberately kind-agnostic — a third
+`ESpaceMMOPlaceableKind` and a `FormatEntry` branch is most of what a cave entry would take — but
+what a cave *is* in `data/` is 89's decision and is not pre-empted here.
 
 ## 97 — Settlements
 

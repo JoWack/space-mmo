@@ -256,6 +256,17 @@
       "quantityMax": 150,
       "respawnSeconds": 1800,
       "direction": [-1.0, -0.025, -0.02]
+    },
+    {
+      "key": "node_ares_new_1",
+      "body": "body_ares",
+      "item": "ares_regolith",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "requiredLevel": 15,
+      "quantityMax": 150,
+      "respawnSeconds": 1800,
+      "direction": [-0.999389, -0.016573, 0.030768]
     }
   ],
 
@@ -288,7 +299,7 @@
       "system": "system_origin",
       "body": "body_ares",
       "kind": "TradingHub",
-      "direction": [-1.0, -0.02, 0.03],
+      "direction": [-0.999103, -0.019982, 0.037327],
       "dockingRangeKm": 5.0
     },
     {

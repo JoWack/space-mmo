@@ -32,9 +32,19 @@ public:
 
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 
-	/** Which body's deposits to place. Resolved to an id by key, never hard-coded as a number. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Deposit")
-	FString BodyKey = TEXT("body_capital");
+	/**
+	 * Which body's deposits and stations belong in this scene: whichever one the planet draws.
+	 *
+	 * <strong>Asked of the planet rather than configured again here.</strong> This was a second
+	 * <c>BodyKey</c>, hard-coded to <c>body_capital</c> while the planet actor drew
+	 * <c>body_ares</c> from <c>DefaultGame.ini</c> — so the world had Ares' terrain with the
+	 * Capital's deposits standing on it, and neither setting looked wrong from where it was
+	 * written. It surfaced when the authoring tool (task 96) made somebody ask which body to
+	 * author against, and the honest answer needed both files and a playtest log.
+	 *
+	 * Two settings for one question is the bug. There is now one, and this reads it.
+	 */
+	FString SceneBodyKey() const;
 
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Deposit")
 	int32 GetPlacedCount() const { return PlacedDeposits.Num(); }

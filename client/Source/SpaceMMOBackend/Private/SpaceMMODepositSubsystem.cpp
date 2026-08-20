@@ -132,6 +132,28 @@ void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 	Gathering->BindInput(Pawn->InputComponent);
 }
 
+FString USpaceMMODepositSubsystem::SceneBodyKey() const
+{
+	// The planet that is actually in the world, when there is one. What is drawn is what content
+	// belongs on it, and asking the built thing beats asking what configured it.
+	if (UWorld* const World = GetWorld())
+	{
+		for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+		{
+			const ASpaceMMOPlanetActor* const Planet = *It;
+
+			if (Planet != nullptr && !Planet->BodyKey.IsEmpty())
+			{
+				return Planet->BodyKey;
+			}
+		}
+	}
+
+	// Otherwise the configured value the planet will take when it spawns. Subsystem ordering is
+	// not guaranteed, so arriving before the planet does is a normal state rather than a fault.
+	return GetDefault<ASpaceMMOPlanetActor>()->BodyKey;
+}
+
 void USpaceMMODepositSubsystem::HandleBodiesLoaded()
 {
 	const UWorld* World = GetWorld();
@@ -148,6 +170,8 @@ void USpaceMMODepositSubsystem::HandleBodiesLoaded()
 		return;
 	}
 
+	const FString BodyKey = SceneBodyKey();
+
 	FBackendBody Body;
 
 	if (!Backend->FindBodyByKey(BodyKey, Body))
@@ -160,6 +184,12 @@ void USpaceMMODepositSubsystem::HandleBodiesLoaded()
 
 		return;
 	}
+
+	// Said on the way through, not only on failure. Which body a scene is populated from used to
+	// be answerable only by reading two files, and it was wrong for months without a symptom.
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Scene is body '%s' (id %d); its deposits and stations are the ones that belong."),
+		*BodyKey, Body.Id);
 
 	// Remembered, because it is also the answer to "which stations belong on the planet this scene
 	// actually has". Every other body is in the database with nowhere to stand.
@@ -441,5 +471,5 @@ void USpaceMMODepositSubsystem::PlaceDeposits()
 	}
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Placed %d deposit(s) on %s."),
-		PlacedDeposits.Num(), *BodyKey);
+		PlacedDeposits.Num(), *SceneBodyKey());
 }
