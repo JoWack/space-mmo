@@ -2263,6 +2263,34 @@ entry appears. Everything the tool decides is tested — the parse, the splice, 
 insertion, the comment preservation, the scale of the preview — but the editor half is looked at,
 not asserted. See the checklist in the segment report.
 
+**Renaming or removing an entry leaves an orphan in every database that already seeded it.** Found
+20 August, on the first key this tool ever generated. `ContentLoader.UpsertResourceNodesAsync`
+upserts by key and never deletes: a node whose key has changed is simply a *new* node, and the old
+row stays, still servable, forever. The same is true of an entry removed entirely.
+
+That is not new behaviour, and it is defensible — a seeder that deleted whatever was missing from
+content would be one mis-pathed file away from emptying a production world. What is new is that this
+tool makes renaming and removing one click each, so a trap that used to need a deliberate hand-edit
+is now easy to spring. `node_ares_new_1` was authored, seeded, then renamed to
+`node_ares_regolith_b`, and the database has both.
+
+Consequences, in order of how much they matter:
+
+- **A key is permanent the moment it is seeded, not the moment it is written.** Choose the real name
+  before the first `--seed`, not after. The tool's generated `node_<body>_new_<n>` is a placeholder
+  and should never survive to a seed.
+- **Removing an entry hides it from nothing.** The row is still there and the API will still serve
+  it. Removal is a content decision that needs a database change to finish, and neither this tool nor
+  the seeder makes that change.
+- Cleaning one up is a hand-written `delete from resource_nodes where key = '...'`, and
+  `resource_node_states` restricts on delete, so any node a player has actually gathered from needs
+  its state rows dealt with first.
+
+**Not fixed here, deliberately**, because the options all have teeth: a prune step in the seeder is
+the destructive one; a `retired` flag in content is a schema change; and a warning at seed time
+naming rows that content no longer mentions is the cheap one and is probably right. That is worth its
+own task when somebody has an opinion, and it belongs to whoever owns the seeder rather than to 96.
+
 **It found a real bug in its first hour**, which is the argument for having built it: asking which
 body to author against to see the result in a playtest turned out to need two files and a client log
 to answer, because the drawn body and the populated body were separate settings that disagreed. See

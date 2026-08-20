@@ -258,7 +258,7 @@
       "direction": [-1.0, -0.025, -0.02]
     },
     {
-      "key": "node_ares_new_1",
+      "key": "node_ares_regolith_b",
       "body": "body_ares",
       "item": "ares_regolith",
       "skill": "mining",
