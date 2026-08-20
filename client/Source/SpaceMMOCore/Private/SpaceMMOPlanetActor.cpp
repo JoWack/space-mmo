@@ -1,5 +1,7 @@
 #include "SpaceMMOPlanetActor.h"
 
+#include "SpaceMMOPlanetMeshAttributes.h"
+
 #include "Components/DynamicMeshComponent.h"
 #include "DynamicMesh/DynamicMesh3.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
@@ -514,100 +516,6 @@ void ASpaceMMOPlanetActor::BeginPlay()
 			: 0.0);
 }
 
-namespace
-{
-	/**
-	 * Writes the two UV layers a terrain material reads: where a point is, and what it is like.
-	 *
-	 * Layer 0 carries cube-face coordinates in 0..1 and layer 1 carries height and steepness, both
-	 * 0..1. Neither is pre-multiplied by a tiling factor -- the material owns how large a texture
-	 * reads, and this owns only what is true of the ground.
-	 *
-	 * Both meshes go through here rather than each writing its own, because the globe and the patch
-	 * are two samplings of one surface and a material fed differently by each would draw a line
-	 * around the patch where they meet.
-	 */
-	void WriteTerrainUVs(
-		FDynamicMesh3& Mesh,
-		const TArray<FVector2D>& SurfaceUVs,
-		const TArray<FVector2D>& GroundKinds)
-	{
-		FDynamicMeshAttributeSet* const Attributes = Mesh.Attributes();
-
-		if (Attributes == nullptr || SurfaceUVs.Num() == 0)
-		{
-			return;
-		}
-
-		// UV0 carries the surface parameterisation, for tiling a texture.
-		if (FDynamicMeshUVOverlay* const UVs = Attributes->PrimaryUV();
-			UVs != nullptr && SurfaceUVs.Num() >= Mesh.MaxVertexID())
-		{
-			UVs->ClearElements();
-
-			TArray<int32> Elements;
-			Elements.Reserve(SurfaceUVs.Num());
-
-			for (const FVector2D& Value : SurfaceUVs)
-			{
-				Elements.Add(UVs->AppendElement(FVector2f(Value)));
-			}
-
-			for (const int32 TriangleId : Mesh.TriangleIndicesItr())
-			{
-				const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
-
-				UVs->SetTriangle(
-					TriangleId,
-					FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
-			}
-		}
-
-		// Height and steepness go in the vertex colour, not a second UV channel.
-		//
-		// They were in UV1 first, and the mesh carried them correctly -- 32768 triangles across two
-		// layers, and the scene proxy forwards every layer it finds. A material reading TexCoord[1]
-		// still got a constant, and rather than keep chasing where an index stops matching, this is
-		// the channel the engine and every terrain material already agree on: VertexColor has no
-		// index to get wrong.
-		if (GroundKinds.Num() < Mesh.MaxVertexID())
-		{
-			return;
-		}
-
-		Attributes->EnablePrimaryColors();
-
-		if (FDynamicMeshColorOverlay* const Colors = Attributes->PrimaryColors())
-		{
-			Colors->ClearElements();
-
-			TArray<int32> Elements;
-			Elements.Reserve(GroundKinds.Num());
-
-			for (const FVector2D& Kind : GroundKinds)
-			{
-				// Red is height, green is steepness, and blue is left free for whatever the third
-				// thing turns out to be -- moisture, or a biome mask, when a planet needs one.
-				Elements.Add(Colors->AppendElement(
-					FVector4f(
-						static_cast<float>(Kind.X),
-						static_cast<float>(Kind.Y),
-						0.0f,
-						1.0f)));
-			}
-
-			for (const int32 TriangleId : Mesh.TriangleIndicesItr())
-			{
-				const FIndex3i Triangle = Mesh.GetTriangle(TriangleId);
-
-				Colors->SetTriangle(
-					TriangleId,
-					FIndex3i(Elements[Triangle.A], Elements[Triangle.B], Elements[Triangle.C]));
-			}
-		}
-	}
-}
-
 void ASpaceMMOPlanetActor::BuildGlobe()
 {
 	// A dedicated server has no renderer, and a hundred thousand triangles per planet is a large
@@ -675,7 +583,7 @@ void ASpaceMMOPlanetActor::BuildGlobe()
 		}
 	}
 
-	WriteTerrainUVs(Mesh, Globe.SurfaceUVs, Globe.GroundKinds);
+	FPlanetMeshAttributes::Write(Mesh, Globe.SurfaceUVs, Globe.GroundKinds);
 
 	// Known-good geometry, made patch-shaped. Nothing about how these vertices were generated
 	// changes -- only how many of them survive.
@@ -1197,7 +1105,7 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		}
 	}
 
-	WriteTerrainUVs(Mesh, Patch.SurfaceUVs, Patch.GroundKinds);
+	FPlanetMeshAttributes::Write(Mesh, Patch.SurfaceUVs, Patch.GroundKinds);
 
 	const bool bWantsGlobeComponent = GPatchIntoGlobe > 0.5f;
 

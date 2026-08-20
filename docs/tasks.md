@@ -1920,12 +1920,22 @@ rebuild — set it in `DefaultGame.ini`. It logs what it configured and what it 
 including the one that does nothing, because a material that failed to arrive and code that never ran
 otherwise leave identical evidence.
 
-### Still outstanding
+### The gap that made this expensive, now closed
 
-**Nothing asserts the ground kinds reach the vertex colour.** The builders are tested and the mesh
-conversion is not — which is the exact gap that let the UV1 version measure perfectly at every step
-and show a constant on screen. It needs the conversion pulled out of the actor into something a test
-can call with an `FDynamicMesh3`, which needs no renderer.
+**Nothing asserted that the ground kinds reached the mesh.** The builders were tested and correct
+throughout; the step carrying their output onto the mesh was not tested at all, and it wrote height
+and steepness into a channel materials read as a constant. Every measurement passed at every stage
+and the ground was one flat colour.
+
+The conversion is `FPlanetMeshAttributes::Write` now — its own class, because an `FDynamicMesh3`
+needs no renderer and a test can therefore call it. `SpaceMMO.Terrain.GroundKindsReachTheMesh`
+asserts height lands in red, steepness in green, and the surface coordinate in UV0, per corner, with
+values chosen so a channel swap or a vertex mix-up cannot pass by coincidence. Verified by swapping
+the two channels.
+
+`PartialGroundKindsAreRefused` covers the other half: given fewer values than the mesh has vertices,
+nothing is written. A partly filled overlay would blend toward whatever the missing elements
+defaulted to and look deliberate.
 
 ## 122 — One patch is not a planet
 
