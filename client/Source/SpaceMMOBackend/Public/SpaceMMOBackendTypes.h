@@ -704,6 +704,58 @@ struct SPACEMMOBACKEND_API FBackendBody
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	double RadiusKilometres = 0.0;
+
+	/**
+	 * What this body's ground looks like, and whether anybody has said.
+	 *
+	 * A planet's look is content, the same as its radius: Ares is red oxide and Grimhold is black
+	 * slag because somebody decided and wrote it down in <c>data/universe/origin.json</c>. Unpainted
+	 * is a working state -- the client keeps whatever material it was configured with.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bHasAppearance = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FLinearColor LowColour = FLinearColor::Black;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FLinearColor HighColour = FLinearColor::White;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FLinearColor RockColour = FLinearColor::Gray;
+
+	/** Where the height blend starts and finishes, in fractions of the body's maximum relief. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	float HeightFrom = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	float HeightTo = 1.0f;
+
+	/** And where rock begins and finishes covering, as the sine of the slope angle. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	float SlopeFrom = 0.0f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	float SlopeTo = 1.0f;
+
+	/**
+	 * The shape of this body's ground, and whether anybody has authored one.
+	 *
+	 * Separate from the palette because they answer different questions: the palette says what a
+	 * world is made of, this says whether it is swells, hills or crags. Two planets sharing a
+	 * palette and differing here read as different places.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bHasTerrain = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 TerrainSeed = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	double MaxElevationKilometres = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	double BaseFrequency = 0.0;
 };
 
 /**

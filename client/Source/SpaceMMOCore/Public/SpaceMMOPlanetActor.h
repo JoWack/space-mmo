@@ -80,11 +80,43 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Planet")
 	FSoftObjectPath TerrainMaterial;
 
+	/**
+	 * Which authored body this planet draws, e.g. <c>body_ares</c>.
+	 *
+	 * The palette comes from that body's content — <c>data/universe/origin.json</c> → seed → API →
+	 * here — so what a world looks like is authored beside how large it is, rather than compiled in.
+	 * An empty key, an unknown one, or a body nobody has painted all leave the configured material
+	 * exactly as it is, which is what every planet did before this existed.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Planet")
+	FString BodyKey = TEXT("body_ares");
+
+	/**
+	 * Paints the terrain with an authored palette.
+	 *
+	 * <strong>Called from the backend module, not from here.</strong> Core knows nothing about HTTP
+	 * or content — the same boundary that has the game mode resolve its player controller by path —
+	 * so what a body looks like arrives as four values from whoever fetched them.
+	 *
+	 * <c>Ranges</c> is height from and to, then slope from and to: where each blend starts and
+	 * finishes. Both channels occupy only part of 0..1 on any given planet, and a material fed the
+	 * raw values draws a flat colour however it is authored.
+	 */
+	void SetTerrainPalette(
+		const FLinearColor& Low,
+		const FLinearColor& High,
+		const FLinearColor& Rock,
+		const FVector4& Ranges);
+
 protected:
 	virtual void BeginPlay() override;
 
 	/** Puts the configured material on both meshes, or leaves the placeholder and says why. */
 	void ApplyTerrainMaterial();
+
+	/** The material actually on the meshes, made per planet so its parameters can be set. */
+	UPROPERTY()
+	TObjectPtr<class UMaterialInstanceDynamic> TerrainMaterialInstance;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Planet")
 	FPlanetConfig Planet;

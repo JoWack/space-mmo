@@ -1203,6 +1203,43 @@ bool FSpaceMMOBackendProtocol::ParseGatherResult(
 	return true;
 }
 
+namespace
+{
+	/**
+	 * Reads a colour authored as "r,g,b" in 0..1, or returns false.
+	 *
+	 * Three numbers in a string rather than three fields, because a palette is read and edited by a
+	 * person: "0.35,0.12,0.07" on one line is legible in a diff in a way three keys are not. Parsed
+	 * strictly -- a malformed colour is a content mistake worth noticing, not something to guess at.
+	 */
+	bool ParseColour(
+		const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, FLinearColor& OutColour)
+	{
+		FString Text;
+
+		if (!Object.IsValid() || !Object->TryGetStringField(Field, Text) || Text.IsEmpty())
+		{
+			return false;
+		}
+
+		TArray<FString> Parts;
+		Text.ParseIntoArray(Parts, TEXT(","));
+
+		if (Parts.Num() != 3)
+		{
+			return false;
+		}
+
+		OutColour = FLinearColor(
+			FCString::Atof(*Parts[0].TrimStartAndEnd()),
+			FCString::Atof(*Parts[1].TrimStartAndEnd()),
+			FCString::Atof(*Parts[2].TrimStartAndEnd()),
+			1.0f);
+
+		return true;
+	}
+}
+
 bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendBody>& OutBodies)
 {
 	TArray<TSharedPtr<FJsonValue>> Values;
@@ -1232,6 +1269,56 @@ bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendB
 
 		Object->TryGetStringField(TEXT("name"), Body.Name);
 		Object->TryGetNumberField(TEXT("radiusKm"), Body.RadiusKilometres);
+
+		// All or nothing. A half-authored palette -- two colours and no third -- would blend toward
+		// whatever the default happened to be and look deliberate, so a body counts as painted only
+		// when every colour arrived.
+		Body.bHasAppearance =
+			ParseColour(Object, TEXT("lowColour"), Body.LowColour)
+			&& ParseColour(Object, TEXT("highColour"), Body.HighColour)
+			&& ParseColour(Object, TEXT("rockColour"), Body.RockColour);
+
+		if (Body.bHasAppearance)
+		{
+			double Scratch = 0.0;
+
+			if (Object->TryGetNumberField(TEXT("heightFrom"), Scratch))
+			{
+				Body.HeightFrom = static_cast<float>(Scratch);
+			}
+
+			if (Object->TryGetNumberField(TEXT("heightTo"), Scratch))
+			{
+				Body.HeightTo = static_cast<float>(Scratch);
+			}
+
+			if (Object->TryGetNumberField(TEXT("slopeFrom"), Scratch))
+			{
+				Body.SlopeFrom = static_cast<float>(Scratch);
+			}
+
+			if (Object->TryGetNumberField(TEXT("slopeTo"), Scratch))
+			{
+				Body.SlopeTo = static_cast<float>(Scratch);
+			}
+		}
+
+		// Shape is independent of palette: a body may be painted before anybody has decided how
+		// rugged it is, or shaped before anybody has decided its colour. All three are required
+		// together, because a seed without a frequency would build a landscape nobody authored.
+		double Elevation = 0.0;
+		double Frequency = 0.0;
+
+		Body.bHasTerrain =
+			ReadInt64(Object, TEXT("terrainSeed"), Body.TerrainSeed)
+			&& Object->TryGetNumberField(TEXT("maxElevationKm"), Elevation)
+			&& Object->TryGetNumberField(TEXT("baseFrequency"), Frequency);
+
+		if (Body.bHasTerrain)
+		{
+			Body.MaxElevationKilometres = Elevation;
+			Body.BaseFrequency = Frequency;
+		}
 
 		int64 Id = 0;
 		int64 StarSystemId = 0;

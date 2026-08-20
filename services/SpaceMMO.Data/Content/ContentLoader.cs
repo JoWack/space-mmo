@@ -375,6 +375,33 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             .ToDictionaryAsync(s => s.Key, s => s.Id, StringComparer.Ordinal, cancellationToken);
     }
 
+    /// <summary>
+    /// Copies an authored palette onto a body, or clears it when the content has none.
+    /// </summary>
+    /// <remarks>
+    /// Cleared rather than left alone, because seeding is how content is corrected: deleting an
+    /// appearance from the JSON has to remove it from the database, or a palette somebody took out
+    /// on purpose would live on in every environment that had already seeded it.
+    /// </remarks>
+    private static void ApplyAppearance(Body body, BodyAppearanceContent? appearance)
+    {
+        body.LowColour = appearance?.LowColour;
+        body.HighColour = appearance?.HighColour;
+        body.RockColour = appearance?.RockColour;
+        body.HeightFrom = appearance?.HeightFrom;
+        body.HeightTo = appearance?.HeightTo;
+        body.SlopeFrom = appearance?.SlopeFrom;
+        body.SlopeTo = appearance?.SlopeTo;
+    }
+
+    /// <summary>Copies an authored terrain shape onto a body, or clears it. See ApplyAppearance.</summary>
+    private static void ApplyTerrain(Body body, BodyTerrainContent? terrain)
+    {
+        body.TerrainSeed = terrain?.Seed;
+        body.MaxElevationKm = terrain?.MaxElevationKm;
+        body.BaseFrequency = terrain?.BaseFrequency;
+    }
+
     private async Task<Dictionary<string, int>> UpsertBodiesAsync(
         ContentPack pack,
         Dictionary<string, int> systemIds,
@@ -395,10 +422,13 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 body.SecurityLevel = content.SecurityLevel;
                 body.RadiusKm = content.RadiusKm;
 
+                ApplyAppearance(body, content.Appearance);
+                ApplyTerrain(body, content.Terrain);
+
                 continue;
             }
 
-            _database.Bodies.Add(new Body
+            var added = new Body
             {
                 Key = content.Key,
                 Name = content.Name,
@@ -406,7 +436,12 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 Kind = content.Kind,
                 SecurityLevel = content.SecurityLevel,
                 RadiusKm = content.RadiusKm,
-            });
+            };
+
+            ApplyAppearance(added, content.Appearance);
+            ApplyTerrain(added, content.Terrain);
+
+            _database.Bodies.Add(added);
         }
 
         await _database.SaveChangesAsync(cancellationToken);

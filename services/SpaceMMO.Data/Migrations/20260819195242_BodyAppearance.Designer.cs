@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SpaceMMO.Data;
@@ -11,9 +12,11 @@ using SpaceMMO.Data;
 namespace SpaceMMO.Data.Migrations
 {
     [DbContext(typeof(SpaceMmoDbContext))]
-    partial class SpaceMmoDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260819195242_BodyAppearance")]
+    partial class BodyAppearance
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -66,10 +69,6 @@ namespace SpaceMMO.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<double?>("BaseFrequency")
-                        .HasColumnType("double precision")
-                        .HasColumnName("base_frequency");
-
                     b.Property<double?>("HeightFrom")
                         .HasColumnType("double precision")
                         .HasColumnName("height_from");
@@ -97,10 +96,6 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<string>("LowColour")
                         .HasColumnType("text")
                         .HasColumnName("low_colour");
-
-                    b.Property<double?>("MaxElevationKm")
-                        .HasColumnType("double precision")
-                        .HasColumnName("max_elevation_km");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -133,10 +128,6 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<int>("StarSystemId")
                         .HasColumnType("integer")
                         .HasColumnName("star_system_id");
-
-                    b.Property<long?>("TerrainSeed")
-                        .HasColumnType("bigint")
-                        .HasColumnName("terrain_seed");
 
                     b.HasKey("Id")
                         .HasName("pk_bodies");

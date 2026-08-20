@@ -3,6 +3,7 @@
 #include "Components/DynamicMeshComponent.h"
 #include "DynamicMesh/DynamicMesh3.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOLog.h"
 #include "GameFramework/PlayerController.h"
@@ -428,6 +429,61 @@ void ASpaceMMOPlanetActor::ApplyTerrainMaterial()
 	}
 
 	UE_LOG(LogSpaceMMO, Log, TEXT("Terrain drawing with '%s'."), *TerrainMaterial.ToString());
+}
+
+void ASpaceMMOPlanetActor::SetTerrainPalette(
+	const FLinearColor& Low,
+	const FLinearColor& High,
+	const FLinearColor& Rock,
+	const FVector4& Ranges)
+{
+	if (Surface == nullptr)
+	{
+		return;
+	}
+
+	if (TerrainMaterialInstance == nullptr)
+	{
+		UMaterialInterface* const Source = Surface->GetMaterial(0);
+
+		if (Source == nullptr)
+		{
+			return;
+		}
+
+		// One instance for both meshes: the globe and the patch are two samplings of one surface,
+		// and two instances would be two places for a palette to end up different.
+		TerrainMaterialInstance = UMaterialInstanceDynamic::Create(Source, this);
+
+		if (TerrainMaterialInstance == nullptr)
+		{
+			return;
+		}
+
+		Surface->SetMaterial(0, TerrainMaterialInstance);
+
+		if (GroundPatch != nullptr)
+		{
+			GroundPatch->SetMaterial(0, TerrainMaterialInstance);
+		}
+	}
+
+	TerrainMaterialInstance->SetVectorParameterValue(TEXT("LowColour"), Low);
+	TerrainMaterialInstance->SetVectorParameterValue(TEXT("HighColour"), High);
+	TerrainMaterialInstance->SetVectorParameterValue(TEXT("RockColour"), Rock);
+	TerrainMaterialInstance->SetScalarParameterValue(TEXT("HeightFrom"), Ranges.X);
+	TerrainMaterialInstance->SetScalarParameterValue(TEXT("HeightTo"), Ranges.Y);
+	TerrainMaterialInstance->SetScalarParameterValue(TEXT("SlopeFrom"), Ranges.Z);
+	TerrainMaterialInstance->SetScalarParameterValue(TEXT("SlopeTo"), Ranges.W);
+
+	// Said out loud, and naming the body. A planet drawn with the wrong world's palette looks
+	// deliberate, and there is nothing else on screen that would give it away.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Terrain painted from body '%s': low %s, high %s, rock %s, height %.2f..%.2f, "
+			"slope %.2f..%.2f."),
+		*BodyKey,
+		*Low.ToString(), *High.ToString(), *Rock.ToString(),
+		Ranges.X, Ranges.Y, Ranges.Z, Ranges.W);
 }
 
 void ASpaceMMOPlanetActor::BeginPlay()
@@ -1320,6 +1376,22 @@ void ASpaceMMOPlanetActor::SetTerrainConfig(const FPlanetTerrainConfig& NewTerra
 	// The globe is a tessellation of exactly this, so leaving it alone would leave a planet whose
 	// shape and whose ground came from different settings.
 	BuildGlobe();
+
+	// And the patch, which is the same surface sampled finer and is what a player is standing on.
+	//
+	// Dropped rather than rebuilt here: UpdateTerrainPatch rebuilds from the viewer's position on
+	// the next tick, and forgetting the current one is what makes it do so. Without this the ground
+	// underfoot keeps whatever shape it was built with while the globe beneath it changes -- two
+	// samplings of one height function disagreeing, which is the fault task 86 exists to prevent.
+	if (bHasPatch)
+	{
+		bHasPatch = false;
+		PatchDirection = FVector::ZeroVector;
+		PatchAngularRadiusDegrees = 0.0;
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Terrain changed; dropped the ground patch so it rebuilds from the new shape."));
+	}
 }
 
 void ASpaceMMOPlanetActor::ApplyRenderTransform()

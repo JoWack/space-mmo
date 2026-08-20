@@ -3,12 +3,26 @@ using SpaceMMO.Data;
 
 namespace SpaceMMO.Api.Endpoints;
 
+/// <param name="LowColour">
+/// What this body's ground looks like, or null throughout when nobody has painted it. Sent with the
+/// body because a planet's look is content, the same as its radius — see BodyAppearanceContent.
+/// </param>
 public sealed record BodyResponse(
     int Id,
     string Key,
     string Name,
     int StarSystemId,
-    double RadiusKm);
+    double RadiusKm,
+    string? LowColour,
+    string? HighColour,
+    string? RockColour,
+    double? HeightFrom,
+    double? HeightTo,
+    double? SlopeFrom,
+    double? SlopeTo,
+    long? TerrainSeed,
+    double? MaxElevationKm,
+    double? BaseFrequency);
 
 /// <param name="RequiredToolName">
 /// Display name of the tool this deposit needs, or null for bare hands. Sent so a player can be
@@ -119,7 +133,22 @@ public static class WorldEndpoints
     {
         List<BodyResponse> bodies = await database.Bodies
             .OrderBy(b => b.Key)
-            .Select(b => new BodyResponse(b.Id, b.Key, b.Name, b.StarSystemId, b.RadiusKm))
+            .Select(b => new BodyResponse(
+                b.Id,
+                b.Key,
+                b.Name,
+                b.StarSystemId,
+                b.RadiusKm,
+                b.LowColour,
+                b.HighColour,
+                b.RockColour,
+                b.HeightFrom,
+                b.HeightTo,
+                b.SlopeFrom,
+                b.SlopeTo,
+                b.TerrainSeed,
+                b.MaxElevationKm,
+                b.BaseFrequency))
             .ToListAsync(cancellation);
 
         return Results.Ok(bodies);

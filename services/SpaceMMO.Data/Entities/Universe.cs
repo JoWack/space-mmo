@@ -67,6 +67,42 @@ public class Body
     /// <summary>Radius in kilometres, at the 1:10 scale from ADR-0001.</summary>
     public double RadiusKm { get; set; }
 
+    /// <summary>
+    /// What this body's ground looks like, or null if nobody has painted it yet.
+    /// </summary>
+    /// <remarks>
+    /// Stored as columns rather than a blob so a palette can be queried and corrected like anything
+    /// else. Null throughout is a working state: the client keeps whatever material it was
+    /// configured with, which is what every body was doing before this existed.
+    /// </remarks>
+    public string? LowColour { get; set; }
+
+    public string? HighColour { get; set; }
+
+    public string? RockColour { get; set; }
+
+    public double? HeightFrom { get; set; }
+
+    public double? HeightTo { get; set; }
+
+    public double? SlopeFrom { get; set; }
+
+    public double? SlopeTo { get; set; }
+
+    /// <summary>
+    /// The shape of this body's ground, or null to leave the client on its own defaults.
+    /// </summary>
+    /// <remarks>
+    /// Separate from the palette because they answer different questions and a body may reasonably
+    /// have one without the other: a world can be painted before anybody has decided how rugged it
+    /// is, and shaped before anybody has decided what colour it is.
+    /// </remarks>
+    public long? TerrainSeed { get; set; }
+
+    public double? MaxElevationKm { get; set; }
+
+    public double? BaseFrequency { get; set; }
+
     public ICollection<Station> Stations { get; } = [];
 }
 

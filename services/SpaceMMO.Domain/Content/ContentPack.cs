@@ -110,7 +110,75 @@ public sealed record BodyContent(
     string System,
     BodyKind Kind,
     SecurityLevel SecurityLevel,
-    double RadiusKm);
+    double RadiusKm,
+    BodyAppearanceContent? Appearance = null,
+    BodyTerrainContent? Terrain = null);
+
+/// <summary>
+/// The shape of a body's ground, as authored in <c>data/universe/</c>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>Shape, not colour.</strong> The palette says what a world is made of; this says what it
+/// looks like from a distance — whether it is smooth swells, rugged hills, or something jagged. Two
+/// planets sharing a palette and differing here read as genuinely different places, and two sharing
+/// these and differing in palette read as the same place painted twice.
+/// </para>
+/// <para>
+/// These were constants in the client until 19 August, which meant every world had one silhouette
+/// and the only thing content could change was its tint.
+/// </para>
+/// </remarks>
+/// <param name="Seed">Decorrelates one body's surface from another's. Two bodies sharing a seed and
+/// a frequency are the same landscape.</param>
+/// <param name="MaxElevationKm">How far the surface rises above the nominal radius. Modest by
+/// design: Everest is 0.14% of Earth's radius, and terrain built the other way round makes a planet
+/// look like a golf ball.</param>
+/// <param name="BaseFrequency">Features per radius at the coarsest octave. Low values give broad
+/// swells; it was 2 and produced a planet whose steepest ground anywhere was 5.9 degrees, which no
+/// slope-based material could say anything about.</param>
+public sealed record BodyTerrainContent(
+    long Seed,
+    double MaxElevationKm,
+    double BaseFrequency);
+
+/// <summary>
+/// What a body's ground looks like, as authored in <c>data/universe/</c>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>Here rather than in the client, because a planet's look is content.</strong> Ares is red
+/// oxide and Grimhold is black slag for the same reason one is 339 km and the other 780 — somebody
+/// decided, and wrote it down. Keeping the palette in C++ would mean the only way to say what a new
+/// world looks like is to recompile the game, and would let a body's appearance and its facts drift
+/// apart in a way nothing could catch.
+/// </para>
+/// <para>
+/// The three colours are the ground low down, the ground high up, and the rock that shows on
+/// anything steep. The two ranges remap the terrain's own measurements onto that blend: height and
+/// steepness each occupy only part of 0..1 on any given planet, and a material fed the raw values
+/// draws a flat colour however it is authored.
+/// </para>
+/// <para>
+/// Optional, and null means the client keeps whatever material it was configured with. A body
+/// nobody has painted yet is a working state, not a broken one.
+/// </para>
+/// </remarks>
+/// <param name="LowColour">Ground at the bottom of the body's relief, as "r,g,b" in 0..1.</param>
+/// <param name="HighColour">Ground at the top of it.</param>
+/// <param name="RockColour">What shows through on slopes.</param>
+/// <param name="HeightFrom">Where the height blend starts, in fractions of maximum relief.</param>
+/// <param name="HeightTo">And where it finishes.</param>
+/// <param name="SlopeFrom">Where rock starts showing, as the sine of the slope angle.</param>
+/// <param name="SlopeTo">And where it covers the ground entirely.</param>
+public sealed record BodyAppearanceContent(
+    string LowColour,
+    string HighColour,
+    string RockColour,
+    double HeightFrom,
+    double HeightTo,
+    double SlopeFrom,
+    double SlopeTo);
 
 /// <summary>A resource deposit, as authored in <c>data/universe/</c>.</summary>
 /// <param name="Direction">Direction from the body's centre. Normalised on load, so authors may

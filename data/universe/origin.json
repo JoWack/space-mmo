@@ -22,7 +22,23 @@
       "kind": "Planet",
       "securityLevel": "Secure",
       "$comment": "Earth-analog. 6371 km at true scale becomes 637.1 at 1:10.",
-      "radiusKm": 637.1
+      "radiusKm": 637.1,
+      "$appearanceComment": "Oceanic and green where it is low, weathered grey stone up high, concrete-coloured rock: Terra is humanity's scarred cradle rather than a garden.",
+      "appearance": {
+        "lowColour": "0.10,0.14,0.09",
+        "highColour": "0.55,0.55,0.48",
+        "rockColour": "0.30,0.30,0.31",
+        "heightFrom": 0.25,
+        "heightTo": 0.72,
+        "slopeFrom": 0.18,
+        "slopeTo": 0.38
+      },
+      "$terrainComment": "Coastal and worn. Middling frequency: real hills and valleys, nothing jagged, because Terra is an old world that has been weathered and lived on.",
+      "terrain": {
+        "seed": 20260801,
+        "maxElevationKm": 0.5,
+        "baseFrequency": 9.0
+      }
     },
     {
       "key": "body_ares",
@@ -31,7 +47,23 @@
       "kind": "Planet",
       "securityLevel": "Secure",
       "$comment": "Mars-analog: thin atmosphere, red desert, low gravity.",
-      "radiusKm": 339.0
+      "radiusKm": 339.0,
+      "$appearanceComment": "Red oxide basins rising to pale dust, bare basalt on anything steep. The palette the terrain material was first tuned against.",
+      "appearance": {
+        "lowColour": "0.35,0.12,0.07",
+        "highColour": "0.72,0.42,0.26",
+        "rockColour": "0.18,0.15,0.14",
+        "heightFrom": 0.22,
+        "heightTo": 0.75,
+        "slopeFrom": 0.15,
+        "slopeTo": 0.45
+      },
+      "$terrainComment": "Rugged and broken — canyons and rift valleys carved by ancient water and tectonics, per the sheet. The frequency the terrain material was tuned against.",
+      "terrain": {
+        "seed": 20260802,
+        "maxElevationKm": 0.5,
+        "baseFrequency": 12.0
+      }
     },
     {
       "key": "body_verdance",
@@ -40,7 +72,23 @@
       "kind": "Planet",
       "securityLevel": "Secure",
       "$comment": "Lush and luminous — a planet that reads as alive.",
-      "radiusKm": 610.0
+      "radiusKm": 610.0,
+      "$appearanceComment": "Deep forest floor to lit canopy green, damp bark-dark rock. Amber bioluminescence belongs to the structures rather than the ground.",
+      "appearance": {
+        "lowColour": "0.05,0.13,0.05",
+        "highColour": "0.38,0.58,0.20",
+        "rockColour": "0.26,0.21,0.15",
+        "heightFrom": 0.26,
+        "heightTo": 0.69,
+        "slopeFrom": 0.1,
+        "slopeTo": 0.26
+      },
+      "$terrainComment": "Softer and lower: lush basins and rolling canopy rather than crags. Gentler relief so valleys hold together as valleys.",
+      "terrain": {
+        "seed": 20260803,
+        "maxElevationKm": 0.4,
+        "baseFrequency": 7.0
+      }
     },
     {
       "key": "body_grimhold",
@@ -49,7 +97,23 @@
       "kind": "Planet",
       "securityLevel": "Secure",
       "$comment": "Dark and industrial, heavy gravity, perpetual overcast. Larger than the rest, which is where the heavy gravity comes from.",
-      "radiusKm": 780.0
+      "radiusKm": 780.0,
+      "$appearanceComment": "Black slag to ash-grey, basalt throughout. Nearly monochrome on purpose: the colour on Grimhold comes from its forges, not its ground.",
+      "appearance": {
+        "lowColour": "0.03,0.03,0.03",
+        "highColour": "0.34,0.31,0.28",
+        "rockColour": "0.14,0.13,0.13",
+        "heightFrom": 0.25,
+        "heightTo": 0.85,
+        "slopeFrom": 0.25,
+        "slopeTo": 0.62
+      },
+      "$terrainComment": "The harshest of the five. Higher relief and the finest features: scarred highlands, slag ridges and deep excavation country, and the heavy gravity to make climbing it mean something.",
+      "terrain": {
+        "seed": 20260804,
+        "maxElevationKm": 0.7,
+        "baseFrequency": 16.0
+      }
     },
     {
       "key": "body_capital",
@@ -58,9 +122,27 @@
       "kind": "Planet",
       "securityLevel": "Secure",
       "$comment": "The shared capital world the onboarding questline ends at. Neutral ground: both factions trade here, which is why career questlines live here rather than on a homeworld.",
-      "radiusKm": 700.0
+      "radiusKm": 700.0,
+      "$appearanceComment": "Temperate and built-over. Between Terra and Ares in tone because the Capital is where everybody meets.",
+      "appearance": {
+        "lowColour": "0.16,0.19,0.15",
+        "highColour": "0.62,0.60,0.55",
+        "rockColour": "0.34,0.33,0.32",
+        "heightFrom": 0.24,
+        "heightTo": 0.68,
+        "slopeFrom": 0.08,
+        "slopeTo": 0.19
+      },
+      "$terrainComment": "Deliberately the tamest. The Capital is built over, and broad gentle ground is what a city sprawls across — jagged terrain here would fight every settlement placed on it.",
+      "terrain": {
+        "seed": 20260805,
+        "maxElevationKm": 0.35,
+        "baseFrequency": 6.0
+      }
     }
   ],
+
+  "$appearanceRanges": "Height and slope thresholds are measured per body rather than shared: each world's terrain settings put its height and steepness in a different part of 0..1, and thresholds tuned against one compress another into a corner. Measured across five patches per body — capital reaches 12 degrees at its steepest and grimhold 46, so a single slope range gave one almost no rock and the other nothing but. Re-measure if a body's terrain block changes.",
 
   "$nodeComment": "Deposits are placed by direction from the body centre, never by latitude and longitude — a lat-long pair has two singular points and a deposit at a pole is no less valid than one at the equator. No altitude: how high the ground is there is a question the terrain function already answers, and a second answer would be free to disagree with it.",
 

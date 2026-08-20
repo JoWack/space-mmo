@@ -150,6 +150,96 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     // ── Applying ─────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task AuthoredPalettes_ReachTheDatabase()
+    {
+        // A planet's look is content, the same as its radius, and it travels the same path:
+        // data/ -> seed -> Postgres -> API -> client. This is the seed half.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        // Against the pack rather than a literal count, for the reason the test below says: a
+        // number that is bumped whenever content is authored catches nothing.
+        foreach (BodyContent authored in pack.Bodies.Where(b => b.Appearance is not null))
+        {
+            Body stored = await verify.Bodies.SingleAsync(b => b.Key == authored.Key);
+
+            Assert.Equal(authored.Appearance!.LowColour, stored.LowColour);
+            Assert.Equal(authored.Appearance.HighColour, stored.HighColour);
+            Assert.Equal(authored.Appearance.RockColour, stored.RockColour);
+            Assert.Equal(authored.Appearance.SlopeFrom, stored.SlopeFrom);
+        }
+
+        // And that any were authored at all, since the loop above passes against none.
+        Assert.Contains(pack.Bodies, b => b.Appearance is not null);
+    }
+
+    [Fact]
+    public async Task AuthoredTerrainShapes_ReachTheDatabase_AndDiffer()
+    {
+        // Shape is what makes two worlds different places rather than one place painted twice, so
+        // this asserts both that it survives the seed and that the bodies are not all the same.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        foreach (BodyContent authored in pack.Bodies.Where(b => b.Terrain is not null))
+        {
+            Body stored = await verify.Bodies.SingleAsync(b => b.Key == authored.Key);
+
+            Assert.Equal(authored.Terrain!.Seed, stored.TerrainSeed);
+            Assert.Equal(authored.Terrain.MaxElevationKm, stored.MaxElevationKm);
+            Assert.Equal(authored.Terrain.BaseFrequency, stored.BaseFrequency);
+        }
+
+        // Distinct seeds, or every world is the same landscape wearing different colours -- which
+        // would look like a content decision rather than the copy-paste it actually was.
+        List<long?> seeds = await verify.Bodies
+            .Where(b => b.TerrainSeed != null)
+            .Select(b => b.TerrainSeed)
+            .ToListAsync();
+
+        Assert.Equal(seeds.Count, seeds.Distinct().Count());
+        Assert.Contains(pack.Bodies, b => b.Terrain is not null);
+    }
+
+    [Fact]
+    public async Task RemovingAPalette_ClearsIt()
+    {
+        // Seeding is how content is corrected, so deleting an appearance from the JSON has to
+        // remove it from the database. Left alone, a palette taken out on purpose would live on in
+        // every environment that had already seeded it -- and the only symptom would be a planet
+        // that still looks like something nobody can find the source of.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        await using (SpaceMmoDbContext paint = _fixture.CreateContext())
+        {
+            Body body = await paint.Bodies.FirstAsync();
+            body.LowColour = "1,0,1";
+
+            await paint.SaveChangesAsync();
+        }
+
+        await using (SpaceMmoDbContext reseed = _fixture.CreateContext())
+        {
+            await new ContentLoader(reseed).LoadAsync(ContentRoot());
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.DoesNotContain(
+            await verify.Bodies.Select(b => b.LowColour).ToListAsync(),
+            colour => colour == "1,0,1");
+    }
+
+    [Fact]
     public async Task LoadingTheShippedContent_PopulatesTheDatabase()
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();

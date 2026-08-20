@@ -1997,6 +1997,55 @@ sense a player would mean.
 That is the same shape as the reconciliation failures already recorded in `README.md`, and it is now
 the fourth one listed there.
 
+## 123 — A planet's look and shape are content
+
+**Done 19 August.** Split out of 121, which had deliberately hardcoded one planet's look to get the
+shader right without a seed cycle on every tweak. This is that decision being paid back.
+
+A body now carries both **what it is made of** and **what shape its ground is**, authored in
+`data/universe/origin.json` and travelling the same path as everything else: `data/` → seed →
+Postgres → API → client. Five worlds, five palettes, five silhouettes, and changing any of them is a
+JSON edit and a re-seed rather than a rebuild.
+
+**Palette and terrain are separate blocks on purpose.** A body may reasonably be painted before
+anybody has decided how rugged it is, or shaped before anybody has chosen its colours, and either
+alone is a working state. Both are optional; a body with neither keeps whatever the client was
+configured with, which is what every planet did before this existed.
+
+`ASpaceMMOPlanetActor::BodyKey` names which body a planet draws — config, so switching worlds is one
+ini line. `USpaceMMOTerrainPaintSubsystem` does the applying, in the backend module, because Core
+knows nothing about HTTP or content and keeping it that way is the same boundary the game mode holds
+for its player controller.
+
+### What this ran into
+
+**Changing terrain has to drop the ground patch.** `SetTerrainConfig` rebuilt the globe and left the
+patch alone, so the ground underfoot kept its old shape while the world beneath it changed — two
+samplings of one height function disagreeing, which is the fault 86 exists to prevent. It now
+forgets the patch so the next tick rebuilds it, and says so.
+
+**Thresholds are coupled to terrain and the coupling is invisible.** The remap ranges that make
+height and steepness usable were measured against Ares and copied to all five. Every body's terrain
+puts those channels somewhere different: the Capital reaches 12 degrees at its steepest and Grimhold
+46, so one shared slope range gave the Capital almost no rock and Grimhold nothing but.
+
+Measured per body and set from measurement. `SpaceMMO.Terrain.BodyPalettesSuitTheirTerrain` reads the
+authored JSON, builds real patches from each body's terrain, and fails when a body's thresholds fall
+outside the ground it actually has — verified by flattening Grimhold and watching it fail on a
+`heightTo` the ground no longer reaches.
+
+**Contrast is a palette decision, not a threshold one.** Four of the five worlds were first authored
+as tight tonal pairs, which is uniform by construction however well the blend works. They keep their
+hue identity and gained value range; Ares was left alone, being the one that already read.
+
+### Still hardcoded
+
+**Radius.** Ares is 339 km in content and the planet drawn is 20 km. Making that real changes
+approach times, orbital speeds and the horizon, and turns 0.5 km of relief from rugged into
+Earth-scale subtlety — a flight change worth making deliberately rather than inheriting.
+
+**Only one planet is spawned.** Five bodies are authored and one is drawn.
+
 ## 96 — Author world content graphically
 
 **Pending.** Raised 11 August; ADR-0011 makes it pressing, because a cave is a shape rather than a
