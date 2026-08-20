@@ -2070,10 +2070,19 @@ game, which is the worst failure mode available.
 
 Three approaches, cheapest first:
 
-1. **Capture in game.** A dev key that logs the normalised direction from the body centre at the
-   player's position, ready to paste. Everything is authored as a direction — deposits, stations,
-   and now caves — so this is small, needs no editor work at all, and solves placement for a single
-   point immediately. It does not help with shape.
+1. **Capture in game. Built 19 August.** `P` prints the normalised direction from the nearest body's
+   centre at the player's position, in the array shape `origin.json` uses, with the body key beside
+   it — a direction means nothing without knowing which world it is on, and the key is what the
+   content file wants next to it anyway. On screen as well as in the log, so the key visibly does
+   something without alt-tabbing to find out.
+
+   **It does not write to `data/`, deliberately.** A tool editing content while the game ran would be
+   a second writer racing the seeder, and the export is the part that has to be right; copying one
+   line out of a log is a smaller thing to get wrong.
+
+   Confirmed the same day by authoring a ferrite deposit at the character's spawn point, which is
+   the loop this replaces guessing unit vectors for. It does not help with shape, which is what 89
+   will need.
 2. **An editor utility that reads and writes `data/`.** Loads `origin.json`, spawns a preview actor
    per deposit, station and cave on a body, lets them be dragged and shaped, and serialises back.
    This is the real answer to "can I adjust it graphically", and it is bounded work: UE already has

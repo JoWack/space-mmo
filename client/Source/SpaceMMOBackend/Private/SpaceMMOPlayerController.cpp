@@ -3,6 +3,7 @@
 #include "Components/InputComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "Net/UnrealNetwork.h"
 #include "SpaceMMOBackendClient.h"
@@ -17,6 +18,8 @@
 #include "SpaceMMODepositPrompt.h"
 #include "SpaceMMOGatheringComponent.h"
 #include "SpaceMMOOnFootReadout.h"
+#include "SpaceMMOCharacterPawn.h"
+#include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOShipPawn.h"
 #include "SpaceMMOSkillsScreen.h"
 #include "SpaceMMOStationOverlay.h"
@@ -291,6 +294,10 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 
 		InputComponent->BindAction(
 			TEXT("StationTabMyOrders"), IE_Pressed, this, &ASpaceMMOPlayerController::ShowMyOrdersTab);
+
+		InputComponent->BindAction(
+			TEXT("CaptureDirection"), IE_Pressed, this,
+			&ASpaceMMOPlayerController::CaptureDirection);
 
 		InputComponent->BindAction(
 			TEXT("CycleRecipe"), IE_Pressed, this, &ASpaceMMOPlayerController::CycleRecipe);
@@ -773,6 +780,105 @@ void ASpaceMMOPlayerController::ShowQuestsTab()
 	{
 		StationOverlay->SetTab(ESpaceMMOStationTab::Quests);
 	}
+}
+
+void ASpaceMMOPlayerController::CaptureDirection()
+{
+	const UWorld* const World = GetWorld();
+
+	const APawn* const Possessed = GetPawn();
+
+	if (World == nullptr || Possessed == nullptr)
+	{
+		return;
+	}
+
+	// Both pawns keep a system position and neither shares a base that exposes it, so this asks
+	// each in turn rather than inventing a common interface for one caller.
+	FSystemCoordinate Where;
+
+	if (const ASpaceMMOShipPawn* const Ship = Cast<ASpaceMMOShipPawn>(Possessed))
+	{
+		Where = Ship->GetSystemPosition();
+	}
+	else if (const ASpaceMMOCharacterPawn* const OnFoot =
+		Cast<ASpaceMMOCharacterPawn>(Possessed))
+	{
+		Where = OnFoot->GetSystemPosition();
+	}
+	else
+	{
+		ShowTransientMessage(
+			TEXT("Nothing to take a bearing from"), ESpaceMMOMessageTone::Warning);
+
+		return;
+	}
+
+	// The nearest body, because a direction only means anything relative to one -- and standing on
+	// a planet, the one underfoot is the one being authored against.
+	const ASpaceMMOPlanetActor* Nearest = nullptr;
+	double NearestDistance = TNumericLimits<double>::Max();
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		const ASpaceMMOPlanetActor* const Planet = *It;
+
+		if (Planet == nullptr)
+		{
+			continue;
+		}
+
+		const double Distance =
+			(Where.Kilometres - Planet->GetPlanetConfig().Centre.Kilometres).Size();
+
+		if (Distance < NearestDistance)
+		{
+			NearestDistance = Distance;
+			Nearest = Planet;
+		}
+	}
+
+	if (Nearest == nullptr)
+	{
+		ShowTransientMessage(TEXT("No body to take a bearing from"), ESpaceMMOMessageTone::Warning);
+
+		return;
+	}
+
+	const FPlanetConfig Planet = Nearest->GetPlanetConfig();
+
+	const FVector Direction =
+		(Where.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
+
+	if (Direction.IsNearlyZero())
+	{
+		// Standing exactly at a body's centre names no point on its surface, which is the same
+		// reason a deposit authored with a zero direction is dropped rather than placed.
+		ShowTransientMessage(
+			TEXT("At the centre of the body; no direction to give"), ESpaceMMOMessageTone::Warning);
+
+		return;
+	}
+
+	// Printed as the array content actually uses, so it is a copy rather than a transcription.
+	// Six decimals is about a metre on a 20 km body and well past that on a real one.
+	const FString Line = FString::Printf(
+		TEXT("\"direction\": [%.6f, %.6f, %.6f]"), Direction.X, Direction.Y, Direction.Z);
+
+	// The body key is named alongside, because a direction means nothing without knowing which world
+	// it is a direction on -- and it is the key rather than a display name because the key is what
+	// the content file wants next to it.
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Bearing on '%s' (%.3f km from its centre, %.0f m above nominal): %s"),
+		*Nearest->BodyKey,
+		NearestDistance,
+		(NearestDistance - Planet.RadiusKilometres) * 1000.0,
+		*Line);
+
+	// And on screen, so somebody standing in the right place knows the key did something without
+	// alt-tabbing to a log to find out.
+	ShowTransientMessage(
+		FString::Printf(TEXT("Bearing taken: %s"), *Line), ESpaceMMOMessageTone::Positive);
 }
 
 void ASpaceMMOPlayerController::ShowMyOrdersTab()

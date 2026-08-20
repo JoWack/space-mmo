@@ -128,6 +128,20 @@ public:
 	void ShowMyOrdersTab();
 
 	/**
+	 * Prints where the player is standing, as a direction ready to paste into content. Bound to P.
+	 *
+	 * <strong>The cheap half of task 96.</strong> Everything in the world is authored as a direction
+	 * from a body's centre — deposits, stations, and caves when they land — and working one out by
+	 * hand means guessing a unit vector for a place you can see. This is that number, for wherever
+	 * somebody is standing.
+	 *
+	 * It does not write to <c>data/</c>, and deliberately: a tool that edited content while the game
+	 * ran would be a second writer racing the seeder, and the export is the part that has to be
+	 * right. Copying one line out of a log is a smaller thing to get wrong.
+	 */
+	void CaptureDirection();
+
+	/**
 	 * The three panels the station overlay renders, and where the player is.
 	 *
 	 * Assembled here rather than in the widget because the selection state and the price arithmetic

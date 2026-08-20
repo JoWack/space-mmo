@@ -148,6 +148,19 @@
 
   "resourceNodes": [
     {
+      "key": "node_test_player_spawn_ferrite_a",
+      "body": "body_capital",
+      "item": "ferrite_ore",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "$toolComment": "Mining is tool-gated by design (design bible, skills table), and the onboarding questline already teaches the order: gather scrap, craft the laser, then mine. Until this field existed the gate could not be authored, so step two of the quest could be skipped entirely and mining worked bare-handed.",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "$comment": "On the face a character first spawning in can see, so the first deposit a new player meets is not on the far side of the world.",
+      "direction": [0.001078, 0.000080, 0.999999]
+    },
+    {
       "key": "node_capital_ferrite_a",
       "body": "body_capital",
       "item": "ferrite_ore",
