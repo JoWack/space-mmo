@@ -1,5 +1,6 @@
 #include "Misc/AutomationTest.h"
 #include "SpaceMMOPlanetTerrain.h"
+#include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMOWalkModel.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -544,6 +545,61 @@ bool FSpaceMMOWalkMoveDirectionIsSafeWhenStillTest::RunTest(const FString& Param
 		FCharacterWalkModel::GroundSpeed(State, FVector::ZeroVector),
 		300.0,
 		0.001);
+
+	return true;
+}
+
+
+/**
+ * A model exported at any scale stands the height it is supposed to.
+ *
+ * The first character model imported at 98 cm — normalised to roughly one unit, and one unit
+ * arriving as a metre — which on screen read as the ore deposit being enormous rather than the
+ * person being half size. Deposits already solve this (FDepositPlacement::UniformScale) for the
+ * same reason: exporters disagree about scale and the game should not.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOCharacterStandsAtItsHeightTest,
+	"SpaceMMO.Walk.CharacterStandsAtItsHeight",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOCharacterStandsAtItsHeightTest::RunTest(const FString& Parameters)
+{
+	// The real measurement off the first imported model, so this test has met the case it exists
+	// for at least once.
+	const double Authored = 98.0;
+	const double Target = 180.0;
+
+	const double Scale = ASpaceMMOCharacterPawn::UniformScaleForHeight(Authored, Target);
+
+	TestEqual(TEXT("A 98 cm model scaled to stand 180"), Authored * Scale, Target, 0.001);
+
+	// Uniform, so the shape survives. A per-axis fit would make every model that was not authored
+	// at exactly the right proportions look squashed, and the artist would have no way to tell
+	// whether their proportions were wrong or the game was lying about them.
+	TestTrue(TEXT("A model already the right height is left alone"),
+		FMath::IsNearlyEqual(
+			ASpaceMMOCharacterPawn::UniformScaleForHeight(Target, Target), 1.0, 1e-9));
+
+	TestEqual(
+		TEXT("A model authored too large is scaled down"),
+		ASpaceMMOCharacterPawn::UniformScaleForHeight(360.0, Target),
+		0.5,
+		1e-9);
+
+	// Both refusals leave the model as authored rather than collapsing it to nothing, which would
+	// read as a character that failed to spawn instead of a number nobody set.
+	TestEqual(
+		TEXT("A model with no height is left alone"),
+		ASpaceMMOCharacterPawn::UniformScaleForHeight(0.0, Target),
+		1.0,
+		1e-9);
+
+	TestEqual(
+		TEXT("A zero target leaves the model at its authored size"),
+		ASpaceMMOCharacterPawn::UniformScaleForHeight(Authored, 0.0),
+		1.0,
+		1e-9);
 
 	return true;
 }

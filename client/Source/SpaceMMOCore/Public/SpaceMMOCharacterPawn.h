@@ -129,6 +129,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
 	USkeletalMeshComponent* GetBodyMesh() const { return BodyMesh; }
 
+	/**
+	 * Uniform scale that stands a model of a given height at a target height.
+	 *
+	 * Pure and static so the arithmetic can be checked without a mesh, a world or an editor — the
+	 * same treatment, and the same reasoning, as FDepositPlacement::UniformScale.
+	 *
+	 * Returns 1 when either height is unusable, which leaves the model exactly as authored rather
+	 * than collapsing it to a point.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
+	static double UniformScaleForHeight(double AuthoredHeightCentimetres, double TargetCentimetres);
+
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Character")
 	void ToggleCameraView();
 
@@ -299,6 +311,29 @@ private:
 
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
 	FVector CharacterMeshOffset = FVector::ZeroVector;
+
+	/**
+	 * How tall the character stands, in centimetres. Zero leaves the model at its authored size.
+	 *
+	 * <strong>Fitted rather than trusted, for the same reason deposits are.</strong>
+	 * FDepositPlacement already argues this at length: exporters disagree about scale, and a model
+	 * of any dimensions should arrive at a sensible size with its shape intact. The first character
+	 * model imported at 98 cm — a person normalised to roughly one unit, and one unit arriving as a
+	 * metre — which read as a child standing next to a boulder and looked like the boulder was
+	 * wrong.
+	 *
+	 * 180 cm because that is what everything else on this pawn was built around: the placeholder
+	 * tube stood 180, the third-person boom sits at 160 and the first-person camera at 165, both
+	 * eye height on a person that tall.
+	 *
+	 * Scaling here rather than in the asset is the cheap fix, not the correct one. Anything later
+	 * attached to a socket — a mining laser in a hand — inherits this multiplier and has to
+	 * remember it. Re-exporting the model at human scale and setting this to zero is the version
+	 * with one authority instead of two.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	double CharacterHeightCentimetres = 180.0;
+
 
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Character")
 	TObjectPtr<USpringArmComponent> CameraBoom;

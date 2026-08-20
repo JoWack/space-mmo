@@ -586,6 +586,20 @@ void ASpaceMMOCharacterPawn::ApplyCameraView()
 	}
 }
 
+double ASpaceMMOCharacterPawn::UniformScaleForHeight(
+	const double AuthoredHeightCentimetres, const double TargetCentimetres)
+{
+	// Either being unusable leaves the model exactly as authored. Dividing by a zero height, or
+	// scaling to a zero target, both end with a character that is not there at all -- which reads
+	// as a failure to spawn rather than as a number nobody set.
+	if (AuthoredHeightCentimetres <= UE_DOUBLE_SMALL_NUMBER || TargetCentimetres <= 0.0)
+	{
+		return 1.0;
+	}
+
+	return TargetCentimetres / AuthoredHeightCentimetres;
+}
+
 void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 {
 	if (BodyMesh == nullptr)
@@ -618,9 +632,15 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 		return;
 	}
 
+	// Measured off the model, not assumed. The bounds are the reference pose's, which is the only
+	// thing that knows what scale somebody exported at.
+	const double AuthoredHeight = Mesh->GetBounds().BoxExtent.Z * 2.0;
+	const double Scale = UniformScaleForHeight(AuthoredHeight, CharacterHeightCentimetres);
+
 	BodyMesh->SetSkeletalMeshAsset(Mesh);
 	BodyMesh->SetRelativeRotation(CharacterMeshRotation);
 	BodyMesh->SetRelativeLocation(CharacterMeshOffset);
+	BodyMesh->SetRelativeScale3D(FVector(Scale));
 	BodyMesh->SetVisibility(true);
 
 	// The tube has done its job. Hidden rather than destroyed, so a model that fails to load on a
@@ -649,9 +669,16 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 		}
 	}
 
+	// The authored height is named as well as the applied scale, because a model that needs a large
+	// multiplier is a model exported at the wrong scale, and that is worth being told rather than
+	// silently corrected forever.
 	UE_LOG(LogSpaceMMO, Log,
-		TEXT("Character drawing as '%s', rotated %s, offset %s."),
+		TEXT("Character drawing as '%s': authored %.1f cm, scaled %.3f to stand %.1f cm; "
+			"rotated %s, offset %s."),
 		*Mesh->GetName(),
+		AuthoredHeight,
+		Scale,
+		AuthoredHeight * Scale,
 		*CharacterMeshRotation.ToCompactString(),
 		*CharacterMeshOffset.ToCompactString());
 }

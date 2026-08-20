@@ -2463,6 +2463,23 @@ become a playtest.
 2. Judge the model on the planet: whether `CharacterMeshRotation` is right, whether it stands on the
    ground rather than in it, and whether the third-person boom still frames a person rather than a
    cylinder. All three are config or a number, not a rebuild.
+
+   **Done 20 August, and it found one.** Facing and footing were right first time; the character was
+   half size. It read on screen as the ore deposit being enormous, and the log settled it in one
+   line rather than by argument — the standing-gap diagnostic, changed the same day to measure
+   whichever body is drawn, reported the model spanning 0..98 cm. A deposit is fitted to a 300 cm
+   box, and 300 ÷ 98 is exactly the ratio on screen.
+
+   Fixed the way deposits already solve it: `CharacterHeightCentimetres`, default 180, with the mesh
+   uniformly scaled to stand that tall and the log naming the authored height as well as the applied
+   scale — so a model exported at the wrong size stays visible as a fact rather than being silently
+   corrected forever. 180 because everything else on the pawn was built around it: the placeholder
+   tube was 180, and the two cameras sit at 160 and 165, eye height on a person that tall.
+
+   **The cheap fix, not the correct one**, and it is worth saying which. Anything later attached to a
+   socket — a mining laser in a hand — inherits the multiplier and has to remember it. Re-exporting
+   the model at human scale and setting the height to zero is the version with one authority instead
+   of two.
 3. **First person hides the whole body**, agreed with Joe rather than hiding only the head. Wired,
    unlooked at.
 
