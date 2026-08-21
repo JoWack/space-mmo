@@ -212,6 +212,12 @@ private:
 	/** Puts the configured model and animation blueprint on the pawn, or says why it did not. */
 	void ApplyCharacterMesh();
 
+	/** Prints actor, mesh, pose and camera positions. Behind SpaceMMO.LogCharacterDraw. */
+	void ReportHowItIsDrawn() const;
+
+	/** Samples how far off centre the character is drawn, every frame, keeping the worst. */
+	void TrackHowFarOffCentre();
+
 	/**
 	 * Applies which camera is live and what the body does about it.
 	 *
@@ -368,4 +374,12 @@ private:
 
 	/** Diagnostic only: seconds since the last on-foot line. */
 	double DiagnosticSeconds = 0.0;
+
+	/** The same, for the draw report, so the two rate limits do not steal each other's ticks. */
+	double DrawDiagnosticSeconds = 0.0;
+
+	/** Worst offsets seen since the last draw report, in the camera's own axes. */
+	double WorstHorizontalDegrees = 0.0;
+
+	double WorstVerticalDegrees = 0.0;
 };

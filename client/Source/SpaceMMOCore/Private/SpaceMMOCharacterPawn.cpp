@@ -20,6 +20,28 @@
 #include "SpaceMMORenderOrigin.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	/**
+	 * Prints where the character is, where its mesh is drawn, and what is looking at it.
+	 *
+	 * <strong>Written because three plausible causes were proposed for one symptom and all three
+	 * were wrong.</strong> The character does not stay centred while moving, which can be the actor
+	 * moving away from the camera, the pose drifting away from the actor, or the view being
+	 * attached to something else entirely — and no amount of reasoning from a screenshot separates
+	 * them. This prints the three numbers that do.
+	 *
+	 * A console variable rather than a command-line flag, for two reasons: this machine mangles
+	 * Unreal arguments, and a running game reads its command line once, which is exactly the trap
+	 * that has already cost two rounds today. Toggle it with `SpaceMMO.LogCharacterDraw 1`.
+	 */
+	static TAutoConsoleVariable<int32> CVarLogCharacterDraw(
+		TEXT("SpaceMMO.LogCharacterDraw"),
+		0,
+		TEXT("Log the character's actor, mesh and camera positions once a second."),
+		ECVF_Default);
+}
+
 ASpaceMMOCharacterPawn::ASpaceMMOCharacterPawn()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -131,6 +153,15 @@ void ASpaceMMOCharacterPawn::BeginPlay()
 	// is, and a warning about a missing model is worth having in the log above the first frame.
 	ApplyCharacterMesh();
 	ApplyCameraView();
+
+	// Said out loud whether it is on or off, because the alternative has already happened: a console
+	// variable resets every run, and a run where somebody forgot to set it produces a log with no
+	// draw lines in it -- which is indistinguishable from a run where nothing went wrong. A
+	// diagnostic that can silently not happen is worse than none, because it answers anyway, and
+	// this line is what makes "off" a fact rather than an absence.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Character draw logging is %s (SpaceMMO.LogCharacterDraw)."),
+		CVarLogCharacterDraw.GetValueOnGameThread() > 0 ? TEXT("ON") : TEXT("OFF"));
 
 	// Resolve the ground before the first step so the character starts standing on the surface with
 	// its up already correct, rather than upright in world space and snapping on frame one.
@@ -377,6 +408,29 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 
 	DiagnosticSeconds += DeltaSeconds;
 
+	DrawDiagnosticSeconds += DeltaSeconds;
+
+	if (CVarLogCharacterDraw.GetValueOnGameThread() > 0)
+	{
+		// Sampled every frame, reported every second.
+		//
+		// The first version of this only measured on the second, and a once-a-second sample cannot
+		// see a transient: a character that swings wide during a turn and comes back would report
+		// the same steady number as one that never moved. What is being complained about is a
+		// moment, so the diagnostic has to watch every frame and keep the worst one.
+		TrackHowFarOffCentre();
+
+		if (DrawDiagnosticSeconds >= 1.0)
+		{
+			DrawDiagnosticSeconds = 0.0;
+
+			ReportHowItIsDrawn();
+
+			WorstHorizontalDegrees = 0.0;
+			WorstVerticalDegrees = 0.0;
+		}
+	}
+
 	if (FParse::Param(FCommandLine::Get(), TEXT("LogApproach")) && DiagnosticSeconds >= 1.0)
 	{
 		DiagnosticSeconds = 0.0;
@@ -584,6 +638,131 @@ void ASpaceMMOCharacterPawn::ApplyCameraView()
 	{
 		Body->SetVisibility(bBodyVisible);
 	}
+}
+
+void ASpaceMMOCharacterPawn::TrackHowFarOffCentre()
+{
+	const APlayerController* const Viewer = Cast<APlayerController>(GetController());
+
+	if (Viewer == nullptr)
+	{
+		return;
+	}
+
+	FVector CameraLocation = FVector::ZeroVector;
+	FRotator CameraRotation = FRotator::ZeroRotator;
+
+	Viewer->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+	// Measured at the middle of the character rather than at its feet. The feet are always low in
+	// frame by the geometry of a camera that sits at head height and looks level, and reporting
+	// that as an offset drowns the thing actually being looked for.
+	const FVector Middle =
+		GetActorLocation() + (GetActorQuat().GetUpVector() * (CharacterHeightCentimetres * 0.5));
+
+	const FVector ToCharacter = Middle - CameraLocation;
+
+	if (ToCharacter.IsNearlyZero())
+	{
+		return;
+	}
+
+	// Split into the camera's own axes, because left-of-centre and low-in-frame are different
+	// complaints and one unsigned angle cannot tell them apart -- which is what the first version
+	// of this got wrong.
+	const FMatrix CameraFrame = FRotationMatrix(CameraRotation);
+
+	const double Forward = FVector::DotProduct(ToCharacter, CameraFrame.GetUnitAxis(EAxis::X));
+	const double Right = FVector::DotProduct(ToCharacter, CameraFrame.GetUnitAxis(EAxis::Y));
+	const double Up = FVector::DotProduct(ToCharacter, CameraFrame.GetUnitAxis(EAxis::Z));
+
+	if (FMath::Abs(Forward) < UE_DOUBLE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	WorstHorizontalDegrees = FMath::Max(
+		WorstHorizontalDegrees, FMath::Abs(FMath::RadiansToDegrees(FMath::Atan2(Right, Forward))));
+
+	WorstVerticalDegrees = FMath::Max(
+		WorstVerticalDegrees, FMath::Abs(FMath::RadiansToDegrees(FMath::Atan2(Up, Forward))));
+}
+
+void ASpaceMMOCharacterPawn::ReportHowItIsDrawn() const
+{
+	const FVector Actor = GetActorLocation();
+
+	// Where the pose actually puts the body, in the mesh's own frame. This is the number that
+	// separates "the mesh is drifting" from "the actor is": root motion left in a pose walks the
+	// root bone away from the component while the component itself never moves, so a component
+	// transform will happily report everything is fine.
+	FVector RootBone = FVector::ZeroVector;
+	FVector PelvisBone = FVector::ZeroVector;
+
+	FString AnimReport = TEXT("<no anim instance>");
+
+	if (BodyMesh != nullptr)
+	{
+		RootBone = BodyMesh->GetBoneLocation(TEXT("root"), EBoneSpaces::ComponentSpace);
+		PelvisBone = BodyMesh->GetBoneLocation(TEXT("pelvis"), EBoneSpaces::ComponentSpace);
+
+		if (const UAnimInstance* const Anim = BodyMesh->GetAnimInstance())
+		{
+			// The mode the running instance actually has, not the one the asset was saved with.
+			// Whether a dropdown took effect is exactly the sort of thing worth reading off the
+			// built object rather than believing.
+			AnimReport = FString::Printf(
+				TEXT("%s, root motion mode %d"),
+				*GetNameSafe(Anim->GetClass()),
+				static_cast<int32>(Anim->RootMotionMode.GetValue()));
+		}
+	}
+
+	// What is looking at it, and from where. A view target that is not this pawn would put the
+	// character anywhere on screen at all, and nothing else here would look wrong.
+	FString ViewReport = TEXT("<no view target>");
+
+	if (const APlayerController* const Viewer = Cast<APlayerController>(GetController()))
+	{
+		const AActor* const ViewTarget = Viewer->GetViewTarget();
+
+		FVector CameraLocation = FVector::ZeroVector;
+		FRotator CameraRotation = FRotator::ZeroRotator;
+
+		Viewer->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+		// How far off the middle of the screen the character is, as an angle. Zero is dead centre,
+		// and it is the number the complaint is actually about.
+		const FVector ToCharacter = Actor - CameraLocation;
+
+		const double OffAxisDegrees = ToCharacter.IsNearlyZero()
+			? 0.0
+			: FMath::RadiansToDegrees(
+				FMath::Acos(
+					FMath::Clamp(
+						FVector::DotProduct(
+							ToCharacter.GetSafeNormal(), CameraRotation.Vector()),
+						-1.0,
+						1.0)));
+
+		ViewReport = FString::Printf(
+			TEXT("view target %s, camera %.0f cm away, feet %.1f deg off axis; "
+				"worst this second: %.1f deg sideways, %.1f deg vertical"),
+			*GetNameSafe(ViewTarget),
+			ToCharacter.Size(),
+			OffAxisDegrees,
+			WorstHorizontalDegrees,
+			WorstVerticalDegrees);
+	}
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("DRAW: actor %s | mesh relative %s | root bone (component) %s | pelvis %s | %s | %s"),
+		*Actor.ToCompactString(),
+		BodyMesh != nullptr ? *BodyMesh->GetRelativeLocation().ToCompactString() : TEXT("<none>"),
+		*RootBone.ToCompactString(),
+		*PelvisBone.ToCompactString(),
+		*AnimReport,
+		*ViewReport);
 }
 
 double ASpaceMMOCharacterPawn::UniformScaleForHeight(

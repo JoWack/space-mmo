@@ -2536,6 +2536,43 @@ become a playtest.
 3. **First person hides the whole body**, agreed with Joe rather than hiding only the head. Wired,
    unlooked at.
 
+### "The character is not centred while moving" — measured, 20 August
+
+Reported from a screenshot with the character hard against the left edge of the screen. **Three
+causes were proposed and all three were wrong**, which is the point at which this project's own rule
+says to stop arguing and print numbers.
+
+Wrong guess one: the root motion mode, which was genuinely wrong in the spec — `IgnoreRootMotion`
+rather than `NoRootMotionExtraction` — but changing it did not fix the symptom. Wrong guess two:
+that the running session had never picked the change up, which was true of that session and still
+did not fix it on a clean one. Wrong guess three: an instrument that measured the angle from the
+camera to the *actor origin*, which is the character's feet, and duly reported a constant 20 degrees
+off centre. That is `atan(160/430)` — the geometry of a camera at neck height looking level — and it
+was a number the diagnostic invented rather than found.
+
+`SpaceMMO.LogCharacterDraw` is what settled it, once it measured the character's middle, split the
+offset into the camera's own sideways and vertical axes, and sampled every frame rather than once a
+second. Across 47 seconds of deliberately hard turns:
+
+- **Sideways: 0.0 to 1.6 degrees, never more.** The character is horizontally centred at all times.
+- **Vertical: 9.7 degrees, steady**, which is the middle of a 180 cm character seen from a camera
+  400 cm back and 160 cm up. Expected.
+- **Vertical spikes to 38 degrees**, which are mouse-look: `LookUp` pitches the camera boom, so
+  looking up and down swings the character in frame. Also expected.
+
+So the original screenshot was the root motion leak — a pose dragging the mesh in the direction of
+travel — and it is fixed. What remains is the framing: the character sits slightly low because the
+camera looks level from neck height, which is a tuning preference rather than a fault.
+
+**Two things kept from this**, both about the diagnostic rather than the bug:
+
+- A once-a-second sample cannot see a transient. The first version reported the same steady number
+  for a character that swung wide and came back as for one that never moved.
+- **A console variable resets every run**, so a run where nobody set it writes no lines at all — and
+  a log with no diagnostic in it looks exactly like a run where nothing was wrong. That cost a whole
+  round trip. The switch now says whether it is on or off at startup, so "off" is a fact in the log
+  rather than an absence from it.
+
 **Not fixed, and worth knowing:** the rig carries Auto-Rig Pro controller bones (`c_` prefix) and a
 stray `OBroot`, which are Blender-side scaffolding rather than anything the game needs to evaluate.
 Re-exporting with deform bones only would make the skeleton leaner. It costs nothing today, so it is
