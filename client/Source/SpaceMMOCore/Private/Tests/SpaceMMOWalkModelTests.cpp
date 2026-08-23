@@ -683,4 +683,73 @@ bool FSpaceMMOWalkStrafeReadsAsTheKeyPressedTest::RunTest(const FString& Paramet
 	return true;
 }
 
+
+/**
+ * A body turning to face travel takes the short way round.
+ *
+ * <strong>The wrap is the whole test.</strong> Running backwards puts the direction at plus or
+ * minus 180, and the sign flips on numerical noise — so a body that turned by the raw difference
+ * would spin a full circle every time the last digit changed. The same discontinuity froze a blend
+ * space earlier the same day, which is how it earned a test of its own here.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkBodyTurnsTheShortWayTest,
+	"SpaceMMO.Walk.BodyTurnsTheShortWay",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkBodyTurnsTheShortWayTest::RunTest(const FString& Parameters)
+{
+	// Straight across the wrap: 170 to -170 is twenty degrees, not three hundred and forty.
+	TestEqual(
+		TEXT("Ten degrees from 170 toward -170 lands on 180"),
+		FMath::Abs(ASpaceMMOCharacterPawn::TurnTowards(170.0, -170.0, 10.0)),
+		180.0,
+		0.001);
+
+	TestEqual(
+		TEXT("And the other way round"),
+		FMath::Abs(ASpaceMMOCharacterPawn::TurnTowards(-170.0, 170.0, 10.0)),
+		180.0,
+		0.001);
+
+	// A step it can complete lands exactly, rather than stepping past and oscillating -- which
+	// reads as a body that jitters while running.
+	TestEqual(
+		TEXT("A reachable target is landed on exactly"),
+		ASpaceMMOCharacterPawn::TurnTowards(0.0, 45.0, 90.0),
+		45.0,
+		0.001);
+
+	TestEqual(
+		TEXT("Already facing the right way does not move"),
+		ASpaceMMOCharacterPawn::TurnTowards(90.0, 90.0, 30.0),
+		90.0,
+		0.001);
+
+	// Direction of travel, not just magnitude: turning toward +90 must not go to -90.
+	TestEqual(
+		TEXT("Turning right goes right"),
+		ASpaceMMOCharacterPawn::TurnTowards(0.0, 90.0, 30.0),
+		30.0,
+		0.001);
+
+	TestEqual(
+		TEXT("Turning left goes left"),
+		ASpaceMMOCharacterPawn::TurnTowards(0.0, -90.0, 30.0),
+		-30.0,
+		0.001);
+
+	// Repeated steps converge rather than orbiting the target forever.
+	double Facing = 0.0;
+
+	for (int32 Step = 0; Step < 60; ++Step)
+	{
+		Facing = ASpaceMMOCharacterPawn::TurnTowards(Facing, -135.0, 12.0);
+	}
+
+	TestEqual(TEXT("A body turning every frame settles on its heading"), Facing, -135.0, 0.001);
+
+	return true;
+}
+
 #endif

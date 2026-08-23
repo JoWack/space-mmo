@@ -37,7 +37,7 @@ namespace
 	 */
 	static TAutoConsoleVariable<int32> CVarLogCharacterDraw(
 		TEXT("SpaceMMO.LogCharacterDraw"),
-		0,
+		1,
 		TEXT("Log the character's actor, mesh and camera positions once a second."),
 		ECVF_Default);
 }
@@ -406,6 +406,9 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 	PendingInput.Move = FVector2D::ZeroVector;
 	PendingInput.Turn = 0.0;
 
+	// Drawn, not simulated: this turns the model and touches nothing the server has an opinion on.
+	UpdateMeshFacing(DeltaSeconds);
+
 	DiagnosticSeconds += DeltaSeconds;
 
 	DrawDiagnosticSeconds += DeltaSeconds;
@@ -428,6 +431,7 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 
 			WorstHorizontalDegrees = 0.0;
 			WorstVerticalDegrees = 0.0;
+			WorstDrawnFromActorCentimetres = 0.0;
 		}
 	}
 
@@ -654,13 +658,16 @@ void ASpaceMMOCharacterPawn::TrackHowFarOffCentre()
 
 	Viewer->GetPlayerViewPoint(CameraLocation, CameraRotation);
 
-	// Measured at the middle of the character rather than at its feet. The feet are always low in
-	// frame by the geometry of a camera that sits at head height and looks level, and reporting
-	// that as an offset drowns the thing actually being looked for.
-	const FVector Middle =
-		GetActorLocation() + (GetActorQuat().GetUpVector() * (CharacterHeightCentimetres * 0.5));
+	// <strong>The bone, not the actor.</strong> The previous version of this measured
+	// GetActorLocation, which is bolted to the camera boom and therefore reads zero degrees off
+	// centre forever, whatever is on screen. It duly proved the actor was centred, which was never
+	// the question: what a player looks at is the skinned mesh, and a pose can walk that anywhere
+	// while the actor it hangs from does not move at all.
+	const FVector Drawn = BodyMesh != nullptr
+		? BodyMesh->GetBoneLocation(TEXT("pelvis"), EBoneSpaces::WorldSpace)
+		: GetActorLocation();
 
-	const FVector ToCharacter = Middle - CameraLocation;
+	const FVector ToCharacter = Drawn - CameraLocation;
 
 	if (ToCharacter.IsNearlyZero())
 	{
@@ -686,6 +693,15 @@ void ASpaceMMOCharacterPawn::TrackHowFarOffCentre()
 
 	WorstVerticalDegrees = FMath::Max(
 		WorstVerticalDegrees, FMath::Abs(FMath::RadiansToDegrees(FMath::Atan2(Up, Forward))));
+
+	// And the same difference in plain centimetres, between where the character is and where it is
+	// drawn. A sawtooth here -- climbing, then snapping back -- is a pose accumulating motion and
+	// releasing it, and it is the shape the complaint describes.
+	const double DrawnFromActor = (Drawn - GetActorLocation()).Size();
+
+	WorstDrawnFromActorCentimetres = FMath::Max(WorstDrawnFromActorCentimetres, DrawnFromActor);
+
+	LastDrawnFromActorCentimetres = DrawnFromActor;
 }
 
 void ASpaceMMOCharacterPawn::ReportHowItIsDrawn() const
@@ -747,22 +763,95 @@ void ASpaceMMOCharacterPawn::ReportHowItIsDrawn() const
 
 		ViewReport = FString::Printf(
 			TEXT("view target %s, camera %.0f cm away, feet %.1f deg off axis; "
-				"worst this second: %.1f deg sideways, %.1f deg vertical"),
+				"worst this second: %.1f deg sideways, %.1f deg vertical; "
+				"body drawn %.0f cm from the actor now, %.0f cm at worst"),
 			*GetNameSafe(ViewTarget),
 			ToCharacter.Size(),
 			OffAxisDegrees,
 			WorstHorizontalDegrees,
-			WorstVerticalDegrees);
+			WorstVerticalDegrees,
+			LastDrawnFromActorCentimetres,
+			WorstDrawnFromActorCentimetres);
 	}
 
+	// The four values the animation graph is actually handed, printed beside what it drew. Which
+	// sample plays is entirely a function of these, so a wrong pose is either a wrong number here
+	// or a wrong asset there -- and there is no way to tell which from a screenshot.
 	UE_LOG(LogSpaceMMO, Log,
-		TEXT("DRAW: actor %s | mesh relative %s | root bone (component) %s | pelvis %s | %s | %s"),
+		TEXT("DRAW: speed %.2f m/s, direction %.1f deg (body facing %.1f, residual %.1f), "
+			"vertical %.2f m/s, %s | "
+			"actor %s | mesh relative %s | root bone (component) %s | pelvis %s | %s | %s"),
+		GetGroundSpeedMetresPerSecond(),
+		GetMoveDirectionDegrees(),
+		MeshFacingDegrees,
+		GetAnimationDirectionDegrees(),
+		GetVerticalSpeedMetresPerSecond(),
+		bOnGround ? TEXT("GROUNDED") : TEXT("AIRBORNE"),
 		*Actor.ToCompactString(),
 		BodyMesh != nullptr ? *BodyMesh->GetRelativeLocation().ToCompactString() : TEXT("<none>"),
 		*RootBone.ToCompactString(),
 		*PelvisBone.ToCompactString(),
 		*AnimReport,
 		*ViewReport);
+}
+
+double ASpaceMMOCharacterPawn::TurnTowards(
+	const double CurrentDegrees, const double DesiredDegrees, const double MaxStepDegrees)
+{
+	// Normalised into -180..180 first, so the difference between them is the short way round by
+	// construction rather than by luck. Turning from 170 to -170 is twenty degrees, and a version
+	// of this that subtracted the raw values would spin the character the other three hundred and
+	// forty every time somebody ran backwards.
+	const double Delta =
+		FRotator::NormalizeAxis(DesiredDegrees) - FRotator::NormalizeAxis(CurrentDegrees);
+
+	const double Shortest = FRotator::NormalizeAxis(Delta);
+
+	if (MaxStepDegrees <= 0.0 || FMath::Abs(Shortest) <= MaxStepDegrees)
+	{
+		// Close enough to land on it exactly. Stepping past and oscillating around the target is
+		// the other way this goes wrong, and it reads as a body that jitters while running.
+		return FRotator::NormalizeAxis(DesiredDegrees);
+	}
+
+	return FRotator::NormalizeAxis(
+		FRotator::NormalizeAxis(CurrentDegrees) + (FMath::Sign(Shortest) * MaxStepDegrees));
+}
+
+void ASpaceMMOCharacterPawn::UpdateMeshFacing(const double DeltaSeconds)
+{
+	if (BodyMesh == nullptr)
+	{
+		return;
+	}
+
+	if (!bCharacterFacesTravel)
+	{
+		MeshFacingDegrees = 0.0;
+		BodyMesh->SetRelativeRotation(CharacterMeshRotation);
+
+		return;
+	}
+
+	// Only while actually going somewhere. Below the threshold there is no direction of travel to
+	// face, and reading one out of a velocity that is basically noise would have the body twitching
+	// round while the character stands still.
+	if (GetGroundSpeedMetresPerSecond() >= CharacterFacingSpeedThresholdMetresPerSecond)
+	{
+		MeshFacingDegrees = TurnTowards(
+			MeshFacingDegrees,
+			GetMoveDirectionDegrees(),
+			CharacterTurnRateDegreesPerSecond * DeltaSeconds);
+	}
+
+	// Added to the authored offset rather than replacing it: that value is how the model sits on
+	// the pawn at all, and losing it would leave the character facing ninety degrees off whichever
+	// way they walked.
+	BodyMesh->SetRelativeRotation(
+		FRotator(
+			CharacterMeshRotation.Pitch,
+			CharacterMeshRotation.Yaw + MeshFacingDegrees,
+			CharacterMeshRotation.Roll));
 }
 
 double ASpaceMMOCharacterPawn::UniformScaleForHeight(

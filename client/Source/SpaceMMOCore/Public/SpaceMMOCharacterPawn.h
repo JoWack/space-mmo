@@ -141,6 +141,32 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
 	static double UniformScaleForHeight(double AuthoredHeightCentimetres, double TargetCentimetres);
 
+	/**
+	 * Turns one angle toward another by at most a given step, the short way round.
+	 *
+	 * <strong>The short way is the whole point.</strong> Turning from 170 degrees to -170 is a
+	 * twenty degree step, not a three hundred and forty degree spin, and the naive version of this
+	 * makes a character pirouette every time they run backwards past the wrap. This project has
+	 * already lost an evening to the same discontinuity in a blend space.
+	 *
+	 * Pure and static so the wrap can be tested without a mesh, a world or an editor.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
+	static double TurnTowards(double CurrentDegrees, double DesiredDegrees, double MaxStepDegrees);
+
+	/**
+	 * Which way the character is travelling relative to the way its <em>body</em> is drawn facing.
+	 *
+	 * Zero once the body has finished turning to face travel, which is what makes a forward run the
+	 * only clip a facing-travel character needs. While the turn is still catching up it is the
+	 * residual, so a blend space with real strafe animations in it would fill the gap correctly.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
+	double GetAnimationDirectionDegrees() const
+	{
+		return FRotator::NormalizeAxis(GetMoveDirectionDegrees() - MeshFacingDegrees);
+	}
+
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Character")
 	void ToggleCameraView();
 
@@ -211,6 +237,9 @@ protected:
 private:
 	/** Puts the configured model and animation blueprint on the pawn, or says why it did not. */
 	void ApplyCharacterMesh();
+
+	/** Swings the drawn body round toward the direction of travel. Presentation only. */
+	void UpdateMeshFacing(double DeltaSeconds);
 
 	/** Prints actor, mesh, pose and camera positions. Behind SpaceMMO.LogCharacterDraw. */
 	void ReportHowItIsDrawn() const;
@@ -340,6 +369,30 @@ private:
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
 	double CharacterHeightCentimetres = 180.0;
 
+	/**
+	 * Whether the drawn body turns to face the way the character is travelling.
+	 *
+	 * <strong>The mesh only. Nothing the server simulates moves.</strong> The pawn still faces
+	 * wherever the mouse points and still strafes; this changes what that looks like, from
+	 * side-stepping to running. Chosen because the animation library's lateral clips are angled
+	 * runs rather than strafes, and a character who faces where they are going needs none of them —
+	 * a forward run covers every direction.
+	 *
+	 * Keeping it out of the walk model is deliberate: that model is pure, tested, and evaluated by
+	 * the dedicated server as well as here, and how a body is drawn is not something the server
+	 * should ever have an opinion about.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	bool bCharacterFacesTravel = true;
+
+	/** How fast the body swings round to face travel, in degrees per second. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	double CharacterTurnRateDegreesPerSecond = 720.0;
+
+	/** Below this, there is no travel to face and the body holds the way it was last going. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	double CharacterFacingSpeedThresholdMetresPerSecond = 0.2;
+
 
 	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Character")
 	TObjectPtr<USpringArmComponent> CameraBoom;
@@ -378,8 +431,16 @@ private:
 	/** The same, for the draw report, so the two rate limits do not steal each other's ticks. */
 	double DrawDiagnosticSeconds = 0.0;
 
+	/** Yaw the body is drawn at, relative to the pawn's own facing. Presentation only. */
+	double MeshFacingDegrees = 0.0;
+
 	/** Worst offsets seen since the last draw report, in the camera's own axes. */
 	double WorstHorizontalDegrees = 0.0;
 
 	double WorstVerticalDegrees = 0.0;
+
+	/** How far the drawn body is from the actor it hangs on, worst and latest, in centimetres. */
+	double WorstDrawnFromActorCentimetres = 0.0;
+
+	double LastDrawnFromActorCentimetres = 0.0;
 };

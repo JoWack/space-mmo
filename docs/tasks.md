@@ -2405,8 +2405,9 @@ level the ground under one.
 
 ## 125 — The character is a tube
 
-**In progress. Raised 20 August** by Joe, wanting the game to look like a game. Belongs to **M7 — a
-world worth being in**.
+**Done 22 August**, confirmed by playtest: a rigged human runs, jumps and falls on the planet, turns
+to face where it is going, and is hidden in first person. Raised 20 August by Joe, wanting the game
+to look like a game. Belongs to **M7 — a world worth being in**.
 
 **Built so far: the pawn can wear a model.** A `USkeletalMeshComponent` on
 `ASpaceMMOCharacterPawn`, with the model, the animation blueprint and how the mesh sits on the pawn
@@ -2453,9 +2454,9 @@ pawns too — `FollowServerState` writes the same walk state from what the serve
 players animate rather than sliding about in a bind pose. Checked by reading it, before it could
 become a playtest.
 
-**Still to do:**
+**How it was finished:**
 
-1. The animation blueprint itself. **Specified 20 August**, below, and not yet built.
+1. The animation blueprint. **Specified 20 August**, below, and built 22 August.
 
    Create it on the **FreeAnimationLibrary `SK_Mannequin`** — the skeleton the mesh was bound to,
    not the `Characters/Mannequins` twin — at `/Game/Characters/Human/ABP_Human`. Set **Root Motion
@@ -2513,9 +2514,15 @@ become a playtest.
    Then `CharacterAnimClass=/Game/Characters/Human/ABP_Human.ABP_Human_C` in `DefaultGame.ini`.
    **The `_C` matters** — that is the generated class rather than the asset, and without it the load
    fails and the character stands in its bind pose, which the log says out loud.
+
+   **What was built differs from that spec in one way**, and the reason is worth keeping: the blend
+   space is one-dimensional, on speed alone — `anim_Idle`, `anim_Walk_Fwd_Loop_L`,
+   `anim_Jog_Loop_Fwd` — because the body now turns to face travel, and a character who faces where
+   they are going only ever runs forward. See below.
 2. Judge the model on the planet: whether `CharacterMeshRotation` is right, whether it stands on the
    ground rather than in it, and whether the third-person boom still frames a person rather than a
-   cylinder. All three are config or a number, not a rebuild.
+   cylinder. All three are config or a number, not a rebuild. **All three passed 20 August**, after
+   the height fix below.
 
    **Done 20 August, and it found one.** Facing and footing were right first time; the character was
    half size. It read on screen as the ore deposit being enormous, and the log settled it in one
@@ -2533,8 +2540,72 @@ become a playtest.
    socket — a mining laser in a hand — inherits the multiplier and has to remember it. Re-exporting
    the model at human scale and setting the height to zero is the version with one authority instead
    of two.
-3. **First person hides the whole body**, agreed with Joe rather than hiding only the head. Wired,
-   unlooked at.
+3. **First person hides the whole body**, agreed with Joe rather than hiding only the head.
+   Confirmed by playtest, 20 August.
+
+**Left undone deliberately:** `anim_LandRoll_R` is still unused, because a full roll after a small
+hop reads as absurd; it wants a fourth state gated on how hard the landing was, which is vertical
+speed at the moment `IsOnGround` becomes true. The lateral and backward jog clips are unused for the
+reason below. And the model is still scaled 1.836 at runtime rather than exported at human scale,
+which is fine until something is attached to a hand socket and inherits the multiplier.
+
+### The clips are angled runs, not strafes, so the body turns instead
+
+The library's `Jog_Loop_Left_L` and its siblings are not what their names suggest: previewing one
+shows the whole upper body rotated away and the head turned, rather than a torso square to the
+camera with the feet crossing over. In game that read as *running left while facing right*, which is
+neither a strafe nor a turn.
+
+Decided with Joe, 22 August: **the drawn body turns to face the direction of travel**, and the
+lateral clips are not used at all.
+
+**Mesh only. Nothing the server simulates changed.** The pawn still faces the mouse and still
+strafes; `bCharacterFacesTravel` swings the skeletal mesh yaw toward the travel direction and does
+nothing else. The walk model stays pure, tested, and identical on the dedicated server — which is
+the reason it was done this way rather than by making the character genuinely rotate. That version
+needs a rotate-toward-heading behaviour inside the replicated simulation and a camera decoupled from
+the pawn, and it changes how the game plays rather than how it looks.
+
+It also collapsed two problems rather than solving them. With the body facing travel the blend space
+needs one dimension and three samples, so the misnamed lateral clips and the backward clip that
+would not animate are simply never played.
+
+`TurnTowards` is a pure static with tests, and the wrap is the test that matters: turning from 170
+degrees to -170 is a twenty degree step, not a three hundred and forty degree spin, and running
+backwards flips that sign on numerical noise every frame. Verified by substituting the naive
+difference and watching it go red. The same discontinuity had already frozen the blend space earlier
+the same day, which is how it earned a test here.
+
+Turn rate, threshold and the behaviour itself are config, because 720 degrees per second is a feel
+value and feel is judged by looking.
+
+### Root motion reached the pose, and only `Force Root Lock` stopped it
+
+**Four wrong answers before the right one**, all recorded because each looked correct at the time.
+
+The symptom: the drawn body ran ahead of the actor by up to seven metres, snapped back, and did it
+again. `SpaceMMO.LogCharacterDraw` measured it as a clean sawtooth once it was pointed at the right
+object.
+
+- **`No Root Motion Extraction` was wrong**, and this task's own spec had said it. The engine
+  comment is "leave root motion in animation", which is the opposite of what was wanted.
+- **`Ignore Root Motion` did not fix it**, though the mode was confirmed applied by reading it off
+  the running instance rather than the saved asset.
+- **`Root Motion From Everything` did not fix it either.**
+- **`Enable Root Motion` was unchecked on every clip**, which is what made all three irrelevant.
+  `AnimationDecompression.cpp:274` locks the root only when
+  `(bExtractRootMotion && bEnableRootMotion) || bForceRootLock`. With the middle term false no
+  instance mode can satisfy the left half, and `bForceRootLock` is the only term left — its own
+  engine comment reads "Force Root Bone Lock even if Root Motion is not enabled".
+
+**The fix is `Force Root Lock` ticked on every clip**, done in one pass through Asset Actions → Edit
+Selection in Property Matrix. `Enable Root Motion` stays off: it means "this clip drives the
+character", and movement here belongs to the server.
+
+An earlier reading claimed root motion *was* enabled on those clips. That was wrong and worth
+naming: the asset binaries were grepped for the property name and its presence reported as the value
+being true. A name in an asset table is not a value. It was an inference presented as a measurement,
+which is the same mistake as the one below.
 
 ### "The character is not centred while moving" — measured, 20 August
 
@@ -2572,6 +2643,11 @@ camera looks level from neck height, which is a tuning preference rather than a 
   a log with no diagnostic in it looks exactly like a run where nothing was wrong. That cost a whole
   round trip. The switch now says whether it is on or off at startup, so "off" is a fact in the log
   rather than an absence from it.
+- **It measured the actor, which is bolted to the camera boom**, and so reported zero degrees off
+  centre whatever was on screen. It proved the actor was centred, which was never the question: a
+  player looks at the skinned mesh, and a pose can walk that seven metres away while the actor it
+  hangs from does not move at all. It reads the pelvis bone in world space now. Two rounds were
+  spent on a number that could not have detected the fault.
 
 **Not fixed, and worth knowing:** the rig carries Auto-Rig Pro controller bones (`c_` prefix) and a
 stray `OBroot`, which are Blender-side scaffolding rather than anything the game needs to evaluate.
