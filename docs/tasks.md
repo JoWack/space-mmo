@@ -2369,11 +2369,49 @@ should know this exists before it designs its lookup. See the note there.
 
 ## 124 — A station is an engine cube, whatever kind it is
 
-**Pending. Raised 19 August**, out of the same question as the sketch in 97. Belongs to **M7 — a
-world worth being in**, which already names settlements.
+**Done 23 August.** Raised 19 August, out of the same question as the sketch in 97. Belongs to
+**M7 — a world worth being in**, which already names settlements.
 
-**Verified, not inferred:** the client treats `kind` as an opaque `FString` and uses it in exactly
-one place — a log line at `SpaceMMOStationActor.cpp:122`. Every station in the game is the same
+`USpaceMMOStationSettings` maps station kind to mesh and to size, with a per-key override, in
+`DefaultGame.ini` — the deposit settings class copied deliberately rather than reinvented, down to
+keying by the authored key rather than the database id and holding soft references.
+
+**Sizes are per kind now**, which the single compiled constant could not express: Capital 40 m,
+Spaceport 35, TradingHub 25, Social 12, Housing 8. The old value was 25 for everything, judged
+against the horizon — on a 20 km planet that is about 260 m from eye height, so a 60 m building
+subtends thirteen degrees and reads as the size of the visible world. Twenty-five metres of house
+was the absurdity that came with one value for all five.
+
+**Engine primitives as placeholders**, agreed with Joe: a cone for the Capital, a cylinder for the
+Spaceport, a cube for the TradingHub, a sphere for Social, a small cube for Housing. Five
+distinguishable silhouettes beat one cube five times, nothing needed authoring, and swapping in a
+real building later is one line each. Housing and TradingHub share the cube and differ threefold in
+size, which is honest rather than ideal.
+
+**The scale is fitted to the mesh** rather than divided by the engine cube's known hundred
+centimetres, which was right exactly as long as every station was that cube. `ScaleFitsTheMesh`
+asserts the new arithmetic reproduces the old number for that case, so nothing changed size the day
+it landed.
+
+**Two things worth keeping:**
+
+- **`EveryAuthoredKindHasALook` earned itself on its first run.** It reads the station kinds out of
+  `origin.json` and asserts each has a mesh and a size configured, and it immediately failed —
+  because the ini syntax was invented rather than copied. A `TMap` is written as one assignment with
+  quoted values, exactly as `USpaceMMODepositSettings.Meshes` two sections above it had been doing
+  all along; the `+Key=(("A", B))` form per line is for arrays and quietly does not populate the
+  map. The proven example was ten lines up the same file.
+- **A config class loads the ini into every instance it constructs**, not only into the class
+  default. A test that built a fresh settings object and asserted "an unmapped kind resolves to
+  nothing" was really asserting against whatever content happened to be shipped that week. The
+  resolution-order tests empty the maps first, and say why.
+
+**What this does not do**, said plainly so it is not mistaken for the town: it puts a distinguishable
+building where each station is. It does not lay out a settlement, does not place props, and does not
+level the ground under one. Those are 97 and 89.
+
+**What was true before this, verified and not inferred:** the client treated `kind` as an opaque
+`FString` and used it in exactly one place — a log line at `SpaceMMOStationActor.cpp:122`. Every station in the game is the same
 engine cube, scaled and lifted onto the terrain, whether it is a trading hub, a spaceport or
 somebody's house. 97 already said this and it is still true: the enum, the JSON and the serving cost
 almost nothing, and the entire visible difference is work that does not exist.

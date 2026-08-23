@@ -66,6 +66,9 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
+	/** Swaps in the mesh configured for this station's key or kind, if there is one. */
+	void ApplyConfiguredMesh();
+
 	void ApplyRenderTransform();
 
 	FBackendStation Station;

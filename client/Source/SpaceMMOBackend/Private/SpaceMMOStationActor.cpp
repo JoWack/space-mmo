@@ -7,30 +7,27 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMODepositSettings.h"
 #include "SpaceMMORenderOrigin.h"
+#include "SpaceMMOStationSettings.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace SpaceMMOStation
 {
-	/** The engine cube is 100 cm on each edge. */
-	constexpr double EngineCubeSizeCentimetres = 100.0;
-
 	/**
-	 * How large a station stands, in metres.
+	 * How large a station stands is now per kind, in USpaceMMOStationSettings.
 	 *
-	 * <strong>Judged against the horizon, not against a picture of a space station.</strong> This
-	 * planet has a radius of twenty kilometres, so from eye height the horizon is about two
-	 * hundred and sixty metres away. A sixty-metre building — the first value here — subtends
-	 * thirteen degrees at that range and reads as a structure the size of the visible world, which
-	 * is exactly how it looked.
+	 * It was one compiled constant of twenty-five metres for everything, which was judged against
+	 * the horizon and is still the default there — this planet has a radius of twenty kilometres,
+	 * so from eye height the horizon is about two hundred and sixty metres away, and a sixty-metre
+	 * building subtends thirteen degrees at that range and reads as a structure the size of the
+	 * visible world. That was exactly how the first one looked.
 	 *
-	 * Twenty-five metres is still a landmark you can see from most of the way to the horizon, and
-	 * still large next to a three-metre ore deposit, without dominating a planet that is only
-	 * forty kilometres across.
+	 * What the single value could not express is that a spaceport and somebody's house are not the
+	 * same size, which is most of what made every station read as the same building.
 	 *
-	 * Stated in metres and converted once, because a radius set in the wrong unit earlier in this
-	 * project wrapped a two-metre shape in a twenty-metre body and nothing looked wrong.
+	 * Sizes are stated in metres and converted once, because a radius set in the wrong unit earlier
+	 * in this project wrapped a two-metre shape in a twenty-metre body and nothing looked wrong.
 	 */
-	constexpr double SizeMetres = 25.0;
+	constexpr double CentimetresPerMetre = 100.0;
 }
 
 ASpaceMMOStationActor::ASpaceMMOStationActor()
@@ -71,8 +68,23 @@ void ASpaceMMOStationActor::Configure(
 	Planet = InPlanet;
 	Terrain = InTerrain;
 
-	const double Scale =
-		(SpaceMMOStation::SizeMetres * 100.0) / SpaceMMOStation::EngineCubeSizeCentimetres;
+	// Before the scale is worked out, because the scale is fitted to whatever mesh ends up on the
+	// component and the placeholder cube is not the same size as an authored building.
+	ApplyConfiguredMesh();
+
+	const USpaceMMOStationSettings* const Settings = GetDefault<USpaceMMOStationSettings>();
+
+	const double SizeMetres = Settings != nullptr
+		? FStationAppearance::SizeMetresFor(*Settings, Station.Kind)
+		: 25.0;
+
+	const FBoxSphereBounds LocalBounds =
+		(Hull != nullptr && Hull->GetStaticMesh() != nullptr)
+			? Hull->GetStaticMesh()->GetBounds()
+			: FBoxSphereBounds(ForceInit);
+
+	const double Scale = FStationAppearance::UniformScaleForSize(
+		LocalBounds.BoxExtent, SizeMetres * SpaceMMOStation::CentimetresPerMetre);
 
 	if (Hull != nullptr)
 	{
@@ -86,12 +98,8 @@ void ASpaceMMOStationActor::Configure(
 		//
 		// The same helper the deposits use, so both handle either pivot convention without being
 		// told which the mesh was authored with.
-		const FBoxSphereBounds MeshBounds = Hull->GetStaticMesh() != nullptr
-			? Hull->GetStaticMesh()->GetBounds()
-			: FBoxSphereBounds(ForceInit);
-
 		BaseLiftCentimetres =
-			FDepositPlacement::BaseLift(MeshBounds.Origin, MeshBounds.BoxExtent, Scale);
+			FDepositPlacement::BaseLift(LocalBounds.Origin, LocalBounds.BoxExtent, Scale);
 	}
 
 	if (!Station.bPlaced)
@@ -117,11 +125,59 @@ void ASpaceMMOStationActor::Configure(
 	ApplyRenderTransform();
 
 	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("Station %s (%s) at %s, docking range %.1f km."),
+		TEXT("Station %s (%s) at %s, docking range %.1f km, drawn as %s at %.0f m."),
 		*Station.Key,
 		*Station.Kind,
 		*SystemPosition.ToString(),
-		Station.DockingRangeKilometres);
+		Station.DockingRangeKilometres,
+		(Hull != nullptr && Hull->GetStaticMesh() != nullptr)
+			? *Hull->GetStaticMesh()->GetName()
+			: TEXT("<nothing>"),
+		SizeMetres);
+}
+
+void ASpaceMMOStationActor::ApplyConfiguredMesh()
+{
+	const USpaceMMOStationSettings* const Settings = GetDefault<USpaceMMOStationSettings>();
+
+	if (Settings == nullptr || Hull == nullptr)
+	{
+		return;
+	}
+
+	const TSoftObjectPtr<UStaticMesh> Configured =
+		FStationAppearance::MeshFor(*Settings, Station.Key, Station.Kind);
+
+	if (Configured.IsNull())
+	{
+		// Keeps the cube the constructor attached. An unmapped kind is still dockable, and a
+		// station that rendered as nothing would look exactly like one that was never placed.
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Station kind '%s' has no configured mesh; %s keeps the placeholder cube."),
+			*Station.Kind, *Station.Key);
+
+		return;
+	}
+
+	// Loaded synchronously, and deliberately, for the same reason deposits are: stations are placed
+	// once when the world is built rather than per frame, and a building that popped in a second
+	// late would have players flying through the space where it was about to be.
+	UStaticMesh* const Mesh = Configured.LoadSynchronous();
+
+	if (Mesh == nullptr)
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Station mesh for '%s' (%s) is configured but failed to load; using the cube."),
+			*Station.Key, *Station.Kind);
+
+		return;
+	}
+
+	Hull->SetStaticMesh(Mesh);
+
+	// The mesh brings its own materials. The placeholder material the constructor set is for the
+	// engine cube, and leaving it on would repaint an authored building in flat grey.
+	Hull->EmptyOverrideMaterials();
 }
 
 bool ASpaceMMOStationActor::IsWithinDockingRange(
