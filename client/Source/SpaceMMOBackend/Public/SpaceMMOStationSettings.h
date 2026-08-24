@@ -4,6 +4,7 @@
 #include "Engine/DeveloperSettings.h"
 #include "SpaceMMOStationSettings.generated.h"
 
+class AActor;
 class UStaticMesh;
 
 /**
@@ -50,6 +51,34 @@ public:
 	TMap<FString, TSoftObjectPtr<UStaticMesh>> MeshesByKey;
 
 	/**
+	 * Station kind to an assembled building, as a Blueprint class.
+	 *
+	 * <strong>What a kit of modular pieces becomes.</strong> A bought hangar arrives as thirty
+	 * separate meshes with their own materials and collision; arranging them in a Blueprint keeps
+	 * every one of those and lets the arrangement be edited without re-baking anything. It is also
+	 * what a settlement will need (97): a place is a prefab holding props, and later a door or a
+	 * vendor marker, none of which a static mesh can carry.
+	 *
+	 * <strong>Authored at true scale, and never scaled here.</strong> A building should be the size
+	 * it was built. SizeMetresByKind applies only to the mesh path, where it exists because engine
+	 * primitives have no natural size at all.
+	 *
+	 * <strong>The Blueprint must not know where it is.</strong> Where a station stands is content —
+	 * a direction in origin.json, seeded, served over HTTP — and the class only ever describes local
+	 * geometry. A prefab that also remembered a world position would be a second answer to "where is
+	 * it", free to disagree with the first.
+	 *
+	 * Paths end in <c>_C</c>: that is the generated class rather than the asset, and without it the
+	 * load fails and the station quietly keeps its placeholder.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "Stations")
+	TMap<FString, TSoftClassPtr<AActor>> BlueprintsByKind;
+
+	/** One named station's own building, overriding its kind. */
+	UPROPERTY(EditAnywhere, Config, Category = "Stations")
+	TMap<FString, TSoftClassPtr<AActor>> BlueprintsByKey;
+
+	/**
 	 * How large each kind stands, in metres.
 	 *
 	 * <strong>Judged against the horizon, not against a picture of a space station.</strong> This
@@ -85,6 +114,16 @@ struct SPACEMMOBACKEND_API FStationAppearance
 	 * general case would not be an override.
 	 */
 	static TSoftObjectPtr<UStaticMesh> MeshFor(
+		const USpaceMMOStationSettings& Settings, const FString& Key, const FString& Kind);
+
+	/**
+	 * The assembled building for a station, or null if it has none.
+	 *
+	 * Resolved before the mesh, and by the same rule: the station's own key beats its kind. A kind
+	 * with both a Blueprint and a mesh uses the Blueprint, because the mesh in that case is the
+	 * placeholder somebody has now replaced.
+	 */
+	static TSoftClassPtr<AActor> BlueprintFor(
 		const USpaceMMOStationSettings& Settings, const FString& Key, const FString& Kind);
 
 	/** How large this kind stands, in metres, falling back to the default. */

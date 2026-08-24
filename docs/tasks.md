@@ -2406,9 +2406,43 @@ it landed.
   nothing" was really asserting against whatever content happened to be shipped that week. The
   resolution-order tests empty the maps first, and say why.
 
+**A kind may name a Blueprint instead of a mesh**, added 24 August when Joe bought a modular hangar
+kit and asked how real art should reach the game. `BlueprintsByKind` and `BlueprintsByKey` hold a
+`TSoftClassPtr<AActor>`, resolved before the mesh — where a kind has both, the mesh is the
+placeholder somebody has now replaced.
+
+**Why a Blueprint rather than a merged mesh.** A bought kit arrives as dozens of pieces with their
+own materials, collision and LODs, and arranging them in a Blueprint keeps all of it while letting
+the arrangement be edited without re-baking. It is also what 97 needs: a settlement is a prefab
+holding props, and later a door or a vendor marker, none of which a static mesh can carry. Merging
+into one mesh stays available as an optimisation for whichever stations turn out to be expensive to
+draw.
+
+**Carried on a `UChildActorComponent`**, not a hand-spawned actor, because it already solves the
+three things doing it by hand gets wrong — spawning the class, attaching it, and destroying it with
+the station. `Configure` runs before `FinishSpawning`, which is the worst possible moment to be
+spawning something else.
+
+**A Blueprint is drawn at the size it was authored** and never fitted. The component uses absolute
+scale so the mesh path's fitting multiplier cannot reach it: a building should be the size it was
+built, and multiplying that by a number chosen to fit an engine cube into twenty-five metres would
+be a second opinion about how big a hangar is. `SizeMetresByKind` therefore applies only to the mesh
+path, where it exists because engine primitives have no natural size at all.
+
+**The path must end in `_C`.** That is the generated class rather than the asset, and without it the
+load fails and the station quietly keeps its cube — the same trap as `CharacterAnimClass` in 125.
+The warning names it explicitly for that reason.
+
+**And the rule that matters more than any of it: the Blueprint must not know where it is.** Where a
+station stands is content — a direction in `origin.json`, seeded, served over HTTP — and the class
+only ever describes local geometry. A prefab that also remembered a world position would be a second
+answer to "where is it", which is the failure 96 exists to prevent, one level up.
+
 **What this does not do**, said plainly so it is not mistaken for the town: it puts a distinguishable
 building where each station is. It does not lay out a settlement, does not place props, and does not
-level the ground under one. Those are 97 and 89.
+level the ground under one. Those are 97 and 89. Stations also still have no collision — contact is
+`FPlanetTerrain` and docking is measured — so a hangar is scenery you walk through until somebody
+decides interiors are real.
 
 **What was true before this, verified and not inferred:** the client treated `kind` as an opaque
 `FString` and used it in exactly one place — a log line at `SpaceMMOStationActor.cpp:122`. Every station in the game is the same

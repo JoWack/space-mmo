@@ -31,6 +31,36 @@ TSoftObjectPtr<UStaticMesh> FStationAppearance::MeshFor(
 	return nullptr;
 }
 
+TSoftClassPtr<AActor> FStationAppearance::BlueprintFor(
+	const USpaceMMOStationSettings& Settings, const FString& Key, const FString& Kind)
+{
+	// The station's own key first, exactly as for meshes: an override the general case could beat
+	// would not be an override.
+	if (!Key.IsEmpty())
+	{
+		if (const TSoftClassPtr<AActor>* const ByKey = Settings.BlueprintsByKey.Find(Key))
+		{
+			if (!ByKey->IsNull())
+			{
+				return *ByKey;
+			}
+		}
+	}
+
+	if (!Kind.IsEmpty())
+	{
+		if (const TSoftClassPtr<AActor>* const ByKind = Settings.BlueprintsByKind.Find(Kind))
+		{
+			if (!ByKind->IsNull())
+			{
+				return *ByKind;
+			}
+		}
+	}
+
+	return nullptr;
+}
+
 double FStationAppearance::SizeMetresFor(
 	const USpaceMMOStationSettings& Settings, const FString& Kind)
 {

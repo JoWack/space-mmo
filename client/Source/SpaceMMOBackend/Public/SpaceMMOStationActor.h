@@ -66,8 +66,22 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	/** Swaps in the mesh configured for this station's key or kind, if there is one. */
-	void ApplyConfiguredMesh();
+	/**
+	 * Puts the configured building on the station: a Blueprint if one is named, otherwise a mesh,
+	 * otherwise the placeholder cube it was constructed with.
+	 */
+	void ApplyConfiguredLook();
+
+	/**
+	 * The assembled building, when a kind names a Blueprint rather than a mesh.
+	 *
+	 * A child actor component rather than a spawned actor kept in a pointer, because it already
+	 * solves the three things doing it by hand gets wrong: it spawns the class, attaches it, and
+	 * destroys it with this actor. Configure runs before FinishSpawning, which is the worst moment
+	 * to be spawning something else.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "SpaceMMO|Station")
+	TObjectPtr<class UChildActorComponent> Structure;
 
 	void ApplyRenderTransform();
 

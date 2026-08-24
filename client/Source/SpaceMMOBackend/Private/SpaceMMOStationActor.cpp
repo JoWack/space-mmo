@@ -1,5 +1,6 @@
 #include "SpaceMMOStationActor.h"
 
+#include "Components/ChildActorComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -50,6 +51,15 @@ ASpaceMMOStationActor::ASpaceMMOStationActor()
 		Hull->SetStaticMesh(CubeMesh.Object);
 	}
 
+	// Holds an assembled building when a kind names one. Empty otherwise, and costing nothing.
+	Structure = CreateDefaultSubobject<UChildActorComponent>(TEXT("Structure"));
+	Structure->SetupAttachment(Hull);
+
+	// Absolute, so the Hull's fitting scale never reaches it. A Blueprint is authored at the size
+	// the building actually is, and multiplying that by a number chosen to fit an engine cube into
+	// twenty-five metres would be a second opinion about how big a hangar is.
+	Structure->SetUsingAbsoluteScale(true);
+
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> Material(
 		TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 
@@ -70,7 +80,12 @@ void ASpaceMMOStationActor::Configure(
 
 	// Before the scale is worked out, because the scale is fitted to whatever mesh ends up on the
 	// component and the placeholder cube is not the same size as an authored building.
-	ApplyConfiguredMesh();
+	ApplyConfiguredLook();
+
+	// A Blueprint building is drawn at the size it was built, so none of the fitting below applies
+	// to it -- and the cube it would otherwise have been is not drawn at all.
+	const bool bUsingBlueprint =
+		Structure != nullptr && Structure->GetChildActorClass() != nullptr;
 
 	const USpaceMMOStationSettings* const Settings = GetDefault<USpaceMMOStationSettings>();
 
@@ -79,7 +94,7 @@ void ASpaceMMOStationActor::Configure(
 		: 25.0;
 
 	const FBoxSphereBounds LocalBounds =
-		(Hull != nullptr && Hull->GetStaticMesh() != nullptr)
+		(!bUsingBlueprint && Hull != nullptr && Hull->GetStaticMesh() != nullptr)
 			? Hull->GetStaticMesh()->GetBounds()
 			: FBoxSphereBounds(ForceInit);
 
@@ -125,24 +140,63 @@ void ASpaceMMOStationActor::Configure(
 	ApplyRenderTransform();
 
 	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("Station %s (%s) at %s, docking range %.1f km, drawn as %s at %.0f m."),
+		TEXT("Station %s (%s) at %s, docking range %.1f km, drawn as %s%s."),
 		*Station.Key,
 		*Station.Kind,
 		*SystemPosition.ToString(),
 		Station.DockingRangeKilometres,
-		(Hull != nullptr && Hull->GetStaticMesh() != nullptr)
-			? *Hull->GetStaticMesh()->GetName()
-			: TEXT("<nothing>"),
-		SizeMetres);
+		bUsingBlueprint
+			? *GetNameSafe(Structure->GetChildActorClass())
+			: ((Hull != nullptr && Hull->GetStaticMesh() != nullptr)
+				? *Hull->GetStaticMesh()->GetName()
+				: TEXT("<nothing>")),
+		bUsingBlueprint
+			? TEXT(" at its authored size")
+			: *FString::Printf(TEXT(" at %.0f m"), SizeMetres));
 }
 
-void ASpaceMMOStationActor::ApplyConfiguredMesh()
+void ASpaceMMOStationActor::ApplyConfiguredLook()
 {
 	const USpaceMMOStationSettings* const Settings = GetDefault<USpaceMMOStationSettings>();
 
 	if (Settings == nullptr || Hull == nullptr)
 	{
 		return;
+	}
+
+	// An assembled building wins over a mesh: where a kind has both, the mesh is the placeholder
+	// somebody has now replaced.
+	const TSoftClassPtr<AActor> Assembled =
+		FStationAppearance::BlueprintFor(*Settings, Station.Key, Station.Kind);
+
+	if (!Assembled.IsNull())
+	{
+		// Synchronously, and deliberately, for the same reason the meshes are: stations are placed
+		// once when the world is built, not per frame, and a building that popped in a second late
+		// would have players flying through the space where it was about to be.
+		UClass* const Class = Assembled.LoadSynchronous();
+
+		if (Class == nullptr)
+		{
+			// Almost always a path missing its _C, which names the asset rather than the generated
+			// class. Said out loud, because the station still stands there as a cube and nothing
+			// else would suggest a building had been configured at all.
+			UE_LOG(LogSpaceMMOBackend, Warning,
+				TEXT("Station building '%s' for %s (%s) did not load; using the placeholder. "
+					"A Blueprint path must end in _C."),
+				*Assembled.ToString(), *Station.Key, *Station.Kind);
+		}
+		else if (Structure != nullptr)
+		{
+			Structure->SetChildActorClass(Class);
+
+			// The placeholder is not drawn under an assembled building. Hidden rather than
+			// stripped, so a Blueprint that fails to load on a later run still has something to
+			// fall back to.
+			Hull->SetVisibility(false);
+
+			return;
+		}
 	}
 
 	const TSoftObjectPtr<UStaticMesh> Configured =
@@ -152,6 +206,7 @@ void ASpaceMMOStationActor::ApplyConfiguredMesh()
 	{
 		// Keeps the cube the constructor attached. An unmapped kind is still dockable, and a
 		// station that rendered as nothing would look exactly like one that was never placed.
+		//
 		UE_LOG(LogSpaceMMOBackend, Log,
 			TEXT("Station kind '%s' has no configured mesh; %s keeps the placeholder cube."),
 			*Station.Kind, *Station.Key);

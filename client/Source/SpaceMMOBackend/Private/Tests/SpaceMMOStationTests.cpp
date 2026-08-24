@@ -212,6 +212,38 @@ bool FSpaceMMOStationLookFollowsKeyThenKindTest::RunTest(const FString& Paramete
 		TEXT("A station with no kind at all resolves to nothing"),
 		FStationAppearance::MeshFor(*Settings, FString(), FString()).IsNull());
 
+	// An assembled building beats a mesh at the same specificity, because where a kind has both,
+	// the mesh is the placeholder somebody has now replaced.
+	Settings->BlueprintsByKind.Empty();
+	Settings->BlueprintsByKey.Empty();
+
+	const TSoftClassPtr<AActor> KindBuilding(
+		FSoftObjectPath(TEXT("/Game/Stations/BP_Kind.BP_Kind_C")));
+
+	const TSoftClassPtr<AActor> KeyBuilding(
+		FSoftObjectPath(TEXT("/Game/Stations/BP_Key.BP_Key_C")));
+
+	Settings->BlueprintsByKind.Add(TEXT("TradingHub"), KindBuilding);
+
+	TestEqual(
+		TEXT("A kind with a building resolves to it"),
+		FStationAppearance::BlueprintFor(*Settings, TEXT("station_plain"), TEXT("TradingHub"))
+			.ToString(),
+		KindBuilding.ToString());
+
+	Settings->BlueprintsByKey.Add(TEXT("station_plain"), KeyBuilding);
+
+	TestEqual(
+		TEXT("A station with its own building beats its kind"),
+		FStationAppearance::BlueprintFor(*Settings, TEXT("station_plain"), TEXT("TradingHub"))
+			.ToString(),
+		KeyBuilding.ToString());
+
+	TestTrue(
+		TEXT("A kind with no building resolves to nothing, so the mesh path is used"),
+		FStationAppearance::BlueprintFor(*Settings, TEXT("station_other"), TEXT("Housing"))
+			.IsNull());
+
 	return true;
 }
 
