@@ -1484,7 +1484,7 @@ combat tasks and gathering bugs and test tooling under one heading — because a
 about what the game will be able to do, and none of these are that yet.
 
 Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
-125, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
+125, 126, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
 number is how it is referred to months later and shuffling blocks around a file this size is how
 content gets lost.
 
@@ -2725,6 +2725,65 @@ camera looks level from neck height, which is a tuning preference rather than a 
 stray `OBroot`, which are Blender-side scaffolding rather than anything the game needs to evaluate.
 Re-exporting with deform bones only would make the skeleton leaner. It costs nothing today, so it is
 recorded rather than done.
+
+## 126 — The starter world was a quarter of a planet away from the spawn
+
+**Done 24 August**, found while trying to look at a station up close and measured rather than
+argued about. Belongs to **M7 — a world worth being in**.
+
+`station_capital_hub` and all four starter deposits sat at direction `[-1, 0, 0]` while a character
+spawns at `[0, 0, 1]` — **exactly 90 degrees apart, which on the drawn 20 km planet is 31.4 km of
+walking**. The only thing at the spawn was `node_test_player_spawn_ferrite_a`, the deposit authored
+with the capture key when 96's first option was built.
+
+So the onboarding chain read: arrive, find one ferrite deposit you cannot mine without a laser you
+have not crafted, and walk 31 km to reach the scrap that step one actually asks for.
+
+**Nobody moved the content. The spawn moved.** Task 120 put players on the ground at `+Z` on 18
+August, and the placement it landed next to was never revisited. Every comment in `origin.json` went
+on describing the old arrangement, including one that said in as many words:
+
+> A new player should not have to circumnavigate a planet to find step one, and a deposit they
+> cannot find is indistinguishable from one that does not exist.
+
+That sentence was an intention that had quietly become false, which is the specific failure this
+file's own rules keep warning about — a note that describes what somebody meant rather than what is
+true, sitting next to content nobody re-measured.
+
+**Fixed by rotating the cluster, not by re-placing it.** A quarter turn about Y — `(x, y, z)` to
+`(z, y, -x)` — maps `-X` onto `+Z` and preserves every deposit's position relative to its
+neighbours, so the layout somebody chose is intact and only the face changed. Then the whole cluster
+is nudged 1.5 degrees, about 520 m, so a 25 m building is not standing on the arrival point.
+
+| | Was | Now |
+|---|---|---|
+| `station_capital_hub` | 31.4 km | 0.52 km |
+| `node_capital_ferrite_a` | 31.4 km | 0.66 km |
+| `node_capital_ferrite_b` | 30.9 km | 1.06 km |
+| `node_capital_scrap_a` | 31.7 km | 0.85 km |
+| `node_capital_scrap_b` | 31.8 km | 0.65 km |
+
+Five changed lines, all `direction`, every comment intact — the same property 96's tool guarantees,
+because it is the same operation. The stale comments were rewritten to say where things are now and
+to record that the old claim had been false for weeks. Verified in Postgres after seeding rather
+than assumed from the file.
+
+**Done by arithmetic rather than with 96's tool, deliberately.** Dragging is for "put it where it
+looks good"; rotating a cluster 90 degrees while preserving its internal layout is a computation,
+and doing it by hand would have lost the relative spacing that was authored on purpose.
+
+**A test failed on the comment rewrite, and it was right to.**
+`SpaceMMO.Authoring.MovingRewritesOnlyTheDirection` proved the splice does not eat comments by
+asserting a literal sentence from `origin.json` — so rewording the content turned it red. The
+property was right and the check was brittle in the same way asserting counts of shipped content is.
+It now reads the entry's comment out of the file first and asserts *that* survives, whatever it
+says. Verified by making the splice eat sixty characters of the line above and watching it, and
+`CommentsSurviveEveryEdit`, both go red.
+
+**What this does not settle:** whether `+Z` is the right place to arrive at all. The deposits'
+original comments talked about the face a ship approaching from the system origin reaches, which is
+a real consideration once landing somewhere other than the spawn is a thing anybody does. This moved
+the content to the players rather than deciding where players should be.
 
 ---
 

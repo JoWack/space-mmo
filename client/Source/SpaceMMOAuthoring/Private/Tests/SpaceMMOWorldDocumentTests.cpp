@@ -242,9 +242,53 @@ bool FSpaceMMOAuthoringMovingRewritesOnlyTheDirectionTest::RunTest(const FString
 
 	// The comment belonging to that entry sits immediately above the line that changed, which is
 	// exactly where a splice that miscounted its span would eat it.
+	//
+	// Taken out of the file rather than written down here. This asserted a literal sentence from
+	// origin.json until 24 August, when the content it quoted was reworded and the test failed for
+	// having an opinion about prose. What it is meant to check is that the entry keeps whatever
+	// comment it had, which is the same check without the brittleness -- the same reason this file
+	// does not assert counts of shipped content either.
+	TArray<FString> BeforeLines;
+
+	Text.ParseIntoArrayLines(BeforeLines, false);
+
+	FString OwnComment;
+
+	for (int32 Index = 0; Index < BeforeLines.Num(); ++Index)
+	{
+		if (BeforeLines[Index].Contains(TEXT("node_capital_ferrite_a")))
+		{
+			// Scan forward to this entry's own comment, stopping at the end of the entry so a
+			// neighbour's comment can never stand in for it.
+			for (int32 Scan = Index; Scan < BeforeLines.Num(); ++Scan)
+			{
+				if (BeforeLines[Scan].Contains(TEXT("\"$comment\"")))
+				{
+					OwnComment = BeforeLines[Scan].TrimStartAndEnd();
+
+					break;
+				}
+
+				if (BeforeLines[Scan].Contains(TEXT("\"direction\"")))
+				{
+					break;
+				}
+			}
+
+			break;
+		}
+	}
+
+	if (OwnComment.IsEmpty())
+	{
+		AddError(TEXT("The deposit being moved has no comment, so this cannot check one survives."));
+
+		return false;
+	}
+
 	TestTrue(
-		TEXT("The entry's own comment survives"),
-		Written.Contains(TEXT("\"$comment\": \"On the face a ship approaching from the system origin")));
+		TEXT("The entry's own comment survives, whatever it says"),
+		Written.Contains(OwnComment));
 
 	return true;
 }

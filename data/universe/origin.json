@@ -170,8 +170,8 @@
       "requiredLevel": 1,
       "quantityMax": 200,
       "respawnSeconds": 1200,
-      "$comment": "On the face a ship approaching from the system origin arrives at, so the first deposit a new player meets is not on the far side of the world.",
-      "direction": [-1.0, 0.02, 0.0]
+      "$comment": "On the face a character spawns on, so the first deposit a new player meets is not on the far side of the world. It read 'the face a ship approaching from the system origin arrives at' until 24 August, which had been true and quietly stopped being so when task 120 put players on the ground at +Z: the whole starter cluster was left 31 km away, a quarter of the way round the planet, while every comment here still claimed it was close.",
+      "direction": [0.026000, 0.020000, 1.000000]
     },
     {
       "key": "node_capital_ferrite_b",
@@ -183,7 +183,7 @@
       "requiredLevel": 1,
       "quantityMax": 200,
       "respawnSeconds": 1200,
-      "direction": [-1.0, -0.015, 0.025]
+      "direction": [0.051000, -0.015000, 1.000000]
     },
 
     {
@@ -195,8 +195,8 @@
       "requiredLevel": 1,
       "quantityMax": 25,
       "respawnSeconds": 300,
-      "$directionComment": "Close to the ferrite nodes on the same approach face. A new player should not have to circumnavigate a planet to find step one, and a deposit they cannot find is indistinguishable from one that does not exist.",
-      "direction": [-1.0, 0.04, -0.012]
+      "$directionComment": "Close to the ferrite nodes on the same face a character spawns on. A new player should not have to circumnavigate a planet to find step one, and a deposit they cannot find is indistinguishable from one that does not exist. That was written as an intention and was false for weeks -- see the comment on the first ferrite node above.",
+      "direction": [0.014000, 0.040000, 1.000000]
     },
     {
       "key": "node_capital_scrap_b",
@@ -206,7 +206,7 @@
       "requiredLevel": 1,
       "quantityMax": 25,
       "respawnSeconds": 300,
-      "direction": [-1.0, -0.032, -0.021]
+      "direction": [0.005000, -0.032000, 1.000000]
     },
 
     {
@@ -279,8 +279,8 @@
       "system": "system_origin",
       "body": "body_capital",
       "kind": "TradingHub",
-      "$directionComment": "On the approach face, near the starter deposits, so the first station a new player meets is not on the far side of the world.",
-      "direction": [-1.0, 0.0, 0.0],
+      "$directionComment": "About 500 m from where a character spawns, near the starter deposits: close enough to see and walk to, far enough that a 25 m building is not standing on top of the arrival point. The first station a new player meets should not be on the far side of the world.",
+      "direction": [0.026000, 0.000000, 1.000000],
       "dockingRangeKm": 5.0
     },
     {

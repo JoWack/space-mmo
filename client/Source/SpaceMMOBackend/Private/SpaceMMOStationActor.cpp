@@ -199,6 +199,20 @@ void ASpaceMMOStationActor::ApplyConfiguredLook()
 		}
 	}
 
+	// Said out loud, on the path that does nothing.
+	//
+	// A kind with no building configured used to fall through here in silence, so a station drawn
+	// as its placeholder looked identical whether nobody had configured a building, the path was
+	// wrong, or -- three times now -- the game had been started before the ini was edited and was
+	// never going to see it. Only the middle case warned. Now the absence is a line in the log,
+	// and a stale session is visible without cross-checking file timestamps.
+	if (Assembled.IsNull())
+	{
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Station kind '%s' has no building configured; %s falls back to a mesh."),
+			*Station.Kind, *Station.Key);
+	}
+
 	const TSoftObjectPtr<UStaticMesh> Configured =
 		FStationAppearance::MeshFor(*Settings, Station.Key, Station.Kind);
 
