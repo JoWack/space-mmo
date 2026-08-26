@@ -52,6 +52,21 @@ appsettings.Development.json
 appsettings.Local.json
 secrets.json
 
+# ─── Bought asset packs used as raw material ─────────────────────────────────
+# Kits bought from Fab that are a *source of parts* rather than something the game loads: you
+# assemble your own Blueprint out of them and commit that. Twenty megabytes of trim sheet is not
+# worth carrying in LFS when only the thing built from it is ever referenced.
+#
+# The line is what the game depends on at runtime, not who made it. FreeAnimationLibrary IS
+# committed, and has to be: the character's animation blueprint names its clips directly, so a
+# fresh clone without it has a T-posed player. A pack the game references is a dependency; a pack
+# somebody builds from is a tool.
+#
+# Consequence, and it is the reason this list stays explicit rather than becoming a wildcard:
+# nothing committed — no data/ content, no DefaultGame.ini line — may reference a path inside one
+# of these, or a fresh clone points at an asset that is not there.
+client/Content/ZenUV_SciFi_TrimSheet/
+
 # ─── Tooling / OS ─────────────────────────────────────────────────────────────
 .idea/
 *.swp
@@ -78,3 +93,6 @@ secrets/
 # Credentials, wherever they are left. secrets/ is ignored already; this catches a copy
 # moved elsewhere, which is exactly how one reached a commit.
 player-login.txt
+
+# Blender autosave backups (the .blend itself is source and is kept)
+*.blend1
