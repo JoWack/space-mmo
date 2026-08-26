@@ -2785,6 +2785,57 @@ original comments talked about the face a ship approaching from the system origi
 a real consideration once landing somewhere other than the spawn is a thing anybody does. This moved
 the content to the players rather than deciding where players should be.
 
+## 127 — A-02 Capital Hub, greyboxed from the plan set
+
+**Done 25 August.** Belongs to **M7 — a world worth being in**, alongside 97 and 124. Nothing in
+the game references it yet; this is the drawing turned into geometry so it can be argued with.
+
+`tools/greybox/a02_capital_hub.py` builds sheet A-02 in Blender headless, writing a `.blend`, an
+FBX and six preview renders into whatever `--out` names. Rerunning it is the only way any of them
+should ever change — the numbers live in the script, not in the artefacts.
+
+**Only the FBX is kept here**, in `client/RawContent/Stations/A02_CapitalHub/`, because it is what
+the engine consumes. The `.blend` and the renders live in Joe's Blender directory outside this
+repository, on the same reasoning as a83ed80: a bought kit and a modelling scratch file are raw
+material, not a dependency of the build. Nothing is lost by that as long as the script is here,
+which is the point of the script being here.
+
+**The scale came off the sheet's own dimension line**, not off a guess: A-02's 40 m dimension spans
+SVG x=30..430, so 10 SVG units = 1 metre, and every wall centreline, door gap and service rectangle
+in the file is read from the drawn paths at that scale. The 6 m main entrance and the 8.0 x 2.5 m
+supply counter both fall out of it exactly, which is what says the scale is right.
+
+**The script asserts the model against the sheet's printed room schedule** before it builds
+anything — trade floor 552, offices 320, hangar 184, departures 184, cores 216, arrival hall 144,
+gross 1600, eight terminals, six alcoves. A mis-transcribed coordinate fails the run rather than
+turning up in a screenshot days later. This is the same discipline as
+`SpaceMMO.Terrain.HasSlopesToShade`: measure the artefact, not the thing that configures it.
+
+**The plan gives widths and areas, and no heights at all.** Door heads (3 m, 3.5 m at the two
+entrances, 4 m at the arrival opening) and every service element's height are the greybox's
+invention, flagged in the script. So is the Level 01 floor at 4.5 m, which is the only reading that
+makes note 6's "9 m over the trade floor, 4 m elsewhere" close.
+
+**Two things the plan does not settle, both left as drawn and noted:**
+
+- **The alcove fronts.** The sheet draws a partition clean across each of the six alcoves with no
+  door gap, which would seal them. Built as a 1.1 m counter, because an alcove you cannot enter is
+  not an alcove and a career giver stands behind a counter. One constant to change.
+- **The Level 01 south core wall is 0.8 m south of the Level 00 wall below it** (y=31.8 against
+  y=31.0). Drawn that way, kept that way. It reads as a drafting tolerance rather than intent, but
+  the greybox shows the offset rather than quietly correcting it.
+
+**Superseded before it was built, on purpose.** A-02 note 5 and the plan set's build order both say
+A-07 Borlash City replaces this on `body_capital` and that A-02 is deferred indefinitely. It was
+greyboxed anyway as the pattern for a large hub, and because a 40 m two-level shell is the thing
+R2 is about — see below.
+
+**Blocked-on, and what it does not touch:** nothing here changes `origin.json`, `DefaultGame.ini`
+or any Blueprint. R2 on the plan set still stands: `DefaultGame.ini` configures `Capital` at 40 m
+while `origin.json` authors `station_capital_hub` as `kind: TradingHub`, so the 40 m footprint this
+sheet is drawn to is not the one the game uses. Fixing that is one word plus a re-seed, and it has
+to happen before any of this is pointed at a station.
+
 ---
 
 ## Done
