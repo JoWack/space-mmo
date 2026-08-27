@@ -46,6 +46,9 @@ void USpaceMMOTerrainPaintSubsystem::PaintPlanets()
 
 	if (World == nullptr || Backend == nullptr || Backend->GetBodies().Num() == 0)
 	{
+		// Nothing has arrived yet. Deliberately not counted as settled: whatever is waiting on
+		// that signal would then place itself against the compiled-in default terrain, which is
+		// the race this exists to close.
 		return;
 	}
 
@@ -120,5 +123,19 @@ void USpaceMMOTerrainPaintSubsystem::PaintPlanets()
 			Body->HighColour,
 			Body->RockColour,
 			FVector4(Body->HeightFrom, Body->HeightTo, Body->SlopeFrom, Body->SlopeTo));
+	}
+
+	// Said once, and said even when nothing needed shaping. A body with no authored terrain is a
+	// working state, and a gate waiting for a signal that only fires on the interesting path would
+	// wait forever -- which is a world with no stations in it and nothing in the log about why.
+	if (!bPlanetsSettled)
+	{
+		bPlanetsSettled = true;
+
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Planets have the shape they will keep; anything placed on the ground may go "
+				"down now."));
+
+		OnPlanetsPainted.Broadcast();
 	}
 }

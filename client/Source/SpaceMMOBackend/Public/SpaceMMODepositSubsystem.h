@@ -74,6 +74,17 @@ private:
 	void HandleStationsLoaded();
 
 	/**
+	 * The planets have the shape they will keep, so anything standing on the ground may go down.
+	 *
+	 * The third thing station placement waits for. Stations are positioned by asking the terrain
+	 * function where the ground is, and that terrain arrives from content on the same broadcast
+	 * this subsystem listens to -- so without this the two race, and losing leaves a station
+	 * measured against the compiled-in default with the real ground reshaped out from under it.
+	 */
+	UFUNCTION()
+	void HandlePlanetsPainted();
+
+	/**
 	 * Puts every placed station in the world.
 	 *
 	 * Here rather than in a subsystem of its own because this one already resolves the planet a
@@ -81,10 +92,13 @@ private:
 	 * read a different planet's radius.
 	 */
 	/**
-	 * Places stations once both they and the scene's body are known.
+	 * Places stations once they, the scene's body, and the ground they stand on are all known.
 	 *
-	 * They arrive in either order, and acting on whichever lands first silently drops every
-	 * body-relative station on the ordering where stations win.
+	 * All three arrive in any order, and acting on whichever lands first goes wrong two different
+	 * ways: on the ordering where stations beat bodies, every body-relative station is compared
+	 * against a scene body of zero and silently dropped; on the ordering where they beat the
+	 * terrain, they are placed against the compiled-in default and left floating when the real
+	 * ground arrives.
 	 */
 	void PlaceStationsWhenReady();
 

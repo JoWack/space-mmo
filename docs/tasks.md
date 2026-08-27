@@ -1484,7 +1484,7 @@ combat tasks and gathering bugs and test tooling under one heading — because a
 about what the game will be able to do, and none of these are that yet.
 
 Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
-125, 126, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
+125, 126, 129, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
 number is how it is referred to months later and shuffling blocks around a file this size is how
 content gets lost.
 
@@ -2872,6 +2872,74 @@ building its own station. Quest 7 targets the capital by key in `main-story.json
 that a 25 m building is not standing on top of the arrival point"; the building is 40 m now. The
 500 m still holds, and 40 m is visible from further away than 25 m was, so the placement did not
 need to move — only the sentence explaining it.
+
+## 129 — A station stood on the wrong ground, about half the time
+
+**Done 26 August**, found by playtest: the same build put the A-02 capital hub on the ground one
+run and roughly a hundred metres above it the next, with nothing changed between them. Belongs to
+**M7 — a world worth being in**.
+
+**A race, and the log timings prove which one.** `FetchBodies()` and `FetchStations()` go out in
+parallel at world begin play. Two world subsystems then subscribe to the *same* `OnBodiesLoaded`
+broadcast:
+
+- `USpaceMMOTerrainPaintSubsystem` reshapes the planet from that body's authored terrain — the
+  capital is seed 20260805, relief 0.35 km, frequency 6.0.
+- `USpaceMMODepositSubsystem` places stations, reading `PlanetActor->GetTerrainConfig()` at that
+  instant.
+
+When the stations response lands first, placement happens *inside* the bodies broadcast and races
+the reshape. Lose it and the station is positioned against the compiled-in default terrain — seed
+20260801, relief 0.5, frequency 12, from `USpaceMMOWorldSubsystem::StartingPlanetTerrain` — and
+then the ground is reshaped underneath it and never re-derived. The difference between two height
+fields at one direction is the hundred metres. Win it and everything lines up. Nothing in between,
+which is why it flipped cleanly rather than drifting.
+
+**The gate had two of its three inputs.** `PlaceStationsWhenReady` already existed and its comment
+reasons carefully about stations and bodies arriving in either order — that ordering had bitten
+before and been fixed. Nobody added the third thing placement depends on: the shape of the ground it
+is placing against.
+
+`USpaceMMOTerrainPaintSubsystem` now broadcasts `OnPlanetsPainted` once the planets have the shape
+they will keep, and the gate waits for it. Two details carry their own comments because both are
+ways this fix could have been written wrong:
+
+- **The signal fires even when a body has no authored terrain to apply.** A body nobody has shaped
+  is a working state, and a gate waiting for a signal that only fires on the interesting path
+  deadlocks into a world with no stations in it and nothing in the log about why.
+- **The speculative paint at world begin play does not count as settled.** It runs before anything
+  has arrived, and treating "nothing to do yet" as "settled" reopens exactly the race being closed.
+
+**Verified by the thing that found it**, because a race cannot be reproduced headlessly. Across
+restarts the log now shows the settle line before placement every time, and two different gaps —
+1763 ms on the ordering where the ground settled first and stations arrived later, 3 ms on the
+ordering where they were already waiting and the paint released them. Both orderings, both correct.
+
+**Deposits were never affected, but only by accident.** `FetchDeposits` is issued *from* the bodies
+handler, so its response cannot arrive until that broadcast has finished and the terrain is settled.
+That is safety by ordering rather than by statement, and it breaks silently if anyone ever moves
+that fetch earlier.
+
+### The diagnostic that could not see it, which is the part worth keeping
+
+A station's placement was already logged as "placed 0.0 m above the ground at its direction", added
+the day before to settle whether a floating building was a pivot bug or terrain. It read zero on
+every run, including the broken ones.
+
+It compared the station's position against **the terrain config the station itself was holding** —
+the same stale one it had been placed with. Perfectly self-consistent, and structurally incapable of
+detecting this fault: the station and its own copy of the ground agreed exactly, while both
+disagreed with the planet everybody could see.
+
+That was the third instrument in two days to measure a thing against itself rather than against what
+it is supposed to agree with. The others were an off-centre check that measured the actor — which is
+bolted to the camera boom and therefore always centred — rather than the skinned mesh a player looks
+at, and a standing-gap check that measured the character's feet, which are below the camera's aim by
+construction. Each read a confident number that could not have been wrong, and each sent somebody
+looking in the wrong place.
+
+**So placement now names the terrain seed it used.** If a station is ever placed against 20260801
+while the capital is 20260805, that line says so outright, and no reasoning about pivots is needed.
 
 ---
 

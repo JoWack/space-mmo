@@ -12,6 +12,7 @@
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOShipPawn.h"
 #include "SpaceMMOStationActor.h"
+#include "SpaceMMOTerrainPaintSubsystem.h"
 
 bool USpaceMMODepositSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
@@ -51,6 +52,22 @@ void USpaceMMODepositSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	Backend->OnBodiesLoaded.AddDynamic(this, &USpaceMMODepositSubsystem::HandleBodiesLoaded);
 	Backend->OnDepositsLoaded.AddDynamic(this, &USpaceMMODepositSubsystem::HandleDepositsLoaded);
 	Backend->OnStationsLoaded.AddDynamic(this, &USpaceMMODepositSubsystem::HandleStationsLoaded);
+
+	// The third thing placement waits for, and the one that was missing.
+	//
+	// Stations are positioned by asking the terrain function where the ground is, so they cannot go
+	// down until the planet is wearing the terrain it will keep. That arrives from content on the
+	// same OnBodiesLoaded broadcast this subsystem listens to, which means the two handlers race:
+	// win it and the station sits on the ground, lose it and the station is placed against the
+	// compiled-in default and the ground is reshaped out from under it. About a hundred metres, on
+	// the capital, and intermittent across restarts because it turns on which HTTP response landed
+	// first.
+	if (USpaceMMOTerrainPaintSubsystem* const Paint =
+		InWorld.GetSubsystem<USpaceMMOTerrainPaintSubsystem>())
+	{
+		Paint->OnPlanetsPainted.AddDynamic(
+			this, &USpaceMMODepositSubsystem::HandlePlanetsPainted);
+	}
 
 	// Bodies first, so the deposit request can name a body by an id resolved from its content key.
 	Backend->FetchBodies();
@@ -288,14 +305,34 @@ void USpaceMMODepositSubsystem::HandleStationsLoaded()
 	PlaceStationsWhenReady();
 }
 
+void USpaceMMODepositSubsystem::HandlePlanetsPainted()
+{
+	PlaceStationsWhenReady();
+}
+
 void USpaceMMODepositSubsystem::PlaceStationsWhenReady()
 {
-	// Both answers are needed and they arrive in either order: stations are asked for immediately,
-	// bodies take a round trip to resolve a content key. Placing on whichever lands first would
-	// mean that on the ordering where stations win, every body-relative station is compared
-	// against a scene body of zero, matches nothing, and is silently skipped — a world with one
-	// deep-space station in it and no error anywhere.
-	if (bStationsPlaced || !bStationsLoaded || SceneBodyId == 0)
+	// Three answers are needed and they arrive in any order: stations are asked for immediately,
+	// bodies take a round trip to resolve a content key, and the planet is reshaped from that
+	// body's authored terrain. Placing on whichever lands first would mean that on the ordering
+	// where stations win, every body-relative station is compared against a scene body of zero,
+	// matches nothing, and is silently skipped — a world with one deep-space station in it and no
+	// error anywhere.
+	//
+	// The terrain was the one nobody added. Placement asks the terrain function where the ground
+	// is, so a station placed before the planet is reshaped is measured against the compiled-in
+	// default and then left floating when the real ground arrives — and nothing about it looks
+	// wrong, because the station and its own copy of the terrain config agree with each other
+	// perfectly. It was found from a playtest where the same build put the station on the ground
+	// one run and a hundred metres above it the next.
+	const USpaceMMOTerrainPaintSubsystem* const Paint =
+		GetWorld() != nullptr
+			? GetWorld()->GetSubsystem<USpaceMMOTerrainPaintSubsystem>()
+			: nullptr;
+
+	const bool bGroundSettled = Paint == nullptr || Paint->HavePlanetsSettled();
+
+	if (bStationsPlaced || !bStationsLoaded || SceneBodyId == 0 || !bGroundSettled)
 	{
 		return;
 	}
@@ -397,6 +434,15 @@ void USpaceMMODepositSubsystem::PlaceStations()
 
 		Drawn += Station.bPlaced ? 1 : 0;
 	}
+
+	// The shape they were placed against, named. A station measured against the wrong terrain looks
+	// exactly like one measured against the right terrain -- it is only wrong relative to the ground
+	// everybody else can see -- so the seed is the one value that tells the two apart.
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Stations placed against terrain seed %lld, relief %.2f km, frequency %.1f."),
+		Terrain.Seed,
+		Terrain.MaxElevationKilometres,
+		Terrain.BaseFrequency);
 
 	UE_LOG(LogSpaceMMOBackend, Log,
 		TEXT("Placed %d station(s), %d drawable; skipped %d on bodies this scene does not have."),
