@@ -2835,6 +2835,40 @@ or any Blueprint. It was blocked on R2 of the plan set — the capital was autho
 `TradingHub`, so the 40 m footprint this sheet is drawn to was not the one the game used. **Fixed
 the same day in 128**, which is what makes this sheet's dimensions and the game's agree.
 
+**Amended 26 August: it flickered, and the reason was that every junction met exactly.** Joe opened
+the `.blend` and reported meshes fighting, worst around Level 01. The first build put wall tops on
+the slab top at 4.5, cut slab edges to the wall faces they abutted, and stood everything on the
+surface it sat on. All of that is correct, and all of it is unrenderable: two coplanar faces facing
+the same way at the same depth have nothing to break the tie.
+
+**Measured rather than argued.** `report_coincident_faces` walks every pair of solids and reports
+same-facing coplanar faces with overlapping area. It found **155 pairs**, the worst 20 m², and the
+top of the list was `GB_L00_Walls vs GB_L01_Slab` at `z=4.5` — which is exactly the floor Joe named.
+Reasoning about it from the source would have been guessing; the numbers named the plane.
+
+**The rule now is that solids overlap rather than touch**, by a `KNIT` of 0.1 m. Wall tops die
+inside the slab, slab edges die inside the walls, the roof soffit dips below every wall top, and
+anything standing on a floor starts below its surface. Nothing looks different, because a face
+buried in another solid was never visible.
+
+**Two of the 155 were not knitting problems but modelling ones**, and both are worth keeping:
+
+- **The 8 m opening had a lintel that could not exist.** Its head is at 4.0 m, which *is* the slab
+  soffit, so the lintel was a 0.3 m sliver whose underside lay in the ceiling plane. The slab is
+  the head. Deleted.
+- **25 treads, not 26.** The stair drew a final tread whose top face was the Level 01 floor it
+  landed on. The slab is the twenty-sixth tread, and the last riser is the step onto it.
+
+**The check now grades by material, which is the honest measure.** 172 coincidences remain and are
+deliberate: same-facing coplanar faces where *both* solids carry the same material shade
+identically, so the depth test ties without flickering — butt joints between two wall segments are
+the common case. 132 more are sealed inside a third solid and cannot be seen at all. What the run
+now asserts is **zero coincidences across two materials**, which is the set that actually shows.
+
+**The roof was briefly given a 0.3 m oversail** to dodge a coincidence with the perimeter face,
+which quietly grew the envelope to 41.1 m. Reverted to an inset edge: fixing a rendering fault is
+not licence to change the building, and the sheet says 40.5 m over the walls.
+
 ---
 
 ## 128 — StationKind.Capital was configured and authored on nothing

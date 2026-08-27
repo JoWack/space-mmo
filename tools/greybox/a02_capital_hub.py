@@ -65,6 +65,31 @@ PLATE_R_OUTER = 3.6
 PLATE_R_INNER = 2.4
 
 STAIR_STEPS = 26            # 4.5 m rise over a 9 m run = 26.6 degrees
+STAIR_DRAWN = STAIR_STEPS - 1   # the slab itself is the last tread
+
+# --------------------------------------------------------------------------
+# Knitting the solids together
+#
+# The first build met every junction exactly: wall tops landed on the Level 01
+# slab top at 4.5, slab edges sat on the wall faces they were cut to, and
+# everything standing on a floor started at its surface. All correct, and all
+# unrenderable -- two coplanar faces pointing the same way at the same depth
+# have nothing to break the tie, so they flicker. 155 such pairs, worst of
+# them across the whole Level 01 floor.
+#
+# The rule now is that solids overlap rather than touch. A face buried inside
+# another solid cannot fight with anything, and the union looks identical.
+# report_coincident_faces measures it, so this cannot quietly come back.
+# --------------------------------------------------------------------------
+
+KNIT = 0.1                          # how far solids reach into each other
+
+Z_SUNK = -KNIT                      # floors: sit things inside the ground slab
+Z_SLAB_BOT = Z_L01 - T_SLAB         # 4.0
+Z_L00_WALL_TOP = Z_L01 - 0.20       # 4.30, buried in the Level 01 slab
+Z_L01_WALL_BOT = Z_L01 - 0.30       # 4.20, buried, and clear of the above
+Z_RAIL_BOT = Z_L01 - 0.15           # 4.35, buried, and clear of both
+Z_ROOF_BOT = Z_ROOF - KNIT          # 8.90, so it swallows every wall top
 
 # --------------------------------------------------------------------------
 # Materials and grouping
@@ -97,14 +122,19 @@ GROUPS = {
 
 _geometry = dict((name, {"verts": [], "faces": []}) for name in GROUPS)
 
+# Every solid, in plan coordinates, kept so the model can be measured for
+# coincident faces after it is built. See report_coincident_faces.
+_boxes = []
+
 
 def _plan_to_blender(x, y):
     """Plan metres -> Blender metres, centred, +Y north."""
     return (x - FOOTPRINT / 2.0, FOOTPRINT / 2.0 - y)
 
 
-def box(group, x0, x1, y0, y1, z0, z1):
+def box(group, x0, x1, y0, y1, z0, z1, label=""):
     """An axis-aligned solid given in plan coordinates."""
+    _boxes.append((group, label, (x0, x1, y0, y1, z0, z1)))
     g = _geometry[group]
     base = len(g["verts"])
     bx0, by1 = _plan_to_blender(x0, y0)
@@ -135,14 +165,114 @@ def cylinder(group, cx, cy, radius, z0, z1, segments=48):
     g["faces"].append(tuple(base + segments + i for i in range(segments)))
 
 
-def wall_ns(group, x, y0, y1, z0, z1, t=T_STRUCT):
+def wall_ns(group, x, y0, y1, z0, z1, t=T_STRUCT, label=""):
     """Wall running north-south, centreline at x."""
-    box(group, x - t / 2.0, x + t / 2.0, y0, y1, z0, z1)
+    box(group, x - t / 2.0, x + t / 2.0, y0, y1, z0, z1, label)
 
 
-def wall_ew(group, y, x0, x1, z0, z1, t=T_STRUCT):
+def wall_ew(group, y, x0, x1, z0, z1, t=T_STRUCT, label=""):
     """Wall running east-west, centreline at y."""
-    box(group, x0, x1, y - t / 2.0, y + t / 2.0, z0, z1)
+    box(group, x0, x1, y - t / 2.0, y + t / 2.0, z0, z1, label)
+
+
+AXIS_NAME = ("x", "y", "z")
+
+
+def _enclosed(ax, plane, rect, exclude):
+    """Is this patch strictly inside some third solid?
+
+    Two coplanar faces sealed inside a third box cannot be seen, so they
+    cannot flicker. Wall tops meeting under a slab are the common case, and
+    counting them as faults would make the number meaningless.
+    """
+    for k, (_g, _l, b) in enumerate(_boxes):
+        if k in exclude:
+            continue
+        if not (b[ax * 2] < plane - 1e-6 < b[ax * 2 + 1] - 1e-6):
+            continue
+        inside = True
+        for other in range(3):
+            if other == ax:
+                continue
+            lo, hi = rect[other]
+            if b[other * 2] > lo + 1e-6 or hi > b[other * 2 + 1] + 1e-6:
+                inside = False
+                break
+        if inside:
+            return True
+    return False
+
+
+def report_coincident_faces(limit=14):
+    """Find pairs of solids that put two same-facing faces on the same plane.
+
+    That is what z-fights: two coplanar faces pointing the same way at the
+    same depth, with nothing to break the tie. Solids that interpenetrate are
+    fine, and solids that merely abut hide their shared plane inside the
+    union. Same-side coincidence is the bug, and it is invisible in the
+    source -- every one of these boxes is at the coordinate the plan gives.
+    """
+    found = []
+    buried = [0]
+    same_material = [0]
+    n = len(_boxes)
+    for i in range(n):
+        gi, li, bi = _boxes[i]
+        for j in range(i + 1, n):
+            gj, lj, bj = _boxes[j]
+            for ax in range(3):
+                for side, off in (("min", 0), ("max", 1)):
+                    plane = bi[ax * 2 + off]
+                    if abs(plane - bj[ax * 2 + off]) > 1e-6:
+                        continue
+                    area = 1.0
+                    for other in range(3):
+                        if other == ax:
+                            continue
+                        lo = max(bi[other * 2], bj[other * 2])
+                        hi = min(bi[other * 2 + 1], bj[other * 2 + 1])
+                        if hi - lo <= 1e-4:
+                            area = 0.0
+                            break
+                        area *= hi - lo
+                    if area <= 0.0:
+                        continue
+                    rect = []
+                    for other in range(3):
+                        if other == ax:
+                            rect.append(None)
+                        else:
+                            rect.append((max(bi[other * 2], bj[other * 2]),
+                                         min(bi[other * 2 + 1],
+                                             bj[other * 2 + 1])))
+                    if _enclosed(ax, plane, rect, (i, j)):
+                        buried[0] += 1
+                        continue
+                    if GROUPS[gi][1] == GROUPS[gj][1]:
+                        # Both faces shade identically, so whichever the
+                        # renderer picks looks the same. It ties; it does
+                        # not flicker.
+                        same_material[0] += 1
+                        continue
+                    found.append((area, AXIS_NAME[ax], side, plane,
+                                  gi, li, gj, lj))
+    found.sort(reverse=True, key=lambda f: f[0])
+    print("")
+    print("  coincident, buried inside a third solid: %d (cannot be seen)"
+          % buried[0])
+    print("  coincident, same material on both faces: %d (ties, does not flicker)"
+          % same_material[0])
+    if not found:
+        print("  coincident across two materials: none")
+        return 0
+    print("  coincident across two materials: %d pair(s), worst first"
+          % len(found))
+    for area, ax, side, plane, gi, li, gj, lj in found[:limit]:
+        print("    %8.2f m2  %s=%-7.3g %s  %s/%s  vs  %s/%s"
+              % (area, ax, plane, side, gi, li or "-", gj, lj or "-"))
+    if len(found) > limit:
+        print("    ... and %d more" % (len(found) - limit))
+    return len(found)
 
 
 # --------------------------------------------------------------------------
@@ -156,55 +286,64 @@ W = "GB_L00_Walls"
 P = "GB_L00_Partitions"
 S = "GB_L00_Service"
 
-# Ground slab.
-box("GB_L00_Floor", NEG, OUT, NEG, OUT, -T_SLAB, 0.0)
+# Ground slab. Its edges stop short of the perimeter's outer face so they sit
+# inside the wall rather than flush with it.
+box("GB_L00_Floor", NEG + KNIT, OUT - KNIT, NEG + KNIT, OUT - KNIT,
+    -T_SLAB, 0.0, "ground slab")
 
 # Perimeter. SVG: M 30 30 H 430 V 200 M 430 250 V 430 H 260 M 200 430 H 30 V 30
 # -> east door gap y 17..22 (5 m), south entrance gap x 17..23 (6 m).
-wall_ew(W, 0.0, NEG, OUT, 0.0, Z_ROOF)                      # north
-wall_ew(W, FOOTPRINT, NEG, 17.0, 0.0, Z_ROOF)               # south, west of door
-wall_ew(W, FOOTPRINT, 23.0, OUT, 0.0, Z_ROOF)               # south, east of door
-wall_ew(W, FOOTPRINT, 17.0, 23.0, H_MAIN, Z_ROOF)           # main entrance head
-wall_ns(W, 0.0, 0.0, FOOTPRINT, 0.0, Z_ROOF)                # west
-wall_ns(W, FOOTPRINT, 0.0, 17.0, 0.0, Z_ROOF)               # east, north of door
-wall_ns(W, FOOTPRINT, 22.0, FOOTPRINT, 0.0, Z_ROOF)         # east, south of door
-wall_ns(W, FOOTPRINT, 17.0, 22.0, H_MAIN, Z_ROOF)           # east door head
+# Wall tops stop at Z_ROOF, which the roof underside at Z_ROOF_BOT swallows.
+wall_ew(W, 0.0, NEG, OUT, Z_SUNK, Z_ROOF, label="perimeter N")
+wall_ew(W, FOOTPRINT, NEG, 17.0 + KNIT, Z_SUNK, Z_ROOF, label="perimeter S/W")
+wall_ew(W, FOOTPRINT, 23.0 - KNIT, OUT, Z_SUNK, Z_ROOF, label="perimeter S/E")
+wall_ew(W, FOOTPRINT, 17.0, 23.0, H_MAIN, Z_ROOF, label="main entrance head")
+wall_ns(W, 0.0, T_STRUCT / 2.0, FOOTPRINT - T_STRUCT / 2.0, Z_SUNK, Z_ROOF,
+        label="perimeter W")
+wall_ns(W, FOOTPRINT, T_STRUCT / 2.0, 17.0 + KNIT, Z_SUNK, Z_ROOF,
+        label="perimeter E/N")
+wall_ns(W, FOOTPRINT, 22.0 - KNIT, FOOTPRINT - T_STRUCT / 2.0, Z_SUNK, Z_ROOF,
+        label="perimeter E/S")
+wall_ns(W, FOOTPRINT, 17.0, 22.0, H_MAIN, Z_ROOF, label="east door head")
 
 # North band at y=8, two offices. SVG: M 30 110 H 100 M 130 110 H 330 M 360 110 H 430
 # -> 3 m doors at x 7..10 and x 30..33. Partition on the centre line at x=20.
-wall_ew(W, 8.0, NEG, 7.0, 0.0, Z_L01)
-wall_ew(W, 8.0, 10.0, 30.0, 0.0, Z_L01)
-wall_ew(W, 8.0, 33.0, OUT, 0.0, Z_L01)
-wall_ew(W, 8.0, 7.0, 10.0, H_DOOR, Z_L01)
-wall_ew(W, 8.0, 30.0, 33.0, H_DOOR, Z_L01)
-wall_ns(P, 20.0, 0.0, 8.0, 0.0, H_L00_CLEAR, T_PART)
+# Interior walls die on the perimeter centrelines, a quarter-metre inside it.
+wall_ew(W, 8.0, 0.0, 7.0 + KNIT, Z_SUNK, Z_L00_WALL_TOP, label="north band W")
+wall_ew(W, 8.0, 10.0 - KNIT, 30.0 + KNIT, Z_SUNK, Z_L00_WALL_TOP, label="north band C")
+wall_ew(W, 8.0, 33.0 - KNIT, FOOTPRINT, Z_SUNK, Z_L00_WALL_TOP, label="north band E")
+wall_ew(W, 8.0, 7.0, 10.0, H_DOOR, Z_L00_WALL_TOP, label="office door head W")
+wall_ew(W, 8.0, 30.0, 33.0, H_DOOR, Z_L00_WALL_TOP, label="office door head E")
+wall_ns(P, 20.0, 0.0, 8.0, Z_SUNK, H_L00_CLEAR, T_PART, "office partition")
 
 # Wings at x=8 and x=32. SVG: M 110 110 V 200 M 110 240 V 340 -> 4 m gap y 17..21.
 for _x in (8.0, 32.0):
-    wall_ns(W, _x, 8.0, 17.0, 0.0, Z_L01)
-    wall_ns(W, _x, 21.0, 31.0, 0.0, Z_L01)
-    wall_ns(W, _x, 17.0, 21.0, H_DOOR, Z_L01)
+    wall_ns(W, _x, 8.0, 17.0 + KNIT, Z_SUNK, Z_L00_WALL_TOP, label="wing wall N")
+    wall_ns(W, _x, 21.0 - KNIT, 31.0, Z_SUNK, Z_L00_WALL_TOP, label="wing wall S")
+    wall_ns(W, _x, 17.0, 21.0, H_DOOR, Z_L00_WALL_TOP, label="wing opening head")
 
 # Trade floor south wall at y=31. SVG: M 30 340 H 190 M 270 340 H 430
 # -> the 8 m opening into the arrival hall, x 16..24.
-wall_ew(W, 31.0, NEG, 16.0, 0.0, Z_L01)
-wall_ew(W, 31.0, 24.0, OUT, 0.0, Z_L01)
-wall_ew(W, 31.0, 16.0, 24.0, H_OPENING, Z_L01)
+wall_ew(W, 31.0, 0.0, 16.0 + KNIT, Z_SUNK, Z_L00_WALL_TOP, label="trade S wall W")
+wall_ew(W, 31.0, 24.0 - KNIT, FOOTPRINT, Z_SUNK, Z_L00_WALL_TOP, label="trade S wall E")
+# No head over the 8 m opening: H_OPENING is the slab soffit, so the slab is
+# the head. A lintel here would put its underside in the soffit plane.
 
 # Cores at x=12 and x=28. SVG: M 150 340 V 380 M 150 410 V 430 -> 3 m door y 35..38.
 for _x in (12.0, 28.0):
-    wall_ns(W, _x, 31.0, 35.0, 0.0, Z_L01)
-    wall_ns(W, _x, 38.0, FOOTPRINT, 0.0, Z_L01)
-    wall_ns(W, _x, 35.0, 38.0, H_DOOR, Z_L01)
+    wall_ns(W, _x, 31.0, 35.0 + KNIT, Z_SUNK, Z_L00_WALL_TOP, label="core wall N")
+    wall_ns(W, _x, 38.0 - KNIT, FOOTPRINT, Z_SUNK, Z_L00_WALL_TOP, label="core wall S")
+    wall_ns(W, _x, 35.0, 38.0, H_DOOR, Z_L00_WALL_TOP, label="core door head")
 
+# Service elements sit into the ground slab rather than on its surface.
 # F -- faction supply counter, 8.0 x 2.5 m.  SVG rect 70,70 80x25
-box(S, 4.0, 12.0, 4.0, 6.5, 0.0, H_COUNTER)
+box(S, 4.0, 12.0, 4.0, 6.5, Z_SUNK, H_COUNTER, "F faction supply")
 # R -- registry and insurance, 8.0 x 2.5 m.  SVG rect 310,70 80x25
-box(S, 28.0, 36.0, 4.0, 6.5, 0.0, H_COUNTER)
+box(S, 28.0, 36.0, 4.0, 6.5, Z_SUNK, H_COUNTER, "R registry")
 # H -- hangar racking, 1.5 m deep run.       SVG rect 35,130 15x190
-box(S, 0.5, 2.0, 10.0, 29.0, 0.0, H_RACK)
+box(S, 0.5, 2.0, 10.0, 29.0, Z_SUNK, H_RACK, "H racking")
 # Q -- quest stand, 3.0 x 2.5 m.             SVG rect 160,350 30x25
-box(S, 13.0, 16.0, 32.0, 34.5, 0.0, H_QUEST)
+box(S, 13.0, 16.0, 32.0, 34.5, Z_SUNK, H_QUEST, "Q quest stand")
 
 # M -- eight market terminals, two banks of four against the wing walls.
 MARKET_Y = [(10.0, 13.0), (14.5, 17.5), (19.0, 22.0), (23.5, 26.5)]
@@ -212,25 +351,34 @@ MARKET_X = [(8.5, 10.5), (29.5, 31.5)]
 market_count = 0
 for _mx0, _mx1 in MARKET_X:
     for _my0, _my1 in MARKET_Y:
-        box(S, _mx0, _mx1, _my0, _my1, 0.0, H_TERMINAL)
+        box(S, _mx0, _mx1, _my0, _my1, Z_SUNK, H_TERMINAL, "M terminal")
         market_count += 1
 
 # System plate -- a landmark, not a service (A-01 note 3). SVG r=36 and r=24.
-cylinder("GB_L00_Plate", 20.0, 19.5, PLATE_R_OUTER, 0.0, 0.05)
-cylinder("GB_L00_Plate", 20.0, 19.5, PLATE_R_INNER, 0.0, 0.10)
+cylinder("GB_L00_Plate", 20.0, 19.5, PLATE_R_OUTER, Z_SUNK, 0.05)
+cylinder("GB_L00_Plate", 20.0, 19.5, PLATE_R_INNER, Z_SUNK, 0.10)
 
 # Stairs. The SVG hatch runs x 1.5..10.5 (west) and 29.5..38.5 (east),
 # y 33..37.5 -- a 9 m run across the core, 4.5 m wide, rising to Level 01.
+#
+# Only 25 treads are drawn. The 26th is the Level 01 slab itself, so the last
+# riser is the step up onto the floor; drawing a 26th tread at 4.5 would put
+# its top face in the same plane as the slab it lands on. Each tread reaches
+# KNIT into the next, and the whole flight is KNIT wider than the stairwell
+# it comes up through, so the slab edge is buried in the stair and the stair's
+# sides are buried under the slab.
 STAIR_Y = (33.0, 37.5)
 STAIR_RISE = Z_L01 / STAIR_STEPS
 STAIR_GOING = 9.0 / STAIR_STEPS
+STAIR_RUN = STAIR_DRAWN * STAIR_GOING       # where the stairwell opening ends
 for _group, _x_start, _dir in (("GB_L00_Stair_West", 1.5, 1.0),
                                ("GB_L00_Stair_East", 38.5, -1.0)):
-    for _i in range(STAIR_STEPS):
+    for _i in range(STAIR_DRAWN):
         _a = _x_start + _dir * _i * STAIR_GOING
-        _b = _x_start + _dir * (_i + 1) * STAIR_GOING
-        box(_group, min(_a, _b), max(_a, _b), STAIR_Y[0], STAIR_Y[1],
-            0.0, (_i + 1) * STAIR_RISE)
+        _b = _x_start + _dir * ((_i + 1) * STAIR_GOING + KNIT)
+        box(_group, min(_a, _b), max(_a, _b),
+            STAIR_Y[0] - KNIT, STAIR_Y[1] + KNIT,
+            Z_SUNK, (_i + 1) * STAIR_RISE, "tread %d" % (_i + 1))
 
 # --------------------------------------------------------------------------
 # Level 01 -- career gallery
@@ -239,58 +387,78 @@ for _group, _x_start, _dir in (("GB_L00_Stair_West", 1.5, 1.0),
 W1 = "GB_L01_Walls"
 F1 = "GB_L01_Fronts"
 
-# The void is the trade floor, x 8..32 by y 8..31 on centrelines. The slab
-# hole is cut back to the wall faces so the slab meets them cleanly.
-VX0, VX1, VY0, VY1 = 8.25, 31.75, 8.25, 30.75
+# The void is the trade floor, x 8..32 by y 8..31 on centrelines. The hole is
+# cut KNIT wider than the wall faces around it, so the slab edge ends inside
+# the wall instead of flush against it.
+VX0, VX1 = 8.25 - KNIT, 31.75 + KNIT
+VY0, VY1 = 8.25 - KNIT, 30.75 + KNIT
 
-box("GB_L01_Slab", NEG, OUT, NEG, VY0, Z_L01 - T_SLAB, Z_L01)          # north
-box("GB_L01_Slab", NEG, VX0, VY0, VY1, Z_L01 - T_SLAB, Z_L01)          # west
-box("GB_L01_Slab", VX1, OUT, VY0, VY1, Z_L01 - T_SLAB, Z_L01)          # east
-# South strip, with a stairwell cut over each core stair.
-box("GB_L01_Slab", NEG, OUT, VY1, 33.0, Z_L01 - T_SLAB, Z_L01)
-box("GB_L01_Slab", NEG, 1.5, 33.0, 37.5, Z_L01 - T_SLAB, Z_L01)
-box("GB_L01_Slab", 10.5, 29.5, 33.0, 37.5, Z_L01 - T_SLAB, Z_L01)
-box("GB_L01_Slab", 38.5, OUT, 33.0, 37.5, Z_L01 - T_SLAB, Z_L01)
-box("GB_L01_Slab", NEG, OUT, 37.5, OUT, Z_L01 - T_SLAB, Z_L01)
+SLAB_NEG, SLAB_OUT = NEG + KNIT, OUT - KNIT     # buried in the perimeter wall
+SW0 = 1.5 + STAIR_RUN                           # west stairwell, east end
+SE0 = 38.5 - STAIR_RUN                          # east stairwell, west end
+
+box("GB_L01_Slab", SLAB_NEG, SLAB_OUT, SLAB_NEG, VY0, Z_SLAB_BOT, Z_L01, "slab N")
+box("GB_L01_Slab", SLAB_NEG, VX0, VY0, VY1, Z_SLAB_BOT, Z_L01, "slab W")
+box("GB_L01_Slab", VX1, SLAB_OUT, VY0, VY1, Z_SLAB_BOT, Z_L01, "slab E")
+# South strip, with a stairwell cut over each core stair. The openings stop at
+# the top tread rather than at the foot of the flight, so there is floor
+# everywhere the stair is not.
+box("GB_L01_Slab", SLAB_NEG, SLAB_OUT, VY1, 33.0, Z_SLAB_BOT, Z_L01, "slab S/N")
+box("GB_L01_Slab", SLAB_NEG, 1.5, 33.0, 37.5, Z_SLAB_BOT, Z_L01, "slab S/W")
+box("GB_L01_Slab", SW0, SE0, 33.0, 37.5, Z_SLAB_BOT, Z_L01, "slab S/landing")
+box("GB_L01_Slab", 38.5, SLAB_OUT, 33.0, 37.5, Z_SLAB_BOT, Z_L01, "slab S/E")
+box("GB_L01_Slab", SLAB_NEG, SLAB_OUT, 37.5, SLAB_OUT, Z_SLAB_BOT, Z_L01, "slab S/S")
 
 # Bureau band at y=4. SVG: M 490 70 H 610 M 650 70 H 730 M 770 70 H 890
 # -> 4 m openings at x 12..16 and x 24..28.
-wall_ew(W1, 4.0, NEG, 12.0, Z_L01, Z_ROOF)
-wall_ew(W1, 4.0, 16.0, 24.0, Z_L01, Z_ROOF)
-wall_ew(W1, 4.0, 28.0, OUT, Z_L01, Z_ROOF)
-wall_ew(W1, 4.0, 12.0, 16.0, Z_L01 + H_DOOR, Z_ROOF)
-wall_ew(W1, 4.0, 24.0, 28.0, Z_L01 + H_DOOR, Z_ROOF)
+wall_ew(W1, 4.0, 0.0, 12.0 + KNIT, Z_L01_WALL_BOT, Z_ROOF, label="bureau W")
+wall_ew(W1, 4.0, 16.0 - KNIT, 24.0 + KNIT, Z_L01_WALL_BOT, Z_ROOF, label="bureau C")
+wall_ew(W1, 4.0, 28.0 - KNIT, FOOTPRINT, Z_L01_WALL_BOT, Z_ROOF, label="bureau E")
+wall_ew(W1, 4.0, 12.0, 16.0, Z_L01 + H_DOOR, Z_ROOF, label="bureau head W")
+wall_ew(W1, 4.0, 24.0, 28.0, Z_L01 + H_DOOR, Z_ROOF, label="bureau head E")
 
 # Six career alcoves, 4 m deep by 5 m, three a side. Numbered C1..C6 on the
 # sheet and deliberately unnamed -- career chains are M8 (note 4).
 ALCOVE_Y = [(10.0, 15.0), (17.0, 22.0), (24.0, 29.0)]
-ALCOVE_SIDES = [(NEG, 4.0, 4.0), (36.0, OUT, 36.0)]   # x0, x1, front centreline
+ALCOVE_SIDES = [(0.0, 4.0, 4.0), (36.0, FOOTPRINT, 36.0)]  # x0, x1, front
 alcove_count = 0
 for _ax0, _ax1, _front in ALCOVE_SIDES:
     for _ay0, _ay1 in ALCOVE_Y:
-        wall_ew(W1, _ay0, _ax0, _ax1, Z_L01, Z_ROOF)
-        wall_ew(W1, _ay1, _ax0, _ax1, Z_L01, Z_ROOF)
-        wall_ns(F1, _front, _ay0, _ay1, Z_L01, Z_L01 + H_ALCOVE_FRONT, T_PART)
+        wall_ew(W1, _ay0, _ax0, _ax1, Z_L01_WALL_BOT, Z_ROOF, label="alcove wall")
+        wall_ew(W1, _ay1, _ax0, _ax1, Z_L01_WALL_BOT, Z_ROOF, label="alcove wall")
+        wall_ns(F1, _front, _ay0, _ay1, Z_L01_WALL_BOT,
+                Z_L01 + H_ALCOVE_FRONT, T_PART, "alcove front")
         alcove_count += 1
 
 # Cores and landing. SVG: M 490 348 H 610 M 770 348 H 890, verticals at
 # x=12 and x=28 -- so the landing between them is open to the void.
-wall_ew(W1, 31.8, NEG, 12.0, Z_L01, Z_ROOF)
-wall_ew(W1, 31.8, 28.0, OUT, Z_L01, Z_ROOF)
+wall_ew(W1, 31.8, 0.0, 12.0 + KNIT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N/W")
+wall_ew(W1, 31.8, 28.0 - KNIT, FOOTPRINT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N/E")
 for _x in (12.0, 28.0):
-    wall_ns(W1, _x, 31.8, 35.0, Z_L01, Z_ROOF)
-    wall_ns(W1, _x, 38.0, FOOTPRINT, Z_L01, Z_ROOF)
-    wall_ns(W1, _x, 35.0, 38.0, Z_L01 + H_DOOR, Z_ROOF)
+    wall_ns(W1, _x, 31.8, 35.0 + KNIT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N")
+    wall_ns(W1, _x, 38.0 - KNIT, FOOTPRINT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core S")
+    wall_ns(W1, _x, 35.0, 38.0, Z_L01 + H_DOOR, Z_ROOF, label="L01 core door head")
 
-# Parapet round the void, inner face on the slab edge.
+# Parapet round the void, foot sunk into the slab. Its inner face oversails
+# the slab edge by a nosing rather than sitting flush with it: flush would put
+# a Partition face and a Floor face in one plane, which is two different greys
+# competing for the same pixels.
 R = "GB_L01_Railing"
-box(R, VX0 - T_PART, VX1 + T_PART, VY0 - T_PART, VY0, Z_L01, Z_L01 + H_RAIL)
-box(R, VX0 - T_PART, VX1 + T_PART, VY1, VY1 + T_PART, Z_L01, Z_L01 + H_RAIL)
-box(R, VX0 - T_PART, VX0, VY0, VY1, Z_L01, Z_L01 + H_RAIL)
-box(R, VX1, VX1 + T_PART, VY0, VY1, Z_L01, Z_L01 + H_RAIL)
+NOSE = KNIT / 2.0
+box(R, VX0 - T_PART, VX1 + T_PART, VY0 - T_PART, VY0 + NOSE, Z_RAIL_BOT,
+    Z_L01 + H_RAIL, "parapet N")
+box(R, VX0 - T_PART, VX1 + T_PART, VY1 - NOSE, VY1 + T_PART, Z_RAIL_BOT,
+    Z_L01 + H_RAIL, "parapet S")
+box(R, VX0 - T_PART, VX0 + NOSE, VY0, VY1, Z_RAIL_BOT,
+    Z_L01 + H_RAIL, "parapet W")
+box(R, VX1 - NOSE, VX1 + T_PART, VY0, VY1, Z_RAIL_BOT,
+    Z_L01 + H_RAIL, "parapet E")
 
-# Roof.
-box("GB_Roof", NEG, OUT, NEG, OUT, Z_ROOF, Z_ROOF + T_ROOF)
+# Roof. Its underside dips below the wall tops so it swallows them, and its
+# edges stop inside the perimeter rather than flush with its outer face. Not
+# an oversail: the envelope stays 40.5 m over the walls, as the sheet has it.
+box("GB_Roof", SLAB_NEG, SLAB_OUT, SLAB_NEG, SLAB_OUT,
+    Z_ROOF_BOT, Z_ROOF + T_ROOF, "roof")
 
 
 # --------------------------------------------------------------------------
@@ -631,11 +799,27 @@ def main():
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
 
+    # The .blend and the renders are working files and are kept outside the
+    # game repository; only the FBX is committed, because only the FBX is what
+    # the engine consumes. Two destinations rather than one, so the split is
+    # enforced here instead of remembered at the call site.
+    fbx_path = os.path.join(out_dir, "A02_CapitalHub.fbx")
+    if "--fbx" in argv:
+        fbx_path = os.path.abspath(argv[argv.index("--fbx") + 1])
+        if not os.path.isdir(os.path.dirname(fbx_path)):
+            os.makedirs(os.path.dirname(fbx_path))
+
     print("")
     print("A-02 Capital Hub greybox")
-    print("  out: %s" % out_dir)
+    print("  blend and renders: %s" % out_dir)
+    print("  fbx:               %s" % fbx_path)
 
     check_against_sheet()
+    coincident = report_coincident_faces()
+
+    if "--check-only" in argv:
+        print("")
+        raise SystemExit(1 if coincident else 0)
 
     clear_scene()
     scene = bpy.context.scene
@@ -648,7 +832,7 @@ def main():
     report_bounds(objects)
 
     print("")
-    export_fbx(os.path.join(out_dir, "A02_CapitalHub.fbx"))
+    export_fbx(fbx_path)
     render_previews(out_dir, subs, objects)
 
     # Roof hidden on open, so the file shows an interior when you load it.
