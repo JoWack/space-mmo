@@ -139,6 +139,28 @@ void ASpaceMMOStationActor::Configure(
 
 	ApplyRenderTransform();
 
+	// Altitude above the ground at its own direction, and the lift that was applied to get there.
+	//
+	// Placement asks FPlanetTerrain for the surface point, so the first number is zero by
+	// construction and any other value means something moved the actor afterwards. The second is
+	// the only thing that does. Printed together because a station that looks like it is floating
+	// has three candidate explanations -- a lift meant for a centred pivot, a mesh whose origin is
+	// not where its author thought, and standing on ground that is simply higher than the viewer's
+	// -- and they are indistinguishable from a screenshot.
+	const double SurfaceRadiusKm = Station.bOnBody
+		? FPlanetTerrain::SurfaceRadiusKilometres(Planet, Terrain, Station.Direction)
+		: 0.0;
+
+	const double PlacedRadiusKm =
+		(SystemPosition.Kilometres - Planet.Centre.Kilometres).Size();
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Station %s: placed %.1f m above the ground at its direction, lifted a further "
+			"%.1f m for its pivot."),
+		*Station.Key,
+		Station.bOnBody ? (PlacedRadiusKm - SurfaceRadiusKm) * 1000.0 : 0.0,
+		BaseLiftCentimetres / 100.0);
+
 	UE_LOG(LogSpaceMMOBackend, Log,
 		TEXT("Station %s (%s) at %s, docking range %.1f km, drawn as %s%s."),
 		*Station.Key,
