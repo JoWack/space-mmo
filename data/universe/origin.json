@@ -278,8 +278,9 @@
       "name": "Capital Trading Hub",
       "system": "system_origin",
       "body": "body_capital",
-      "kind": "TradingHub",
-      "$directionComment": "About 500 m from where a character spawns, near the starter deposits: close enough to see and walk to, far enough that a 25 m building is not standing on top of the arrival point. The first station a new player meets should not be on the far side of the world.",
+      "$kindComment": "Capital, not TradingHub. It was authored as a TradingHub until 25 August, which meant StationKind.Capital was configured in DefaultGame.ini and authored on nothing -- the capital drew the same 25 m cube as every outpost, and EveryAuthoredKindHasALook could not catch it because it checks that authored kinds have a look, not that configured kinds are authored.",
+      "kind": "Capital",
+      "$directionComment": "About 500 m from where a character spawns, near the starter deposits: close enough to see and walk to, far enough that a 40 m building is not standing on top of the arrival point. The first station a new player meets should not be on the far side of the world.",
       "direction": [0.026000, 0.000000, 1.000000],
       "dockingRangeKm": 5.0
     },

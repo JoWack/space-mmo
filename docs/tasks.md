@@ -2831,10 +2831,47 @@ greyboxed anyway as the pattern for a large hub, and because a 40 m two-level sh
 R2 is about — see below.
 
 **Blocked-on, and what it does not touch:** nothing here changes `origin.json`, `DefaultGame.ini`
-or any Blueprint. R2 on the plan set still stands: `DefaultGame.ini` configures `Capital` at 40 m
-while `origin.json` authors `station_capital_hub` as `kind: TradingHub`, so the 40 m footprint this
-sheet is drawn to is not the one the game uses. Fixing that is one word plus a re-seed, and it has
-to happen before any of this is pointed at a station.
+or any Blueprint. It was blocked on R2 of the plan set — the capital was authored as a
+`TradingHub`, so the 40 m footprint this sheet is drawn to was not the one the game used. **Fixed
+the same day in 128**, which is what makes this sheet's dimensions and the game's agree.
+
+---
+
+## 128 — StationKind.Capital was configured and authored on nothing
+
+**Done 25 August**, from R2 of the Origin Station Plans, which 127 named as the item blocking any
+of that greybox reaching a station. Belongs to **M7 — a world worth being in**.
+
+`DefaultGame.ini` has given `Capital` a cone at 40 m since 124. `origin.json` authored
+`station_capital_hub` as `kind: TradingHub`, so **the Capital entry had never once been exercised**
+and the capital drew the same 25 m cube as every outpost on every homeworld. It had looked
+different for a while, which is what hid this: `BlueprintsByKey` pointed that one key at the bought
+kit's example building. a83ed80 commented that line out for being a dangling reference in a fresh
+clone, and the capital went back to being a cube with nothing anywhere saying it should not be.
+
+**One word, as R2 said**: `"kind": "Capital"`, plus a re-seed. Verified in Postgres rather than
+inferred from the seed's success line — `stations` now reads `station_capital_hub | Capital`, and
+with no `MeshesByKey` entry and `BlueprintsByKey` commented out it resolves to the cone at 40 m.
+
+**Why the existing test could not catch it, and why the obvious new test would be wrong.**
+`EveryAuthoredKindHasALook` reads the kinds out of `origin.json` and asserts each has a mesh and a
+size configured. It checks that *authored* kinds have a look, not that *configured* kinds are
+authored, so a kind sitting in the ini with nothing pointing at it is invisible to it. Inverting it
+— assert every configured kind is authored — was considered and rejected: `Social` and `Housing`
+are configured today and authored by nothing on purpose, ahead of the content that will use them,
+and a test that went red for them would be reporting the config working as intended. The actual
+fault was narrower and is not generically testable: a station called "Capital Trading Hub", sitting
+on `body_capital`, was not of kind `Capital`. Nothing but reading it catches that.
+
+**Nothing branches on kind**, which is R9 of the same plan set and is why this is a content change
+and not a behavioural one. Every `StationKind` reference outside the enum is a test fixture
+building its own station. Quest 7 targets the capital by key in `main-story.json`, not by kind, so
+`intro_fly_to_capital` is untouched.
+
+**The direction comment was stale in the same edit.** It justified the placement as "far enough
+that a 25 m building is not standing on top of the arrival point"; the building is 40 m now. The
+500 m still holds, and 40 m is visible from further away than 25 m was, so the placement did not
+need to move — only the sentence explaining it.
 
 ---
 
