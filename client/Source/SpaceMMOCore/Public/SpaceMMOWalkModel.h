@@ -168,6 +168,24 @@ public:
 	static double SeparationCentimetres(double DepthCentimetres);
 
 	/**
+	 * What is left of a step once the surface it ran into has taken its share.
+	 *
+	 * <strong>The half of a blocking hit that was missing, and the reason a character could be
+	 * pinned against a hull while pressing forward.</strong> Stopping at the contact point and
+	 * spending the rest of the step nowhere leaves a character in continuous contact moving only by
+	 * the separation push -- measured at six centimetres a second against a walk of six hundred,
+	 * which is indistinguishable from the controls having died. Cancelling the velocity into the
+	 * surface fixes the next frame; this fixes the frame you are in.
+	 *
+	 * Projection onto the contact plane, which is what every character controller does and what
+	 * makes a wall something you slide along rather than something you stick to.
+	 *
+	 * @param RemainingDelta How much of the step is unspent, in centimetres.
+	 * @param Normal         Outward normal of what was hit, pointing back at the character.
+	 */
+	static FVector SlideDeltaCentimetres(const FVector& RemainingDelta, const FVector& Normal);
+
+	/**
 	 * Speed across the ground, ignoring any rise or fall. Centimetres per second.
 	 *
 	 * <strong>What a walk cycle should be played against, and not the same as the speed of the

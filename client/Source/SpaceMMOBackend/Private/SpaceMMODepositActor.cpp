@@ -8,6 +8,7 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMODepositSettings.h"
 #include "SpaceMMORenderOrigin.h"
+#include "SpaceMMOSolidity.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace SpaceMMODeposit
@@ -34,9 +35,6 @@ ASpaceMMODepositActor::ASpaceMMODepositActor()
 	Marker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Marker"));
 	SetRootComponent(Marker);
 
-	// No collision, for the same reason the planet and the ship have none: contact here is decided
-	// by FPlanetTerrain, not by Chaos, and a solver body would be a second opinion about where
-	// solid things are. Gathering range is measured, not collided.
 	// Solid to a query, and to nothing else (ADR-0013). Query-only rather than physics: nothing
 	// here is simulated, and a deposit that could be pushed would be a deposit that could be moved
 	// off the position both machines derived for it.
@@ -113,6 +111,11 @@ void ASpaceMMODepositActor::ApplyConfiguredMesh()
 	}
 
 	Marker->SetStaticMesh(Mesh);
+
+	// Said at the moment the mesh is attached, because this is the only place that knows both which
+	// asset was chosen and which deposit chose it. Walking through an ore boulder looks like a
+	// movement bug from anywhere else in the game.
+	SpaceMMOSolidity::ReportIfIntangible(Mesh, TEXT("Deposit"), Node.Key);
 
 	// The mesh brings its own materials. The placeholder material the constructor set is for the
 	// engine cylinder, and leaving it on would repaint an authored model in flat grey.

@@ -866,4 +866,69 @@ bool FSpaceMMOWalkSeparationClearsTheSurfaceTest::RunTest(const FString& Paramet
 	return true;
 }
 
+
+/**
+ * A step that runs into a wall spends the rest of itself along the wall.
+ *
+ * <strong>Written against a measured bug, not a hypothetical one.</strong> Resolving a blocking hit
+ * by clamping to the contact point and stopping looks correct and reads as sliding in a diagram. In
+ * the game it pinned a character under a ship hull: the log showed 638 consecutive blocked frames
+ * covering 34 cm, which is six centimetres a second against a walk speed of six hundred. Every
+ * frame of the step past first contact was being thrown away, and the only motion left was the
+ * separation push. This is the arithmetic that gives that motion somewhere to go.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkSpendsTheRestOfTheStepAlongTheWallTest,
+	"SpaceMMO.Walk.SpendsTheRestOfTheStepAlongTheWall",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkSpendsTheRestOfTheStepAlongTheWallTest::RunTest(const FString& Parameters)
+{
+	// A wall facing back along -X, met by a step heading diagonally into it.
+	const FVector Wall(-1.0, 0.0, 0.0);
+
+	const FVector Slid =
+		FCharacterWalkModel::SlideDeltaCentimetres(FVector(6.0, 4.0, 0.0), Wall);
+
+	TestEqual(TEXT("Nothing is left heading into the wall"), Slid.X, 0.0, 0.001);
+
+	TestEqual(
+		TEXT("And everything running along it survives, so the step is not thrown away"),
+		Slid.Y,
+		4.0,
+		0.001);
+
+	// The case the bug was: a step almost parallel to the surface must keep almost all of itself.
+	// Losing it is what turned walking into a six-centimetres-a-second crawl.
+	const FVector Grazing =
+		FCharacterWalkModel::SlideDeltaCentimetres(FVector(0.2, 5.0, 0.0), Wall);
+
+	TestTrue(
+		TEXT("A glancing step keeps nearly all of its length"),
+		Grazing.Size() > 4.9);
+
+	// Leaving a surface you are touching must not be interfered with, or a character resolved into
+	// contact could never be resolved back out of it.
+	const FVector Leaving =
+		FCharacterWalkModel::SlideDeltaCentimetres(FVector(-6.0, 0.0, 0.0), Wall);
+
+	TestEqual(TEXT("A step away from the surface is untouched"), Leaving.X, -6.0, 0.001);
+
+	// Straight on there is genuinely nothing along the wall to spend, and the character should
+	// stop rather than be deflected somewhere it did not ask to go.
+	const FVector HeadOn =
+		FCharacterWalkModel::SlideDeltaCentimetres(FVector(6.0, 0.0, 0.0), Wall);
+
+	TestTrue(TEXT("A head-on step keeps nothing"), HeadOn.Size() < 0.001);
+
+	// A hit with no usable normal names no direction, and a position is spent the moment it is
+	// applied. Spending nothing costs a frame; guessing costs a character inside the scenery.
+	const FVector Unknown =
+		FCharacterWalkModel::SlideDeltaCentimetres(FVector(6.0, 4.0, 0.0), FVector::ZeroVector);
+
+	TestTrue(TEXT("A hit with no normal moves the character nowhere"), Unknown.IsNearlyZero());
+
+	return true;
+}
+
 #endif

@@ -1484,7 +1484,7 @@ combat tasks and gathering bugs and test tooling under one heading — because a
 about what the game will be able to do, and none of these are that yet.
 
 Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
-125, 126, 129, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
+125, 126, 129, 130, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
 number is how it is referred to months later and shuffling blocks around a file this size is how
 content gets lost.
 
@@ -2974,6 +2974,103 @@ looking in the wrong place.
 
 **So placement now names the terrain seed it used.** If a station is ever placed against 20260801
 while the capital is 20260805, that line says so outright, and no reasoning about pivots is needed.
+
+## 130 — Things you cannot walk through
+
+**In progress.** Belongs to **M7 — a world worth being in**, and implements
+[ADR-0013](adr/0013-terrain-is-a-function-everything-else-collides.md), accepted 26 August: terrain
+stays a pure height function with no collision geometry at all, and everything standing on it —
+ships, deposits, buildings — gets ordinary Unreal collision, queried rather than simulated.
+
+**Query-only, never simulated,** for the same reason the planet has none: where a ship is comes from
+the flight model and the server, and a physics body would be a second opinion about that. The pawn
+owns no body either. It sweeps a capsule from where it was to where the walk model wants it and
+resolves the hit itself, so there is no accumulated solver state for a render-origin rebase to
+disturb (ADR-0001).
+
+The seam is deliberate. Whether something is in the way is a question about the world and lives in
+the pawn; what happens once the answer is yes is movement and lives in `FCharacterWalkModel`, where
+it is tested with no world at all.
+
+### Done
+
+Ships and deposits are `QueryOnly`, `ECC_Pawn` blocked and everything else ignored, and the
+character sweeps against them.
+
+### Deposits are not solid, and the mesh is the reason, not the code
+
+**Blocked on content.** `Ferrite_Ore` and `Scrap_Deposits` have no simple collision, so nothing can
+hit them.
+
+The sweep leaves `bTraceComplex` false, and the engine reads that flag as a choice of exactly one
+kind of geometry rather than a preference —
+`Engine/Private/PhysicsEngine/PhysicsInterfaceUtils.cpp`:
+
+    Chaos::EFilterFlags FlagsToSet = bTraceComplex
+        ? Chaos::EFilterFlags::ComplexCollision
+        : Chaos::EFilterFlags::SimpleCollision;
+
+Simple or complex, never both. Both deposit meshes were imported with `"bCollision": false` and
+`"bForceCollisionPrimitiveGeneration": false` — those are values in the import settings stored inside
+the uasset, not names in its table — so they carry no simple primitives and a simple query cannot
+see them however solid they look.
+
+**The observation that discriminated** was already in the log and cost nothing: 1794 blocking hits in
+one session, every single one of them the ship, none of them a deposit, while the player spawned 55 m
+from `node_test_player_spawn_ferrite_a` and walked around it. The ship draws an engine basic shape,
+which ships with simple collision. That rules out the sweep, the channel, the responses and the
+character all at once, and leaves only the asset.
+
+- **What is left to do is content**, in the Static Mesh editor: *Collision → Add Simplified
+  Collision*, or a `UCX_` mesh alongside the model in the FBX, or a re-import with *Generate Missing
+  Collision* on.
+- `SpaceMMOSolidity::ReportIfIntangible` now warns at placement, naming both the deposit and the
+  asset, because this is exactly the accepted cost ADR-0013 wrote down: a mesh without collision is
+  silently intangible and looks precisely like a bug in the movement code. It measures the built
+  mesh's primitive count rather than the import settings that produced it, since the two disagree the
+  moment anyone edits collision by hand.
+- **Rejected: sweeping with `bTraceComplex` true.** It would make every mesh solid by its render
+  geometry with no authoring at all, which is the opposite of what ADR-0013 decided, and it puts a
+  per-triangle query in the walk step of every character on the server.
+
+### A character could be pinned against a ship and press forward for five seconds
+
+**Measured rather than theorised, and the number is the whole diagnosis.** 638 consecutive blocked
+frames covering 34 cm: about 6 cm/s against a walk speed of 600.
+
+The resolve clamped the character to the contact point and discarded the rest of the step. In
+continuous contact the sweep hits at once every frame, so the entire step was thrown away and the
+only motion left was the separation push — 0.1 cm a frame, at 120 fps, times the 0.44 of the contact
+normal that lay horizontal, is 5.3 cm/s. That is the figure the log shows. Nothing else produces it.
+
+- `FCharacterWalkModel::SlideDeltaCentimetres` spends what is left of a step along the contact plane
+  instead of nowhere, and the pawn sweeps up to three times so a corner resolves rather than pinning.
+- **A sweep that begins inside something is handled apart from one that crosses a surface.** It
+  reports the shortest way out, not a surface it met, and its impact normal describes nothing; worse,
+  its `Hit.Location` is the sweep's own start, so resolving to it put the character back exactly
+  where the frame began. The MTD normal is used to push clear and the step is retried.
+
+### The diagnostic that could not see it, which is the fourth of these
+
+`Blocked by %s at %s, normal %s, depth %.1f` printed every frame, and it was right every time. A
+character leaning on a wall and a character who cannot walk print the identical line — an actor, a
+normal, a depth of zero — and the only thing that separates them is how far the contact let the
+character travel while it lasted. Finding that out took piping 1794 lines into a script.
+
+Task 129 records three instruments that measured a thing against itself. This is a different failure
+in the same family: an instrument that measured the event rather than the harm. Contacts are now
+reported at their edges — one line when one begins, one when it ends carrying the distance covered
+and the rate — and a contact lasting over a second at under 30 cm/s logs a warning that says it is
+stuck rather than sliding, in words.
+
+### Still open
+
+- **Station interiors.** Hulls are still `NoCollision` deliberately, because the A-02 greybox has no
+  collision geometry at all: `tools/greybox/a02_capital_hub.py` needs to emit `UCX_` meshes per
+  piece, or primitives have to be added by hand. Turning collision on before that would produce
+  exactly the silent intangibility above, one building at a time. Blocked on 127.
+- Verifying that a deposit stops a character, which cannot happen until the two meshes have
+  collision.
 
 ---
 

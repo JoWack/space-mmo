@@ -310,6 +310,9 @@ void ASpaceMMOCharacterPawn::ResolveBlocking(const FSystemCoordinate& From)
 
 	if (FVector::DistSquared(Start, End) < UE_DOUBLE_SMALL_NUMBER)
 	{
+		// Standing still asks nothing of the world, so it neither begins a contact nor ends one. A
+		// character resting against a hull is still resting against it, and counting those seconds
+		// as time spent failing to walk is how a diagnostic learns to cry wolf.
 		return;
 	}
 
@@ -323,55 +326,158 @@ void ASpaceMMOCharacterPawn::ResolveBlocking(const FSystemCoordinate& From)
 
 	const FVector Lift = Up * HalfHeight;
 
+	const FQuat Orientation = FRotationMatrix::MakeFromZ(Up).ToQuat();
+
+	const FCollisionShape Capsule = FCollisionShape::MakeCapsule(
+		static_cast<float>(CollisionRadiusCentimetres), static_cast<float>(HalfHeight));
+
+	// Simple collision only, which is what leaving bTraceComplex false selects -- the engine picks
+	// exactly one of the two, never both. An imported mesh with no simple collision is invisible to
+	// this sweep however solid it looks, which is why placement warns about one.
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(SpaceMMOCharacterBlocking), false, this);
 
-	FHitResult Hit;
+	// Capsule centres rather than feet, because that is what a sweep moves.
+	FVector Here = Start + Lift;
+	FVector Want = End + Lift;
 
-	const bool bBlocked = World->SweepSingleByChannel(
-		Hit,
-		Start + Lift,
-		End + Lift,
-		FRotationMatrix::MakeFromZ(Up).ToQuat(),
-		ECC_Pawn,
-		FCollisionShape::MakeCapsule(
-			static_cast<float>(CollisionRadiusCentimetres), static_cast<float>(HalfHeight)),
-		Params);
+	const AActor* Touched = nullptr;
+	FVector LastNormal = FVector::ZeroVector;
 
-	if (!bBlocked || !Hit.bBlockingHit)
+	// Three passes. The first stops the character against whatever it walked into; the second
+	// spends the rest of the step along that surface, which is the difference between sliding and
+	// being pinned; the third settles the corner where sliding runs into something else. Past that
+	// the character is in a crevice and stopping is the honest answer.
+	for (int32 Pass = 0; Pass < 3; ++Pass)
 	{
-		return;
+		FHitResult Hit;
+
+		const bool bHit = World->SweepSingleByChannel(
+			Hit, Here, Want, Orientation, ECC_Pawn, Capsule, Params);
+
+		if (!bHit || !Hit.bBlockingHit)
+		{
+			Here = Want;
+
+			break;
+		}
+
+		Touched = Hit.GetActor();
+
+		// A sweep that begins inside something has no surface to report crossing, so its impact
+		// normal means nothing; what it does know is the shortest way out. Take that and try the
+		// step again rather than resolving against a normal that was never measured.
+		if (Hit.bStartPenetrating)
+		{
+			LastNormal = Hit.Normal.GetSafeNormal();
+
+			const FVector Out =
+				LastNormal * FCharacterWalkModel::SeparationCentimetres(Hit.PenetrationDepth);
+
+			Here += Out;
+			Want += Out;
+
+			continue;
+		}
+
+		LastNormal = Hit.ImpactNormal;
+
+		// Stop a hair clear of the contact, then spend what is left of the step along the surface.
+		//
+		// <strong>Keeping the remainder is the fix.</strong> Clamping to the contact and stopping
+		// there leaves a character in continuous contact moving only by the separation push, which
+		// measured at six centimetres a second against a walk of six hundred and read in the game as
+		// the controls having died. The arithmetic is in the walk model, where it has tests.
+		const FVector Contact =
+			Hit.Location + LastNormal * FCharacterWalkModel::SeparationCentimetres(0.0);
+
+		Want = Contact + FCharacterWalkModel::SlideDeltaCentimetres(Want - Hit.Location, LastNormal);
+		Here = Contact;
+
+		WalkState =
+			FCharacterWalkModel::ResolveBlockingHit(WalkState, LastNormal, Hit.PenetrationDepth);
 	}
-
-	// Back to where the sweep stopped, plus a hair, so the next frame does not start inside what
-	// was just hit. The arithmetic of both is in the walk model, where it can be tested with no
-	// world at all.
-	const FVector Normal = Hit.ImpactNormal;
-
-	const FVector Clear =
-		Hit.Location - Lift + (Normal * FCharacterWalkModel::SeparationCentimetres(Hit.PenetrationDepth));
 
 	// Applied as a delta rather than by converting back through the render origin, which has no
 	// reverse and would not want one: a difference between two points in the same frame means the
 	// same thing whatever the origin happens to be, so this cannot be skewed by a rebase.
 	const FVector CorrectionKilometres =
-		(Clear - End) / SpaceMMO::Coordinates::CentimetresPerKilometre;
+		((Here - Lift) - End) / SpaceMMO::Coordinates::CentimetresPerKilometre;
 
 	Navigation.SystemPosition =
 		FSystemCoordinate(Navigation.SystemPosition.Kilometres + CorrectionKilometres);
 
-	WalkState = FCharacterWalkModel::ResolveBlockingHit(WalkState, Normal, Hit.PenetrationDepth);
+	ReportBlocking(Touched, LastNormal, (End - Start).Size());
+}
 
-	if (CVarLogCharacterDraw.GetValueOnGameThread() > 0)
+void ASpaceMMOCharacterPawn::ReportBlocking(
+	const AActor* const Touched, const FVector& Normal, const double WantedCentimetres)
+{
+	const UWorld* const World = GetWorld();
+
+	if (World == nullptr)
 	{
-		// Named, because an asset with no collision on it is silently intangible and looks exactly
-		// like broken movement code -- which ADR-0013 lists as an accepted cost of this approach
-		// and is therefore worth being able to see.
+		return;
+	}
+
+	const bool bLogging = CVarLogCharacterDraw.GetValueOnGameThread() > 0;
+
+	const AActor* const Was = BlockedBy.Get();
+
+	if (Touched == Was)
+	{
+		// The same contact, still going. Keep adding up what is being asked of it.
+		if (Touched != nullptr)
+		{
+			BlockedWantedCentimetres += WantedCentimetres;
+		}
+
+		return;
+	}
+
+	if (Was != nullptr)
+	{
+		const double Seconds = FMath::Max(0.0, World->GetTimeSeconds() - BlockedSinceSeconds);
+
+		const double GotCentimetres =
+			(Navigation.SystemPosition.Kilometres - BlockedFrom.Kilometres).Size()
+			* SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+		if (bLogging)
+		{
+			UE_LOG(LogSpaceMMO, Log,
+				TEXT("Cleared %s after %.1f s: asked for %.0f cm along it and got %.0f."),
+				*GetNameSafe(Was), Seconds, BlockedWantedCentimetres, GotCentimetres);
+		}
+
+		// The line that would have found the pinning bug in one reading rather than in a script over
+		// 1794 of them. Asked against got, because a contact going nowhere is only a fault if the
+		// character was trying to go somewhere: standing beside a ship for ten seconds asks for
+		// nothing and must not read as being stuck.
+		//
+		// A metre of asking is past any stumble, and a tenth of it arriving is far below anything
+		// sliding produces -- a step almost parallel to a surface keeps nearly all of its length,
+		// which SpaceMMO.Walk.SpendsTheRestOfTheStepAlongTheWall pins down.
+		if (BlockedWantedCentimetres > 100.0 && GotCentimetres < BlockedWantedCentimetres * 0.1)
+		{
+			UE_LOG(LogSpaceMMO, Warning,
+				TEXT("Pinned against %s for %.1f s: asked to move %.0f cm and moved %.0f. That is ")
+				TEXT("stuck, not sliding."),
+				*GetNameSafe(Was), Seconds, BlockedWantedCentimetres, GotCentimetres);
+		}
+	}
+
+	BlockedBy = Touched;
+	BlockedSinceSeconds = World->GetTimeSeconds();
+	BlockedFrom = Navigation.SystemPosition;
+	BlockedWantedCentimetres = Touched != nullptr ? WantedCentimetres : 0.0;
+
+	if (Touched != nullptr && bLogging)
+	{
+		// Named, because a mesh with no collision on it is silently intangible and looks exactly
+		// like broken movement code -- which ADR-0013 lists as an accepted cost of this approach.
 		UE_LOG(LogSpaceMMO, Log,
-			TEXT("Blocked by %s at %s, normal %s, depth %.1f cm."),
-			*GetNameSafe(Hit.GetActor()),
-			*Hit.Location.ToCompactString(),
-			*Normal.ToCompactString(),
-			Hit.PenetrationDepth);
+			TEXT("Blocked by %s, normal %s. Watching how far it lets the character get."),
+			*GetNameSafe(Touched), *Normal.ToCompactString());
 	}
 }
 

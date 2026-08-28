@@ -254,3 +254,29 @@ FWalkState FCharacterWalkModel::ResolveBlockingHit(
 
 	return Result;
 }
+
+FVector FCharacterWalkModel::SlideDeltaCentimetres(
+	const FVector& RemainingDelta, const FVector& Normal)
+{
+	const FVector Surface = Normal.GetSafeNormal();
+
+	if (Surface.IsNearlyZero())
+	{
+		// Nothing is known about which way the surface faces, so no direction can be called safe.
+		// Spending nothing costs one frame of motion; spending it in an unknown direction spends it
+		// straight through whatever was hit. This is the opposite choice from ResolveBlockingHit
+		// deliberately: that one is about velocity next frame, which can afford to wait, and this is
+		// about a position now, which cannot be taken back.
+		return FVector::ZeroVector;
+	}
+
+	const double Into = FVector::DotProduct(RemainingDelta, Surface);
+
+	if (Into >= 0.0)
+	{
+		// Already heading away from the surface. Nothing to take.
+		return RemainingDelta;
+	}
+
+	return RemainingDelta - Surface * Into;
+}

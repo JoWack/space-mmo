@@ -281,6 +281,35 @@ private:
 	 */
 	void ResolveBlocking(const FSystemCoordinate& From);
 
+	/**
+	 * Says what the character is pressed against, and how far that surface let it travel.
+	 *
+	 * <strong>What is measured is the harm, not the contact.</strong> A character leaning on a hull
+	 * and a character who cannot walk produce exactly the same per-frame line -- an actor name, a
+	 * normal, a depth of zero -- and the first is correct behaviour while the second is a bug.
+	 * Finding out which one was happening took piping 1794 of those lines into a script.
+	 *
+	 * What separates them is how far the contact let the character get against how far it was trying
+	 * to go, so both are accumulated across the contact and reported at its edges: one line when it
+	 * begins, one when it ends. Asking against getting is what makes standing still beside a ship
+	 * read differently from pressing into one, which a distance on its own cannot do.
+	 *
+	 * @param WantedCentimetres How far this step tried to move, before anything was in the way.
+	 */
+	void ReportBlocking(const AActor* Touched, const FVector& Normal, double WantedCentimetres);
+
+	/** What the character is currently pressed against, if anything. Diagnostic only. */
+	TWeakObjectPtr<const AActor> BlockedBy;
+
+	/** When the current contact began, in world seconds. */
+	double BlockedSinceSeconds = 0.0;
+
+	/** Where the character was when the current contact began. */
+	FSystemCoordinate BlockedFrom;
+
+	/** How far the character has asked to move since the current contact began, in centimetres. */
+	double BlockedWantedCentimetres = 0.0;
+
 	/** How wide and tall the character is to a sweep, in centimetres. */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
 	double CollisionRadiusCentimetres = 34.0;
