@@ -12,6 +12,11 @@ class USkeletalMeshComponent;
 class USpringArmComponent;
 class UStaticMeshComponent;
 
+// Declared rather than included: the ground's answer is passed through this header by reference,
+// and pulling the whole terrain function in to say so would put a height field in the include graph
+// of everything that knows what a character is.
+struct FGroundContact;
+
 /**
  * What the server publishes about a character on foot.
  *
@@ -268,25 +273,37 @@ private:
 	void ResolveSurface();
 
 	/**
-	 * Stands the character on whatever is under its feet, when that is above the ground.
+	 * Puts the character on whichever is higher, the ground or a floor, and only then moves them.
 	 *
-	 * <strong>The height field is not the only floor (ADR-0013).</strong> Terrain is a pure function
-	 * of direction and knows nothing about a building standing on it, so a character walking into a
-	 * station falls through the slab to the ground the planet says is there. This probes downward
-	 * for geometry and stands on it when it is higher than the ground.
+	 * <strong>The height field is not the only floor (ADR-0013), and the two are one question.</strong>
+	 * Terrain is a pure function of direction and knows nothing about a building standing on it, so
+	 * a character walking into a station falls through the slab to the ground the planet says is
+	 * there. This probes downward for geometry and arbitrates.
 	 *
-	 * Only ever a lift, never a drop. FPlanetTerrain has already put the character on its own floor
-	 * by the time this runs, so refusing to move anyone downward is what makes "whichever support is
-	 * higher" fall out rather than having to be arbitrated: a floor found below the height field is
-	 * a floor the height field is already standing on top of.
+	 * <strong>Nothing is applied until both answers are in, and that is the fix rather than a
+	 * tidiness.</strong> Resolving the ground first and correcting afterwards worked as long as the
+	 * ground disagreed by a lot: a character on the gallery, four and a half metres up, is far
+	 * enough away that FPlanetTerrain lets go of them. A character on a metre-high counter is not.
+	 * Ground contact holds on out to ten times its tolerance once it has somebody -- two metres,
+	 * sized for a ship crossing twelve metres of ground per frame -- so it claimed a character
+	 * standing on the counter and teleported them down to the terrain, which is to say into the
+	 * middle of the counter. The probe then began inside the geometry, reported the way out rather
+	 * than what was underfoot, and declined to answer. Waist deep, on the floor, in a box.
 	 *
 	 * A query, like every other use of collision here -- the pawn owns no physics body, so a render
 	 * origin rebase has no solver state to disturb (ADR-0001).
 	 *
 	 * @param bWasStanding Whether the character was on the ground when this step began. Widens the
 	 *                     band, so walking down a step does not go airborne at every one.
+	 * @param Ground       What the height field decided, computed but deliberately not yet applied.
 	 */
-	void ResolveStanding(bool bWasStanding);
+	void ResolveFooting(bool bWasStanding, const FGroundContact& Ground);
+
+	/** Applies what the height field decided, which every path that declines geometry must do. */
+	void StandOnGround(const FGroundContact& Ground);
+
+	/** What the character is currently standing on, if it is geometry. Diagnostic only. */
+	TWeakObjectPtr<const AActor> StoodOn;
 
 	/** How far above the feet the floor probe starts, in centimetres. */
 	static constexpr double FloorProbeLiftCentimetres = 10.0;

@@ -199,6 +199,8 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 	bOnGround = false;
 	SurfaceNormal = FVector::UpVector;
 
+	FGroundContact Ground;
+
 	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
 	{
 		const FPlanetConfig& Planet = It->GetPlanetConfig();
@@ -225,7 +227,9 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 
 		bOnGround = true;
 
-		Navigation.SystemPosition = Contact.Position;
+		// Recorded, not applied. A building's floor gets its say first, and the higher of the two
+		// wins; applying this here is what put a character inside a counter.
+		Ground = Contact;
 
 		// Raw facts, and nothing derived from them.
 		//
@@ -285,30 +289,29 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 						+ ((Local.Origin.Z + Local.BoxExtent.Z) * Scale.Z));
 			}
 		}
-		WalkState.Velocity = Contact.Velocity;
 	}
 
-	// After every planet has had its say, because this may only raise the character above whatever
-	// answer they gave, and it needs their answer to know what it is raising them above.
-	ResolveStanding(bWasOnGround);
+	// Both answers are in. One of them is now applied.
+	ResolveFooting(bWasOnGround, Ground);
 }
 
-void ASpaceMMOCharacterPawn::ResolveStanding(const bool bWasStanding)
+void ASpaceMMOCharacterPawn::ResolveFooting(
+	const bool bWasStanding, const FGroundContact& Ground)
 {
 	UWorld* const World = GetWorld();
 
 	const USpaceMMORenderOriginSubsystem* const Origin =
 		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
 
-	if (World == nullptr || Origin == nullptr || CollisionRadiusCentimetres <= 0.0)
-	{
-		return;
-	}
-
 	const FVector Up = SurfaceNormal.GetSafeNormal();
 
-	if (Up.IsNearlyZero())
+	// Nothing to probe with. The ground still gets applied: refusing to answer must not also
+	// discard the answer that was already arrived at.
+	if (World == nullptr || Origin == nullptr || CollisionRadiusCentimetres <= 0.0
+		|| Up.IsNearlyZero())
 	{
+		StandOnGround(Ground);
+
 		return;
 	}
 
@@ -341,9 +344,11 @@ void ASpaceMMOCharacterPawn::ResolveStanding(const bool bWasStanding)
 
 	// A probe that begins inside something says nothing about what is underfoot -- it reports the
 	// way out of what it started in. ResolveBlocking is what pushes a character out of geometry;
-	// standing waits for it to have done so rather than guessing a floor from a depenetration.
+	// footing waits for it to have done so rather than guessing a floor from a depenetration.
 	if (!bFound || !Hit.bBlockingHit || Hit.bStartPenetrating)
 	{
+		StandOnGround(Ground);
+
 		return;
 	}
 
@@ -351,18 +356,27 @@ void ASpaceMMOCharacterPawn::ResolveStanding(const bool bWasStanding)
 
 	const double GapCentimetres = FVector::DotProduct(Feet - FloorFeet, Up);
 
-	// Never downward. Terrain has already placed the character on its own floor, so anything found
-	// below the feet is below the ground they are standing on.
-	if (bOnGround && GapCentimetres > 0.0)
-	{
-		return;
-	}
-
 	const double SeparationSpeed = FVector::DotProduct(WalkState.Velocity, Up);
 
 	if (!FCharacterWalkModel::StandsOn(
 			Hit.ImpactNormal, Up, GapCentimetres, SeparationSpeed, bWasStanding))
 	{
+		StandOnGround(Ground);
+
+		return;
+	}
+
+	// Both have hold. The higher one wins, which is the whole arbitration: a floor below the ground
+	// is a floor the ground is standing on top of, and a floor above it is a building.
+	//
+	// Compared in world space, because that is the frame the sweep answered in. Converting the
+	// ground's system coordinate across is one call; treating the sweep's centimetres as kilometres
+	// would be a number that looks like a comparison and is not one.
+	if (Ground.bOnGround
+		&& FVector::DotProduct(Origin->ToWorldLocation(Ground.Position) - FloorFeet, Up) > 0.0)
+	{
+		StandOnGround(Ground);
+
 		return;
 	}
 
@@ -370,9 +384,11 @@ void ASpaceMMOCharacterPawn::ResolveStanding(const bool bWasStanding)
 		Navigation.SystemPosition.Kilometres
 		+ ((FloorFeet - Feet) / SpaceMMO::Coordinates::CentimetresPerKilometre));
 
-	const bool bBegan = !bOnGround;
-
 	bOnGround = true;
+
+	const bool bBegan = StoodOn.Get() != Hit.GetActor();
+
+	StoodOn = Hit.GetActor();
 
 	// Resolved along the character's own up rather than along the surface's normal, and the
 	// difference matters on the stair ramp. Up on a planet is the direction away from its centre --
@@ -383,8 +399,12 @@ void ASpaceMMOCharacterPawn::ResolveStanding(const bool bWasStanding)
 
 	if (bBegan && CVarLogCharacterDraw.GetValueOnGameThread() > 0)
 	{
-		// Only where standing starts, not every frame it continues. A floor holding a character up
-		// is the working case; it is finding one, and what was found, that is worth a line.
+		// Where the thing being stood on changes, and not otherwise.
+		//
+		// The first version of this logged where standing began and asked bOnGround, which
+		// ResolveSurface clears at the top of every call -- so it fired on almost every one, twice a
+		// frame, 8622 times in a session, and said nothing by saying it constantly. Tracking what is
+		// underfoot rather than whether anything is says the same thing in one line per floor.
 		UE_LOG(LogSpaceMMO, Log,
 			TEXT("Standing on %s, %.1f cm %s the feet, normal %s."),
 			*GetNameSafe(Hit.GetActor()),
@@ -392,6 +412,19 @@ void ASpaceMMOCharacterPawn::ResolveStanding(const bool bWasStanding)
 			GapCentimetres >= 0.0 ? TEXT("below") : TEXT("above"),
 			*Hit.ImpactNormal.ToCompactString());
 	}
+}
+
+void ASpaceMMOCharacterPawn::StandOnGround(const FGroundContact& Ground)
+{
+	StoodOn = nullptr;
+
+	if (!Ground.bOnGround)
+	{
+		return;
+	}
+
+	Navigation.SystemPosition = Ground.Position;
+	WalkState.Velocity = Ground.Velocity;
 }
 
 void ASpaceMMOCharacterPawn::ResolveBlocking(const FSystemCoordinate& From)

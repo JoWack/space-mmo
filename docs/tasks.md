@@ -1484,7 +1484,7 @@ combat tasks and gathering bugs and test tooling under one heading — because a
 about what the game will be able to do, and none of these are that yet.
 
 Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
-125, 126, 129, 130, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
+125, 126, 129, 130, 131, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
 number is how it is referred to months later and shuffling blocks around a file this size is how
 content gets lost.
 
@@ -3139,12 +3139,67 @@ Two details that would each have been a bug:
   planet is the direction away from its centre; that substitution is the whole walk model. Using the
   ramp's normal would tilt a body 26° while everything else in the building stood square.
 
+**A character could jump onto a metre-high counter and sink into it.** Found by playtest, and the
+mechanism is arithmetic rather than a guess.
+
+Ground contact holds on out to *ten times* its tolerance once it has somebody — two metres, sized in
+task 84's era for a ship crossing twelve metres of ground per frame — and when it holds on it
+teleports the character onto the height field. A service counter is 1.1 m (`H_COUNTER`), so a
+character standing on one was still inside that band: the ground claimed them and moved them down
+1.1 m, which is to say into the middle of the counter. The floor probe then began inside the
+geometry, reported the way out rather than what was underfoot, and correctly declined to answer.
+Waist deep, on the floor, in a box.
+
+The gallery worked throughout, and that is the discriminating half: 4.5 m is outside the band, so
+the ground let go and the geometry answer stood unopposed. Everything under two metres failed and
+everything over it worked.
+
+**Nothing is applied now until both answers are in.** The planet loop records what the height field
+decided instead of acting on it, the probe runs from where the character actually is, and the higher
+of the two is applied once. Correcting afterwards was always going to work only while the ground
+disagreed by a lot.
+
+No test covers the arbitration, and one would be near-tautological: the comparison is a dot product.
+What was wrong was the *order*, in a function that needs a world, so it is a playtest or nothing —
+which is the same shape as the fault in task 129 and worth saying twice.
+
+**The diagnostic was useless in the same way, again.** `Standing on …` was meant to log where
+standing began and asked `bOnGround`, which `ResolveSurface` clears at the top of every call — so it
+fired on nearly every call, twice a frame, **8622 times in one session**, and said nothing by saying
+it constantly. It tracks what is underfoot now, and prints one line per floor.
+
 **Unverified, and cannot be verified headlessly:** whether the dedicated server agrees. The client
 predicts and reconciles softly toward the server, so if the server's world has no station in it the
 server will think a character on the gallery is falling and drag them down. The deposit subsystem is
 not gated by net mode, so a server world should place the same stations — but whether a dedicated
 server signs in to the backend and therefore receives them has not been checked. It does not arise
 in a standalone session, which is how this is played today.
+
+## 131 — Ships fly through buildings
+
+**Pending.** Belongs to **M7 — a world worth being in**, and finishes
+[ADR-0013](adr/0013-terrain-is-a-function-everything-else-collides.md), which names "stations,
+ships and deposits" and has so far been implemented for characters only.
+
+Noticed in the playtest of task 130: a ship passes straight through the A-02 hull. **The ship is
+solid to other things and asks nothing of the world itself.** `ASpaceMMOShipPawn::Hull` is
+`QueryOnly` and blocks `ECC_Pawn`, so a walking character is stopped by a parked ship — but flight
+sets position from `FShipFlightModel` and nothing sweeps, so nothing can stop the ship.
+
+**Probably small, and deliberately not begun on the same playtest as 130.** A ship is already a
+two-metre sphere to ground contact — `HullRadiusKilometres = 0.002` passed to
+`FPlanetTerrain::ResolveContact` — so the shape exists and the seam is the same one the character
+uses: sweep from the previous position to the wanted one, resolve the hit with the arithmetic that
+is already pure and already tested.
+
+**No design decision is needed to start**, and that is worth stating because it looks as though one
+is. Ground contact cancels the motion into the surface and does nothing else — no damage, no
+bounce — so a hull doing the same is consistent with what a planet already does, and hitting a
+building at speed is a matter for the combat milestone rather than for this.
+
+One thing to check rather than assume: the ship's sweep must not be blocked by its own docking or
+by the character it carries, and it must not fight `ASpaceMMOShipPawn`'s own terrain contact the way
+the character's floor probe fought the ground before task 130's second fix.
 
 ---
 
