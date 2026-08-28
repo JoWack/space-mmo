@@ -2999,8 +2999,9 @@ character sweeps against them.
 
 ### Deposits are not solid, and the mesh is the reason, not the code
 
-**Blocked on content.** `Ferrite_Ore` and `Scrap_Deposits` have no simple collision, so nothing can
-hit them.
+**Fixed by authoring, not by code.** `Ferrite_Ore` and `Scrap_Deposits` carried no simple collision,
+so nothing could hit them. Convex hulls added in the Static Mesh editor; both assets now hold
+`KConvexElem` data, and a playtest confirms a character stops against a deposit and slides off it.
 
 The sweep leaves `bTraceComplex` false, and the engine reads that flag as a choice of exactly one
 kind of geometry rather than a preference —
@@ -3021,9 +3022,10 @@ from `node_test_player_spawn_ferrite_a` and walked around it. The ship draws an 
 which ships with simple collision. That rules out the sweep, the channel, the responses and the
 character all at once, and leaves only the asset.
 
-- **What is left to do is content**, in the Static Mesh editor: *Collision → Add Simplified
-  Collision*, or a `UCX_` mesh alongside the model in the FBX, or a re-import with *Generate Missing
-  Collision* on.
+- **The fix was content**, in the Static Mesh editor: *Collision → Add Simplified Collision*, or a
+  `UCX_` mesh alongside the model in the FBX, or a re-import with *Generate Missing Collision* on.
+  A K-DOP wraps the whole mesh in one hull, so an asset holding several separate lumps wants *Auto
+  Convex Collision* instead or the air between them becomes solid.
 - `SpaceMMOSolidity::ReportIfIntangible` now warns at placement, naming both the deposit and the
   asset, because this is exactly the accepted cost ADR-0013 wrote down: a mesh without collision is
   silently intangible and looks precisely like a bug in the movement code. It measures the built
@@ -3063,14 +3065,18 @@ reported at their edges — one line when one begins, one when it ends carrying 
 and the rate — and a contact lasting over a second at under 30 cm/s logs a warning that says it is
 stuck rather than sliding, in words.
 
+### Verified by playtest, 28 August
+
+A character stops against a deposit and against a parked ship, slides along both rather than
+sticking, and no longer pins under a hull. That is the only coverage this can have: every automated
+run is `-nullrhi` and the pure half of it passes either way.
+
 ### Still open
 
 - **Station interiors.** Hulls are still `NoCollision` deliberately, because the A-02 greybox has no
   collision geometry at all: `tools/greybox/a02_capital_hub.py` needs to emit `UCX_` meshes per
   piece, or primitives have to be added by hand. Turning collision on before that would produce
   exactly the silent intangibility above, one building at a time. Blocked on 127.
-- Verifying that a deposit stops a character, which cannot happen until the two meshes have
-  collision.
 
 ---
 
