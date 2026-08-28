@@ -1,5 +1,7 @@
 #include "SpaceMMOWalkModel.h"
 
+#include "SpaceMMOSurfaces.h"
+
 namespace
 {
 	/** Exponential decay, so damping does not depend on frame rate. */
@@ -221,11 +223,7 @@ double FCharacterWalkModel::MoveDirectionDegrees(
 
 double FCharacterWalkModel::SeparationCentimetres(const double DepthCentimetres)
 {
-	// A millimetre past clear. Small enough that nobody sees it, large enough that the next sweep
-	// starts outside the surface rather than inside it by a rounding error.
-	constexpr double SkinCentimetres = 0.1;
-
-	return FMath::Max(0.0, DepthCentimetres) + SkinCentimetres;
+	return SpaceMMO::Surfaces::SeparationCentimetres(DepthCentimetres);
 }
 
 FWalkState FCharacterWalkModel::ResolveBlockingHit(
@@ -242,15 +240,11 @@ FWalkState FCharacterWalkModel::ResolveBlockingHit(
 		return Result;
 	}
 
-	const double Into = FVector::DotProduct(Result.Velocity, Surface);
-
 	// Only motion into the surface is removed. Taking all of it would freeze a character the moment
 	// they brushed a wall, and reversing it would make a wall a trampoline -- the same two failures
-	// ground contact avoids the same way.
-	if (Into < 0.0)
-	{
-		Result.Velocity -= Surface * Into;
-	}
+	// ground contact avoids the same way, and a ship hitting a hangar wall now avoids through the
+	// same function.
+	Result.Velocity = SpaceMMO::Surfaces::SlideAlong(Result.Velocity, Surface);
 
 	return Result;
 }
@@ -270,15 +264,7 @@ FVector FCharacterWalkModel::SlideDeltaCentimetres(
 		return FVector::ZeroVector;
 	}
 
-	const double Into = FVector::DotProduct(RemainingDelta, Surface);
-
-	if (Into >= 0.0)
-	{
-		// Already heading away from the surface. Nothing to take.
-		return RemainingDelta;
-	}
-
-	return RemainingDelta - Surface * Into;
+	return SpaceMMO::Surfaces::SlideAlong(RemainingDelta, Surface);
 }
 
 bool FCharacterWalkModel::StandsOn(

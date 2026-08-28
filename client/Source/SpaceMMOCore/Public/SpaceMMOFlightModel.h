@@ -235,6 +235,34 @@ class SPACEMMOCORE_API FShipFlightModel
 {
 public:
 	/**
+	 * Takes away the part of a ship's motion that was heading into something solid.
+	 *
+	 * <strong>The same treatment the ground already gives, and for the same reasons.</strong>
+	 * FPlanetTerrain::ResolveContact removes the velocity into a hillside rather than reflecting it,
+	 * so a landing is a landing and not a bounce; a hangar wall that behaved differently would be
+	 * two rules for one idea. Nothing else happens: no damage and no bounce, because what hitting a
+	 * building at speed costs a pilot belongs to the combat milestone and not to whether the wall
+	 * is there.
+	 *
+	 * The arithmetic of a blocking hit, with none of the finding of one. Whether something is in the
+	 * way is a question about the world and lives in the pawn; ADR-0013 puts the seam exactly here,
+	 * and the character's walk model is cut in the same place.
+	 *
+	 * @param Normal Outward normal of what was hit, pointing back at the ship.
+	 */
+	static FShipFlightState ResolveBlockingHit(
+		const FShipFlightState& State, const FVector& Normal);
+
+	/**
+	 * What is left of a step once the surface it ran into has taken its share, in centimetres.
+	 *
+	 * Separate from the velocity because a ship stopped dead at first contact and given the rest of
+	 * its step nowhere crawls along a wall at the separation distance per frame -- measured at six
+	 * centimetres a second on a character before this existed there.
+	 */
+	static FVector SlideDeltaCentimetres(const FVector& RemainingDelta, const FVector& Normal);
+
+	/**
 	 * Advances one step.
 	 *
 	 * @param DeltaSeconds           Frame time. Zero or negative returns the state untouched.

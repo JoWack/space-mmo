@@ -14,6 +14,8 @@
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMORenderOrigin.h"
+#include "SpaceMMOSolidity.h"
+#include "SpaceMMOSurfaces.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -53,12 +55,12 @@ ASpaceMMOShipPawn::ASpaceMMOShipPawn()
 
 	// Engine content so the ship is visible without any authored asset. A placeholder until there
 	// is a real hull, but an invisible ship makes every flight change impossible to evaluate.
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> HullMesh(
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> PlaceholderHull(
 		TEXT("/Engine/BasicShapes/Cone.Cone"));
 
-	if (HullMesh.Succeeded())
+	if (PlaceholderHull.Succeeded())
 	{
-		Hull->SetStaticMesh(HullMesh.Object);
+		Hull->SetStaticMesh(PlaceholderHull.Object);
 	}
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> HullMaterial(
@@ -119,6 +121,8 @@ void ASpaceMMOShipPawn::BeginPlay()
 	Super::BeginPlay();
 
 	Navigation = FShipNavigation();
+	ApplyHullMesh();
+
 	Navigation.SystemPosition = FSystemCoordinate(StartingSystemPositionKilometres);
 
 	// Dev affordance: start somewhere specific without editing content or flying there.
@@ -411,11 +415,239 @@ void ASpaceMMOShipPawn::SimulateStep(const double DeltaSeconds)
 	FlightState = FShipFlightModel::Step(
 		FlightState, PendingInput, FlightConfig, DeltaSeconds, ComputeGravity());
 
+	const FSystemCoordinate Before = Navigation.SystemPosition;
+
 	Navigation = FShipFlightModel::Advance(Navigation, FlightState, DeltaSeconds);
+
+	// Anything solid in the way, before the ground gets a say. A ship stopped by a wall has not
+	// moved, so resolving the ground at the position it was prevented from reaching would settle it
+	// onto the wrong piece of terrain for a frame.
+	ResolveBlocking(Before);
 
 	// After moving, not before. Resolving first would let the very step that drives the ship into
 	// the ground happen unopposed, so it would sink one frame's worth every frame.
 	ResolveGroundContact();
+}
+
+void ASpaceMMOShipPawn::ApplyHullMesh()
+{
+	if (Hull == nullptr)
+	{
+		return;
+	}
+
+	// Said on every path, including the one that does nothing. An unset hull and code that never ran
+	// produce the same evidence -- a cone -- and only one of them is somebody's mistake.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Ship hull configured as '%s'."),
+		HullMesh.IsNull() ? TEXT("<unset>") : *HullMesh.ToString());
+
+	if (HullMesh.IsNull())
+	{
+		return;
+	}
+
+	UStaticMesh* const Mesh = Cast<UStaticMesh>(HullMesh.TryLoad());
+
+	// Named-but-wrong is worth saying out loud: from the outside a typo and an unset path look
+	// identical, and one of them is a mistake somebody wants telling about.
+	if (Mesh == nullptr)
+	{
+		UE_LOG(LogSpaceMMO, Warning,
+			TEXT("Ship hull '%s' did not load; the placeholder cone stays."),
+			*HullMesh.ToString());
+
+		return;
+	}
+
+	// Measured off the mesh, not assumed, and along whichever axis it is longest on. A ship is
+	// longer than it is wide or tall, so the longest axis is its length whatever orientation it was
+	// authored in -- which means the fit does not depend on the rotation below being right first.
+	const FVector Extent = Mesh->GetBounds().BoxExtent;
+
+	const double AuthoredLength = FMath::Max3(Extent.X, Extent.Y, Extent.Z) * 2.0;
+
+	const double TargetCentimetres = HullLengthMetres * 100.0;
+
+	const double Scale = AuthoredLength > UE_DOUBLE_SMALL_NUMBER && TargetCentimetres > 0.0
+		? TargetCentimetres / AuthoredLength
+		: 1.0;
+
+	Hull->SetStaticMesh(Mesh);
+
+	// The mesh brings its own materials. The placeholder material the constructor set is for the
+	// engine cone, and leaving it on would repaint an authored ship in flat grey.
+	Hull->EmptyOverrideMaterials();
+
+	Hull->SetRelativeRotation(HullMeshRotation);
+	Hull->SetRelativeLocation(HullMeshOffset);
+	Hull->SetRelativeScale3D(FVector(Scale));
+
+	// A hull with no simple collision is one a character walks straight through, and a parked ship
+	// you can walk through looks exactly like the boarding prompt being broken.
+	SpaceMMOSolidity::ReportIfIntangible(Mesh, TEXT("Ship"), GetName());
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Ship drawing as '%s': authored %.1f cm on its longest axis, scaled %.3f to %.1f m; "
+			"rotated %s, offset %s. Collision is still a %.1f m sphere."),
+		*Mesh->GetName(),
+		AuthoredLength,
+		Scale,
+		HullLengthMetres,
+		*HullMeshRotation.ToCompactString(),
+		*HullMeshOffset.ToCompactString(),
+		HullRadiusKilometres * 1000.0);
+}
+
+void ASpaceMMOShipPawn::ResolveBlocking(const FSystemCoordinate& From)
+{
+	UWorld* const World = GetWorld();
+
+	const USpaceMMORenderOriginSubsystem* const Origin =
+		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
+
+	if (World == nullptr || Origin == nullptr || HullRadiusKilometres <= 0.0)
+	{
+		return;
+	}
+
+	// Both ends converted in the same frame, so a rebase between frames cannot skew the sweep.
+	FVector Here = Origin->ToWorldLocation(From);
+	FVector Want = Origin->ToWorldLocation(Navigation.SystemPosition);
+
+	if (FVector::DistSquared(Here, Want) < UE_DOUBLE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	const double RadiusCentimetres =
+		HullRadiusKilometres * SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+	const FCollisionShape Sphere = FCollisionShape::MakeSphere(
+		static_cast<float>(RadiusCentimetres));
+
+	// The pawn channel, which is this project's name for "solid to something moving through the
+	// world": it is what stations, deposits and other ships block. Simple collision only, so an
+	// asset imported without it is invisible here -- SpaceMMOSolidity warns about exactly that.
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SpaceMMOShipBlocking), false, this);
+
+	const AActor* Touched = nullptr;
+	FVector LastNormal = FVector::ZeroVector;
+
+	// Three passes, as the character has: one to stop, one to spend the rest of the step along the
+	// surface so a glancing approach slides rather than pinning, one for the corner where sliding
+	// runs into something else.
+	for (int32 Pass = 0; Pass < 3; ++Pass)
+	{
+		FHitResult Hit;
+
+		const bool bHit = World->SweepSingleByChannel(
+			Hit, Here, Want, FQuat::Identity, ECC_Pawn, Sphere, Params);
+
+		if (!bHit || !Hit.bBlockingHit)
+		{
+			Here = Want;
+
+			break;
+		}
+
+		Touched = Hit.GetActor();
+
+		// A sweep that begins inside something reports the shortest way out rather than a surface it
+		// crossed, and its impact normal describes nothing. Take the way out and try again.
+		if (Hit.bStartPenetrating)
+		{
+			LastNormal = Hit.Normal.GetSafeNormal();
+
+			const FVector Out =
+				LastNormal * SpaceMMO::Surfaces::SeparationCentimetres(Hit.PenetrationDepth);
+
+			Here += Out;
+			Want += Out;
+
+			continue;
+		}
+
+		LastNormal = Hit.ImpactNormal;
+
+		const FVector Contact =
+			Hit.Location + LastNormal * SpaceMMO::Surfaces::SeparationCentimetres(0.0);
+
+		Want = Contact + FShipFlightModel::SlideDeltaCentimetres(Want - Hit.Location, LastNormal);
+		Here = Contact;
+
+		FlightState = FShipFlightModel::ResolveBlockingHit(FlightState, LastNormal);
+	}
+
+	// Applied as a delta rather than by converting back through the render origin, which has no
+	// reverse: a difference between two points in the same frame means the same thing whatever the
+	// origin happens to be.
+	Navigation.SystemPosition = FSystemCoordinate(
+		Navigation.SystemPosition.Kilometres
+		+ ((Here - Origin->ToWorldLocation(Navigation.SystemPosition))
+			/ SpaceMMO::Coordinates::CentimetresPerKilometre));
+
+	ReportBlocking(Touched, LastNormal, (Want - Origin->ToWorldLocation(From)).Size());
+}
+
+void ASpaceMMOShipPawn::ReportBlocking(
+	const AActor* const Touched, const FVector& Normal, const double WantedCentimetres)
+{
+	const UWorld* const World = GetWorld();
+
+	if (World == nullptr)
+	{
+		return;
+	}
+
+	const AActor* const Was = BlockedBy.Get();
+
+	if (Touched == Was)
+	{
+		if (Touched != nullptr)
+		{
+			BlockedWantedCentimetres += WantedCentimetres;
+		}
+
+		return;
+	}
+
+	if (Was != nullptr)
+	{
+		const double Seconds = FMath::Max(0.0, World->GetTimeSeconds() - BlockedSinceSeconds);
+
+		const double GotCentimetres =
+			(Navigation.SystemPosition.Kilometres - BlockedFrom.Kilometres).Size()
+			* SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Ship cleared %s after %.1f s: asked for %.0f cm along it and got %.0f."),
+			*GetNameSafe(Was), Seconds, BlockedWantedCentimetres, GotCentimetres);
+
+		// Asked against got, because a contact going nowhere is only a fault if the ship was trying
+		// to go somewhere. A ship parked against a hangar wall asks for nothing.
+		if (BlockedWantedCentimetres > 100.0 && GotCentimetres < BlockedWantedCentimetres * 0.1)
+		{
+			UE_LOG(LogSpaceMMO, Warning,
+				TEXT("Ship pinned against %s for %.1f s: asked to move %.0f cm and moved %.0f. ")
+				TEXT("That is stuck, not sliding."),
+				*GetNameSafe(Was), Seconds, BlockedWantedCentimetres, GotCentimetres);
+		}
+	}
+
+	BlockedBy = Touched;
+	BlockedSinceSeconds = World->GetTimeSeconds();
+	BlockedFrom = Navigation.SystemPosition;
+	BlockedWantedCentimetres = Touched != nullptr ? WantedCentimetres : 0.0;
+
+	if (Touched != nullptr)
+	{
+		// Named, because a mesh with no simple collision on it is silently intangible and flying
+		// through a wall looks exactly like this feature not existing.
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Ship blocked by %s, normal %s."),
+			*GetNameSafe(Touched), *Normal.ToCompactString());
+	}
 }
 
 void ASpaceMMOShipPawn::ResolveGroundContact()

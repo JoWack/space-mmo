@@ -62,7 +62,7 @@ struct FShipNetState
  * authored as text, and the legacy path is still present and unmarked in UE 5.8. Migrating is
  * worth doing once someone opens the editor to make the assets.
  */
-UCLASS()
+UCLASS(Config = Game)
 class SPACEMMOCORE_API ASpaceMMOShipPawn : public APawn
 {
 	GENERATED_BODY()
@@ -203,6 +203,76 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
 	double HullRadiusKilometres = 0.002;
+
+	/**
+	 * The hull to draw, named in DefaultGame.ini rather than compiled in.
+	 *
+	 * <strong>Content, for the same reason the character model and the station buildings are.</strong>
+	 * Swapping the ship somebody flies should be a line in a file, not a rebuild, and the cone stays
+	 * behind it so an unset or mistyped path leaves something visible rather than nothing.
+	 *
+	 * Note what this does <em>not</em> change: HullRadiusKilometres above. That two-metre sphere is
+	 * what ground contact and the blocking sweep both use, and it does not follow the mesh -- a hull
+	 * that looked twenty metres long and collided like a two-metre ball would be a disagreement
+	 * nobody finds until they are wedged in a doorway. Set both, deliberately.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Ship")
+	FSoftObjectPath HullMesh;
+
+	/**
+	 * How long the ship should be, nose to tail, in metres.
+	 *
+	 * The mesh is scaled uniformly to this off its own bounds, so a model exported in the wrong
+	 * units is corrected without anybody editing the asset -- and the authored size is logged, so a
+	 * model needing a large multiplier is something you get told about rather than silently live
+	 * with.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Ship")
+	double HullLengthMetres = 12.0;
+
+	/** Turns an authored hull to face +X, which is forward and the direction thrust is applied in. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Ship")
+	FRotator HullMeshRotation = FRotator::ZeroRotator;
+
+	/** Shifts the hull relative to the ship's origin, which is what the flight model moves. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Ship")
+	FVector HullMeshOffset = FVector::ZeroVector;
+
+	/** Puts the configured hull on, or says why it did not. */
+	void ApplyHullMesh();
+
+	/**
+	 * Stops the ship at anything solid it has flown into.
+	 *
+	 * <strong>The hull was solid to everything except the ship wearing it (ADR-0013).</strong> It
+	 * is QueryOnly and blocks the pawn channel, so a walking character is stopped by a parked ship
+	 * -- but flight sets position from FShipFlightModel and nothing swept, so nothing could stop the
+	 * ship. It flew through the capital hub.
+	 *
+	 * The same shape as the character's, and for the same reasons: a swept query rather than a
+	 * physics body, so there is no solver state for a render origin rebase to disturb (ADR-0001),
+	 * and the arithmetic of the hit lives in the flight model where it is tested with no world.
+	 *
+	 * The sphere is the one ground contact already uses. A ship has been a two-metre sphere to the
+	 * terrain since it could land; being a different size to a wall than to a hillside would be the
+	 * kind of disagreement nobody finds until they are wedged in a doorway.
+	 */
+	void ResolveBlocking(const FSystemCoordinate& From);
+
+	/** Says what the ship is against, and how far it let the ship get. */
+	void ReportBlocking(const AActor* Touched, const FVector& Normal, double WantedCentimetres);
+
+	/** What the ship is currently pressed against, if anything. Diagnostic only. */
+	TWeakObjectPtr<const AActor> BlockedBy;
+
+	/** When the current contact began, in world seconds. */
+	double BlockedSinceSeconds = 0.0;
+
+	/** Where the ship was when the current contact began. */
+	FSystemCoordinate BlockedFrom;
+
+	/** How far the ship has asked to move since the current contact began, in centimetres. */
+	double BlockedWantedCentimetres = 0.0;
 
 	/** Where the ship starts, in kilometres. */
 	UPROPERTY(EditAnywhere, Category = "SpaceMMO|Ship")

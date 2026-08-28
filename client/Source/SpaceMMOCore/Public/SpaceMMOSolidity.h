@@ -13,8 +13,9 @@ class UStaticMesh;
  * to the sweep however solid it looks, and walking through it is indistinguishable from a fault in
  * the movement code. ADR-0013 accepts that cost; this is what keeps it a cost rather than a trap.
  *
- * Deposits use it now. Stations will the day their hulls stop being deliberately intangible, and
- * so will the first city prop, which is why this has a name rather than living inline.
+ * Deposits and ships use it. Stations will the day their hulls stop being deliberately intangible,
+ * and so will the first city prop -- which is why this lives in Core with a name of its own rather
+ * than inline in whichever module noticed first.
  */
 namespace SpaceMMOSolidity
 {
@@ -31,6 +32,6 @@ namespace SpaceMMOSolidity
 	 * @param What    What kind of thing carries it, for the message: "Deposit", "Station".
 	 * @param Which   Which one, so the line names something findable in the world.
 	 */
-	SPACEMMOBACKEND_API void ReportIfIntangible(
+	SPACEMMOCORE_API void ReportIfIntangible(
 		const UStaticMesh* Mesh, const TCHAR* What, const FString& Which);
 }

@@ -1484,7 +1484,7 @@ combat tasks and gathering bugs and test tooling under one heading — because a
 about what the game will be able to do, and none of these are that yet.
 
 Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
-125, 126, 129, 130, 131, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
+125, 126, 129, 130, 131, 132, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
 number is how it is referred to months later and shuffling blocks around a file this size is how
 content gets lost.
 
@@ -3177,7 +3177,7 @@ in a standalone session, which is how this is played today.
 
 ## 131 — Ships fly through buildings
 
-**Pending.** Belongs to **M7 — a world worth being in**, and finishes
+**Implemented, awaiting a playtest.** Belongs to **M7 — a world worth being in**, and finishes
 [ADR-0013](adr/0013-terrain-is-a-function-everything-else-collides.md), which names "stations,
 ships and deposits" and has so far been implemented for characters only.
 
@@ -3200,6 +3200,67 @@ building at speed is a matter for the combat milestone rather than for this.
 One thing to check rather than assume: the ship's sweep must not be blocked by its own docking or
 by the character it carries, and it must not fight `ASpaceMMOShipPawn`'s own terrain contact the way
 the character's floor probe fought the ground before task 130's second fix.
+
+### What was built
+
+`ResolveBlocking` sweeps between `Advance` and `ResolveGroundContact`, in the same three passes the
+character uses: one to stop, one to spend the rest of the step along the surface so a glancing
+approach scrapes rather than pins, one for the corner. A sweep beginning inside something is handled
+apart, because it reports the way out rather than a surface it crossed.
+
+**The sphere is the one ground contact already uses.** A ship has been two metres to the terrain
+since it could land, and being a different size to a wall than to a hillside is the disagreement
+nobody finds until they are wedged in a doorway. That also means the drawn hull and the collided
+hull are separate numbers on purpose — see 132.
+
+**The ground still resolves after, unchanged, and that is the risk worth naming.** The character's
+floor probe fought terrain hysteresis until task 130 stopped applying either answer early; the ship
+has the same shape of problem and has not hit it, because blocking acts horizontally against a wall
+while terrain acts along the surface normal. If a ship ever wedges where a building meets the ground,
+this is the first place to look.
+
+### One arithmetic instead of three
+
+The character, the ship and ground contact were each about to answer "how much of this motion
+survives" in their own words. `SpaceMMO::Surfaces::SlideAlong` and `SeparationCentimetres` hold it
+once; the walk model delegates and keeps its API and its tests.
+
+What is deliberately *not* shared is the degenerate case, because the callers genuinely differ: a
+velocity can be left alone and retried next frame, and a position is spent the moment it is applied
+and must not be spent in a direction nobody measured. Both policies are pinned by tests, and the
+mutation run shows they are — zeroing the ship's velocity resolve and handing back the unmeasured
+delta each turn exactly one test red, and neither touches the character's.
+
+`FPlanetTerrain::ResolveContact` keeps its own copy: it computes an impact speed in the same
+expression, so the projection is not separable without splitting that too.
+
+Also found on the way: `SpaceMMOFlightModelTests.cpp` closed its `WITH_DEV_AUTOMATION_TESTS` guard
+two thirds of the way down, so 148 lines of reconciliation tests were compiling unconditionally
+rather than only in automation builds. Moved to the end of the file.
+
+---
+
+## 132 — The starter ship is an engine cone
+
+**Done 28 August.** The same move task 124 made for stations, one milestone later: the hull is named
+in `DefaultGame.ini` rather than compiled in, so swapping the ship somebody flies is a line in a file
+and not a rebuild. Points at `/Game/Ships/StarterShip`.
+
+Scaled uniformly off the mesh's own bounds to `HullLengthMetres`, measured along whichever axis it is
+longest on — a ship is longer than it is wide, so that is its length whatever orientation it was
+authored in, which means the fit does not depend on the rotation being right first. The authored size
+is logged beside the multiplier, because a model needing a large one is a model exported in the wrong
+units and that is worth being told rather than silently living with.
+
+**`HullRadiusKilometres` is deliberately not touched by any of this**, and the ini says so where
+somebody changing the mesh will read it. That two-metre sphere is what ground contact has used since
+a ship could land and what task 131's sweep uses now. A hull drawn twelve metres long that collides
+like a two-metre ball is a disagreement nobody finds until they are wedged in a doorway, so both
+numbers are set by hand and the log prints them together.
+
+`SpaceMMOSolidity` moved from Backend to Core to be reachable from the ship, which is its third
+caller. `StarterShip` carries convex collision, checked in the asset rather than assumed, so a
+character can still walk into a parked ship.
 
 ---
 

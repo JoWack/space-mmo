@@ -504,8 +504,6 @@ bool FSpaceMMONavigationStationaryTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-#endif // WITH_DEV_AUTOMATION_TESTS
-
 // ── Reconciliation ───────────────────────────────────────────────────────────
 //
 // Client prediction always drifts from the server, so these decide what a player actually sees
@@ -653,3 +651,123 @@ bool FSpaceMMOExtrapolationTest::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+
+/**
+ * A hull stops a ship against a wall and lets it scrape along one.
+ *
+ * <strong>The same two failures a wall has to avoid for anything that moves.</strong> Taking all of
+ * the velocity freezes a ship the moment it brushes a hangar, which reads as the controls dying;
+ * reflecting it makes the building a trampoline. FPlanetTerrain::ResolveContact already resolves a
+ * landing this way and FCharacterWalkModel resolves a wall this way, and all three now share the
+ * arithmetic -- so this test is about the ship's use of it, and about the case the ship has that
+ * the others do not: it arrives fast.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOFlightStopsAtAWallAndScrapesAlongItTest,
+	"SpaceMMO.Flight.StopsAtAWallAndScrapesAlongIt",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOFlightStopsAtAWallAndScrapesAlongItTest::RunTest(const FString& Parameters)
+{
+	// A wall facing back along -X, met by a ship flying at it in +X at 300 m/s.
+	const FVector Wall(-1.0, 0.0, 0.0);
+
+	FShipFlightState HeadOn;
+
+	HeadOn.Velocity = FVector(30000.0, 0.0, 0.0);
+
+	const FShipFlightState Stopped = FShipFlightModel::ResolveBlockingHit(HeadOn, Wall);
+
+	TestEqual(
+		TEXT("Everything heading into the wall is taken"), Stopped.Velocity.X, 0.0, 0.001);
+
+	TestTrue(
+		TEXT("And nothing is given back, so a building is not a trampoline"),
+		Stopped.Velocity.Size() < 0.001);
+
+	// The case that decides whether a hangar is usable: arriving at an angle must keep the part
+	// running along the wall, or a ship pins against every surface it touches.
+	FShipFlightState Glancing;
+
+	Glancing.Velocity = FVector(30000.0, 20000.0, 0.0);
+
+	const FShipFlightState Scraping = FShipFlightModel::ResolveBlockingHit(Glancing, Wall);
+
+	TestEqual(TEXT("The part into the wall is gone"), Scraping.Velocity.X, 0.0, 0.001);
+
+	TestEqual(
+		TEXT("The part along it is untouched"), Scraping.Velocity.Y, 20000.0, 0.001);
+
+	// Backing away from something you are touching must not be interfered with, or a ship that
+	// nosed into a wall could never be flown out of it.
+	FShipFlightState Leaving;
+
+	Leaving.Velocity = FVector(-30000.0, 0.0, 0.0);
+
+	const FShipFlightState Left = FShipFlightModel::ResolveBlockingHit(Leaving, Wall);
+
+	TestEqual(TEXT("Reversing away is left alone"), Left.Velocity.X, -30000.0, 0.001);
+
+	// Angular velocity is not a wall's business. A ship that stopped spinning because it touched
+	// something would be a ship the pilot cannot reorient while docked against one.
+	FShipFlightState Spinning;
+
+	Spinning.Velocity = FVector(30000.0, 0.0, 0.0);
+	Spinning.AngularVelocity = FVector(0.0, 0.0, 45.0);
+
+	const FShipFlightState Spun = FShipFlightModel::ResolveBlockingHit(Spinning, Wall);
+
+	TestEqual(
+		TEXT("A wall takes no angular velocity"), Spun.AngularVelocity.Z, 45.0, 0.001);
+
+	// A hit with no usable normal names no direction. Leaving the velocity alone lets the next
+	// frame try again; inventing one would throw a ship somewhere arbitrary at flight speed.
+	const FShipFlightState Degenerate =
+		FShipFlightModel::ResolveBlockingHit(HeadOn, FVector::ZeroVector);
+
+	TestEqual(
+		TEXT("A hit with no normal changes nothing"),
+		Degenerate.Velocity.X,
+		HeadOn.Velocity.X,
+		0.001);
+
+	return true;
+}
+
+/**
+ * The rest of a blocked step is spent along the wall rather than thrown away.
+ *
+ * Written before the ship could be blocked at all, because the character had exactly this bug and
+ * it was expensive: clamping to the contact point and stopping leaves anything in continuous
+ * contact moving only by the separation push, which measured at six centimetres a second against a
+ * walk of six hundred and read in the game as the controls having died.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOFlightSpendsTheRestOfTheStepAlongTheWallTest,
+	"SpaceMMO.Flight.SpendsTheRestOfTheStepAlongTheWall",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOFlightSpendsTheRestOfTheStepAlongTheWallTest::RunTest(const FString& Parameters)
+{
+	const FVector Wall(-1.0, 0.0, 0.0);
+
+	const FVector Slid =
+		FShipFlightModel::SlideDeltaCentimetres(FVector(250.0, 400.0, 0.0), Wall);
+
+	TestEqual(TEXT("Nothing is left heading into the wall"), Slid.X, 0.0, 0.001);
+
+	TestEqual(
+		TEXT("And everything running along it survives"), Slid.Y, 400.0, 0.001);
+
+	// A position is spent the moment it is applied, so an unmeasured direction must not be one it
+	// is spent in. Deliberately the opposite of what ResolveBlockingHit does with a velocity.
+	const FVector Unknown =
+		FShipFlightModel::SlideDeltaCentimetres(FVector(250.0, 400.0, 0.0), FVector::ZeroVector);
+
+	TestTrue(TEXT("A hit with no normal moves the ship nowhere"), Unknown.IsNearlyZero());
+
+	return true;
+}
+
+#endif // WITH_DEV_AUTOMATION_TESTS

@@ -2,7 +2,7 @@
 
 #include "Engine/StaticMesh.h"
 #include "PhysicsEngine/BodySetup.h"
-#include "SpaceMMOBackendLog.h"
+#include "SpaceMMOLog.h"
 
 void SpaceMMOSolidity::ReportIfIntangible(
 	const UStaticMesh* const Mesh, const TCHAR* const What, const FString& Which)
@@ -25,7 +25,7 @@ void SpaceMMOSolidity::ReportIfIntangible(
 		return;
 	}
 
-	UE_LOG(LogSpaceMMOBackend, Warning,
+	UE_LOG(LogSpaceMMO, Warning,
 		TEXT("%s '%s' draws '%s', which has no simple collision: a character will walk straight ")
 		TEXT("through it. Give it collision in the Static Mesh editor (Collision > Add Simplified ")
 		TEXT("Collision, or a UCX_ mesh alongside it in the FBX), or re-import with Generate ")

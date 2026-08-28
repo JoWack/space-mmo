@@ -1,4 +1,5 @@
 #include "SpaceMMOFlightModel.h"
+#include "SpaceMMOSurfaces.h"
 
 namespace
 {
@@ -203,4 +204,38 @@ FShipNavigation FShipFlightModel::Advance(
 	++Result.RebaseCount;
 
 	return Result;
+}
+
+FShipFlightState FShipFlightModel::ResolveBlockingHit(
+	const FShipFlightState& State, const FVector& Normal)
+{
+	FShipFlightState Result = State;
+
+	const FVector Surface = Normal.GetSafeNormal();
+
+	if (Surface.IsNearlyZero())
+	{
+		// A hit with no normal names no direction, and inventing one would push a ship somewhere
+		// arbitrary at flight speeds. Leaving the state alone lets the next frame try again.
+		return Result;
+	}
+
+	Result.Velocity = SpaceMMO::Surfaces::SlideAlong(Result.Velocity, Surface);
+
+	return Result;
+}
+
+FVector FShipFlightModel::SlideDeltaCentimetres(
+	const FVector& RemainingDelta, const FVector& Normal)
+{
+	const FVector Surface = Normal.GetSafeNormal();
+
+	if (Surface.IsNearlyZero())
+	{
+		// The opposite choice from ResolveBlockingHit, deliberately: a velocity can afford to wait
+		// a frame, and a position is spent the moment it is applied.
+		return FVector::ZeroVector;
+	}
+
+	return SpaceMMO::Surfaces::SlideAlong(RemainingDelta, Surface);
 }
