@@ -287,6 +287,111 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 		}
 		WalkState.Velocity = Contact.Velocity;
 	}
+
+	// After every planet has had its say, because this may only raise the character above whatever
+	// answer they gave, and it needs their answer to know what it is raising them above.
+	ResolveStanding(bWasOnGround);
+}
+
+void ASpaceMMOCharacterPawn::ResolveStanding(const bool bWasStanding)
+{
+	UWorld* const World = GetWorld();
+
+	const USpaceMMORenderOriginSubsystem* const Origin =
+		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
+
+	if (World == nullptr || Origin == nullptr || CollisionRadiusCentimetres <= 0.0)
+	{
+		return;
+	}
+
+	const FVector Up = SurfaceNormal.GetSafeNormal();
+
+	if (Up.IsNearlyZero())
+	{
+		return;
+	}
+
+	const double HalfHeight =
+		FMath::Max(CollisionRadiusCentimetres, CharacterHeightCentimetres * 0.5);
+
+	const FVector Feet = Origin->ToWorldLocation(Navigation.SystemPosition);
+
+	// The probe starts with its lowest point above the feet rather than at them, so a character
+	// resting exactly on a floor sweeps against it cleanly instead of beginning inside it. Ten
+	// centimetres of headroom costs nothing in a building with four metre ceilings.
+	const FVector From = Feet + Up * (HalfHeight + FloorProbeLiftCentimetres);
+	const FVector To = Feet + Up * (HalfHeight - FloorProbeReachCentimetres);
+
+	// Simple collision only, as everywhere else here: a mesh imported without it is invisible to
+	// this, and a floor nobody can stand on looks exactly like a floor that is not there.
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SpaceMMOCharacterFloor), false, this);
+
+	FHitResult Hit;
+
+	const bool bFound = World->SweepSingleByChannel(
+		Hit,
+		From,
+		To,
+		FRotationMatrix::MakeFromZ(Up).ToQuat(),
+		ECC_Pawn,
+		FCollisionShape::MakeCapsule(
+			static_cast<float>(CollisionRadiusCentimetres), static_cast<float>(HalfHeight)),
+		Params);
+
+	// A probe that begins inside something says nothing about what is underfoot -- it reports the
+	// way out of what it started in. ResolveBlocking is what pushes a character out of geometry;
+	// standing waits for it to have done so rather than guessing a floor from a depenetration.
+	if (!bFound || !Hit.bBlockingHit || Hit.bStartPenetrating)
+	{
+		return;
+	}
+
+	const FVector FloorFeet = Hit.Location - Up * HalfHeight;
+
+	const double GapCentimetres = FVector::DotProduct(Feet - FloorFeet, Up);
+
+	// Never downward. Terrain has already placed the character on its own floor, so anything found
+	// below the feet is below the ground they are standing on.
+	if (bOnGround && GapCentimetres > 0.0)
+	{
+		return;
+	}
+
+	const double SeparationSpeed = FVector::DotProduct(WalkState.Velocity, Up);
+
+	if (!FCharacterWalkModel::StandsOn(
+			Hit.ImpactNormal, Up, GapCentimetres, SeparationSpeed, bWasStanding))
+	{
+		return;
+	}
+
+	Navigation.SystemPosition = FSystemCoordinate(
+		Navigation.SystemPosition.Kilometres
+		+ ((FloorFeet - Feet) / SpaceMMO::Coordinates::CentimetresPerKilometre));
+
+	const bool bBegan = !bOnGround;
+
+	bOnGround = true;
+
+	// Resolved along the character's own up rather than along the surface's normal, and the
+	// difference matters on the stair ramp. Up on a planet is the direction away from its centre --
+	// that substitution is what makes the whole walk model work -- and a character leaning 26
+	// degrees because the floor under one foot is a slope would be a body that disagrees with every
+	// other thing standing in the building.
+	WalkState = FCharacterWalkModel::ResolveBlockingHit(WalkState, Up, 0.0);
+
+	if (bBegan && CVarLogCharacterDraw.GetValueOnGameThread() > 0)
+	{
+		// Only where standing starts, not every frame it continues. A floor holding a character up
+		// is the working case; it is finding one, and what was found, that is worth a line.
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Standing on %s, %.1f cm %s the feet, normal %s."),
+			*GetNameSafe(Hit.GetActor()),
+			FMath::Abs(GapCentimetres),
+			GapCentimetres >= 0.0 ? TEXT("below") : TEXT("above"),
+			*Hit.ImpactNormal.ToCompactString());
+	}
 }
 
 void ASpaceMMOCharacterPawn::ResolveBlocking(const FSystemCoordinate& From)

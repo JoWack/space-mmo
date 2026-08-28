@@ -95,30 +95,55 @@ Z_ROOF_BOT = Z_ROOF - KNIT          # 8.90, so it swallows every wall top
 # Materials and grouping
 # --------------------------------------------------------------------------
 
+# Prefixed, and not decoratively.
+#
+# <strong>Unreal imports meshes and materials into one namespace.</strong> A material called GB_Roof
+# takes that name, and the mesh called GB_Roof arrives second and is quietly renamed GB_Roof1 --
+# which is how the roof ended up with no collision on it: UCX_GB_Roof_01 matched a mesh that no
+# longer existed under that name, and an intangible roof looks exactly like a roof.
+#
+# Only that one name ever collided, but the rule is what matters: nothing here may be called the
+# same thing as a mesh group, and check_names_are_distinct below fails the run rather than trusting
+# anybody to remember.
 MATERIALS = {
-    "GB_Structure": (0.52, 0.54, 0.55, 1.0),
-    "GB_Partition": (0.71, 0.73, 0.74, 1.0),
-    "GB_Floor":     (0.38, 0.40, 0.41, 1.0),
-    "GB_Service":   (0.09, 0.39, 0.37, 1.0),   # the sheet's accent, #16635F
-    "GB_Stair":     (0.60, 0.62, 0.63, 1.0),
-    "GB_Roof":      (0.30, 0.32, 0.33, 1.0),
+    "MAT_GB_Structure": (0.52, 0.54, 0.55, 1.0),
+    "MAT_GB_Partition": (0.71, 0.73, 0.74, 1.0),
+    "MAT_GB_Floor":     (0.38, 0.40, 0.41, 1.0),
+    "MAT_GB_Service":   (0.09, 0.39, 0.37, 1.0),   # the sheet's accent, #16635F
+    "MAT_GB_Stair":     (0.60, 0.62, 0.63, 1.0),
+    "MAT_GB_Roof":      (0.30, 0.32, 0.33, 1.0),
 }
 
 # group name -> (collection, material)
 GROUPS = {
-    "GB_L00_Floor":       ("L00_Structure", "GB_Floor"),
-    "GB_L00_Walls":       ("L00_Structure", "GB_Structure"),
-    "GB_L00_Partitions":  ("L00_Structure", "GB_Partition"),
-    "GB_L00_Service":     ("L00_Service",   "GB_Service"),
-    "GB_L00_Plate":       ("L00_Service",   "GB_Partition"),
-    "GB_L00_Stair_West":  ("L00_Stairs",    "GB_Stair"),
-    "GB_L00_Stair_East":  ("L00_Stairs",    "GB_Stair"),
-    "GB_L01_Slab":        ("L01_Structure", "GB_Floor"),
-    "GB_L01_Walls":       ("L01_Structure", "GB_Structure"),
-    "GB_L01_Fronts":      ("L01_Structure", "GB_Partition"),
-    "GB_L01_Railing":     ("L01_Structure", "GB_Partition"),
-    "GB_Roof":            ("Shell",         "GB_Roof"),
+    "GB_L00_Floor":       ("L00_Structure", "MAT_GB_Floor"),
+    "GB_L00_Walls":       ("L00_Structure", "MAT_GB_Structure"),
+    "GB_L00_Partitions":  ("L00_Structure", "MAT_GB_Partition"),
+    "GB_L00_Service":     ("L00_Service",   "MAT_GB_Service"),
+    "GB_L00_Plate":       ("L00_Service",   "MAT_GB_Partition"),
+    "GB_L00_Stair_West":  ("L00_Stairs",    "MAT_GB_Stair"),
+    "GB_L00_Stair_East":  ("L00_Stairs",    "MAT_GB_Stair"),
+    "GB_L01_Slab":        ("L01_Structure", "MAT_GB_Floor"),
+    "GB_L01_Walls":       ("L01_Structure", "MAT_GB_Structure"),
+    "GB_L01_Fronts":      ("L01_Structure", "MAT_GB_Partition"),
+    "GB_L01_Railing":     ("L01_Structure", "MAT_GB_Partition"),
+    "GB_Roof":            ("Shell",         "MAT_GB_Roof"),
 }
+
+
+def check_names_are_distinct():
+    """Nothing exported may share a name with anything else exported.
+
+    Cheap, and it has already been worth it once: the roof mesh and the roof
+    material were both GB_Roof, so the engine renamed the mesh on import and
+    its collision, which is matched by name, attached to nothing.
+    """
+    clash = sorted(set(GROUPS) & set(MATERIALS))
+
+    if clash:
+        raise SystemExit(
+            "mesh groups and materials share a name, which Unreal resolves by "
+            "renaming one of them on import: %s" % ", ".join(clash))
 
 _geometry = dict((name, {"verts": [], "faces": []}) for name in GROUPS)
 
@@ -952,6 +977,7 @@ def main():
     print("  blend and renders: %s" % out_dir)
     print("  fbx:               %s" % fbx_path)
 
+    check_names_are_distinct()
     check_against_sheet()
     coincident = report_coincident_faces()
 

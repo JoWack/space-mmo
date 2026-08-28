@@ -185,6 +185,48 @@ public:
 	 */
 	static FVector SlideDeltaCentimetres(const FVector& RemainingDelta, const FVector& Normal);
 
+	/** The steepest ground a character can stand on rather than slide off, in degrees. */
+	static constexpr double SteepestWalkableSlopeDegrees = 50.0;
+
+	/** How far above a surface still counts as standing on it, in centimetres. */
+	static constexpr double FloorCaptureGapCentimetres = 20.0;
+
+	/** And how far, once already standing, before the character is let go of it. */
+	static constexpr double FloorReleaseGapCentimetres = 45.0;
+
+	/**
+	 * Whether a surface found under the feet is one to stand on.
+	 *
+	 * <strong>The height field is not the only floor any more.</strong> Terrain is a pure function
+	 * of direction and is resolved by FPlanetTerrain::ResolveContact; a building's slab is geometry,
+	 * and nothing in the height field knows it exists. Without this a character walks into a station
+	 * and falls through its floor to the ground the planet says is there, four and a half metres
+	 * below the gallery they were standing on.
+	 *
+	 * The rules are deliberately the same three FPlanetTerrain::ResolveContact uses, because a floor
+	 * that behaved differently from the ground would be two rules for one idea:
+	 *
+	 * - a band that counts as touching, widened once the character is already standing, so walking
+	 *   down a shallow step does not spend a frame airborne every step;
+	 * - a separation speed that always wins, so a jump leaves the floor rather than being dragged
+	 *   back onto it by the band;
+	 * - and, new here because a sphere has no walls, a limit on how steep the surface may be. A
+	 *   downward sweep beside a wall finds the wall, and standing on one would let a character walk
+	 *   up the outside of the building.
+	 *
+	 * @param Normal                     Outward normal of what was found underfoot.
+	 * @param Up                         Which way is up where the character is standing.
+	 * @param GapCentimetres             How far the feet are above it. Negative if inside it.
+	 * @param SeparationSpeedCentimetres Speed along Up. Positive is climbing away from the floor.
+	 * @param bWasStanding               Whether the character was standing when the step began.
+	 */
+	static bool StandsOn(
+		const FVector& Normal,
+		const FVector& Up,
+		double GapCentimetres,
+		double SeparationSpeedCentimetres,
+		bool bWasStanding);
+
 	/**
 	 * Speed across the ground, ignoring any rise or fall. Centimetres per second.
 	 *

@@ -280,3 +280,47 @@ FVector FCharacterWalkModel::SlideDeltaCentimetres(
 
 	return RemainingDelta - Surface * Into;
 }
+
+bool FCharacterWalkModel::StandsOn(
+	const FVector& Normal,
+	const FVector& Up,
+	const double GapCentimetres,
+	const double SeparationSpeedCentimetres,
+	const bool bWasStanding)
+{
+	const FVector Surface = Normal.GetSafeNormal();
+	const FVector Above = Up.GetSafeNormal();
+
+	if (Surface.IsNearlyZero() || Above.IsNearlyZero())
+	{
+		return false;
+	}
+
+	// Too steep to be a floor. Without this a downward probe alongside a wall reports the wall,
+	// and a character told to stand on it climbs the outside of the building.
+	const double Cosine =
+		FMath::Cos(FMath::DegreesToRadians(SteepestWalkableSlopeDegrees));
+
+	if (FVector::DotProduct(Surface, Above) < Cosine)
+	{
+		return false;
+	}
+
+	// Climbing away deliberately. The same threshold and the same reason as ground contact: on a
+	// curved surface a purely tangential velocity always has a small positive component along the
+	// normal, so testing the sign alone reports every walking step as a departure.
+	constexpr double MinimumSeparationSpeedCentimetres = 50.0;
+
+	if (GapCentimetres > 0.0
+		&& SeparationSpeedCentimetres > MinimumSeparationSpeedCentimetres)
+	{
+		return false;
+	}
+
+	// Wider to leave than to arrive, so a character walking down a shallow step stays attached
+	// instead of going airborne for a frame at every one of them.
+	const double Tolerance =
+		bWasStanding ? FloorReleaseGapCentimetres : FloorCaptureGapCentimetres;
+
+	return GapCentimetres <= Tolerance;
+}

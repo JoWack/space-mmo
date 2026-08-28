@@ -268,6 +268,33 @@ private:
 	void ResolveSurface();
 
 	/**
+	 * Stands the character on whatever is under its feet, when that is above the ground.
+	 *
+	 * <strong>The height field is not the only floor (ADR-0013).</strong> Terrain is a pure function
+	 * of direction and knows nothing about a building standing on it, so a character walking into a
+	 * station falls through the slab to the ground the planet says is there. This probes downward
+	 * for geometry and stands on it when it is higher than the ground.
+	 *
+	 * Only ever a lift, never a drop. FPlanetTerrain has already put the character on its own floor
+	 * by the time this runs, so refusing to move anyone downward is what makes "whichever support is
+	 * higher" fall out rather than having to be arbitrated: a floor found below the height field is
+	 * a floor the height field is already standing on top of.
+	 *
+	 * A query, like every other use of collision here -- the pawn owns no physics body, so a render
+	 * origin rebase has no solver state to disturb (ADR-0001).
+	 *
+	 * @param bWasStanding Whether the character was on the ground when this step began. Widens the
+	 *                     band, so walking down a step does not go airborne at every one.
+	 */
+	void ResolveStanding(bool bWasStanding);
+
+	/** How far above the feet the floor probe starts, in centimetres. */
+	static constexpr double FloorProbeLiftCentimetres = 10.0;
+
+	/** And how far below them it reaches. */
+	static constexpr double FloorProbeReachCentimetres = 60.0;
+
+	/**
 	 * Pushes the character out of anything solid it has walked into.
 	 *
 	 * <strong>A query, never a simulation (ADR-0013).</strong> The pawn owns no physics body: it

@@ -931,4 +931,121 @@ bool FSpaceMMOWalkSpendsTheRestOfTheStepAlongTheWallTest::RunTest(const FString&
 	return true;
 }
 
+
+/**
+ * What counts as a floor when the floor is geometry rather than the height field.
+ *
+ * <strong>Written from the cases that break a building, not from the rule.</strong> A station's
+ * slab, its stair ramp and its outside wall are all surfaces a downward probe finds; only two of
+ * them are floors, and which two is the whole of this function. The A-02 stairs are a 26.6 degree
+ * ramp on purpose, so that angle is a case here rather than a number in a comment.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkStandsOnAFloorAndNotOnAWallTest,
+	"SpaceMMO.Walk.StandsOnAFloorAndNotOnAWall",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkStandsOnAFloorAndNotOnAWallTest::RunTest(const FString& Parameters)
+{
+	const FVector Up(0.0, 0.0, 1.0);
+	const FVector Flat(0.0, 0.0, 1.0);
+
+	TestTrue(
+		TEXT("A slab underfoot is stood on"),
+		FCharacterWalkModel::StandsOn(Flat, Up, 0.0, 0.0, false));
+
+	// Resolved into the floor by a step or by gravity. It must still count, or the character is
+	// airborne while inside the thing holding it up and falls through.
+	TestTrue(
+		TEXT("A floor the feet are slightly inside is stood on"),
+		FCharacterWalkModel::StandsOn(Flat, Up, -5.0, 0.0, false));
+
+	// The A-02 stair ramp. If this ever stops passing, the stairs stop being climbable.
+	const double RampDegrees = 26.6;
+
+	const FVector Ramp(
+		FMath::Sin(FMath::DegreesToRadians(RampDegrees)),
+		0.0,
+		FMath::Cos(FMath::DegreesToRadians(RampDegrees)));
+
+	TestTrue(
+		TEXT("The stair ramp is a floor"),
+		FCharacterWalkModel::StandsOn(Ramp, Up, 0.0, 0.0, true));
+
+	// A downward probe run alongside a wall finds the wall. Standing on one would let a character
+	// walk up the outside of the building.
+	const FVector Wall(1.0, 0.0, 0.0);
+
+	TestFalse(
+		TEXT("A wall is not a floor, however close the feet are to it"),
+		FCharacterWalkModel::StandsOn(Wall, Up, 0.0, 0.0, true));
+
+	// Just past the limit, to pin the boundary rather than only the obvious cases.
+	const double TooSteep = FCharacterWalkModel::SteepestWalkableSlopeDegrees + 2.0;
+
+	const FVector Cliff(
+		FMath::Sin(FMath::DegreesToRadians(TooSteep)),
+		0.0,
+		FMath::Cos(FMath::DegreesToRadians(TooSteep)));
+
+	TestFalse(
+		TEXT("Nor is anything steeper than the walkable limit"),
+		FCharacterWalkModel::StandsOn(Cliff, Up, 0.0, 0.0, true));
+
+	return true;
+}
+
+/**
+ * Standing has to be harder to lose than to gain, and a jump has to win outright.
+ *
+ * The same two rules FPlanetTerrain::ResolveContact reaches for, and they are here for the same
+ * reasons: one threshold cannot both keep a character attached over a step and let one leave the
+ * ground on purpose.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkKeepsItsFooterOverAStepTest,
+	"SpaceMMO.Walk.KeepsItsFooterOverAStep",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkKeepsItsFooterOverAStepTest::RunTest(const FString& Parameters)
+{
+	const FVector Up(0.0, 0.0, 1.0);
+	const FVector Flat(0.0, 0.0, 1.0);
+
+	// A gap between the two bands: reached only by someone already walking.
+	const double Step =
+		(FCharacterWalkModel::FloorCaptureGapCentimetres
+			+ FCharacterWalkModel::FloorReleaseGapCentimetres)
+		* 0.5;
+
+	TestTrue(
+		TEXT("A walker stays attached stepping down onto a floor below the capture band"),
+		FCharacterWalkModel::StandsOn(Flat, Up, Step, 0.0, true));
+
+	TestFalse(
+		TEXT("But falling onto the same floor from that height does not begin standing early"),
+		FCharacterWalkModel::StandsOn(Flat, Up, Step, 0.0, false));
+
+	// A jump. Without this the band drags a rising character straight back onto the floor and the
+	// jump key does nothing at all -- which is the failure ground contact already had once.
+	TestFalse(
+		TEXT("Climbing away from a floor leaves it"),
+		FCharacterWalkModel::StandsOn(Flat, Up, 3.0, 400.0, true));
+
+	// Rising while resolved into the floor is not a jump, it is the frame a lift happens on. The
+	// character has to keep its footing or the very act of being stood up ends the standing.
+	TestTrue(
+		TEXT("Rising while still inside the floor keeps its footing"),
+		FCharacterWalkModel::StandsOn(Flat, Up, -2.0, 400.0, true));
+
+	// Far below anything: the probe reaches further than the band, so this is the case where
+	// something was found and correctly ignored.
+	TestFalse(
+		TEXT("A floor beyond the release band is not stood on"),
+		FCharacterWalkModel::StandsOn(
+			Flat, Up, FCharacterWalkModel::FloorReleaseGapCentimetres + 1.0, 0.0, true));
+
+	return true;
+}
+
 #endif

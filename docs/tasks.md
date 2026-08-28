@@ -3071,9 +3071,28 @@ A character stops against a deposit and against a parked ship, slides along both
 sticking, and no longer pins under a hull. That is the only coverage this can have: every automated
 run is `-nullrhi` and the pure half of it passes either way.
 
-### Still open
+### The roof imported under a different name, and its collision matched nothing
 
-- **Station interiors.** The greybox generator now emits collision — 87 `UCX_` hulls over 11
+Measured off the imported assets rather than taken from a successful import: eleven of the twelve
+meshes hold `KConvexElem` data and `GB_Roof1` holds none.
+
+**`GB_Roof` was both a material and a mesh group**, and Unreal imports meshes and materials into one
+namespace. The material took the name, the mesh arrived second and was silently renamed `GB_Roof1`,
+and `UCX_GB_Roof_01` then matched a mesh that no longer existed under that name. An intangible roof
+looks exactly like a roof. It was the only name that collided, and nothing about the failure said so.
+
+Materials are prefixed `MAT_` now, and `check_names_are_distinct` fails the run rather than trusting
+anybody to remember — the rule is what matters, not the instance. Regenerated; the FBX carries
+`GB_Roof` with its hull.
+
+**Content chore, not urgent**: the roof is unreachable from inside and only matters to someone
+landing on the building. Next re-import, delete the stale `GB_Roof` material asset and `GB_Roof1`
+first, or the mesh will be renamed again and look exactly as it does now, then re-point the
+Blueprint's roof component at `GB_Roof`.
+
+### Station interiors
+
+- The greybox generator now emits collision — 87 `UCX_` hulls over 11
   meshes, one per solid, since every solid in the building is an axis-aligned box and a box is
   already a convex hull. Waiting on a Blender re-run and a re-import with *Import Collision* on.
 
@@ -3084,17 +3103,48 @@ run is `-nullrhi` and the pure half of it passes either way.
   ground slab flush at the foot and lands exactly on the Level 01 slab at the top — measured, not
   assumed: 0.000 m to 4.500 m over 9 m.
 
-- **Standing on geometry, which is the piece that makes "inside" mean anything.** `ResolveSurface`
-  asks planets and nothing else, and it *snaps* the character to `FPlanetTerrain::ResolveContact`.
-  A floor slab is not terrain, so it holds nobody up: the Level 01 gallery cannot be stood on, and
-  neither can the stair ramp above the first metre of its climb. Walls will stop a character the
-  moment the `UCX_` hulls land; floors will not hold one until this exists.
+### Standing on geometry, which is what makes "inside" mean anything
 
-  It wants a downward sweep taking whichever support is higher — the height field or whatever is
-  underfoot — and it is not a small change, because the server integrates the same walk step and
-  the client predicts with it. Both have to agree about what is under a character or reconciliation
-  will fight over it. The deposit subsystem is not gated by net mode, so a dedicated server should
-  be spawning the same stations, but whether it actually fetches and places them is unverified.
+`ResolveSurface` asked planets and nothing else, and it *snaps* the character to
+`FPlanetTerrain::ResolveContact`. A floor slab is not terrain, so it held nobody up: walls stopped a
+character the moment the hulls landed, and the Level 01 gallery could not be stood on at all.
+
+`ResolveStanding` probes downward for geometry and stands on what it finds.
+
+**Only ever a lift, never a drop**, and that one restriction is what makes "whichever support is
+higher" fall out instead of having to be arbitrated. Terrain has already placed the character on its
+own floor by the time this runs, so a surface found *below* the feet is one the height field is
+already standing on top of, and is ignored. Walk into the building and the slab lifts you; walk into
+it where the ground swells above the slab and the ground keeps you, with nothing deciding between
+them.
+
+**The rules for what counts as a floor are the ones ground contact already uses**, because a floor
+that behaved differently from the ground would be two rules for one idea — a capture band widened
+once already standing, so walking down a step does not go airborne at every one, and a separation
+speed that always wins, so a jump leaves rather than being dragged back. `FCharacterWalkModel::
+StandsOn` holds all three and is tested with no world.
+
+The third rule is new, because a sphere has no walls: **a limit on how steep a surface may be**. A
+downward probe run alongside a wall finds the wall, and standing on one would let a character walk
+up the outside of the building. Fifty degrees, so the 26.6° stair ramp passes and the wall does not
+— and the ramp angle is a case in the test rather than a number in a comment, so the stairs stop
+being climbable loudly rather than quietly.
+
+Two details that would each have been a bug:
+
+- **The probe starts above the feet, not at them.** A character resting exactly on a floor otherwise
+  begins its sweep inside it, and a sweep that begins inside something reports the way out rather
+  than what is underfoot.
+- **Standing is resolved along the character's own up, not along the surface normal.** Up on a
+  planet is the direction away from its centre; that substitution is the whole walk model. Using the
+  ramp's normal would tilt a body 26° while everything else in the building stood square.
+
+**Unverified, and cannot be verified headlessly:** whether the dedicated server agrees. The client
+predicts and reconciles softly toward the server, so if the server's world has no station in it the
+server will think a character on the gallery is falling and drag them down. The deposit subsystem is
+not gated by net mode, so a server world should place the same stations — but whether a dedicated
+server signs in to the backend and therefore receives them has not been checked. It does not arise
+in a standalone session, which is how this is played today.
 
 ---
 
