@@ -3073,10 +3073,28 @@ run is `-nullrhi` and the pure half of it passes either way.
 
 ### Still open
 
-- **Station interiors.** Hulls are still `NoCollision` deliberately, because the A-02 greybox has no
-  collision geometry at all: `tools/greybox/a02_capital_hub.py` needs to emit `UCX_` meshes per
-  piece, or primitives have to be added by hand. Turning collision on before that would produce
-  exactly the silent intangibility above, one building at a time. Blocked on 127.
+- **Station interiors.** The greybox generator now emits collision — 87 `UCX_` hulls over 11
+  meshes, one per solid, since every solid in the building is an axis-aligned box and a box is
+  already a convex hull. Waiting on a Blender re-run and a re-import with *Import Collision* on.
+
+  The two stair flights get **one ramp hull each rather than 25 tread hulls**, and that is a
+  decision about how it plays rather than a saving. The character has no step-up, so a sweep into a
+  17.3 cm riser slides sideways along it and an honest flight of stairs is a wall. One convex wedge
+  through the tread nosings is a 26.6° incline, which the walk model already handles. It meets the
+  ground slab flush at the foot and lands exactly on the Level 01 slab at the top — measured, not
+  assumed: 0.000 m to 4.500 m over 9 m.
+
+- **Standing on geometry, which is the piece that makes "inside" mean anything.** `ResolveSurface`
+  asks planets and nothing else, and it *snaps* the character to `FPlanetTerrain::ResolveContact`.
+  A floor slab is not terrain, so it holds nobody up: the Level 01 gallery cannot be stood on, and
+  neither can the stair ramp above the first metre of its climb. Walls will stop a character the
+  moment the `UCX_` hulls land; floors will not hold one until this exists.
+
+  It wants a downward sweep taking whichever support is higher — the height field or whatever is
+  underfoot — and it is not a small change, because the server integrates the same walk step and
+  the client predicts with it. Both have to agree about what is under a character or reconciliation
+  will fight over it. The deposit subsystem is not gated by net mode, so a dedicated server should
+  be spawning the same stations, but whether it actually fetches and places them is unverified.
 
 ---
 

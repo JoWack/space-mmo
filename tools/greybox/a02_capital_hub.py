@@ -567,6 +567,144 @@ def build(mats):
     return root, subs, objects
 
 
+# --------------------------------------------------------------------------
+# Collision
+# --------------------------------------------------------------------------
+#
+# Unreal reads objects named UCX_<mesh>_NN out of the FBX as simple collision,
+# one convex hull each, and a walking character sweeps against simple collision
+# only: it leaves bTraceComplex false, and the engine treats that as a choice
+# of simple or complex rather than as a preference --
+# Engine/Private/PhysicsEngine/PhysicsInterfaceUtils.cpp picks exactly one.
+#
+# A mesh without it is not "roughly" solid, it is intangible, and walking
+# through a wall looks precisely like a bug in the movement code. That is what
+# happened to the ore deposits, and it cost a playtest to find.
+#
+# Every solid in this building is an axis-aligned box, and a box is already a
+# convex hull, so the collision here is the model rather than an approximation
+# of it. No decomposition, nothing to tune, and no way for the two to drift:
+# they are generated from the same list of solids in the same run.
+
+
+# The face winding box() uses, reused so a hull is built the same way a solid
+# is. Vertices 0-3 are the bottom ring, 4-7 the top, in the same order.
+_HULL_FACES = ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
+               (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7))
+
+
+def _hull_verts(x0, x1, y0, y1, z0, z1_west, z1_east):
+    """Eight corners in plan coordinates, with the top allowed to slope in x.
+
+    A flat top (z1_west == z1_east) is a box. A sloped one is the wedge the
+    stairs get, which is still convex and therefore still one hull.
+    """
+    bx0, by1 = _plan_to_blender(x0, y0)
+    bx1, by0 = _plan_to_blender(x1, y1)
+
+    return [
+        (bx0, by0, z0), (bx1, by0, z0), (bx1, by1, z0), (bx0, by1, z0),
+        (bx0, by0, z1_west), (bx1, by0, z1_east),
+        (bx1, by1, z1_east), (bx0, by1, z1_west),
+    ]
+
+
+# The two stair flights get one ramp each instead of a hull per tread.
+#
+# <strong>Not a saving -- a decision about how it plays.</strong> Twenty-five
+# tread hulls are geometrically honest and unwalkable: the character has no
+# step-up, so a sweep into a 17.3 cm riser slides sideways along it and the
+# flight becomes a wall. One convex wedge through the tread nosings is a 26.6
+# degree incline, which is a slope the walk model already knows what to do with.
+#
+# The top face passes exactly through every nosing -- height RISE per GOING --
+# and is extended one going past the foot so it meets the ground slab flush
+# rather than starting with a riser nobody can climb. It lands exactly on the
+# Level 01 slab at the far end, which is what makes 26 the right step count
+# rather than 25 plus a lip.
+def _stair_ramp(group, x_start, direction):
+    foot = x_start - direction * STAIR_GOING
+    top = x_start + direction * STAIR_RUN
+
+    lo, hi = min(foot, top), max(foot, top)
+
+    # z at the low-x and high-x ends, whichever way this flight climbs.
+    z_lo, z_hi = (0.0, Z_L01) if direction > 0 else (Z_L01, 0.0)
+
+    return (group, _hull_verts(lo, hi, STAIR_Y[0] - KNIT, STAIR_Y[1] + KNIT,
+                               Z_SUNK, z_lo, z_hi))
+
+
+STAIR_GROUPS = {"GB_L00_Stair_West": 1.0, "GB_L00_Stair_East": -1.0}
+
+
+def collision_hulls():
+    """One (group, vertices) pair per hull, built from the solids themselves.
+
+    Reads _boxes rather than appending to it: report_coincident_faces measures
+    that list, and collision that reached it would report itself as coincident
+    with the geometry it was generated from.
+    """
+    hulls = []
+
+    for group, _label, (x0, x1, y0, y1, z0, z1) in _boxes:
+        if group in STAIR_GROUPS:
+            continue
+
+        hulls.append((group, _hull_verts(x0, x1, y0, y1, z0, z1, z1)))
+
+    for group, direction in STAIR_GROUPS.items():
+        x_start = 1.5 if direction > 0 else 38.5
+        hulls.append(_stair_ramp(group, x_start, direction))
+
+    # The system plate is a disc a few centimetres proud of the floor. Nothing
+    # can be stopped by it and a character standing on it stands on the floor,
+    # so it gets no hull -- and saying that here is cheaper than wondering later
+    # why one mesh has none.
+    return hulls
+
+
+def build_collision(root, subs):
+    """Attaches a UCX_ object per hull, in a collection no render ever shows."""
+    coll = bpy.data.collections.new("Collision")
+    root.children.link(coll)
+
+    # Registered in subs so render_previews' only() hides it from every shot:
+    # that function hides every collection it is not asked to show, so this
+    # cannot be forgotten by adding a view later.
+    subs["Collision"] = coll
+
+    counts = {}
+    made = []
+
+    for group, verts in collision_hulls():
+        counts[group] = counts.get(group, 0) + 1
+
+        # UCX_<mesh name>_NN. The suffix matters: the importer matches the mesh
+        # by the name between the prefix and it, so UCX_GB_L00_Walls_01 finds
+        # GB_L00_Walls. Import Collision has to be on, and one hull per UCX,
+        # or these arrive as twelve extra static meshes instead.
+        name = "UCX_%s_%02d" % (group, counts[group])
+
+        mesh = bpy.data.meshes.new(name)
+        mesh.from_pydata(verts, [], list(_HULL_FACES))
+        mesh.validate()
+        mesh.update()
+
+        obj = bpy.data.objects.new(name, mesh)
+        coll.objects.link(obj)
+        made.append(obj)
+
+    print("")
+    print("  collision: %d hulls over %d meshes" % (len(made), len(counts)))
+
+    for group in sorted(counts):
+        note = " (one ramp, not %d treads)" % STAIR_DRAWN if group in STAIR_GROUPS else ""
+        print("    %-22s %3d%s" % (group, counts[group], note))
+
+    return coll, made
+
+
 def report_bounds(objects):
     lo = [1e9, 1e9, 1e9]
     hi = [-1e9, -1e9, -1e9]
@@ -830,6 +968,10 @@ def main():
     mats = make_materials()
     root, subs, objects = build(mats)
     report_bounds(objects)
+
+    # Before the export, and not part of `objects`: bounds and face counts
+    # describe the thing that is drawn, and collision is not drawn.
+    build_collision(root, subs)
 
     print("")
     export_fbx(fbx_path)
