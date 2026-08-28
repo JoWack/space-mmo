@@ -267,6 +267,24 @@ private:
 	/** Gravity from every planet, and the ground beneath, resolved together. */
 	void ResolveSurface();
 
+	/**
+	 * Pushes the character out of anything solid it has walked into.
+	 *
+	 * <strong>A query, never a simulation (ADR-0013).</strong> The pawn owns no physics body: it
+	 * sweeps a capsule from where it was to where the walk model wants it, and resolves any hit
+	 * itself. Chaos is used to answer "is something in the way" and for nothing else, so there is
+	 * no accumulated physics state for the render origin to disturb when the world rebases.
+	 *
+	 * The ground is not among the things it can hit. Terrain has no collision geometry at all and
+	 * is resolved by FPlanetTerrain as a function of position, which is the half of ADR-0013 that
+	 * did not change.
+	 */
+	void ResolveBlocking(const FSystemCoordinate& From);
+
+	/** How wide and tall the character is to a sweep, in centimetres. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	double CollisionRadiusCentimetres = 34.0;
+
 	void MoveForward(float Value);
 	void MoveRight(float Value);
 	void TurnRight(float Value);

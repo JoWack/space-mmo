@@ -218,3 +218,39 @@ double FCharacterWalkModel::MoveDirectionDegrees(
 			FVector::DotProduct(Across, Right),
 			FVector::DotProduct(Across, Forward)));
 }
+
+double FCharacterWalkModel::SeparationCentimetres(const double DepthCentimetres)
+{
+	// A millimetre past clear. Small enough that nobody sees it, large enough that the next sweep
+	// starts outside the surface rather than inside it by a rounding error.
+	constexpr double SkinCentimetres = 0.1;
+
+	return FMath::Max(0.0, DepthCentimetres) + SkinCentimetres;
+}
+
+FWalkState FCharacterWalkModel::ResolveBlockingHit(
+	const FWalkState& State, const FVector& Normal, const double DepthCentimetres)
+{
+	FWalkState Result = State;
+
+	const FVector Surface = Normal.GetSafeNormal();
+
+	if (Surface.IsNearlyZero())
+	{
+		// A hit with no normal names no direction to be pushed along, and inventing one would move
+		// the character somewhere arbitrary. Leaving the state alone lets the next frame try again.
+		return Result;
+	}
+
+	const double Into = FVector::DotProduct(Result.Velocity, Surface);
+
+	// Only motion into the surface is removed. Taking all of it would freeze a character the moment
+	// they brushed a wall, and reversing it would make a wall a trampoline -- the same two failures
+	// ground contact avoids the same way.
+	if (Into < 0.0)
+	{
+		Result.Velocity -= Surface * Into;
+	}
+
+	return Result;
+}

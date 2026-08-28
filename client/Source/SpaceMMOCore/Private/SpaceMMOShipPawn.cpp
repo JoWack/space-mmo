@@ -38,7 +38,18 @@ ASpaceMMOShipPawn::ASpaceMMOShipPawn()
 	// No collision: the ship's position is owned by the flight model and the grid, not by Chaos.
 	// Leaving collision on would let the physics solver fight the authoritative position and win
 	// intermittently, which is a miserable class of bug to chase.
-	Hull->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// Solid to a walking character, and to nothing else (ADR-0013).
+	//
+	// Query-only, and deliberately not simulated: where a ship is comes from the flight model and
+	// the server, and a physics body would be a second opinion about that -- the same reason the
+	// planet has no collision body and contact is a function instead.
+	//
+	// The ship still passes through the ground by its own hull radius rather than by this, because
+	// the terrain has no collision geometry for anything to sweep against.
+	Hull->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Hull->SetCollisionObjectType(ECC_WorldDynamic);
+	Hull->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Hull->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
 	// Engine content so the ship is visible without any authored asset. A placeholder until there
 	// is a real hull, but an invisible ship makes every flight change impossible to evaluate.

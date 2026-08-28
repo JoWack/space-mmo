@@ -23,6 +23,7 @@ pitch, not a decision record.
 | [0010](0010-deposits-are-sized-for-a-full-server.md) | Deposits are server-scale, so raw ore is worthless until the server is full | Accepted |
 | [0011](0011-caves-are-authored-volumes.md) | Caves are authored volumes, not a density field | Accepted |
 | [0012](0012-a-ship-is-earned-and-carries-its-own-hold.md) | A ship is earned, summoned, and carries its own hold | Accepted |
+| [0013](0013-terrain-is-a-function-everything-else-collides.md) | Terrain stays a function; everything else gets collision primitives | Accepted |
 
 ## When to write one
 

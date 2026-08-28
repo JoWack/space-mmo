@@ -37,7 +37,13 @@ ASpaceMMODepositActor::ASpaceMMODepositActor()
 	// No collision, for the same reason the planet and the ship have none: contact here is decided
 	// by FPlanetTerrain, not by Chaos, and a solver body would be a second opinion about where
 	// solid things are. Gathering range is measured, not collided.
-	Marker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// Solid to a query, and to nothing else (ADR-0013). Query-only rather than physics: nothing
+	// here is simulated, and a deposit that could be pushed would be a deposit that could be moved
+	// off the position both machines derived for it.
+	Marker->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Marker->SetCollisionObjectType(ECC_WorldStatic);
+	Marker->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Marker->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(
 		TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));

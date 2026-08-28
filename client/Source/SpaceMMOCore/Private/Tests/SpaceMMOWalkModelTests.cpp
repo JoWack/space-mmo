@@ -752,4 +752,118 @@ bool FSpaceMMOWalkBodyTurnsTheShortWayTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+/**
+ * Walking into a wall stops you against it, and does not stop you sliding along it.
+ *
+ * <strong>Both halves are the test.</strong> Removing all velocity on contact freezes a character
+ * the moment they brush anything, which reads as the controls dying; reflecting it makes a wall a
+ * trampoline. The ground already resolves this way in FPlanetTerrain::ResolveContact, and a wall
+ * that behaved differently from the floor would be two rules for one idea.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkStopsAtAWallAndSlidesAlongItTest,
+	"SpaceMMO.Walk.StopsAtAWallAndSlidesAlongIt",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkStopsAtAWallAndSlidesAlongItTest::RunTest(const FString& Parameters)
+{
+	// A wall facing back along -X: its outward normal points at a character walking in +X.
+	const FVector Wall(-1.0, 0.0, 0.0);
+
+	FWalkState Straight;
+
+	Straight.Velocity = FVector(600.0, 0.0, 0.0);
+
+	const FWalkState Stopped = FCharacterWalkModel::ResolveBlockingHit(Straight, Wall, 0.0);
+
+	TestEqual(
+		TEXT("Walking straight into a wall takes all of the motion into it"),
+		Stopped.Velocity.X,
+		0.0,
+		0.001);
+
+	// Straight on, so there is nothing along the wall to keep -- but the character must be stopped
+	// rather than thrown back.
+	TestTrue(
+		TEXT("And does not bounce off it"),
+		Stopped.Velocity.Size() < 0.001);
+
+	// The case that matters for feel: approaching at an angle should shed only the part heading
+	// into the wall and keep the part running along it.
+	FWalkState Glancing;
+
+	Glancing.Velocity = FVector(600.0, 400.0, 0.0);
+
+	const FWalkState Sliding = FCharacterWalkModel::ResolveBlockingHit(Glancing, Wall, 0.0);
+
+	TestEqual(TEXT("The part into the wall is gone"), Sliding.Velocity.X, 0.0, 0.001);
+
+	TestEqual(
+		TEXT("The part along the wall is untouched, so a character slides rather than sticking"),
+		Sliding.Velocity.Y,
+		400.0,
+		0.001);
+
+	// Walking away from a surface you are touching must not be interfered with, or a character
+	// standing against a wall could never leave it.
+	FWalkState Leaving;
+
+	Leaving.Velocity = FVector(-600.0, 0.0, 0.0);
+
+	const FWalkState Left = FCharacterWalkModel::ResolveBlockingHit(Leaving, Wall, 0.0);
+
+	TestEqual(
+		TEXT("Moving away from the surface is left alone"), Left.Velocity.X, -600.0, 0.001);
+
+	// A hit with no usable normal names no direction to push along. Leaving the state untouched
+	// lets the next frame try again; inventing a direction would move the character arbitrarily.
+	const FWalkState Degenerate =
+		FCharacterWalkModel::ResolveBlockingHit(Straight, FVector::ZeroVector, 5.0);
+
+	TestEqual(
+		TEXT("A hit with no normal changes nothing"),
+		Degenerate.Velocity.X,
+		Straight.Velocity.X,
+		0.001);
+
+	return true;
+}
+
+/**
+ * Being pushed out of a surface goes a hair further than exactly clear.
+ *
+ * Resolving to exactly touching leaves the next frame's sweep starting inside the surface by
+ * whatever floating point does, so the character alternates between clear and penetrating and
+ * jitters against every wall. The ground avoids the same failure with its contact tolerance.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkSeparationClearsTheSurfaceTest,
+	"SpaceMMO.Walk.SeparationClearsTheSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkSeparationClearsTheSurfaceTest::RunTest(const FString& Parameters)
+{
+	TestTrue(
+		TEXT("A character exactly touching is still pushed clear"),
+		FCharacterWalkModel::SeparationCentimetres(0.0) > 0.0);
+
+	TestTrue(
+		TEXT("A character ten centimetres inside is pushed further than ten"),
+		FCharacterWalkModel::SeparationCentimetres(10.0) > 10.0);
+
+	// Imperceptible. A push large enough to see would read as being shoved by the scenery.
+	TestTrue(
+		TEXT("But not far enough for anybody to notice"),
+		FCharacterWalkModel::SeparationCentimetres(10.0) < 11.0);
+
+	// A negative depth is a caller saying "not actually penetrating"; it must not pull the
+	// character into the surface.
+	TestTrue(
+		TEXT("A negative depth never pulls the character inward"),
+		FCharacterWalkModel::SeparationCentimetres(-5.0) > 0.0);
+
+	return true;
+}
+
 #endif

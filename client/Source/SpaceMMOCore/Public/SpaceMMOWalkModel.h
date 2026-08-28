@@ -136,6 +136,38 @@ public:
 	static FVector PositionDeltaKilometres(const FWalkState& State, double DeltaSeconds);
 
 	/**
+	 * Slides a character out of something it walked into, and takes the motion into it away.
+	 *
+	 * <strong>The arithmetic of a blocking hit, with none of the finding of one.</strong> Whether
+	 * anything is in the way is a question about the world, and the world is the pawn's business;
+	 * what happens once the answer is yes is movement, and movement lives here where it can be
+	 * tested without a world at all. ADR-0013 puts the seam exactly here.
+	 *
+	 * Fully inelastic and tangential-preserving, which is the same treatment
+	 * <see cref="FPlanetTerrain::ResolveContact"/> gives the ground: the component of velocity
+	 * heading into the surface is removed rather than reflected, so a character stops against a
+	 * wall instead of bouncing off it, and anything along the wall survives so they can slide.
+	 *
+	 * @param Normal      Outward normal of what was hit, pointing back at the character.
+	 * @param DepthCentimetres How far past the surface the character ended up. Zero for a touch.
+	 */
+	static FWalkState ResolveBlockingHit(
+		const FWalkState& State, const FVector& Normal, double DepthCentimetres);
+
+	/**
+	 * How far along the normal a character has to be pushed to be clear, in centimetres.
+	 *
+	 * Separate from the state change because a caller has to move a system coordinate rather than
+	 * a velocity, and it should not have to know the skin width to do it.
+	 *
+	 * <strong>Pushed a hair further than exactly clear.</strong> Landing precisely on a surface
+	 * leaves the next frame's sweep starting inside it by whatever floating point does, and a
+	 * character that alternates between clear and penetrating jitters against every wall it
+	 * touches -- the same reason ground contact carries a tolerance rather than resolving exactly.
+	 */
+	static double SeparationCentimetres(double DepthCentimetres);
+
+	/**
 	 * Speed across the ground, ignoring any rise or fall. Centimetres per second.
 	 *
 	 * <strong>What a walk cycle should be played against, and not the same as the speed of the

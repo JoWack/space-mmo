@@ -289,6 +289,92 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 	}
 }
 
+void ASpaceMMOCharacterPawn::ResolveBlocking(const FSystemCoordinate& From)
+{
+	UWorld* const World = GetWorld();
+
+	const USpaceMMORenderOriginSubsystem* const Origin =
+		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
+
+	if (World == nullptr || Origin == nullptr || CollisionRadiusCentimetres <= 0.0)
+	{
+		return;
+	}
+
+	// The sweep happens in Unreal world space, which is the render origin's frame -- and both ends
+	// are converted in the same frame, so a rebase between frames cannot skew the sweep. That is
+	// the whole reason this is a query and not a physics body: there is no state to carry across a
+	// rebase.
+	const FVector Start = Origin->ToWorldLocation(From);
+	const FVector End = Origin->ToWorldLocation(Navigation.SystemPosition);
+
+	if (FVector::DistSquared(Start, End) < UE_DOUBLE_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// A capsule standing on the character's feet, which is where the pawn's origin is.
+	const double HalfHeight =
+		FMath::Max(CollisionRadiusCentimetres, CharacterHeightCentimetres * 0.5);
+
+	const FVector Up = SurfaceNormal.GetSafeNormal().IsNearlyZero()
+		? FVector::UpVector
+		: SurfaceNormal.GetSafeNormal();
+
+	const FVector Lift = Up * HalfHeight;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SpaceMMOCharacterBlocking), false, this);
+
+	FHitResult Hit;
+
+	const bool bBlocked = World->SweepSingleByChannel(
+		Hit,
+		Start + Lift,
+		End + Lift,
+		FRotationMatrix::MakeFromZ(Up).ToQuat(),
+		ECC_Pawn,
+		FCollisionShape::MakeCapsule(
+			static_cast<float>(CollisionRadiusCentimetres), static_cast<float>(HalfHeight)),
+		Params);
+
+	if (!bBlocked || !Hit.bBlockingHit)
+	{
+		return;
+	}
+
+	// Back to where the sweep stopped, plus a hair, so the next frame does not start inside what
+	// was just hit. The arithmetic of both is in the walk model, where it can be tested with no
+	// world at all.
+	const FVector Normal = Hit.ImpactNormal;
+
+	const FVector Clear =
+		Hit.Location - Lift + (Normal * FCharacterWalkModel::SeparationCentimetres(Hit.PenetrationDepth));
+
+	// Applied as a delta rather than by converting back through the render origin, which has no
+	// reverse and would not want one: a difference between two points in the same frame means the
+	// same thing whatever the origin happens to be, so this cannot be skewed by a rebase.
+	const FVector CorrectionKilometres =
+		(Clear - End) / SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+	Navigation.SystemPosition =
+		FSystemCoordinate(Navigation.SystemPosition.Kilometres + CorrectionKilometres);
+
+	WalkState = FCharacterWalkModel::ResolveBlockingHit(WalkState, Normal, Hit.PenetrationDepth);
+
+	if (CVarLogCharacterDraw.GetValueOnGameThread() > 0)
+	{
+		// Named, because an asset with no collision on it is silently intangible and looks exactly
+		// like broken movement code -- which ADR-0013 lists as an accepted cost of this approach
+		// and is therefore worth being able to see.
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Blocked by %s at %s, normal %s, depth %.1f cm."),
+			*GetNameSafe(Hit.GetActor()),
+			*Hit.Location.ToCompactString(),
+			*Normal.ToCompactString(),
+			Hit.PenetrationDepth);
+	}
+}
+
 void ASpaceMMOCharacterPawn::SimulateStep(const double DeltaSeconds)
 {
 	// Ground first: the walk model needs to know which way is up and whether it has anything to
@@ -298,9 +384,16 @@ void ASpaceMMOCharacterPawn::SimulateStep(const double DeltaSeconds)
 	WalkState = FCharacterWalkModel::Step(
 		WalkState, PendingInput, WalkConfig, SurfaceNormal, Gravity, bOnGround, DeltaSeconds);
 
+	const FSystemCoordinate Before = Navigation.SystemPosition;
+
 	Navigation.SystemPosition = FSystemCoordinate(
 		Navigation.SystemPosition.Kilometres
 		+ FCharacterWalkModel::PositionDeltaKilometres(WalkState, DeltaSeconds));
+
+	// Anything solid in the way, before the ground gets a say. A character stopped by a wall has
+	// not moved, so resolving the ground at the position they were prevented from reaching would
+	// stand them on the wrong piece of terrain for a frame.
+	ResolveBlocking(Before);
 
 	// And again after moving, so the step that would have driven the character into a hill is
 	// undone in the same frame rather than being visible for one.

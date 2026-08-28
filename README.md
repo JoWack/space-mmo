@@ -199,8 +199,10 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   ([ADR-0006](docs/adr/0006-death-and-insurance.md))
 - **M7** — a world worth being in: terrain that is textured rather than grey, cube-sphere LOD so a
   planet is not one patch on a smooth ball, caves
-  ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md)), settlements, and authoring world
-  content graphically instead of by hand in JSON
+  ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md)), settlements, buildings you can walk
+  into and objects you cannot walk through
+  ([ADR-0013](docs/adr/0013-terrain-is-a-function-everything-else-collides.md)), and authoring
+  world content graphically instead of by hand in JSON
 - **M8** — depth: careers, repeatable quest content, the repair loop
 
 Four corrections worth keeping, because each was wrong for a long time without anybody noticing.
