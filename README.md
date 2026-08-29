@@ -191,7 +191,9 @@ dotnet run --project services/SpaceMMO.Api -- --seed
 - **M4** — goods that move and gear that matters: items between inventories, ship holds, hauling
   planet-locked materials by flying them, equippable tools, weapons and armour
 - **M5** — an interface: a real HUD instead of debug text ✅, signing in from the game rather than a
-  file ✅, inventory and transfer screens ✅, a market screen ✅, and menus
+  file ✅, inventory and transfer screens ✅, a market screen ✅, menus, and the perspective and
+  controls of [design-bible.md](docs/design-bible.md) §8 — camera zoom and orbit, sprint, and the
+  ergonomics of getting into and out of a ship
 - **M6** — combat, and the rules that already assume it: personal and ship weapons, the
   `combat` and `pilot` skill trees, security zones and pairwise aggression
   ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md),
@@ -216,6 +218,13 @@ updated, so the roadmap promised a galaxy the ADRs had already cancelled.
 eight combat and pilot skills, defers `constitution` and `stamina` XP "to the combat milestone", and
 three ADRs describe rules — who may shoot whom, what a security zone means, what dying costs — that
 have nothing to shoot with.
+
+**M5 named only screens.** `design-bible.md` §8 is titled "Perspective and controls" and settles that
+the camera is third person by default with a first-person toggle, on foot and in ship, and that it is
+a client concern that must never reach server-side validation. Every word of that is interface, and
+the milestone called "an interface" listed a HUD, a login, two screens and a market — so camera and
+controls had no milestone at all, which is why six of them arrived at once on 29 August as tasks 133
+to 138 with nowhere to live.
 
 **And there was no milestone for how the world looks**, while M2 recorded terrain as done. That is
 true in the sense that terrain exists and false in every sense a player would mean: the ground is

@@ -1484,7 +1484,9 @@ combat tasks and gathering bugs and test tooling under one heading — because a
 about what the game will be able to do, and none of these are that yet.
 
 Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
-125, 126, 129, 130, 131, 132, and the existing 89, 96 and 97. They are left in place here rather than moved, because a task's
+125, 126, 129, 130, 131, 132, and the existing 89, 96 and 97. Tasks 133 to 138 belong to **M5 — an
+interface**, which was widened on 29 August to name perspective and controls: `design-bible.md` §8
+describes them and no milestone had ever hosted it. They are left in place here rather than moved, because a task's
 number is how it is referred to months later and shuffling blocks around a file this size is how
 content gets lost.
 
@@ -3261,6 +3263,125 @@ numbers are set by hand and the log prints them together.
 `SpaceMMOSolidity` moved from Backend to Core to be reachable from the ship, which is its third
 caller. `StarterShip` carries convex collision, checked in the asset rather than assumed, so a
 character can still walk into a parked ship.
+
+## 133 — The ship cannot be seen from inside it
+
+**Pending**, found in the task 131 playtest. Belongs to **M5 — an interface**, widened on 29 August
+to name perspective and controls (`design-bible.md` §8).
+
+Board a ship and the third-person view shows no ship.
+
+**Ruled out already, without a playtest.** The ship defaults to third person —
+`FirstPersonCamera->SetActive(false)` in the constructor — so it is not a camera-toggle state
+carried over from the character. The boom is 1200 cm and the hull is fitted to 12 m, so the camera
+is not inside the hull. And the mesh's own pivot is centred: importing `StarterShip.fbx` into
+Blender and reading the vertices gives x -3.6..3.6, y -5.3..5.3, z -1.6..1.6, centre (0, 0, 0), so
+the hull is not authored off to one side of its origin.
+
+**The leading candidate, and the one measurement that settles it.** In the FBX the *object* sits at
+(-16.9, 75.0, 0) in its scene — about 77 m from the scene origin. If the import baked that transform
+into the vertices, the hull is drawn ~87 m from the pawn once scaled, the camera boom hangs off the
+pawn, and the ship is simply not in frame. From outside, a parked ship would sit 87 m from its own
+boarding prompt, which is easy not to notice: the last boarding in the log happened from 21 m away.
+
+`ApplyHullMesh` now logs the bounds origin as well as the extent, so the next run says outright
+whether the hull is drawn where the ship is. The deposit actor prints the same number for the same
+reason, and it settled a floating-building round in one run.
+
+If that is it, the fix is a re-import with *Transform Vertex to Absolute* off, or an equal and
+opposite `HullMeshOffset` — and the first is right, because the second leaves a mesh whose bounds
+disagree with its collision.
+
+**Also now logged: which axis the hull is longest on.** The mesh is 10.6 m along Y and 7.2 m along
+X, and +X is forward. If UE's import kept that, the ship flies sideways and `HullMeshRotation` needs
+a yaw. Untested — it looked right in the playtest, and "looked right" is not a measurement.
+
+---
+
+## 134 — Stepping out of a ship puts you thirty metres away, facing nowhere
+
+**Pending.** Belongs to **M5**.
+
+`FBoarding::DefaultStepOutOffsetKilometres` is **0.03 km**, so a character steps out thirty metres
+to the ship's right. That was chosen when a ship was an engine cone of no particular size and
+nothing was near it; beside a 12 m hull it reads as being teleported into a field.
+
+Wanted: **at the side of the hull, facing the way the ship faces.** The offset should come from the
+hull rather than being a constant — half its width plus a step — which also stops it going wrong
+again the next time the ship changes size. Nothing sets the character's rotation on step-out at all
+today, so it faces wherever the freshly spawned pawn happens to.
+
+Worth doing at the same time, because it is the same constant's twin: `DefaultBoardingRangeKilometres`
+is **0.1 km**, and the log shows a boarding from 90 m away. Reaching a ship from the length of a
+football pitch is the same fault at the other end of the trip.
+
+---
+
+## 135 — A ship may move when you step out of it
+
+**Pending**, and **unexplained**. Belongs to **M5**.
+
+Reported in the task 131 playtest: the ship appears to shift when the character disembarks.
+`ServerDisembark` deliberately does not touch the ship — "the ship stays exactly where it is,
+unpossessed, waiting to be climbed back into" — so if it moves, something else moves it.
+
+Candidates, none of them checked:
+
+- **The ship keeps simulating after it is unpossessed.** `Tick` still runs `SimulateStep` on the
+  authority, so `PendingInput` frozen at whatever was last held would keep thrusting.
+- **Task 131's blocking sweep**, which is new and runs every frame the ship moves at all.
+- **It may not be moving.** Thirty metres of step-out (134) puts the camera somewhere unexpected,
+  and a ship seen from a new angle looks displaced. Fix 134 first and look again — it may take this
+  with it.
+
+**Do not guess between these.** `PendingInput` and the ship's position across the disembark are two
+numbers and one log line, and this is the third time in this file that reasoning stood in for one.
+
+---
+
+## 136 — Sprint
+
+**Pending.** Belongs to **M5** for the key, and to **M6** for the pool behind it.
+
+Hold Shift to run. The design bible already names it: §2 gives `stamina` as "Sprint, jump, exertion
+pool", and defers the skill to the combat milestone because a pool needs an XP source first.
+
+**Jump is the precedent.** It is on the same skill and it works today without any stamina existing,
+so sprint can be a multiplier on `FWalkConfig::WalkSpeed` now and gain a pool later without the
+movement code changing shape. The walk model is pure and the server integrates it, so the input has
+to travel in `FWalkInput` alongside `bJump` rather than being a client-side speed change.
+
+---
+
+## 137 — The mouse wheel zooms the third-person camera
+
+**Pending.** Belongs to **M5**. Wanted both on foot and in the ship.
+
+The booms are already there — `CameraBoom->TargetArmLength`, 400 cm on the character and 1200 on the
+ship — so this is a bound axis, a clamp and a rate.
+
+**Client-only, and that is a rule rather than an implementation note.** `design-bible.md` §8: "the
+camera is a client concern only — it must never affect server-side validation, which is why
+interaction range is checked against the pawn, never the camera." Zoom must not travel in
+`FWalkInput`, must not be replicated, and must not reach anything that decides what a player can
+reach.
+
+---
+
+## 138 — Holding Alt orbits the camera without turning the pawn
+
+**Pending.** Belongs to **M5**. Wanted both on foot and in the ship.
+
+Hold Alt and the mouse swings the view around the character or ship; release it and the view returns
+to sitting behind them. The pawn does not turn while Alt is held.
+
+**The awkward part is not the orbit, it is what the pawn is doing meanwhile.** On foot, mouse X
+turns the character through `FWalkInput::Turn`, which the server simulates; the orbit has to
+suppress that without suppressing movement, so a character can keep walking forward while the camera
+swings around to look at them. Same in the ship for yaw.
+
+**And the same §8 rule applies**: the orbit is a client concern and must not reach the simulation. A
+camera that turned the pawn would be a camera that changed what the server sees.
 
 ---
 

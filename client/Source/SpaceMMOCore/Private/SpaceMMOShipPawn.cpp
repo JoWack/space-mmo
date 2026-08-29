@@ -463,7 +463,9 @@ void ASpaceMMOShipPawn::ApplyHullMesh()
 	// Measured off the mesh, not assumed, and along whichever axis it is longest on. A ship is
 	// longer than it is wide or tall, so the longest axis is its length whatever orientation it was
 	// authored in -- which means the fit does not depend on the rotation below being right first.
-	const FVector Extent = Mesh->GetBounds().BoxExtent;
+	const FBoxSphereBounds MeshBounds = Mesh->GetBounds();
+
+	const FVector Extent = MeshBounds.BoxExtent;
 
 	const double AuthoredLength = FMath::Max3(Extent.X, Extent.Y, Extent.Z) * 2.0;
 
@@ -497,6 +499,27 @@ void ASpaceMMOShipPawn::ApplyHullMesh()
 		*HullMeshRotation.ToCompactString(),
 		*HullMeshOffset.ToCompactString(),
 		HullRadiusKilometres * 1000.0);
+
+	// The pivot, and which way round the hull is, because neither is visible from a length.
+	//
+	// <strong>A mesh drawn a long way from its own origin is a ship that is not where the ship
+	// is.</strong> The camera boom hangs off the pawn, so a hull sitting eighty metres from the
+	// pivot is simply not in frame -- which looks like the ship failing to draw rather than like a
+	// number in an import setting. The deposit actor prints this for the same reason and it settled
+	// a floating-building round in one run.
+	//
+	// The longest axis is named too: this is scaled along whichever axis is longest, but +X is
+	// forward, and a hull whose length runs along Y is one that flies sideways until
+	// HullMeshRotation says otherwise.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  hull bounds: extent %s cm, origin %s cm from the pawn (%.1f cm once scaled); "
+			"longest axis is %s."),
+		*Extent.ToCompactString(),
+		*MeshBounds.Origin.ToCompactString(),
+		MeshBounds.Origin.Size() * Scale,
+		Extent.X >= Extent.Y && Extent.X >= Extent.Z
+			? TEXT("X, which is forward")
+			: (Extent.Y >= Extent.Z ? TEXT("Y, which is sideways") : TEXT("Z, which is up")));
 }
 
 void ASpaceMMOShipPawn::ResolveBlocking(const FSystemCoordinate& From)
