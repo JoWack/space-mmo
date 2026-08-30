@@ -3266,7 +3266,7 @@ character can still walk into a parked ship.
 
 ## 133 — The ship cannot be seen from inside it
 
-**Diagnosed and blocked on a re-import.** Found in the task 131 playtest; belongs to **M5 — an
+**Done 30 August.** Found in the task 131 playtest; belongs to **M5 — an
 interface**, widened on 29 August to name perspective and controls (`design-bible.md` §8).
 
 Board a ship and the third-person view shows no ship.
@@ -3296,11 +3296,26 @@ into the vertices, the hull is drawn ~87 m from the pawn once scaled, the camera
 pawn, and the ship is simply not in frame. From outside, a parked ship would sit 87 m from its own
 boarding prompt, which is easy not to notice: the last boarding in the log happened from 21 m away.
 
-### What is left, and why it is a re-import rather than a fix in code
+### Fixed by a re-import, not by code
 
-**Re-import `StarterShip.fbx` with *Bake Meshes* / *Transform Vertex to Absolute* off.** The suite
-stays red until then, deliberately: this is a real defect in shipped content and the test's job is
-to say so rather than to be softened into a warning.
+**Re-imported with *Bake Meshes* off**, and the test that found it now reads
+`extent V(X=3.58, Y=5.28, Z=1.63) cm, bounds origin V(0) cm`. The suite was red on that one test in
+between, deliberately: it is a real defect in shipped content and the test's job is to say so rather
+than to be softened into a warning.
+
+*Bake Meshes* is Interchange's name for it. *Transform Vertex to Absolute* is the legacy FBX
+importer's name for the same setting and does not appear in UE 5.8's dialog, which is worth knowing
+before somebody goes looking for it.
+
+**The re-import also dropped the object's 100x scale**, which had been baked in alongside the
+translation: the mesh is 10.56 cm on its longest axis now rather than 1055 cm. Nothing is wrong with
+how it draws, because `HullLengthMetres` fits it and the fit exists for exactly this — but it is
+scaled 113.6 at runtime, and the asset now misstates its own size to anything that reasons from
+bounds, which is LOD screen sizes and lightmap resolution. Setting *Build Scale* to 100 in the mesh's
+build settings, or *Import Uniform Scale* to 100 on a future re-import, would put that right.
+
+**The proportions are unchanged** — 3.58 : 5.28 : 1.63 against the old 358 : 528 : 163 — so the axes
+did not move and the yaw of -90 derived from them still holds.
 
 Two alternatives were considered and rejected.
 
