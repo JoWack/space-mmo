@@ -1484,7 +1484,7 @@ combat tasks and gathering bugs and test tooling under one heading — because a
 about what the game will be able to do, and none of these are that yet.
 
 Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
-125, 126, 129, 130, 131, 132, and the existing 89, 96 and 97. Tasks 133 to 138 belong to **M5 — an
+125, 126, 129, 130, 131, 132, 139, and the existing 89, 96 and 97. Tasks 133 to 138 belong to **M5 — an
 interface**, which was widened on 29 August to name perspective and controls: `design-bible.md` §8
 describes them and no milestone had ever hosted it. They are left in place here rather than moved, because a task's
 number is how it is referred to months later and shuffling blocks around a file this size is how
@@ -3455,6 +3455,53 @@ swings around to look at them. Same in the ship for yaw.
 
 **And the same §8 rule applies**: the orbit is a client concern and must not reach the simulation. A
 camera that turned the pawn would be a camera that changed what the server sees.
+
+## 139 — A character walks through the ship, which has collision a hundred times too big
+
+**Blocked on one asset field.** Belongs to **M7 — a world worth being in**, with
+[ADR-0013](adr/0013-terrain-is-a-function-everything-else-collides.md); found in the task 133
+playtest, and caused by the re-import that closed it.
+
+Measured, headlessly, by `SpaceMMO.Ship.HullCanBeBumpedInto`:
+
+    'StarterShip': 1 simple primitive(s), collision trace flag 0.
+    collision extent V(X=358.32, Y=527.87, Z=163.50) cm
+         against render extent V(X=3.58, Y=5.28, Z=1.63) cm.
+
+**Exactly a hundred to one.** Task 133's re-import dropped the object's 100x scale along with the
+baked translation; the render geometry shrank and the convex hull did not. Multiplied by the runtime
+fit of 113.7 the collision is some four hundred metres across, around a ship drawn twelve metres
+long.
+
+**Set *Build Scale* to 100 in the mesh's build settings.** That is the same field task 133 already
+noted for the bounds, and it fixes both at once: the render mesh returns to 358 x 528 x 163 cm,
+matching the collision exactly, and the runtime fit goes back to 1.137.
+
+### What was ruled out first, and what is still not explained
+
+The character's sweep is fine: the same session logged 23 `Blocked by BP_Station_A02_CapitalHub_C_0`
+and not one against the ship, which clears the channel, the responses, the capsule and the walk code
+in one reading. And the ship stopping at the station says nothing about its hull — that is the ship's
+own two-metre sphere from task 131, not the mesh.
+
+`CTF_UseComplexAsSimple` was the other candidate and the flag says 0, so the hulls are reachable in
+principle.
+
+**What is not explained is why the sweep reports nothing at all.** A character standing beside the
+ship is deep inside a four-hundred-metre hull, and a sweep that begins inside a shape should return
+an initial overlap and be logged. It is not. Fix the scale first and measure again rather than
+layering a second theory on the first — the mismatch is unambiguous and wrong either way, and this
+file already records three rounds lost to reasoning where a number was available.
+
+### The check that should have caught it
+
+`SpaceMMOSolidity::ReportIfIntangible` counted collision primitives and stopped, so it passed a mesh
+whose collision was a hundred times the wrong size. That is its own version of the mistake the
+testing rules warn about: asserting that a value exists rather than asserting the value.
+
+It now also warns when the collision has drifted from the mesh by more than a factor of two, and when
+the collision complexity is *Use Complex Collision As Simple* — which leaves hulls present, drawn in
+the editor, counted correctly, and unreachable to every sweep this project runs.
 
 ---
 
