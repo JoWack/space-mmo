@@ -49,3 +49,28 @@ FSystemCoordinate FBoarding::StepOutPosition(
 
 	return FSystemCoordinate(Ship.Kilometres + Offset);
 }
+
+FQuat FBoarding::StepOutRotation(const FVector& SurfaceNormal, const FVector& ShipForward)
+{
+	const FVector Up = SurfaceNormal.GetSafeNormal();
+
+	if (Up.IsNearlyZero())
+	{
+		return FQuat::Identity;
+	}
+
+	FVector Forward = ShipForward - (Up * FVector::DotProduct(ShipForward, Up));
+
+	// A ship parked nose-straight-up leaves nothing to flatten. Any heading will do at that point,
+	// and having a valid one is what matters -- the alternative is a NaN rotation, which makes the
+	// character vanish rather than face the wrong way.
+	if (Forward.IsNearlyZero())
+	{
+		const FVector Reference =
+			FMath::Abs(Up.Z) < 0.9 ? FVector(0.0, 0.0, 1.0) : FVector(1.0, 0.0, 0.0);
+
+		Forward = FVector::CrossProduct(Up, FVector::CrossProduct(Reference, Up));
+	}
+
+	return FRotationMatrix::MakeFromZX(Up, Forward.GetSafeNormal()).ToQuat();
+}

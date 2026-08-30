@@ -162,6 +162,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	double GetLastCorrectionKilometres() const { return LastCorrectionKilometres; }
 
+	/**
+	 * Which hull this ship is configured to draw, for anything that needs to check the asset.
+	 *
+	 * Public because a test measures the mesh: whether the hull is drawn where the ship is cannot
+	 * be reasoned about from the configuration, only read off the imported artefact.
+	 */
+	const FSoftObjectPath& GetHullMesh() const { return HullMesh; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -240,6 +248,9 @@ protected:
 
 	/** Puts the configured hull on, or says why it did not. */
 	void ApplyHullMesh();
+
+	/** Centres the stick when the pilot leaves, so an empty ship does not fly itself. */
+	virtual void UnPossessed() override;
 
 	/**
 	 * Stops the ship at anything solid it has flown into.

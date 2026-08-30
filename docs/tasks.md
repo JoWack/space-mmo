@@ -3266,10 +3266,22 @@ character can still walk into a parked ship.
 
 ## 133 — The ship cannot be seen from inside it
 
-**Pending**, found in the task 131 playtest. Belongs to **M5 — an interface**, widened on 29 August
-to name perspective and controls (`design-bible.md` §8).
+**Diagnosed and blocked on a re-import.** Found in the task 131 playtest; belongs to **M5 — an
+interface**, widened on 29 August to name perspective and controls (`design-bible.md` §8).
 
 Board a ship and the third-person view shows no ship.
+
+**The hull is drawn 77 metres from the ship**, and the camera boom hangs off the ship. Measured
+rather than inferred: `SpaceMMO.Ship.HullIsDrawnWhereTheShipIs` loads the configured mesh and reads
+its bounds off it —
+
+    'StarterShip': extent V(X=358.22, Y=527.77, Z=163.40) cm,
+                   bounds origin V(X=-1687.33, Y=-7499.78, Z=-0.00) cm
+
+That origin is the FBX object's own scene position, (-16.873, 74.998, 0) metres, baked into the
+vertices at import. Scaled by the 1.137 fit it puts the hull 87 m from the pawn — out of frame from
+inside, and from outside a parked ship sitting 87 m from its own boarding prompt, which was easy to
+miss while boarding reached 90 m.
 
 **Ruled out already, without a playtest.** The ship defaults to third person —
 `FirstPersonCamera->SetActive(false)` in the constructor — so it is not a camera-toggle state
@@ -3284,23 +3296,35 @@ into the vertices, the hull is drawn ~87 m from the pawn once scaled, the camera
 pawn, and the ship is simply not in frame. From outside, a parked ship would sit 87 m from its own
 boarding prompt, which is easy not to notice: the last boarding in the log happened from 21 m away.
 
-`ApplyHullMesh` now logs the bounds origin as well as the extent, so the next run says outright
-whether the hull is drawn where the ship is. The deposit actor prints the same number for the same
-reason, and it settled a floating-building round in one run.
+### What is left, and why it is a re-import rather than a fix in code
 
-If that is it, the fix is a re-import with *Transform Vertex to Absolute* off, or an equal and
-opposite `HullMeshOffset` — and the first is right, because the second leaves a mesh whose bounds
-disagree with its collision.
+**Re-import `StarterShip.fbx` with *Bake Meshes* / *Transform Vertex to Absolute* off.** The suite
+stays red until then, deliberately: this is a real defect in shipped content and the test's job is
+to say so rather than to be softened into a warning.
 
-**Also now logged: which axis the hull is longest on.** The mesh is 10.6 m along Y and 7.2 m along
-X, and +X is forward. If UE's import kept that, the ship flies sideways and `HullMeshRotation` needs
-a yaw. Untested — it looked right in the playtest, and "looked right" is not a measurement.
+Two alternatives were considered and rejected.
+
+- **Rewriting the FBX** so its object sits at its scene origin. Tried, and reverted: it is a bought
+  mesh, a Blender round-trip rewrites its normals and smoothing, and there is no way to check the
+  shading of a ship headlessly. The raw file is byte-identical to the vendor's again.
+- **An equal and opposite `HullMeshOffset`.** It would work today and become wrong the moment
+  anybody re-imports the asset properly — a compensating lie in a config file, waiting.
+
+The hazard with a checkbox is that missing it looks exactly like doing it, which is the shape of
+fault this project has paid for repeatedly. It is covered here: the test fails until the bounds
+origin is inside the hull, so the re-import either worked or the suite says it did not.
+
+**Also measured: the hull is authored nose-along-Y, and +X is forward.** Its extent is 358 cm across
+X and 528 across Y, and bucketing the vertices along Y puts the narrow end — the nose — at Blender
+-Y, which UE's axis conversion lands on +Y. `HullMeshRotation` is a yaw of -90 now, to turn +Y onto
++X. If it flies tail first it is +90, which is one value in the ini and no rebuild. `ApplyHullMesh`
+logs the bounds origin, the extent and which axis is longest, so none of this has to be re-derived.
 
 ---
 
 ## 134 — Stepping out of a ship puts you thirty metres away, facing nowhere
 
-**Pending.** Belongs to **M5**.
+**Done 30 August**, awaiting a playtest. Belongs to **M5**.
 
 `FBoarding::DefaultStepOutOffsetKilometres` is **0.03 km**, so a character steps out thirty metres
 to the ship's right. That was chosen when a ship was an engine cone of no particular size and
@@ -3312,14 +3336,35 @@ again the next time the ship changes size. Nothing sets the character's rotation
 today, so it faces wherever the freshly spawned pawn happens to.
 
 Worth doing at the same time, because it is the same constant's twin: `DefaultBoardingRangeKilometres`
-is **0.1 km**, and the log shows a boarding from 90 m away. Reaching a ship from the length of a
+was **0.1 km**, and the log shows a boarding from 90 m away. Reaching a ship from the length of a
 football pitch is the same fault at the other end of the trip.
+
+### What was done
+
+The offset is measured off the hull — the largest horizontal half-extent plus a metre of clearance —
+so a bigger ship steps you out further and this cannot go stale the next time the drawn ship changes
+size. The largest half-extent rather than the width specifically, because which of a mesh's axes is
+its width depends on how somebody authored it, and landing inside the hull is worse than landing a
+metre further out than was needed.
+
+Taken from the mesh's extent rather than from the component's world bounds, deliberately: task 133's
+hull has bounds 77 m from the pawn, and this must not inherit that fault.
+
+`FBoarding::StepOutRotation` faces the character along the ship's nose, flattened into the tangent
+plane. Nothing set a rotation at all before. The degenerate case is why it is a function rather than
+two lines at the call site — a ship parked nose-straight-up leaves nothing to flatten, and the naive
+version produces a NaN, which does not face the wrong way but makes the character vanish.
+
+Boarding range is 0.015 km. `SpaceMMO.Boarding.Range` asserted 0.09 and 0.11 against a range of 0.1
+and so failed the day the range was tuned — not because anything was wrong, but because it asserted
+the number instead of the rule. It derives both from the constant now, and adds the rule that was
+actually wanted: a ship is boarded from beside it, not from across a field.
 
 ---
 
 ## 135 — A ship may move when you step out of it
 
-**Pending**, and **unexplained**. Belongs to **M5**.
+**One cause removed, still unconfirmed.** Belongs to **M5**.
 
 Reported in the task 131 playtest: the ship appears to shift when the character disembarks.
 `ServerDisembark` deliberately does not touch the ship — "the ship stays exactly where it is,
@@ -3336,6 +3381,19 @@ Candidates, none of them checked:
 
 **Do not guess between these.** `PendingInput` and the ship's position across the disembark are two
 numbers and one log line, and this is the third time in this file that reasoning stood in for one.
+
+### What was done
+
+`UnPossessed` is overridden and centres the stick. **A ship nobody is flying must not keep flying**,
+and nothing cleared `PendingInput`, so a ship left with thrust held kept thrusting after its pilot
+stepped out. That is a fault on its own terms whether or not it is this one, and every route out of
+a ship comes through that override — including ones nobody has written yet. It logs when it had
+something to clear, so "the stick was held" is a fact next time rather than a candidate.
+
+Stepping out logs the ship's position alongside the character's now, because "the ship moved when I
+got out" and "the ship is where it was and I am looking at it from somewhere new" produce the same
+impression and different numbers. With 134 fixed the second is the more likely of the two, and the
+log line settles it either way without another round of reasoning.
 
 ---
 

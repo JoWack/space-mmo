@@ -30,15 +30,29 @@ bool FSpaceMMOBoardingRangeTest::RunTest(const FString& Parameters)
 	// Standing on it.
 	TestTrue(TEXT("Touching the ship is in range"), FBoarding::CanEmbark(Ship, Ship));
 
-	// Just inside the hundred-metre range.
-	const FSystemCoordinate Near(Ship.Kilometres + FVector(0.09, 0.0, 0.0));
+	// Just inside and just outside, taken from the range rather than written out.
+	//
+	// This used to say 0.09 and 0.11 against a range of 0.1, and so it failed the day the range
+	// changed -- not because anything was wrong, but because it had been asserting the number
+	// instead of the rule. The rule is that inside is in and outside is not, at whatever distance
+	// the range happens to be, and a test that has to be edited when a value is tuned trains whoever
+	// is tuning it to edit tests without reading them.
+	const double Range = FBoarding::DefaultBoardingRangeKilometres;
 
-	TestTrue(TEXT("Ninety metres away is in range"), FBoarding::CanEmbark(Near, Ship));
+	const FSystemCoordinate Near(Ship.Kilometres + FVector(Range * 0.9, 0.0, 0.0));
 
-	// Just outside. A client asking to board from further away is asking, not telling.
-	const FSystemCoordinate Far(Ship.Kilometres + FVector(0.11, 0.0, 0.0));
+	TestTrue(TEXT("Just inside the range is in range"), FBoarding::CanEmbark(Near, Ship));
 
-	TestFalse(TEXT("A hundred and ten metres away is not"), FBoarding::CanEmbark(Far, Ship));
+	// A client asking to board from further away is asking, not telling.
+	const FSystemCoordinate Far(Ship.Kilometres + FVector(Range * 1.1, 0.0, 0.0));
+
+	TestFalse(TEXT("Just outside it is not"), FBoarding::CanEmbark(Far, Ship));
+
+	// And the range is a walk rather than a flight. Boarding from further than a hull's length or
+	// two away is what made stepping out thirty metres look normal for as long as it did.
+	TestTrue(
+		TEXT("A ship is boarded from beside it, not from across a field"),
+		Range <= 0.05);
 
 	// And nowhere near, which is what a hostile client would send.
 	const FSystemCoordinate Absurd(Ship.Kilometres + FVector(500.0, 0.0, 0.0));
@@ -47,7 +61,7 @@ bool FSpaceMMOBoardingRangeTest::RunTest(const FString& Parameters)
 
 	// Range is measured in every direction, not just along one axis.
 	const FSystemCoordinate Diagonal(
-		Ship.Kilometres + FVector(0.06, 0.06, 0.06));
+		Ship.Kilometres + FVector(Range * 0.6, Range * 0.6, Range * 0.6));
 
 	TestEqual(
 		TEXT("Diagonal distance is measured properly"),
@@ -156,6 +170,70 @@ bool FSpaceMMOBoardingWorksAnywhereOnASphereTest::RunTest(const FString& Paramet
 			*FString::Printf(TEXT("Not underground at %s"), *Up.ToCompactString()),
 			FVector::DotProduct(Offset, Up) >= 0.0);
 	}
+
+	return true;
+}
+
+
+/**
+ * Stepping out of a ship leaves you facing the way the ship is pointing.
+ *
+ * <strong>Not the way you stepped.</strong> A character steps out sideways, and facing along the
+ * step-out direction leaves somebody staring at their own hull; the ship's nose is the direction
+ * they flew in from and the direction everything they landed for is. Nothing set this at all before
+ * -- a freshly spawned pawn faced wherever it happened to.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOBoardingStepsOutFacingTheShipsNoseTest,
+	"SpaceMMO.Boarding.StepsOutFacingTheShipsNose",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOBoardingStepsOutFacingTheShipsNoseTest::RunTest(const FString& Parameters)
+{
+	const FVector Up(0.0, 0.0, 1.0);
+
+	// A ship pointing along +Y on flat ground.
+	const FQuat Facing = FBoarding::StepOutRotation(Up, FVector(0.0, 1.0, 0.0));
+
+	TestTrue(
+		TEXT("The character faces the ship's nose"),
+		FVector::DotProduct(Facing.GetForwardVector(), FVector(0.0, 1.0, 0.0)) > 0.999);
+
+	TestTrue(
+		TEXT("And stands up out of the ground"),
+		FVector::DotProduct(Facing.GetUpVector(), Up) > 0.999);
+
+	// A ship parked nose-up on a slope has a forward with a component along the normal. Using it
+	// unmodified leans the character; flattening keeps them upright and pointing the same way.
+	const FVector Tilted = FVector(0.0, 1.0, 1.0).GetSafeNormal();
+
+	const FQuat Flattened = FBoarding::StepOutRotation(Up, Tilted);
+
+	TestTrue(
+		TEXT("A ship pitched up still leaves the character upright"),
+		FVector::DotProduct(Flattened.GetUpVector(), Up) > 0.999);
+
+	TestTrue(
+		TEXT("...and still facing the way its nose points across the ground"),
+		FVector::DotProduct(Flattened.GetForwardVector(), FVector(0.0, 1.0, 0.0)) > 0.999);
+
+	// The degenerate case, which is what makes this worth a function rather than two lines at the
+	// call site: a ship nose-straight-up leaves nothing to flatten, and the naive version produces
+	// a NaN rotation. A character with a NaN transform does not face the wrong way, it vanishes.
+	const FQuat NoseUp = FBoarding::StepOutRotation(Up, Up);
+
+	TestFalse(TEXT("A ship parked nose-up does not produce a NaN"), NoseUp.ContainsNaN());
+
+	TestTrue(
+		TEXT("...and still leaves the character standing on the ground"),
+		FVector::DotProduct(NoseUp.GetUpVector(), Up) > 0.999);
+
+	// Up itself being useless is the caller having no ground to stand on. Identity is a heading
+	// somebody can walk out of; a NaN is not.
+	const FQuat NoGround =
+		FBoarding::StepOutRotation(FVector::ZeroVector, FVector(1.0, 0.0, 0.0));
+
+	TestFalse(TEXT("No surface normal produces no NaN either"), NoGround.ContainsNaN());
 
 	return true;
 }

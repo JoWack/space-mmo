@@ -429,6 +429,28 @@ void ASpaceMMOShipPawn::SimulateStep(const double DeltaSeconds)
 	ResolveGroundContact();
 }
 
+void ASpaceMMOShipPawn::UnPossessed()
+{
+	Super::UnPossessed();
+
+	// <strong>A ship nobody is flying must not keep flying.</strong> PendingInput is whatever was
+	// last held, and nothing cleared it, so a ship left with thrust on its stick kept thrusting
+	// after its pilot stepped out -- which is one candidate for task 135 and a fault on its own
+	// terms whether or not it turns out to be that one. Every route out of a ship comes through
+	// here, including ones nobody has written yet.
+	const bool bWasDriving = !PendingInput.Thrust.IsNearlyZero()
+		|| !PendingInput.Torque.IsNearlyZero()
+		|| PendingInput.bBoost;
+
+	PendingInput = FShipFlightInput();
+
+	if (bWasDriving)
+	{
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("Ship left with input still held; the stick is now centred."));
+	}
+}
+
 void ASpaceMMOShipPawn::ApplyHullMesh()
 {
 	if (Hull == nullptr)
@@ -940,8 +962,35 @@ void ASpaceMMOShipPawn::ServerDisembark_Implementation()
 		}
 	}
 
+	// Measured off the hull rather than taken from a constant, so a bigger ship steps you out
+	// further and this cannot go stale the next time the drawn ship changes size.
+	//
+	// The largest horizontal half-extent, not the width specifically: which of a mesh's axes is its
+	// width depends on how somebody authored it, and a step-out that lands inside the hull is worse
+	// than one that lands a metre further out than it needed to. Extent rather than the component's
+	// world bounds, deliberately -- a mesh with a baked-in translation has bounds a long way from
+	// the pawn, and this must not inherit that fault (task 133).
+	double OffsetKilometres = FBoarding::DefaultStepOutOffsetKilometres;
+
+	if (Hull != nullptr && Hull->GetStaticMesh() != nullptr)
+	{
+		const FVector Extent =
+			Hull->GetStaticMesh()->GetBounds().BoxExtent * Hull->GetRelativeScale3D();
+
+		constexpr double ClearanceCentimetres = 100.0;
+
+		OffsetKilometres =
+			(FMath::Max(FMath::Abs(Extent.X), FMath::Abs(Extent.Y)) + ClearanceCentimetres)
+			/ SpaceMMO::Coordinates::CentimetresPerKilometre;
+	}
+
 	const FSystemCoordinate StepOut = FBoarding::StepOutPosition(
-		Navigation.SystemPosition, Up, FlightState.Rotation.GetRightVector());
+		Navigation.SystemPosition, Up, FlightState.Rotation.GetRightVector(), OffsetKilometres);
+
+	// Facing the way the ship faces. Nothing set this before, so a character stepped out facing
+	// whichever way a freshly spawned pawn happens to.
+	const FQuat Facing =
+		FBoarding::StepOutRotation(Up, FlightState.Rotation.GetForwardVector());
 
 	// Assigned in two statements rather than one conditional: TSubclassOf and UClass* both convert
 	// to several common types, so the ternary is ambiguous.
@@ -953,7 +1002,7 @@ void ASpaceMMOShipPawn::ServerDisembark_Implementation()
 	}
 
 	ASpaceMMOCharacterPawn* Character = World->SpawnActorDeferred<ASpaceMMOCharacterPawn>(
-		SpawnClass, FTransform::Identity, nullptr, nullptr,
+		SpawnClass, FTransform(Facing), nullptr, nullptr,
 		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 
 	if (Character == nullptr)
@@ -964,12 +1013,24 @@ void ASpaceMMOShipPawn::ServerDisembark_Implementation()
 	// Before FinishSpawning. BeginPlay resolves the ground and aligns to it, so a position applied
 	// afterwards is a frame too late.
 	Character->SetStartingSystemPosition(StepOut.Kilometres);
-	Character->FinishSpawning(FTransform::Identity);
+
+	// The rotation has to survive FinishSpawning, which is why it is on the transform rather than
+	// applied afterwards: BeginPlay reads the actor's quaternion and aligns it to the ground, so a
+	// heading set later is a heading set a frame too late.
+	Character->FinishSpawning(FTransform(Facing));
 
 	// The ship stays exactly where it is, unpossessed, waiting to be climbed back into.
 	OwningController->Possess(Character);
 
-	UE_LOG(LogSpaceMMO, Log, TEXT("Stepped out of the ship at %s"), *StepOut.ToString());
+	// The ship's position as well as the character's, because "the ship moved when I got out" and
+	// "the ship is where it was and I am looking at it from somewhere new" produce the same
+	// impression and different numbers (task 135). One line, both numbers, every time.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Stepped out of the ship at %s, %.1f m to its side, facing its nose. "
+			"The ship is at %s and stays there."),
+		*StepOut.ToString(),
+		OffsetKilometres * 1000.0,
+		*Navigation.SystemPosition.ToString());
 }
 
 void ASpaceMMOShipPawn::ToggleCameraView()
