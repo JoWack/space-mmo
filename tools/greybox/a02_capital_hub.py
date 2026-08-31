@@ -228,6 +228,76 @@ def _enclosed(ax, plane, rect, exclude):
     return False
 
 
+# --------------------------------------------------------------------------
+# Does a person fit?
+#
+# ASpaceMMOCharacterPawn sweeps a capsule of CollisionRadiusCentimetres = 34
+# and stands CharacterHeightCentimetres = 180 tall
+# (client/Source/SpaceMMOCore/Public/SpaceMMOCharacterPawn.h). So the pawn is
+# 0.68 m across, and anything narrower than that it cannot enter at all.
+#
+# A plan drawn to wall centrelines hides this: two walls 1.0 m apart on the
+# drawing leave 0.5 m of air once they are 0.5 m thick, and a 0.68 m pawn
+# does not fit through 0.5 m. Nothing about the drawing looks wrong.
+# --------------------------------------------------------------------------
+
+PAWN_DIAMETER = 0.68        # 2 x CollisionRadiusCentimetres
+PAWN_HEIGHT = 1.80          # CharacterHeightCentimetres
+MIN_WALKWAY = 1.20          # the pawn plus room either side, not a squeeze
+
+
+def report_tight_gaps(floor_z, level, limit=12):
+    """Find places where two solids face each other too closely to walk between.
+
+    Everything here is axis aligned, so a pinch point is a pair of solids that
+    overlap along one horizontal axis and leave a gap along the other, within
+    the band a standing character occupies.
+    """
+    # Only things that obstruct walking count. Floors, slabs, roofs and stair
+    # treads are surfaces a character stands on or under, and counting a tread
+    # as an obstacle reports a staircase as 25 impassable slots.
+    obstacles = ("MAT_GB_Structure", "MAT_GB_Partition", "MAT_GB_Service")
+    lo, hi = floor_z + 0.05, floor_z + PAWN_HEIGHT
+    live = [(g, l, b) for g, l, b in _boxes
+            if GROUPS[g][1] in obstacles
+            and b[4] < hi - 1e-6 and b[5] > lo + 1e-6]
+
+    gaps = []
+    for i in range(len(live)):
+        gi, li, bi = live[i]
+        for j in range(i + 1, len(live)):
+            gj, lj, bj = live[j]
+            for ax, other in ((0, 1), (1, 0)):
+                run = min(bi[other * 2 + 1], bj[other * 2 + 1]) - \
+                    max(bi[other * 2], bj[other * 2])
+                if run < 0.5:            # not facing each other across a gap
+                    continue
+                if bi[ax * 2 + 1] <= bj[ax * 2]:
+                    gap = bj[ax * 2] - bi[ax * 2 + 1]
+                elif bj[ax * 2 + 1] <= bi[ax * 2]:
+                    gap = bi[ax * 2] - bj[ax * 2 + 1]
+                else:
+                    continue             # they overlap; no gap to measure
+                if 0.01 < gap < MIN_WALKWAY - 1e-6:
+                    gaps.append((gap, run, AXIS_NAME[ax], gi, li, gj, lj))
+
+    gaps.sort(key=lambda g: g[0])
+    print("")
+    print("  %s: gaps under %.2f m between facing solids" % (level, MIN_WALKWAY))
+    if not gaps:
+        print("    none")
+        return 0
+    blocked = sum(1 for g in gaps if g[0] < PAWN_DIAMETER)
+    for gap, run, ax, gi, li, gj, lj in gaps[:limit]:
+        mark = "IMPASSABLE" if gap < PAWN_DIAMETER else "tight"
+        print("    %5.2f m clear over %5.1f m of %s  %-10s  %s vs %s"
+              % (gap, run, ax, mark, li or gi, lj or gj))
+    if len(gaps) > limit:
+        print("    ... and %d more" % (len(gaps) - limit))
+    print("    %d narrower than the %.2f m pawn" % (blocked, PAWN_DIAMETER))
+    return blocked
+
+
 def report_coincident_faces(limit=14):
     """Find pairs of solids that put two same-facing faces on the same plane.
 
@@ -366,13 +436,14 @@ box(S, 4.0, 12.0, 4.0, 6.5, Z_SUNK, H_COUNTER, "F faction supply")
 # R -- registry and insurance, 8.0 x 2.5 m.  SVG rect 310,70 80x25
 box(S, 28.0, 36.0, 4.0, 6.5, Z_SUNK, H_COUNTER, "R registry")
 # H -- hangar racking, 1.5 m deep run.       SVG rect 35,130 15x190
-box(S, 0.5, 2.0, 10.0, 29.0, Z_SUNK, H_RACK, "H racking")
+box(S, T_STRUCT / 2.0, T_STRUCT / 2.0 + 1.5, 10.0, 29.0, Z_SUNK, H_RACK,
+    "H racking")
 # Q -- quest stand, 3.0 x 2.5 m.             SVG rect 160,350 30x25
-box(S, 13.0, 16.0, 32.0, 34.5, Z_SUNK, H_QUEST, "Q quest stand")
+box(S, 12.25, 15.25, 32.45, 34.95, Z_SUNK, H_QUEST, "Q quest stand")
 
 # M -- eight market terminals, two banks of four against the wing walls.
 MARKET_Y = [(10.0, 13.0), (14.5, 17.5), (19.0, 22.0), (23.5, 26.5)]
-MARKET_X = [(8.5, 10.5), (29.5, 31.5)]
+MARKET_X = [(8.25, 10.25), (29.75, 31.75)]
 market_count = 0
 for _mx0, _mx1 in MARKET_X:
     for _my0, _my1 in MARKET_Y:
@@ -402,7 +473,7 @@ for _group, _x_start, _dir in (("GB_L00_Stair_West", 1.5, 1.0),
         _a = _x_start + _dir * _i * STAIR_GOING
         _b = _x_start + _dir * ((_i + 1) * STAIR_GOING + KNIT)
         box(_group, min(_a, _b), max(_a, _b),
-            STAIR_Y[0] - KNIT, STAIR_Y[1] + KNIT,
+            STAIR_Y[0] - 0.25, STAIR_Y[1] + KNIT,
             Z_SUNK, (_i + 1) * STAIR_RISE, "tread %d" % (_i + 1))
 
 # --------------------------------------------------------------------------
@@ -457,10 +528,18 @@ for _ax0, _ax1, _front in ALCOVE_SIDES:
 
 # Cores and landing. SVG: M 490 348 H 610 M 770 348 H 890, verticals at
 # x=12 and x=28 -- so the landing between them is open to the void.
-wall_ew(W1, 31.8, 0.0, 12.0 + KNIT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N/W")
-wall_ew(W1, 31.8, 28.0 - KNIT, FOOTPRINT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N/E")
+# The sheet draws this wall at y=31.8, which leaves 0.8 m centreline to the
+# void edge -- and 0.50 m of air once the wall and the parapet have taken
+# their thickness out of it. A 0.68 m pawn cannot get through, and this strip
+# is the only route from the landing to the career gallery. Moved south to
+# L01_CORE_N, which is as far as the drawn stair at y=33 allows, for 1.30 m
+# clear. See report_tight_gaps.
+L01_CORE_N = 32.6
+
+wall_ew(W1, L01_CORE_N, 0.0, 12.0 + KNIT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N/W")
+wall_ew(W1, L01_CORE_N, 28.0 - KNIT, FOOTPRINT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N/E")
 for _x in (12.0, 28.0):
-    wall_ns(W1, _x, 31.8, 35.0 + KNIT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N")
+    wall_ns(W1, _x, L01_CORE_N, 35.0 + KNIT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core N")
     wall_ns(W1, _x, 38.0 - KNIT, FOOTPRINT, Z_L01_WALL_BOT, Z_ROOF, label="L01 core S")
     wall_ns(W1, _x, 35.0, 38.0, Z_L01 + H_DOOR, Z_ROOF, label="L01 core door head")
 
@@ -980,10 +1059,12 @@ def main():
     check_names_are_distinct()
     check_against_sheet()
     coincident = report_coincident_faces()
+    blocked = report_tight_gaps(0.0, 'Level 00')
+    blocked += report_tight_gaps(Z_L01, 'Level 01')
 
     if "--check-only" in argv:
         print("")
-        raise SystemExit(1 if coincident else 0)
+        raise SystemExit(1 if (coincident or blocked) else 0)
 
     clear_scene()
     scene = bpy.context.scene
