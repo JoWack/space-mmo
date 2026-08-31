@@ -13,9 +13,11 @@ a plausible reconstruction presented as the original is worse than an admitted g
 Status is one of **pending**, **in progress**, **blocked** (say on what), or **done** (say which
 commit closed it, and move it to the bottom).
 
-Milestones live in `README.md` under Roadmap. **M3 is the current one — "closing the loop: mine →
-craft → sell, two players trading a player-made item"** — and tasks 91 to 95 are derived from that
-sentence rather than recovered from any list. Where a task asserts something is missing, it says
+Milestones live in `README.md` under Roadmap. **M5 — an interface — and M7 — a world worth being in
+— are the ones being worked, as of 31 August.** Tasks 91 to 95 are derived from M3's sentence rather
+than recovered from any list; M3 closed and this line went on naming it as current for a fortnight,
+which is the same drift the README records four times and is worth correcting here the moment it is
+noticed rather than at the next reconciliation. Where a task asserts something is missing, it says
 whether that was verified in code or inferred from the design bible, because the two are not the
 same and only one of them is safe to act on without looking.
 
@@ -2979,7 +2981,8 @@ while the capital is 20260805, that line says so outright, and no reasoning abou
 
 ## 130 — Things you cannot walk through
 
-**In progress.** Belongs to **M7 — a world worth being in**, and implements
+**Done 30 August**, bar the roof — see task 133 for why that one asset is a re-import nobody needs to
+do today. Belongs to **M7 — a world worth being in**, and implements
 [ADR-0013](adr/0013-terrain-is-a-function-everything-else-collides.md), accepted 26 August: terrain
 stays a pure height function with no collision geometry at all, and everything standing on it —
 ships, deposits, buildings — gets ordinary Unreal collision, queried rather than simulated.
@@ -3094,9 +3097,9 @@ Blueprint's roof component at `GB_Roof`.
 
 ### Station interiors
 
-- The greybox generator now emits collision — 87 `UCX_` hulls over 11
-  meshes, one per solid, since every solid in the building is an axis-aligned box and a box is
-  already a convex hull. Waiting on a Blender re-run and a re-import with *Import Collision* on.
+- The greybox generator emits collision — 87 `UCX_` hulls over 11 meshes, one per solid, since every
+  solid in the building is an axis-aligned box and a box is already a convex hull. Re-run,
+  re-imported, and playtested: walls stop a character and the floors hold one up.
 
   The two stair flights get **one ramp hull each rather than 25 tread hulls**, and that is a
   decision about how it plays rather than a saving. The character has no step-up, so a sweep into a
@@ -3383,7 +3386,12 @@ actually wanted: a ship is boarded from beside it, not from across a field.
 
 ## 135 — A ship may move when you step out of it
 
-**One cause removed, still unconfirmed.** Belongs to **M5**.
+**Done 30 August**, confirmed by playtest: no drift after the stick is centred. Belongs to **M5**.
+
+Which of the three candidates below it actually was stays unproven — stepping out thirty metres away
+was fixed in the same build, so "the ship moved" and "I was looking at it from somewhere unexpected"
+were both removed at once. The step-out line logs both positions now, so if it ever returns the log
+answers it rather than another round of reasoning.
 
 Reported in the task 131 playtest: the ship appears to shift when the character disembarks.
 `ServerDisembark` deliberately does not touch the ship — "the ship stays exactly where it is,
