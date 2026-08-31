@@ -94,6 +94,7 @@
       "name": "Shuttle",
       "category": "Hull",
       "volumeM3": 200.0,
+      "holdCapacityM3": 80.0,
       "$comment": "The player's first ship."
     },
     {
@@ -101,6 +102,7 @@
       "name": "Freighter",
       "category": "Hull",
       "volumeM3": 900.0,
+      "holdCapacityM3": 360.0,
       "$comment": "The second ship tier, and the only thing that consumes a composite frame. Without a consumer the frame was a dead end: EconSim ran five years and found builders made about twenty, could not sell them, and stopped -- taking with them the only reason ore ever crosses the faction line. A frame that nothing needs makes ADR-0008's contested zone scenery, which is the exact failure that document calls load-bearing. This is what gives the frame standing demand, and it is deliberately a hauler: the ship you want once you are trading across factions is the one that carries more."
     }
   ]

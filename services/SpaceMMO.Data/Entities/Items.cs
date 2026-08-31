@@ -28,6 +28,17 @@ public class ItemDef
     public double VolumeM3 { get; set; }
 
     /// <summary>
+    /// How much this thing can carry, for a <see cref="ItemCategory.Hull"/>. Null for everything
+    /// else, which is most things.
+    /// </summary>
+    /// <remarks>
+    /// Authored rather than derived from <see cref="VolumeM3"/> (ADR-0014). A rule tying a hold to
+    /// the size of the hull reads tidily and means a bigger ship can never be a <em>worse</em>
+    /// hauler, which removes an axis of ship design before any ship exists.
+    /// </remarks>
+    public double? HoldCapacityM3 { get; set; }
+
+    /// <summary>
     /// Not stored: derived from <see cref="Category"/> via
     /// <see cref="ItemCategoryExtensions.IsStackable"/>. A stored flag could contradict the
     /// category, and a <c>Hull</c> marked stackable would be a duplication exploit.

@@ -135,13 +135,6 @@ public sealed class GatheringService(SpaceMmoDbContext database)
                 node.ItemDefId, 0, 0, state.QuantityRemaining, state.RespawnAt);
         }
 
-        state.QuantityRemaining -= quantity;
-
-        if (state.QuantityRemaining == 0)
-        {
-            state.RespawnAt = now.AddSeconds(node.RespawnSeconds);
-        }
-
         // Into the character's own hands, not a station's storage.
         //
         // Gathering happens at a rock, on foot, nowhere near anywhere to dock — so there is no
@@ -152,6 +145,37 @@ public sealed class GatheringService(SpaceMmoDbContext database)
         // ADR-0012: goods are held, and moving them somewhere is a deliberate act.
         Inventory carried = await _inventories.GetOrCreateCarriedAsync(
             characterId, cancellationToken);
+
+        // Only what there is room for (ADR-0014).
+        //
+        // <strong>The node is drawn down by what was taken, not by what was swung for.</strong> Ore
+        // that will not fit is still in the rock, so a full pack cannot quietly delete a node's
+        // contents — which is the difference between this and a purchase, where refusing part of a
+        // delivery would destroy goods that already exist.
+        //
+        // One swing is twenty ore and a pack holds fifteen, so this is the ordinary case rather than
+        // an edge: mining with anything already in your hands ends part way through a swing.
+        quantity = await _inventories.RoomForAsync(
+            carried.Id, node.ItemDefId, quantity, cancellationToken);
+
+        if (quantity <= 0)
+        {
+            // Nothing happened. Not an error, and deliberately not a spent cooldown either: banked
+            // time is not consumed below, so a player standing at a rock with a full pack has lost
+            // nothing but the keypress.
+            await _database.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return new GatherResult(
+                node.ItemDefId, 0, 0, state.QuantityRemaining, state.RespawnAt);
+        }
+
+        state.QuantityRemaining -= quantity;
+
+        if (state.QuantityRemaining == 0)
+        {
+            state.RespawnAt = now.AddSeconds(node.RespawnSeconds);
+        }
 
         // Gathered material enters at zero cost basis: it took labour, not credits. That zero is
         // what makes a hull built from self-gathered ore cost only its manufacturing fees

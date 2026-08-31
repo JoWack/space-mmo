@@ -1536,8 +1536,20 @@ Two things worth keeping from building it:
 
 ## 112 — Goods are held, not teleported
 
-**Pending. Joe's stated direction, 14 August.** A design decision rather than a wiring fix, recorded
-before anything is built.
+**Done 31 August**, by [ADR-0014](adr/0014-capacity-is-volume-and-it-binds-everywhere.md). Belongs
+to **M4 — goods that move and gear that matters**. Recorded as Joe's direction on 14 August, before
+anything was built.
+
+**Most of it turned out to be built already**, and the task had gone stale saying otherwise — which
+is worth recording as much as the work is. Measured rather than assumed on 31 August: gathering was
+already depositing into carried inventory, crafting already drew on carried stock while docked, and
+transfers were already explicit and carrying their cost basis. Goods had stopped teleporting some
+time ago and nobody had come back to say so.
+
+What was left was the half that makes any of it matter, and the code said so itself in
+`InventoryService.TransferAsync`: *"Volume is not checked. CapacityM3 exists on the row and hangars
+are created at zero, and nothing anywhere enforces it yet."* Every inventory in the game was
+infinite, so a ship's hold was decoration and nothing distinguished a shuttle from a freighter.
 
 Today everything gathered or crafted appears in a station hangar wherever the player is, which is
 what 111 is about at the mechanical level — but the deeper point is that **goods never travel**. What
@@ -1550,10 +1562,11 @@ Joe wants instead:
 This is the direction 99 already pointed at without spelling out: `CharacterCarried` and `ShipHold`
 both exist, are both documented in the enum, and nothing routes anything into either.
 
-**It needs `CapacityM3` to start meaning something.** It exists, hangars are created at 0, and
-nothing anywhere enforces it (99). Without a volume limit, "held" is an infinite backpack and the
-change buys nothing — capacity is precisely what turns ADR-0008's planet-locked materials into
-flights rather than paperwork.
+**It needed `CapacityM3` to start meaning something**, which is what ADR-0014 settles: capacity is
+volume, no mass is added, and the rule binds in `AddAsync` because every route into a container goes
+through it — gathering, crafting output, a market purchase, a quest reward, a transfer. On transfers
+alone it would have given a hold you cannot fill by dragging and can fill by mining into, which looks
+like a rule and is not one.
 
 ### Settled by Joe, 14 August
 
@@ -1568,13 +1581,13 @@ dropped.
 **Industry does not reach into two inventories.** Crafting while docked is a transfer followed by a
 craft, which is simpler and honest about where the goods went.
 
-### Three things those answers run into
+### Three things those answers ran into
 
-1. **There is no mass anywhere.** `ItemDef` carries `VolumeM3` and `Inventory` carries `CapacityM3`
-   (`Entities/Items.cs:28,133`) — volume, not weight. A 50 kg limit needs either a new `MassKg` on
-   items, or the limit restated in m³. Worth deciding deliberately rather than adding a second
-   dimension by accident: two capacity systems that disagree is a bug generator, and a hauling game
-   only needs one number to be interesting.
+1. **There is no mass anywhere**, and ADR-0014 settled it as volume. The reading that decided it was
+   of the authored pack rather than of the schema: a unit of ferrite ore is **0.4 m³** and a resource
+   node holds two hundred of them. These are ship-scale numbers, so 50 kg was never going to survive
+   contact with them whichever dimension won. Carried is **6 m³** — fifteen ore, chosen by Joe on 31
+   August — and hulls carry an authored `HoldCapacityM3`: shuttle 80, freighter 360.
 2. **`stamina` does not exist yet.** It is one of the eight skills 101 seeds, and 101 is blocked on
    102 deciding where its XP comes from — which the design bible explicitly leaves open. So
    capacity-from-stamina is blocked behind both; a flat 50 kg is not.
@@ -1583,8 +1596,35 @@ craft, which is simpler and honest about where the goods went.
    condition are new rules on top. They want an ADR of their own or an amendment, not a task comment
    — ADR-0006 going quietly inert once already is why the roadmap reconciliation rule exists.
 
-Probably wants an ADR: it changes the shape of the economy rather than an implementation detail, and
-M4's premise is hauling.
+### The case that was only visible from inside the work
+
+ADR-0014 said a full container refuses the whole delivery: half a delivery arriving and the rest
+evaporating is a silent loss of a player's property, and the same rule on a market purchase is a
+silent partial refund.
+
+**Then mining stopped working entirely.** A swing yields twenty ore, which is 8 m³ against a pack of
+six, so the rule as written refused every swing — including the first one, into an empty pack. The
+ADR was amended the same day it was accepted.
+
+The distinction it had missed is whether refusing destroys anything. A purchase or a transfer moves
+goods that already exist, and refusing part of one destroys the rest. **Ore that will not fit is
+still in the ground.** So gathering takes what fits and leaves the remainder in the node — and the
+node is drawn down by what was taken rather than by what was swung for, which is the assertion that
+would catch a full pack quietly deleting a node's contents.
+
+Two other tests had to be widened rather than corrected: the gathering and industry suites are about
+yield and about what crafting reaches for, and a six cubic metre pack made capacity the constraint in
+all of them. Failures there would have read as gathering bugs. They ask for room deliberately now,
+and say why.
+
+### Not in this, deliberately
+
+- **Capacity from `stamina`, and backpacks.** Both were in the 14 August direction. `stamina` does
+  not exist — it is one of the eight skills task 101 seeds, and 101 is blocked on 102. A flat figure
+  needs neither, and both are later changes to one number rather than to the rule around it.
+- **The death rules.** Safe slots, dropping on death, and destruction at 0% condition extend ADR-0006
+  rather than implement it and belong to **M6**. Folding them into a document about capacity is how
+  ADR-0006 came to be quietly inert the first time.
 
 ## 113 — The automation run sometimes stops two tests early, and looks green doing it
 

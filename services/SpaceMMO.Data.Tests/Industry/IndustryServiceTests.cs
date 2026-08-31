@@ -630,12 +630,22 @@ public sealed class IndustryServiceTests(DatabaseFixture fixture) : IAsyncLifeti
     }
 
     /// <summary>Puts material in the character's own hands rather than the hangar.</summary>
+    /// <remarks>
+    /// Widens the pack first. These tests are about what crafting reaches for and where it refuses
+    /// to reach, and a six cubic metre limit against twenty ore would make capacity the thing under
+    /// test in all of them -- with failures that read as industry bugs. Capacity has its own tests
+    /// (ADR-0014), and gathering has the one case where the two genuinely meet.
+    /// </remarks>
     private async Task CarryAsync(int itemDefId, int quantity)
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         var inventories = new InventoryService(context);
 
         Inventory carried = await inventories.GetOrCreateCarriedAsync(_characterId);
+
+        carried.CapacityM3 = 1_000.0;
+        await context.SaveChangesAsync();
+
         await inventories.AddAsync(carried.Id, itemDefId, quantity, Credits.Zero);
 
         await context.SaveChangesAsync();

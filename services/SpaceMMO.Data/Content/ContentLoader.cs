@@ -186,6 +186,10 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 item.Category = content.Category;
                 item.VolumeM3 = content.VolumeM3;
 
+                // Assigned rather than merged, like the faction price above and for the same reason:
+                // taking a hold off a hull in content has to actually take it off.
+                item.HoldCapacityM3 = content.HoldCapacityM3;
+
                 // Assigned rather than merged, so removing a price from content actually removes it.
                 // A one-way update would leave a standing bid running on an item somebody had
                 // deliberately delisted, with nothing in the file to explain why.
@@ -199,6 +203,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 Name = content.Name,
                 Category = content.Category,
                 VolumeM3 = content.VolumeM3,
+                HoldCapacityM3 = content.HoldCapacityM3,
                 FactionBuyPrice = FactionPriceOf(content),
             };
 

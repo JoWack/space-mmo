@@ -31,6 +31,40 @@ public sealed class InsufficientItemsException(
 public sealed class InventoryTransferException(string message) : InvalidOperationException(message);
 
 /// <summary>
+/// Thrown when something will not fit in the container it is being put into.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The whole delivery is refused, not part of it (ADR-0014). Mining half a swing of ore into a full
+/// backpack and losing the rest is a silent loss of a player's property, and a partial market
+/// purchase is a silent partial refund. Nothing moves, and this says what did not fit and how much
+/// room there was.
+/// </para>
+/// <para>
+/// Carrying the numbers rather than only a sentence, so a caller can word it for a player without
+/// parsing a message: the deposit prompt wants "your pack is full", the market wants "you can afford
+/// forty and can carry twelve".
+/// </para>
+/// </remarks>
+public sealed class InventoryFullException(
+    long inventoryId, double capacityM3, double usedM3, double wantedM3)
+    : InvalidOperationException(
+        $"Inventory {inventoryId} holds {usedM3:0.##} of {capacityM3:0.##} m3 and cannot take "
+        + $"another {wantedM3:0.##} m3.")
+{
+    public long InventoryId { get; } = inventoryId;
+
+    public double CapacityM3 { get; } = capacityM3;
+
+    public double UsedM3 { get; } = usedM3;
+
+    public double WantedM3 { get; } = wantedM3;
+
+    /// <summary>How much room is left, which is what a player actually wants told.</summary>
+    public double FreeM3 { get; } = Math.Max(0.0, capacityM3 - usedM3);
+}
+
+/// <summary>
 /// Moves stackable items in and out of inventories.
 /// </summary>
 /// <remarks>
@@ -49,6 +83,30 @@ public sealed class InventoryService(SpaceMmoDbContext database)
 {
     private readonly SpaceMmoDbContext _database =
         database ?? throw new ArgumentNullException(nameof(database));
+
+    /// <summary>
+    /// What a character carries on their person, in cubic metres (ADR-0014).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Fifteen units of ferrite ore, sixty of scrap, or three mining lasers. A resource node holds
+    /// two hundred ore, so clearing one on foot is fourteen trips — which is the pressure that makes
+    /// a ship worth crafting, without making the on-foot loop a punishment before there is anything
+    /// to fly.
+    /// </para>
+    /// <para>
+    /// Volume rather than the 50 kg of the original direction, because there is no mass anywhere in
+    /// the schema and adding one would be two capacity systems that can disagree. It is not a figure
+    /// that sounds like a backpack, and it was never going to be: the authored volumes are on a ship
+    /// scale, where a single unit of ore is four hundred litres.
+    /// </para>
+    /// <para>
+    /// A flat number. `stamina` raises it and a backpack raises it again, and neither exists —
+    /// stamina is blocked behind tasks 101 and 102, and both are later changes to this one figure
+    /// rather than to the rule around it.
+    /// </para>
+    /// </remarks>
+    public const double CarriedCapacityM3 = 6.0;
 
     /// <summary>
     /// Adds a quantity, creating the stack row if the inventory does not already hold the item.
@@ -75,6 +133,7 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         }
 
         await GuardStackableAsync(itemDefId, cancellationToken);
+        await GuardRoomAsync(inventoryId, itemDefId, quantity, cancellationToken);
 
         InventoryItem? stack = await _database.InventoryItems
             .FirstOrDefaultAsync(
@@ -350,7 +409,7 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         {
             CharacterId = characterId,
             Kind = InventoryKind.CharacterCarried,
-            CapacityM3 = 0,
+            CapacityM3 = CarriedCapacityM3,
         };
 
         _database.Inventories.Add(carried);
@@ -358,6 +417,145 @@ public sealed class InventoryService(SpaceMmoDbContext database)
 
         return carried;
     }
+
+    /// <summary>
+    /// How many of an item will fit in an inventory, up to the number asked for.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>For sources that keep what they cannot hand over (ADR-0014).</strong> Ore that will
+    /// not fit in a pack is still in the ground, so refusing the whole swing would be refusing
+    /// something nobody had yet. That is the opposite of a purchase or a transfer, where the goods
+    /// already exist and refusing part of the delivery would destroy the rest — and those keep
+    /// <see cref="AddAsync"/>, which refuses outright.
+    /// </para>
+    /// <para>
+    /// Returns zero for a container with no room, which callers must handle as "nothing happened"
+    /// rather than as an error: a swing that yields nothing must not draw the node down or spend
+    /// the cooldown.
+    /// </para>
+    /// </remarks>
+    public async Task<int> RoomForAsync(
+        long inventoryId, int itemDefId, int wanted, CancellationToken cancellationToken = default)
+    {
+        GuardQuantity(wanted);
+
+        Inventory? inventory = await _database.Inventories
+            .FirstOrDefaultAsync(i => i.Id == inventoryId, cancellationToken);
+
+        if (inventory is null || inventory.CapacityM3 <= 0.0)
+        {
+            return wanted;
+        }
+
+        double each = await _database.ItemDefs
+            .Where(d => d.Id == itemDefId)
+            .Select(d => d.VolumeM3)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (each <= 0.0)
+        {
+            return wanted;
+        }
+
+        double free = inventory.CapacityM3 + Tolerance
+            - await UsedVolumeAsync(inventoryId, cancellationToken);
+
+        if (free <= 0.0)
+        {
+            return 0;
+        }
+
+        return Math.Min(wanted, (int)Math.Floor(free / each));
+    }
+
+    /// <summary>
+    /// How much of an inventory's capacity is already spoken for, in cubic metres.
+    /// </summary>
+    /// <remarks>
+    /// Stacks and instances both. A hold with a hull in it is a hold with less room, and counting
+    /// only the stackable half would let anybody carry an unlimited number of ships.
+    /// </remarks>
+    public async Task<double> UsedVolumeAsync(
+        long inventoryId, CancellationToken cancellationToken = default)
+    {
+        double stacked = await _database.InventoryItems
+            .Where(i => i.InventoryId == inventoryId)
+            .SumAsync(i => i.Quantity * i.ItemDef!.VolumeM3, cancellationToken);
+
+        double instances = await _database.ItemInstances
+            .Where(i => i.InventoryId == inventoryId)
+            .SumAsync(i => i.ItemDef!.VolumeM3, cancellationToken);
+
+        return stacked + instances;
+    }
+
+    /// <summary>
+    /// Refuses a delivery that will not fit.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Here rather than on transfers, because every route in goes through AddAsync</strong>
+    /// — gathering, crafting output, a market purchase, a quest reward, a transfer. The comment this
+    /// replaced said so: a rule invented on transfer alone gives a hold you cannot fill by dragging
+    /// and can fill by mining into it, which is worse than no rule because it looks like one.
+    /// </para>
+    /// <para>
+    /// <strong>Zero capacity is unlimited, and station hangars keep it (ADR-0014).</strong> A hangar
+    /// is rented storage with rent as its sink; capping it too would charge for a thing that also
+    /// refuses goods.
+    /// </para>
+    /// <para>
+    /// An over-full container is a legal state rather than an error. Limits arriving after goods
+    /// exist, or a hull being moved into a hold that then has no room, both leave one — and the
+    /// answer is that it takes nothing more and drains normally, never that it destroys what is
+    /// already there.
+    /// </para>
+    /// </remarks>
+    private async Task GuardRoomAsync(
+        long inventoryId, int itemDefId, int quantity, CancellationToken cancellationToken)
+    {
+        Inventory? inventory = await _database.Inventories
+            .FirstOrDefaultAsync(i => i.Id == inventoryId, cancellationToken);
+
+        if (inventory is null || inventory.CapacityM3 <= 0.0)
+        {
+            return;
+        }
+
+        double each = await _database.ItemDefs
+            .Where(d => d.Id == itemDefId)
+            .Select(d => d.VolumeM3)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        double wanted = each * quantity;
+
+        // Nothing to check for something that takes up no room. Not an error: a few things are
+        // deliberately weightless, and refusing them on a full container would be a rule about
+        // nothing.
+        if (wanted <= 0.0)
+        {
+            return;
+        }
+
+        double used = await UsedVolumeAsync(inventoryId, cancellationToken);
+
+        if (used + wanted > inventory.CapacityM3 + Tolerance)
+        {
+            throw new InventoryFullException(inventoryId, inventory.CapacityM3, used, wanted);
+        }
+    }
+
+    /// <summary>
+    /// Slack on the capacity comparison, in cubic metres.
+    /// </summary>
+    /// <remarks>
+    /// Volumes are doubles read from authored content and multiplied by quantities, so a hold sized
+    /// to take exactly two hundred ore can come out a billionth of a cubic metre over and refuse the
+    /// last one. A container that is full one short of its stated capacity is a bug report nobody
+    /// can reproduce.
+    /// </remarks>
+    private const double Tolerance = 1e-6;
 
     private static void GuardQuantity(int quantity)
     {

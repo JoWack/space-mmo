@@ -1,6 +1,6 @@
 # ADR-0014 — Capacity is volume, and it binds on every route in
 
-**Status:** Proposed · 2026-08-31 · gives [ADR-0012](0012-a-ship-is-earned-and-carries-its-own-hold.md)'s
+**Status:** Accepted · 2026-08-31 · gives [ADR-0012](0012-a-ship-is-earned-and-carries-its-own-hold.md)'s
 hold a reason to exist · hosted by **M4** in the roadmap
 
 ## Context
@@ -65,9 +65,22 @@ it as well would charge rent for a thing that also refuses goods.
 
 ### 4. A full container refuses the whole delivery, and says so
 
-Not a partial fill. Mining half a swing of ore into a full backpack and destroying the rest is a
-silent loss of player property, and a partial market purchase is a silent partial refund. The
-operation fails, nothing moves, and the message names the container and how much room is left.
+Not a partial fill. Half a delivery arriving and the rest evaporating is a silent loss of a player's
+property, and the same rule applied to a market purchase is a silent partial refund. The operation
+fails, nothing moves, and the message names the container and how much room is left.
+
+**Amended the same day, on implementing it.** The rule above is right where the goods already exist
+and would have to go somewhere or nowhere — a purchase, a transfer, a quest reward. Gathering is not
+that case, and writing it before building it missed the difference: **ore that will not fit is still
+in the ground.**
+
+A single swing yields twenty ore, which is 8 m³ against a pack of six, so the rule as first written
+made mining with a part-full pack fail outright and mining with an empty one fail as well. Gathering
+takes **what fits and leaves the rest in the node** — nothing is destroyed, because nothing was
+extracted, and the node is not drawn down for material nobody received.
+
+The distinction is whether refusing destroys anything. Where it does, refuse the whole; where the
+source keeps what it could not hand over, take what fits.
 
 ### 5. The numbers come from the volumes that are already authored
 
@@ -89,10 +102,12 @@ and a container and never the absolute figure; but it does mean a personal capac
 these units is not going to sound like a backpack, and the 50 kg of the original direction was never
 going to survive contact with them whichever dimension won.
 
-Proposed, and the one number here that is a matter of taste rather than arithmetic:
+Settled by Joe, 31 August. The carried figure is the one number here that is taste rather than
+arithmetic:
 
-- **Carried: 4 m³** — ten ore, or forty scrap, or two mining lasers. Twenty trips on foot to clear a
-  node, which is precisely the pressure that makes a ship worth crafting.
+- **Carried: 6 m³** — fifteen ore, or sixty scrap, or three mining lasers. Fourteen trips on foot to
+  clear a node, which is the pressure that makes a ship worth crafting without making the on-foot
+  loop a punishment before there is anything to fly.
 - **A hull carries a hold of its own size**, authored on the hull rather than derived: `ItemDef`
   gains a nullable `HoldCapacityM3`, meaningful for `ItemCategory.Hull` and null elsewhere. ADR-0012
   already says "volumetric capacity set by the hull" and there is nowhere for a hull to say it.

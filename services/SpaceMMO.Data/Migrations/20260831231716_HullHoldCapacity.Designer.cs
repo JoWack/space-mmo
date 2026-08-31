@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SpaceMMO.Data;
@@ -11,9 +12,11 @@ using SpaceMMO.Data;
 namespace SpaceMMO.Data.Migrations
 {
     [DbContext(typeof(SpaceMmoDbContext))]
-    partial class SpaceMmoDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260831231716_HullHoldCapacity")]
+    partial class HullHoldCapacity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

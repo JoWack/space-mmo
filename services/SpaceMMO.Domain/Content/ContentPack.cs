@@ -34,7 +34,8 @@ public sealed record ItemContent(
     ItemCategory Category,
     double VolumeM3,
     long? FactionBuyPrice = null,
-    bool PlanetLocked = false)
+    bool PlanetLocked = false,
+    double? HoldCapacityM3 = null)
 {
     /// <summary>
     /// Whether this material occurs on exactly one body and nowhere else (ADR-0008).

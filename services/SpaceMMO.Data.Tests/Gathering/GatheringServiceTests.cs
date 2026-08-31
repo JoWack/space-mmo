@@ -177,6 +177,43 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task A_full_pack_takes_what_fits_and_leaves_the_rest_in_the_rock()
+    {
+        // The case ADR-0014 was amended for, the day it was written.
+        //
+        // A swing is twenty ore and a pack holds fifteen, so refusing the whole delivery -- which is
+        // right for a purchase, where the goods already exist -- would have meant mining was
+        // impossible with anything at all in your hands. Ore that will not fit is still in the
+        // ground, so there is nothing to destroy by leaving it there.
+        await GiveRoomToCarryAsync(_alice, InventoryService.CarriedCapacityM3);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        int nodeSize = await context.ResourceNodes
+            .Where(n => n.Id == _sharedNodeId)
+            .Select(n => n.QuantityMax)
+            .FirstAsync();
+
+        GatherResult first = await new GatheringService(context).GatherAsync(_alice, _sharedNodeId);
+
+        // Fifteen ore at 0.4 m3 fills six exactly. The swing was for twenty.
+        Assert.Equal(15, first.Quantity);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        // <strong>The node is drawn down by what was taken, not by what was swung for.</strong> If
+        // this ever reads twenty, a full pack is quietly deleting a node's contents.
+        int nodeAfter = await verify.ResourceNodeStates
+            .Where(s => s.ResourceNodeId == _sharedNodeId)
+            .Select(s => s.QuantityRemaining)
+            .FirstAsync();
+
+        Assert.Equal(nodeSize - 15, nodeAfter);
+
+        Assert.Equal(15, await HeldAsync(verify, _alice, _oreId));
+    }
+
+    [Fact]
     public async Task Gathering_WithTheToolLeftInAHangar_IsRefused()
     {
         // Owning the laser is not holding it. Task 94 recorded that this check could not be
@@ -688,5 +725,48 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         _sharedNodeId = await AddNodeAsync(NodeSharingModel.Shared, 1, null);
         _perCharacterNodeId = await AddNodeAsync(NodeSharingModel.PerCharacter, 1, null);
         _toolGatedNodeId = await AddNodeAsync(NodeSharingModel.Shared, 1, laser.Id);
+
+        await GiveRoomToCarryAsync(alice.Id);
+        await GiveRoomToCarryAsync(bob.Id);
+    }
+
+    /// <summary>
+    /// Creates a carried inventory with room to spare, before the service creates a real one.
+    /// </summary>
+    /// <remarks>
+    /// Every test here is about gathering — yield, XP, node depletion, sharing — and a six cubic
+    /// metre pack against a twenty ore swing makes capacity the constraint in all of them. That
+    /// would be two rules under test at once, and the failures would read as gathering bugs.
+    ///
+    /// <para>
+    /// Capacity has its own tests, and the one gathering case that genuinely belongs here —
+    /// <see cref="A_full_pack_takes_what_fits_and_leaves_the_rest_in_the_rock"/> — asks for the real
+    /// size deliberately rather than inheriting it.
+    /// </para>
+    /// </remarks>
+    private async Task GiveRoomToCarryAsync(int characterId, double capacityM3 = 1_000.0)
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        Inventory? carried = await context.Inventories.FirstOrDefaultAsync(
+            i => i.CharacterId == characterId && i.Kind == InventoryKind.CharacterCarried);
+
+        if (carried is null)
+        {
+            carried = new Inventory
+            {
+                CharacterId = characterId,
+                Kind = InventoryKind.CharacterCarried,
+                CapacityM3 = capacityM3,
+            };
+
+            context.Inventories.Add(carried);
+        }
+        else
+        {
+            carried.CapacityM3 = capacityM3;
+        }
+
+        await context.SaveChangesAsync();
     }
 }
