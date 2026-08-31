@@ -41,6 +41,15 @@ public:
 	FSoftClassPath OnFootReadout;
 
 	/**
+	 * The reticle, and the marker that says where a ship is actually going.
+	 *
+	 * Empty draws nothing, which is a working state: the game was played without one for months, and
+	 * a HUD element that fails loudly at startup would be worse than one that is simply absent.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|HUD")
+	FSoftClassPath Crosshair;
+
+	/**
 	 * The deposit prompt above the reticle. Must derive from <c>USpaceMMODepositPrompt</c>.
 	 */
 	UPROPERTY(EditAnywhere, Config, Category = "HUD",

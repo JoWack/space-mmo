@@ -394,6 +394,12 @@ private:
 	/** Takes a wheel notch. Positive zooms in. */
 	void ZoomView(float Value);
 
+public:
+	/** Whether the camera is being swung, which is when a crosshair stops meaning anything. */
+	bool IsOrbiting() const { return View.bOrbiting; }
+
+protected:
+
 	/** Starts and stops the orbit, which is what makes the mouse swing the view instead of the pawn. */
 	void StartOrbit();
 	void StopOrbit();

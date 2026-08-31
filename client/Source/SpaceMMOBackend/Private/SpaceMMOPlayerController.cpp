@@ -17,6 +17,7 @@
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMODepositPrompt.h"
 #include "SpaceMMOGatheringComponent.h"
+#include "SpaceMMOCrosshair.h"
 #include "SpaceMMOOnFootReadout.h"
 #include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMOPlanetActor.h"
@@ -134,6 +135,9 @@ void ASpaceMMOPlayerController::CreateHud()
 
 	OnFootReadout = CreateHudWidget<USpaceMMOOnFootReadout>(
 		this, Settings->OnFootReadout, TEXT("on-foot readout"));
+
+	Crosshair = CreateHudWidget<USpaceMMOCrosshair>(
+		this, Settings->Crosshair, TEXT("crosshair"));
 
 	DepositPrompt = CreateHudWidget<USpaceMMODepositPrompt>(
 		this, Settings->DepositPrompt, TEXT("deposit prompt"));
@@ -640,6 +644,7 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	{
 		Show(FlightReadout, false);
 		Show(OnFootReadout, false);
+		Show(Crosshair, false);
 		Show(DepositPrompt, false);
 		Show(SkillsScreen, false);
 		Show(InventoryScreen, false);
@@ -652,6 +657,12 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// somebody on foot are never the same moment.
 	Show(FlightReadout, bFlying);
 	Show(OnFootReadout, !bFlying);
+
+	// Both pawns, and gone whenever a screen is open: a reticle over an inventory is pointing at a
+	// list. The widget fades itself while the camera is swung, which is a different question -- that
+	// one is about whether the view still means anything, and this one is about whether the player
+	// is looking at the world at all.
+	Show(Crosshair, !bSkillsScreenOpen && !bInventoryScreenOpen && !bStationOverlayOpen);
 
 	// Gathering happens on foot — the component lives on the character pawn, and a ship has nothing
 	// to pick up with — so the prompt has nothing to say in flight whatever is beneath the ship.

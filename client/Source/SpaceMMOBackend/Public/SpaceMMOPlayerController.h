@@ -161,6 +161,9 @@ public:
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOOnFootReadout> OnFootReadout;
 
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOCrosshair> Crosshair;
+
 	/** The deposit prompt above the reticle, or null when none is configured. */
 	UPROPERTY()
 	TObjectPtr<class USpaceMMODepositPrompt> DepositPrompt;

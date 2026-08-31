@@ -293,6 +293,15 @@ protected:
 	/** Takes a wheel notch. Positive zooms in. */
 	void ZoomView(float Value);
 
+public:
+	/** Whether the camera is being swung, which is when a crosshair stops meaning anything. */
+	bool IsOrbiting() const { return View.bOrbiting; }
+
+	/** The ship's motion, for anything drawing where it is actually going. */
+	const FShipFlightState& GetFlightState() const { return FlightState; }
+
+protected:
+
 	void StartOrbit();
 	void StopOrbit();
 

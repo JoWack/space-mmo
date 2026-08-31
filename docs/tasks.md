@@ -3647,6 +3647,65 @@ one run passed, and the next failed — which is exactly what a setting that did
 from outside, and the same trap as a diagnostic that can silently not run. Reading the property list
 in `UdpMessagingSettings.h` settled it in a minute.
 
+## 141 — There is no crosshair
+
+**Done 31 August**, awaiting a playtest and one Widget Blueprint. Belongs to **M5 — an interface**.
+
+Nothing marked the middle of the screen, on foot or in a ship. Sketched before it was built, per the
+rule that interface gets a yes first, and all three defaults were taken.
+
+**Screen centre rather than the pawn's forward.** It is what people expect, and when combat arrives
+in M6 aiming will almost certainly be camera-relative. Projecting the character's own forward is more
+honest about the pawn but wanders off-centre whenever the camera lags, which reads as a bug rather
+than as precision.
+
+**Faded while Alt is held.** Mid-orbit the camera points somewhere the pawn has no opinion about, so
+a reticle there is actively lying. Hidden outright whenever a screen is open, which is a different
+question and answered in the controller: one is about whether the view still means anything, the
+other about whether the player is looking at the world at all.
+
+**And a velocity marker in the ship**, which is the half that earns its place. This flight model has
+real inertia, so pointing one way and travelling another is ordinary, and nothing on screen said so.
+The reticle says where the nose is; the ring says where the ship will end up. When they coincide it
+is flying straight.
+
+### Where the arithmetic is, and the two ways it goes wrong
+
+`FCrosshairMarker::ScreenOffset` is handed a direction already in the camera's frame, so both awkward
+cases can be pinned down without a viewport.
+
+- **Screen Y runs down and a camera's up runs up.** Getting that negation backwards looks perfectly
+  correct in every still frame — centred flying straight, right when drifting right — and is wrong
+  only while climbing. The test asserts the sign.
+- **A direction behind the camera projects to the mirror of where it belongs.** A ship here routinely
+  travels backwards; turning to face a station while still carrying the velocity that got you there
+  is the ordinary way to arrive. Projected, the marker would sit on the wrong side and a pilot
+  following it would turn away from where they were going. It is pinned to the side the direction
+  actually lies on instead, and a direction straight out of the back is not drawn at all — there is
+  no side to choose, and choosing one sends somebody turning in a direction nothing picked.
+
+Both were verified by mutation: dropping the negation and pinning to the far side each turn exactly
+one test red.
+
+### Drawn, not assembled
+
+Every other element of this HUD is a Widget Blueprint of rows and text. This one is four ticks and a
+ring whose position is recomputed every frame, so it is drawn in `NativePaint` — laying it out in
+UMG would put half the reasoning in an asset nobody can diff and the other half in code reaching into
+it by name.
+
+The Widget Blueprint still exists and is still named in `DefaultGame.ini`, for the same reason as the
+others: it is how the thing gets a class to instantiate and a place to hold its style. **It is empty
+of widgets**, and creating it is the one editor step — a Widget Blueprint parented to
+`SpaceMMOCrosshair`, saved as `/Game/UI/WBP_Crosshair`.
+
+Two passes on every line, a thicker dark one under a lighter one, because no single colour is legible
+everywhere: white vanishes against the ore deposits and against sunlit terrain, black vanishes against
+space.
+
+**It says nothing the simulation reads**, which is `design-bible.md` §8 and worth stating because a
+crosshair is the most tempting thing on a HUD to quietly promote into an aiming rule.
+
 ---
 
 ## Done
