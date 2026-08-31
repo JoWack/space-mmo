@@ -242,7 +242,13 @@ protected:
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Ship")
 	FRotator HullMeshRotation = FRotator::ZeroRotator;
 
-	/** Shifts the hull relative to the ship's origin, which is what the flight model moves. */
+	/**
+	 * Nudges the hull relative to the ship's origin, which is what the flight model moves.
+	 *
+	 * Zero is correct for almost everything. The hull is already centred on its own geometry before
+	 * this is applied, so this is for deliberately sitting a model off its pivot -- not for
+	 * correcting an asset whose pivot is wrong, which the centring handles without being asked.
+	 */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Ship")
 	FVector HullMeshOffset = FVector::ZeroVector;
 

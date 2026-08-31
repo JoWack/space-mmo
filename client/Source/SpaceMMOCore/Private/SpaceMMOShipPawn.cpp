@@ -503,8 +503,22 @@ void ASpaceMMOShipPawn::ApplyHullMesh()
 	// engine cone, and leaving it on would repaint an authored ship in flat grey.
 	Hull->EmptyOverrideMaterials();
 
+	// Centred on its own geometry, whatever the asset says its pivot is.
+	//
+	// <strong>An exporter leaves an object where it was in its scene, and an import can bake that
+	// in.</strong> This hull arrived 77 m from its own origin that way, and since the camera boom
+	// and the collision sphere both hang off the pawn, the ship was drawn somewhere nobody was
+	// looking. Three rounds of import settings went into trying to make the asset agree with the
+	// code; measuring the pivot and subtracting it is one line and works for every hull, including
+	// ones nobody has exported yet.
+	//
+	// Rotated, because the bounds origin is in the mesh's own frame and the offset is applied in the
+	// parent's: a point at Origin in mesh space ends up at Rotation * (Origin * Scale) once the
+	// component has had its say.
+	const FVector Centre = HullMeshRotation.RotateVector(MeshBounds.Origin * Scale);
+
 	Hull->SetRelativeRotation(HullMeshRotation);
-	Hull->SetRelativeLocation(HullMeshOffset);
+	Hull->SetRelativeLocation(HullMeshOffset - Centre);
 	Hull->SetRelativeScale3D(FVector(Scale));
 
 	// A hull with no simple collision is one a character walks straight through, and a parked ship
@@ -534,8 +548,8 @@ void ASpaceMMOShipPawn::ApplyHullMesh()
 	// forward, and a hull whose length runs along Y is one that flies sideways until
 	// HullMeshRotation says otherwise.
 	UE_LOG(LogSpaceMMO, Log,
-		TEXT("  hull bounds: extent %s cm, origin %s cm from the pawn (%.1f cm once scaled); "
-			"longest axis is %s."),
+		TEXT("  hull bounds: extent %s cm, pivot %s cm off centre (%.1f cm once scaled, and "
+			"subtracted); longest axis is %s."),
 		*Extent.ToCompactString(),
 		*MeshBounds.Origin.ToCompactString(),
 		MeshBounds.Origin.Size() * Scale,

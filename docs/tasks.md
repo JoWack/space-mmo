@@ -3473,9 +3473,32 @@ baked translation; the render geometry shrank and the convex hull did not. Multi
 fit of 113.7 the collision is some four hundred metres across, around a ship drawn twelve metres
 long.
 
-**Set *Build Scale* to 100 in the mesh's build settings.** That is the same field task 133 already
-noted for the bounds, and it fixes both at once: the render mesh returns to 358 x 528 x 163 cm,
-matching the collision exactly, and the runtime fit goes back to 1.137.
+**Build Scale was the wrong advice, and it was given confidently.** The engine's mesh builder
+applies `BuildScale3D` through `ScaleStaticMeshVertex` to vertex positions and never mentions
+`AggGeom`, which reads as "scales the render mesh, leaves collision alone". Setting it to 100 did the
+opposite: collision went 358 to 35832 and the render extent did not move. The ratio went from a
+hundred to one to ten thousand to one.
+
+Reading the engine is still the right instinct — it is what killed two console-variable theories in
+one sitting once — but a function that is *not* mentioned in a file is much weaker evidence than a
+value read off the built artefact, and this was treated as though the two were the same. **Set Build
+Scale back to 1.**
+
+### The code stopped caring instead
+
+`ApplyHullMesh` measures the mesh's bounds origin and subtracts it, rotated into the parent frame.
+Three import round trips went into trying to make a pivot be zero; measuring it and cancelling it is
+one line and works for every hull anyone exports in future.
+
+That retires the class. **Where** the geometry sits relative to its pivot no longer matters, and
+**how big** the mesh claims to be never did, because `HullLengthMetres` fits it off its own bounds.
+`SpaceMMO.Ship.HullIsDrawnWhereTheShipIs` was deleted with it: the thing it insisted on is handled
+now, and a test that demands a particular import setting is a test that sends somebody back to a
+dialog.
+
+What is left is the one property of an asset that code cannot compensate for — **the mesh and its
+collision disagreeing with each other**. `HullCanBeBumpedInto` asserts that ratio and says nothing
+about the size, which is allowed to be anything.
 
 ### What was ruled out first, and what is still not explained
 

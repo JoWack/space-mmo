@@ -7,106 +7,27 @@
 #if WITH_DEV_AUTOMATION_TESTS
 
 /**
- * The hull has to be drawn where the ship is.
+ * A hull that is drawn twelve metres long is one you bump into twelve metres out.
  *
- * <strong>Measured off the imported mesh, because nothing upstream of it can tell you.</strong> The
- * camera boom hangs off the pawn's origin, so a hull whose geometry sits a long way from that origin
- * is a ship that is simply not in frame -- which looks like a mesh failing to draw, or a camera
- * pointing the wrong way, or a boom that is too short. Three plausible causes and one number that
- * separates them.
+ * <strong>The one thing about a hull that code cannot correct for.</strong> Where a mesh sits
+ * relative to its pivot is measurable, so ApplyHullMesh measures it and subtracts it -- this hull
+ * arrived 77 m from its own origin and no import setting has to be remembered for that any more.
+ * How big a mesh says it is does not matter either, because HullLengthMetres fits it.
  *
- * The number is the bounds origin: where the middle of the mesh is, relative to the pivot everything
- * else hangs off. An exporter that leaves an object away from its scene origin, and an import that
- * bakes that transform into the vertices, together produce a mesh that is correct in every respect
- * except where it is -- and the extent, the triangle count, the materials and the collision all look
- * exactly right while it happens.
+ * What neither can fix is the mesh and its collision disagreeing with each other. A re-import that
+ * changes one and not the other leaves a ship you can see and cannot touch, or one that stops you
+ * from across the road, and both look like collision being broken rather than like two numbers
+ * having drifted apart. That happened here twice in one evening, at a hundred to one and then at ten
+ * thousand to one, and neither the extent, the primitive count, the trace flag nor the render bounds
+ * said anything was wrong on their own.
  *
- * The assertion is deliberately about the pawn rather than about a tolerance somebody picked: the
- * ship's origin must lie inside its own hull.
+ * <strong>The ratio is the measurement.</strong> Not the size, which is allowed to be anything.
  */
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSpaceMMOShipHullIsDrawnWhereTheShipIsTest,
-	"SpaceMMO.Ship.HullIsDrawnWhereTheShipIs",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FSpaceMMOShipHullIsDrawnWhereTheShipIsTest::RunTest(const FString& Parameters)
-{
-	const ASpaceMMOShipPawn* const Defaults = GetDefault<ASpaceMMOShipPawn>();
-
-	if (Defaults == nullptr)
-	{
-		AddError(TEXT("No ship defaults to read a hull from."));
-
-		return false;
-	}
-
-	// An unset hull is a working state -- the placeholder cone -- but it must be said out loud, or
-	// this test passes forever on a project that stopped configuring a ship at all.
-	if (Defaults->GetHullMesh().IsNull())
-	{
-		AddInfo(TEXT("No hull is configured; the placeholder cone stands and there is nothing to "
-			"measure. Set HullMesh in DefaultGame.ini to make this test do anything."));
-
-		return true;
-	}
-
-	UStaticMesh* const Mesh = Cast<UStaticMesh>(Defaults->GetHullMesh().TryLoad());
-
-	if (Mesh == nullptr)
-	{
-		AddError(FString::Printf(
-			TEXT("Hull '%s' is configured but did not load."), *Defaults->GetHullMesh().ToString()));
-
-		return false;
-	}
-
-	const FBoxSphereBounds Bounds = Mesh->GetBounds();
-
-	AddInfo(FString::Printf(
-		TEXT("'%s': extent %s cm, bounds origin %s cm."),
-		*Mesh->GetName(), *Bounds.BoxExtent.ToCompactString(), *Bounds.Origin.ToCompactString()));
-
-	// Inside its own bounding box, on every axis. A hull offset by less than its own half-width is
-	// a pivot somebody chose; one offset by more than that is a transform that got baked in.
-	TestTrue(
-		FString::Printf(
-			TEXT("The ship's origin is inside its own hull along X (origin %.1f, half-width %.1f)"),
-			Bounds.Origin.X, Bounds.BoxExtent.X),
-		FMath::Abs(Bounds.Origin.X) <= Bounds.BoxExtent.X);
-
-	TestTrue(
-		FString::Printf(
-			TEXT("...and along Y (origin %.1f, half-width %.1f)"),
-			Bounds.Origin.Y, Bounds.BoxExtent.Y),
-		FMath::Abs(Bounds.Origin.Y) <= Bounds.BoxExtent.Y);
-
-	TestTrue(
-		FString::Printf(
-			TEXT("...and along Z (origin %.1f, half-height %.1f)"),
-			Bounds.Origin.Z, Bounds.BoxExtent.Z),
-		FMath::Abs(Bounds.Origin.Z) <= Bounds.BoxExtent.Z);
-
-	return true;
-}
-
-
-/**
- * A ship you can see is a ship you can bump into.
- *
- * <strong>Having collision primitives is not the same as being solid to a query.</strong> A
- * character sweeps with bTraceComplex false, and the engine reads that as a choice of simple or
- * complex geometry rather than a preference. A mesh whose collision complexity is
- * "use complex as simple" therefore answers nothing at all to that sweep, however many convex hulls
- * it is carrying -- and it carries them, and the editor draws them, and every count anyone takes
- * comes back right.
- *
- * That is the hole this test exists for, and it is one SpaceMMOSolidity had too: counting elements
- * proves the hulls are there and says nothing about whether anybody can hit them.
- *
- * The size check is here for the other half of the same idea. Collision that has drifted from the
- * mesh it belongs to -- a re-import that changed the mesh's scale and not its hulls, say -- stops a
- * character in mid-air or lets one walk through a hull, and both look like collision being broken
- * rather than like a number being stale.
+/*
+ * Having collision primitives is not the same as being solid to a query, either. A character sweeps
+ * with bTraceComplex false, and the engine reads that as a choice of simple or complex geometry
+ * rather than a preference, so a mesh set to use complex collision as simple answers nothing at all
+ * -- while carrying hulls, drawing them in the editor, and passing every count anybody takes.
  */
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOShipHullCanBeBumpedIntoTest,
