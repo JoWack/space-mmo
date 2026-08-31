@@ -18,6 +18,7 @@
 #include "SpaceMMOShipPawn.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMORenderOrigin.h"
+#include "SpaceMMOViewSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace
@@ -162,6 +163,23 @@ void ASpaceMMOCharacterPawn::BeginPlay()
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("Character draw logging is %s (SpaceMMO.LogCharacterDraw)."),
 		CVarLogCharacterDraw.GetValueOnGameThread() > 0 ? TEXT("ON") : TEXT("OFF"));
+
+	// Picked up rather than reset. This pawn is spawned fresh every time somebody steps out of a
+	// ship, and a camera that jumped back to its default on every trip would be worse than one that
+	// never moved.
+	if (const UGameInstance* const Game = GetGameInstance())
+	{
+		if (const USpaceMMOViewSubsystem* const Remembered =
+			Game->GetSubsystem<USpaceMMOViewSubsystem>())
+		{
+			View.ArmTargetCentimetres = Remembered->CharacterArmCentimetres;
+		}
+	}
+
+	if (CameraBoom != nullptr && View.ArmTargetCentimetres > 0.0)
+	{
+		CameraBoom->TargetArmLength = static_cast<float>(View.ArmTargetCentimetres);
+	}
 
 	// Resolve the ground before the first step so the character starts standing on the surface with
 	// its up already correct, rather than upright in world space and snapping on frame one.
@@ -735,6 +753,10 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 	if (IsLocallyControlled())
 	{
 		PublishRenderOrigin();
+
+		// Drawn, never simulated. design-bible.md section 8: the camera is a client concern and must
+		// never affect server-side validation, which is why this sits outside the step above.
+		ApplyView(DeltaSeconds);
 	}
 
 	ApplyWorldTransform();
@@ -1315,6 +1337,68 @@ void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerIn
 
 	PlayerInputComponent->BindAction(
 		TEXT("Board"), IE_Pressed, this, &ASpaceMMOCharacterPawn::RequestEmbark);
+
+	PlayerInputComponent->BindAction(
+		TEXT("WalkSprint"), IE_Pressed, this, &ASpaceMMOCharacterPawn::StartSprint);
+	PlayerInputComponent->BindAction(
+		TEXT("WalkSprint"), IE_Released, this, &ASpaceMMOCharacterPawn::StopSprint);
+
+	PlayerInputComponent->BindAxis(TEXT("ViewZoom"), this, &ASpaceMMOCharacterPawn::ZoomView);
+
+	PlayerInputComponent->BindAction(
+		TEXT("OrbitView"), IE_Pressed, this, &ASpaceMMOCharacterPawn::StartOrbit);
+	PlayerInputComponent->BindAction(
+		TEXT("OrbitView"), IE_Released, this, &ASpaceMMOCharacterPawn::StopOrbit);
+}
+
+void ASpaceMMOCharacterPawn::StartSprint() { PendingInput.bSprint = true; }
+void ASpaceMMOCharacterPawn::StopSprint() { PendingInput.bSprint = false; }
+
+void ASpaceMMOCharacterPawn::StartOrbit() { View.bOrbiting = true; }
+void ASpaceMMOCharacterPawn::StopOrbit() { View.bOrbiting = false; }
+
+void ASpaceMMOCharacterPawn::ZoomView(const float Value)
+{
+	if (FMath::IsNearlyZero(Value))
+	{
+		return;
+	}
+
+	View.Wheel(Value, ZoomNearCentimetres, ZoomFarCentimetres, ZoomStepFraction);
+
+	// Remembered off the pawn, because this pawn does not survive being boarded: stepping into a
+	// ship destroys it and stepping out spawns another. A zoom kept here would reset on every trip.
+	if (const UGameInstance* const Game = GetGameInstance())
+	{
+		if (USpaceMMOViewSubsystem* const Remembered =
+			Game->GetSubsystem<USpaceMMOViewSubsystem>())
+		{
+			Remembered->CharacterArmCentimetres = View.ArmTargetCentimetres;
+		}
+	}
+}
+
+void ASpaceMMOCharacterPawn::ApplyView(const double DeltaSeconds)
+{
+	View.Advance(DeltaSeconds, OrbitReturnSeconds);
+
+	if (CameraBoom == nullptr)
+	{
+		return;
+	}
+
+	// Eased rather than set, so a fast scroll glides out instead of jumping. The rate is the
+	// reciprocal of the time asked for, which is what FInterpTo's "speed" means.
+	CameraBoom->TargetArmLength = static_cast<float>(FMath::FInterpTo(
+		static_cast<double>(CameraBoom->TargetArmLength),
+		View.ArmTargetCentimetres,
+		DeltaSeconds,
+		ZoomSmoothingSeconds > 0.0 ? 1.0 / ZoomSmoothingSeconds : 0.0));
+
+	// The orbit rides on top of the ordinary look pitch rather than replacing it, so letting go of
+	// the key returns the swing and leaves the player looking where they were looking.
+	CameraBoom->SetRelativeRotation(
+		FRotator(ViewPitchDegrees + View.Orbit.Pitch, View.Orbit.Yaw, 0.0));
 }
 
 void ASpaceMMOCharacterPawn::MoveForward(const float Value)
@@ -1329,6 +1413,18 @@ void ASpaceMMOCharacterPawn::MoveRight(const float Value)
 
 void ASpaceMMOCharacterPawn::TurnRight(const float Value)
 {
+	// While the orbit key is held the mouse swings the camera and the character stands its ground.
+	// Turn is simulated by the server, so this has to stop the input reaching PendingInput rather
+	// than be undone afterwards -- a turn sent and then cancelled is a turn the server performed.
+	if (View.bOrbiting)
+	{
+		View.Swing(Value * OrbitSensitivityDegrees, 0.0, MaxLookPitchDegrees);
+
+		PendingInput.Turn = 0.0;
+
+		return;
+	}
+
 	PendingInput.Turn = Value;
 }
 
@@ -1336,6 +1432,15 @@ void ASpaceMMOCharacterPawn::LookUp(const float Value)
 {
 	if (FMath::IsNearlyZero(Value))
 	{
+		return;
+	}
+
+	// While the orbit key is held the mouse swings the camera instead. Kept apart from the pitch
+	// below so that releasing the key gives back the swing and not the look.
+	if (View.bOrbiting)
+	{
+		View.Swing(0.0, Value * OrbitSensitivityDegrees, MaxLookPitchDegrees);
+
 		return;
 	}
 

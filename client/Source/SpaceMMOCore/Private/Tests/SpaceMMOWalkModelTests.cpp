@@ -1048,4 +1048,80 @@ bool FSpaceMMOWalkKeepsItsFooterOverAStepTest::RunTest(const FString& Parameters
 	return true;
 }
 
+
+/**
+ * Sprint raises the speed a character ends up at, not the rate they get there.
+ *
+ * <strong>A ceiling, not a shove.</strong> Adding a push would make tapping the key a lunge;
+ * multiplying the acceleration would make a sprinting character turn sharper than a walking one,
+ * which reads as the controls changing under you. The model accelerates toward a higher number and
+ * is otherwise untouched, which is also what lets the animation blend space keep working on ground
+ * speed alone.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkSprintRaisesTheCeilingTest,
+	"SpaceMMO.Walk.SprintRaisesTheCeiling",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkSprintRaisesTheCeilingTest::RunTest(const FString& Parameters)
+{
+	const FVector Up(0.0, 0.0, 1.0);
+	const FVector NoGravity = FVector::ZeroVector;
+
+	FWalkConfig Config;
+
+	FWalkInput Walking;
+	Walking.Move = FVector2D(1.0, 0.0);
+
+	FWalkInput Running = Walking;
+	Running.bSprint = true;
+
+	// Long enough for both to have reached whatever they are heading for.
+	FWalkState Walked;
+	FWalkState Ran;
+
+	for (int32 Frames = 0; Frames < 240; ++Frames)
+	{
+		Walked = FCharacterWalkModel::Step(
+			Walked, Walking, Config, Up, NoGravity, true, 1.0 / 60.0);
+
+		Ran = FCharacterWalkModel::Step(Ran, Running, Config, Up, NoGravity, true, 1.0 / 60.0);
+	}
+
+	TestEqual(
+		TEXT("Walking settles at the walk speed"),
+		FCharacterWalkModel::GroundSpeed(Walked, Up), Config.WalkSpeed, 1.0);
+
+	TestEqual(
+		TEXT("Sprinting settles at the walk speed times the multiplier"),
+		FCharacterWalkModel::GroundSpeed(Ran, Up),
+		Config.WalkSpeed * Config.SprintMultiplier,
+		1.0);
+
+	// One step from a standstill, where the difference between raising the ceiling and adding a
+	// push would show: both are still accelerating at the same rate, so both are in the same place.
+	const FWalkState FirstWalk =
+		FCharacterWalkModel::Step(FWalkState(), Walking, Config, Up, NoGravity, true, 1.0 / 60.0);
+
+	const FWalkState FirstRun =
+		FCharacterWalkModel::Step(FWalkState(), Running, Config, Up, NoGravity, true, 1.0 / 60.0);
+
+	TestEqual(
+		TEXT("And the first step off the mark is the same either way"),
+		FCharacterWalkModel::GroundSpeed(FirstRun, Up),
+		FCharacterWalkModel::GroundSpeed(FirstWalk, Up),
+		0.001);
+
+	// It has to survive the trip to the server, which is the half a client-side speed change would
+	// get wrong: the server integrates this model, so a sprint it never hears about is a client
+	// disagreeing with it about where the character is.
+	FWalkInput Hostile;
+	Hostile.Move = FVector2D(5.0, 5.0);
+	Hostile.bSprint = true;
+
+	TestTrue(TEXT("Sanitising input keeps the sprint"), Hostile.Sanitised().bSprint);
+
+	return true;
+}
+
 #endif

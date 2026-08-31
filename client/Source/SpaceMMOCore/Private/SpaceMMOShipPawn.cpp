@@ -15,6 +15,7 @@
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMORenderOrigin.h"
 #include "SpaceMMOSolidity.h"
+#include "SpaceMMOViewSubsystem.h"
 #include "SpaceMMOSurfaces.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
@@ -122,6 +123,20 @@ void ASpaceMMOShipPawn::BeginPlay()
 
 	Navigation = FShipNavigation();
 	ApplyHullMesh();
+
+	if (const UGameInstance* const Game = GetGameInstance())
+	{
+		if (const USpaceMMOViewSubsystem* const Remembered =
+			Game->GetSubsystem<USpaceMMOViewSubsystem>())
+		{
+			View.ArmTargetCentimetres = Remembered->ShipArmCentimetres;
+		}
+	}
+
+	if (CameraBoom != nullptr && View.ArmTargetCentimetres > 0.0)
+	{
+		CameraBoom->TargetArmLength = static_cast<float>(View.ArmTargetCentimetres);
+	}
 
 	Navigation.SystemPosition = FSystemCoordinate(StartingSystemPositionKilometres);
 
@@ -314,6 +329,13 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 			It->GetPlanetConfig(), GroundAltitudeKilometres, Proximity);
 
 		break;
+	}
+
+	// Drawn, never simulated. Before the axes are cleared, because the orbit reads what the mouse
+	// did this frame and the clear below is what ends that frame's input.
+	if (IsLocallyControlled())
+	{
+		ApplyView(DeltaSeconds);
 	}
 
 	// Axes are cleared each frame because the legacy input path calls the handlers only while a
@@ -1072,6 +1094,13 @@ void ASpaceMMOShipPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	PlayerInputComponent->BindAxis(TEXT("ShipYaw"), this, &ASpaceMMOShipPawn::Yaw);
 	PlayerInputComponent->BindAxis(TEXT("ShipRoll"), this, &ASpaceMMOShipPawn::Roll);
 
+	PlayerInputComponent->BindAxis(TEXT("ViewZoom"), this, &ASpaceMMOShipPawn::ZoomView);
+
+	PlayerInputComponent->BindAction(
+		TEXT("OrbitView"), IE_Pressed, this, &ASpaceMMOShipPawn::StartOrbit);
+	PlayerInputComponent->BindAction(
+		TEXT("OrbitView"), IE_Released, this, &ASpaceMMOShipPawn::StopOrbit);
+
 	PlayerInputComponent->BindAction(
 		TEXT("ShipBoost"), IE_Pressed, this, &ASpaceMMOShipPawn::StartBoost);
 	PlayerInputComponent->BindAction(
@@ -1091,9 +1120,80 @@ void ASpaceMMOShipPawn::ThrustUp(const float Value) { PendingInput.Thrust.Z = Va
 
 void ASpaceMMOShipPawn::Roll(const float Value) { PendingInput.Torque.X = Value; }
 
-void ASpaceMMOShipPawn::Pitch(const float Value) { PendingInput.Torque.Y = Value; }
+void ASpaceMMOShipPawn::Pitch(const float Value)
+{
+	// While the orbit key is held the mouse swings the camera and the ship holds its attitude.
+	// Torque is simulated by the server, so the input has to be stopped here rather than undone
+	// afterwards -- a pitch sent and then cancelled is a pitch the server flew.
+	if (View.bOrbiting)
+	{
+		View.Swing(0.0, Value * OrbitSensitivityDegrees, OrbitMaxPitchDegrees);
 
-void ASpaceMMOShipPawn::Yaw(const float Value) { PendingInput.Torque.Z = Value; }
+		PendingInput.Torque.Y = 0.0;
+
+		return;
+	}
+
+	PendingInput.Torque.Y = Value;
+}
+
+void ASpaceMMOShipPawn::Yaw(const float Value)
+{
+	if (View.bOrbiting)
+	{
+		View.Swing(Value * OrbitSensitivityDegrees, 0.0, OrbitMaxPitchDegrees);
+
+		PendingInput.Torque.Z = 0.0;
+
+		return;
+	}
+
+	PendingInput.Torque.Z = Value;
+}
+
+void ASpaceMMOShipPawn::StartOrbit() { View.bOrbiting = true; }
+void ASpaceMMOShipPawn::StopOrbit() { View.bOrbiting = false; }
+
+void ASpaceMMOShipPawn::ZoomView(const float Value)
+{
+	if (FMath::IsNearlyZero(Value))
+	{
+		return;
+	}
+
+	View.Wheel(Value, ZoomNearCentimetres, ZoomFarCentimetres, ZoomStepFraction);
+
+	// A ship is not destroyed when it is left, so this would survive on the pawn -- but it is kept
+	// beside the character's for one reason: both are answers to "how does this player like to look
+	// at the game", and splitting them across a pawn and a subsystem would leave the next person
+	// looking in two places.
+	if (const UGameInstance* const Game = GetGameInstance())
+	{
+		if (USpaceMMOViewSubsystem* const Remembered =
+			Game->GetSubsystem<USpaceMMOViewSubsystem>())
+		{
+			Remembered->ShipArmCentimetres = View.ArmTargetCentimetres;
+		}
+	}
+}
+
+void ASpaceMMOShipPawn::ApplyView(const double DeltaSeconds)
+{
+	View.Advance(DeltaSeconds, OrbitReturnSeconds);
+
+	if (CameraBoom == nullptr)
+	{
+		return;
+	}
+
+	CameraBoom->TargetArmLength = static_cast<float>(FMath::FInterpTo(
+		static_cast<double>(CameraBoom->TargetArmLength),
+		View.ArmTargetCentimetres,
+		DeltaSeconds,
+		ZoomSmoothingSeconds > 0.0 ? 1.0 / ZoomSmoothingSeconds : 0.0));
+
+	CameraBoom->SetRelativeRotation(FRotator(View.Orbit.Pitch, View.Orbit.Yaw, 0.0));
+}
 
 void ASpaceMMOShipPawn::StartBoost() { PendingInput.bBoost = true; }
 

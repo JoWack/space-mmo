@@ -3418,36 +3418,71 @@ log line settles it either way without another round of reasoning.
 
 ## 136 — Sprint
 
-**Pending.** Belongs to **M5** for the key, and to **M6** for the pool behind it.
+**Done 31 August**, awaiting a playtest. Belongs to **M5** for the key, and to **M6** for the pool
+behind it.
 
 Hold Shift to run. The design bible already names it: §2 gives `stamina` as "Sprint, jump, exertion
 pool", and defers the skill to the combat milestone because a pool needs an XP source first.
 
 **Jump is the precedent.** It is on the same skill and it works today without any stamina existing,
-so sprint can be a multiplier on `FWalkConfig::WalkSpeed` now and gain a pool later without the
-movement code changing shape. The walk model is pure and the server integrates it, so the input has
-to travel in `FWalkInput` alongside `bJump` rather than being a client-side speed change.
+so sprint is a multiplier on `FWalkConfig::WalkSpeed` now and gains a pool later without the movement
+code changing shape. `bSprint` travels in `FWalkInput` alongside `bJump`, because the server
+integrates this model — a client that simply moved faster would be a client disagreeing with the
+server about where it is.
+
+**A ceiling, not a shove.** Sprint raises the speed the model accelerates toward and changes nothing
+else. Adding a push would make tapping the key a lunge; multiplying the acceleration would make a
+sprinting character turn sharper than a walking one, which reads as the controls changing under you.
+The test pins both ends: the settled speed differs, and the first step off the mark does not.
+
+It applies in the air too. A character who loses their run the instant they leave the ground
+decelerates mid-jump, and a jump that travels less far the faster you were going feels broken without
+being explicable. Air control is already a quarter of ground acceleration, so it changes little.
+
+Shift is free on foot — `ShipBoost` already has it, and that is a different pawn with different
+bindings. The animation needs nothing: the blend space is one-dimensional on ground speed, so a
+faster character plays its fastest clip.
 
 ---
 
 ## 137 — The mouse wheel zooms the third-person camera
 
-**Pending.** Belongs to **M5**. Wanted both on foot and in the ship.
+**Done 31 August**, awaiting a playtest. Belongs to **M5**. Both on foot and in the ship.
 
 The booms are already there — `CameraBoom->TargetArmLength`, 400 cm on the character and 1200 on the
 ship — so this is a bound axis, a clamp and a rate.
 
 **Client-only, and that is a rule rather than an implementation note.** `design-bible.md` §8: "the
 camera is a client concern only — it must never affect server-side validation, which is why
-interaction range is checked against the pawn, never the camera." Zoom must not travel in
-`FWalkInput`, must not be replicated, and must not reach anything that decides what a player can
-reach.
+interaction range is checked against the pawn, never the camera." Zoom does not travel in
+`FWalkInput`, is not replicated, and is applied outside the simulated step in both pawns.
+
+**Proportional, not a fixed step.** A notch is worth a fraction of the current distance, so it feels
+the same close in and far out — a fixed number of centimetres is either unusably coarse near or
+unusably slow far, because what anybody perceives is how much the view changed by. 150 to 900 cm on
+foot, 600 to 3000 in the ship, eased over 0.15 s so a fast scroll glides.
+
+**Remembered off the pawn.** A character does not survive being boarded — stepping into a ship
+destroys it and stepping out spawns another — so a zoom kept on the pawn would reset on every trip.
+`USpaceMMOViewSubsystem` holds both distances on the game instance, which is per client and outlives
+everything.
+
+### The test that passed for the wrong reason
+
+`ZoomStepsByProportion` was green against a mutation that replaced the whole thing with "subtract 60
+centimetres". Fifteen per cent of the four hundred it was started from *is* sixty, and a fixed step
+reverses exactly as cleanly as a proportional one — so every assertion in it held, including the one
+about going in and back out landing where it started.
+
+It asserts the property that actually separates them now: a notch from twice as far out moves twice
+as far. **The mutation run is the only reason anybody knew**, which is the whole argument for doing
+one rather than reading the test and nodding at it.
 
 ---
 
 ## 138 — Holding Alt orbits the camera without turning the pawn
 
-**Pending.** Belongs to **M5**. Wanted both on foot and in the ship.
+**Done 31 August**, awaiting a playtest. Belongs to **M5**. Both on foot and in the ship.
 
 Hold Alt and the mouse swings the view around the character or ship; release it and the view returns
 to sitting behind them. The pawn does not turn while Alt is held.
@@ -3458,7 +3493,24 @@ suppress that without suppressing movement, so a character can keep walking forw
 swings around to look at them. Same in the ship for yaw.
 
 **And the same §8 rule applies**: the orbit is a client concern and must not reach the simulation. A
-camera that turned the pawn would be a camera that changed what the server sees.
+camera that turned the pawn would be a camera that changed what the server sees. So the input is
+stopped before it reaches `PendingInput` rather than undone afterwards — a turn sent and then
+cancelled is a turn the server performed.
+
+**Returning is where the arithmetic is.** `FViewOrbit::Recentred` eases the swing back by the short
+way round: a camera at 190 degrees comes home through 180, not the other 170, or looking behind
+yourself spins the view most of a full turn on release. Exponential rather than linear, so it arrives
+without a stop.
+
+**The first version did not arrive.** Three time constants left five per cent of the swing
+outstanding when its time was up — four and a half degrees off a ninety degree orbit, a camera that
+visibly settles late and then creeps. The test asked whether it was home when it said it would be and
+it was not; it is five time constants and a degree of slack now, with a second assertion that it is
+*still on its way* at the halfway mark, so "eases" cannot quietly become "snaps".
+
+**The state is shared with the ship** rather than written twice. From the camera's side a hull and a
+body are one problem and only the suppressed input differs, and two copies would be two places for
+the feel to drift apart.
 
 ## 139 — A character walks through the ship, which has collision a hundred times too big
 
@@ -3566,6 +3618,34 @@ the editor, counted correctly, and unreachable to every sweep this project runs.
 **And the test measures where the collision is, not only how big it is.** Four measurements of this
 asset were taken before anybody asked that question, and the answer was the whole fault. Size was
 only ever half of "they agree".
+
+## 140 — A failing UDP transport failed a different innocent test every run
+
+**Done 31 August.** Environment rather than code.
+
+Two consecutive suite runs failed two entirely unrelated tests —
+`SpaceMMO.Patch.AssemblesLikeTheGlobe`, then `SpaceMMO.Planet.SurfaceGravityMatchesConfig` — and
+neither had been touched in weeks. The cause was in the log just above them:
+
+    LogUdpMessaging: Error: Sender FUdpMessageProcessor.Sender:
+    SendTo failed (destination: 230.0.0.1:6666) (SE_EINVAL)
+
+**An Error-level log during a test fails that test, whatever wrote it.** The automation framework's
+own multicast transport started failing on this machine — ten occurrences in one run, and *zero* in
+every archived log before that day — so the error landed on whichever test happened to be in flight.
+
+**A red suite that names a different innocent test each run is worse than a red suite**, because the
+first thing anybody does is go and read that test. Two runs went that way before the pattern showed,
+and the only reason it showed at all is that the second failure was somewhere else entirely.
+
+The transport is off in `DefaultEngine.ini`. The message bus the automation runner uses works
+in-process; UDP is one transport for it and nothing here needs one. Off rather than silenced, because
+suppressing the log would leave it failing quietly instead.
+
+**`EnableTransport` is the switch and `EnabledByDefault` is not.** The first attempt set the latter,
+one run passed, and the next failed — which is exactly what a setting that did not take looks like
+from outside, and the same trap as a diagnostic that can silently not run. Reading the property list
+in `UdpMessagingSettings.h` settled it in a minute.
 
 ---
 

@@ -4,6 +4,7 @@
 #include "GameFramework/Pawn.h"
 #include "SpaceMMOCoordinates.h"
 #include "SpaceMMOFlightModel.h"
+#include "SpaceMMOViewControls.h"
 #include "SpaceMMOWalkModel.h"
 #include "SpaceMMOCharacterPawn.generated.h"
 
@@ -357,6 +358,52 @@ private:
 	/** How wide and tall the character is to a sweep, in centimetres. */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
 	double CollisionRadiusCentimetres = 34.0;
+
+
+	/**
+	 * How far back the camera sits, how it zooms, and how it swings.
+	 *
+	 * Shared with the ship, because a character and a hull are the same problem from the camera's
+	 * side: the only thing that differs is what the mouse would otherwise have been doing.
+	 */
+	FThirdPersonView View;
+
+	/** Closest and furthest the camera may sit, in centimetres. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ZoomNearCentimetres = 150.0;
+
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ZoomFarCentimetres = 900.0;
+
+	/** How much of the current distance one wheel notch is worth. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ZoomStepFraction = 0.15;
+
+	/** How long the camera takes to catch up with a zoom, so a fast scroll glides. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ZoomSmoothingSeconds = 0.15;
+
+	/** How long the view takes to swing back behind the pawn once the orbit key is released. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double OrbitReturnSeconds = 0.4;
+
+	/** Degrees of swing per unit of mouse movement while the orbit key is held. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double OrbitSensitivityDegrees = 2.0;
+
+	/** Takes a wheel notch. Positive zooms in. */
+	void ZoomView(float Value);
+
+	/** Starts and stops the orbit, which is what makes the mouse swing the view instead of the pawn. */
+	void StartOrbit();
+	void StopOrbit();
+
+	/** Eases the boom toward where the zoom and the orbit want it. */
+	void ApplyView(double DeltaSeconds);
+
+	/** Holds the sprint key down. Travels to the server in FWalkInput, like the jump does. */
+	void StartSprint();
+	void StopSprint();
 
 	void MoveForward(float Value);
 	void MoveRight(float Value);

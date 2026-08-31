@@ -4,6 +4,7 @@
 #include "GameFramework/Pawn.h"
 #include "SpaceMMOCoordinates.h"
 #include "SpaceMMOFlightModel.h"
+#include "SpaceMMOViewControls.h"
 #include "SpaceMMOPlanet.h"
 #include "SpaceMMOShipPawn.generated.h"
 
@@ -251,6 +252,52 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Ship")
 	FVector HullMeshOffset = FVector::ZeroVector;
+
+	/**
+	 * How far back the camera sits, how it zooms, and how it swings.
+	 *
+	 * The same state a character carries, and deliberately the same code driving it: from the
+	 * camera's side a hull and a body are one problem, and the only difference is what the mouse
+	 * would otherwise have been doing -- yawing a ship, or turning a person.
+	 */
+	FThirdPersonView View;
+
+	/** Closest and furthest the camera may sit, in centimetres. Further out than on foot: a ship is
+	 *  bigger, and a camera as close to a hull as it sits to a body is inside it. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ZoomNearCentimetres = 600.0;
+
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ZoomFarCentimetres = 3000.0;
+
+	/** How much of the current distance one wheel notch is worth. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ZoomStepFraction = 0.15;
+
+	/** How long the camera takes to catch up with a zoom, so a fast scroll glides. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ZoomSmoothingSeconds = 0.15;
+
+	/** How long the view takes to swing back behind the ship once the orbit key is released. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double OrbitReturnSeconds = 0.4;
+
+	/** Degrees of swing per unit of mouse movement while the orbit key is held. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double OrbitSensitivityDegrees = 2.0;
+
+	/** How far the orbit may be pitched, short of straight up or down. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double OrbitMaxPitchDegrees = 80.0;
+
+	/** Takes a wheel notch. Positive zooms in. */
+	void ZoomView(float Value);
+
+	void StartOrbit();
+	void StopOrbit();
+
+	/** Eases the boom toward where the zoom and the orbit want it. */
+	void ApplyView(double DeltaSeconds);
 
 	/** Puts the configured hull on, or says why it did not. */
 	void ApplyHullMesh();

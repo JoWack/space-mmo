@@ -23,6 +23,21 @@ struct SPACEMMOCORE_API FWalkInput
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
 	bool bJump = false;
 
+	/**
+	 * Whether the character is running rather than walking.
+	 *
+	 * <strong>Simulated, not drawn.</strong> It travels with the rest of the input because the
+	 * server integrates this model and the client predicts with it; a client that simply moved
+	 * faster would be a client disagreeing with the server about where it is.
+	 *
+	 * `design-bible.md` §2 gives this to the `stamina` skill -- "sprint, jump, exertion pool" -- and
+	 * defers the skill to the combat milestone, because a pool needs an XP source before it means
+	 * anything. Jump is the precedent: same skill, works today, gains a cost later without the
+	 * movement code changing shape.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	bool bSprint = false;
+
 	/** Clamps every axis into range, for the same reason ship input is clamped: clients lie. */
 	FWalkInput Sanitised() const
 	{
@@ -31,6 +46,7 @@ struct SPACEMMOCORE_API FWalkInput
 			FMath::Clamp(Move.X, -1.0, 1.0), FMath::Clamp(Move.Y, -1.0, 1.0));
 		Result.Turn = FMath::Clamp(Turn, -1.0, 1.0);
 		Result.bJump = bJump;
+		Result.bSprint = bSprint;
 
 		return Result;
 	}
@@ -72,6 +88,15 @@ struct SPACEMMOCORE_API FWalkConfig
 	/** Degrees per second the character turns at full input. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
 	double TurnRate = 180.0;
+
+	/**
+	 * What holding sprint multiplies the top speed by.
+	 *
+	 * A ceiling, not a shove: the character still accelerates toward it at the same rate, so sprint
+	 * changes how fast somebody ends up going and not how abruptly they get there.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double SprintMultiplier = 1.8;
 };
 
 /**

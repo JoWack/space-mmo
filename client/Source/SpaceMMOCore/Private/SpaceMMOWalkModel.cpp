@@ -90,9 +90,21 @@ FWalkState FCharacterWalkModel::Step(
 	FVector Along = Result.Velocity - (Up * IntoSurface);
 	double Away = IntoSurface;
 
+	// Sprint raises the speed being accelerated toward, and nothing else. Adding a push instead
+	// would make tapping the key a shove, and multiplying the acceleration would make a sprinting
+	// character turn sharper than a walking one, which reads as the controls changing under you.
+	//
+	// It applies in the air too, because the alternative is worse: a character who loses their run
+	// the instant they leave the ground decelerates mid-jump, and a jump that travels less far the
+	// faster you were going is the sort of thing that feels broken without being explicable. Air
+	// control is already a quarter of ground acceleration, so this changes very little up there.
+	const double TopSpeed = Clean.bSprint
+		? Config.WalkSpeed * FMath::Max(1.0, Config.SprintMultiplier)
+		: Config.WalkSpeed;
+
 	const FVector Wanted =
 		((Forward * Clean.Move.X) + (Right * Clean.Move.Y)).GetClampedToMaxSize(1.0)
-		* Config.WalkSpeed;
+		* TopSpeed;
 
 	const double Acceleration = bOnGround
 		? Config.GroundAcceleration
