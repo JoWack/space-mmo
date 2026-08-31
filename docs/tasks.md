@@ -3298,8 +3298,12 @@ boarding prompt, which is easy not to notice: the last boarding in the log happe
 
 ### Fixed by a re-import, not by code
 
-**Re-imported with *Bake Meshes* off**, and the test that found it now reads
-`extent V(X=3.58, Y=5.28, Z=1.63) cm, bounds origin V(0) cm`. The suite was red on that one test in
+**Re-imported with *Bake Meshes* off**, and the test that found it read
+`extent V(X=3.58, Y=5.28, Z=1.63) cm, bounds origin V(0) cm`.
+
+**That setting was reverted the same evening** — see task 139. Turning it off moved the render mesh
+and not its collision, which traded a ship you could not see for one you could walk through. The
+pivot is corrected at load instead, so the importer is back at its defaults. The suite was red on that one test in
 between, deliberately: it is a real defect in shipped content and the test's job is to say so rather
 than to be softened into a warning.
 
@@ -3458,7 +3462,7 @@ camera that turned the pawn would be a camera that changed what the server sees.
 
 ## 139 — A character walks through the ship, which has collision a hundred times too big
 
-**Blocked on one asset field.** Belongs to **M7 — a world worth being in**, with
+**Done 31 August**, verified by playtest and by measurement. Belongs to **M7 — a world worth being in**, with
 [ADR-0013](adr/0013-terrain-is-a-function-everything-else-collides.md); found in the task 133
 playtest, and caused by the re-import that closed it.
 
@@ -3521,9 +3525,19 @@ bounds origin, which is (0, 0, 0) here, so it correctly did nothing — while th
 somewhere else entirely. Centring can move the two together; it cannot fix them disagreeing, which is
 the one thing the test is for.
 
-**Re-import with *Bake Meshes* on** — the original default. Collision is unaffected by that setting,
-so it stays at 358 @ (-1687, -7500), and the render mesh joins it there instead of at the origin.
-They then agree in size and in place, and the pawn's centring moves both onto the ship.
+**Re-imported with *Bake Meshes* on** — the original default. Collision is unaffected by that
+setting, so it stayed at 358 @ (-1687, -7500) and the render mesh joined it there instead of sitting
+at the origin:
+
+    collision  extent (358.32, 527.87, 163.50) cm  at (-1687.33, -7499.78, 0)
+    render     extent (358.22, 527.77, 163.40) cm  at (-1687.33, -7499.78, 0)
+
+Same size to within a millimetre, and the same place. The pawn's centring subtracts that shared
+origin and puts both on the ship. A character walks into a parked ship again.
+
+**The 77 m pivot is still in the asset and no longer matters**, which is the point of having moved
+the correction into code: the import setting that was fought over for four rounds is back at its
+default, and the thing it was being fought about is measured and cancelled at load.
 
 ### What was ruled out first, and what was unexplained until the position was measured
 
