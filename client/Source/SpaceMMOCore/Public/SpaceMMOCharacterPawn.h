@@ -391,6 +391,20 @@ private:
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
 	double OrbitSensitivityDegrees = 2.0;
 
+	/**
+	 * How far the camera sits beside the character, so the crosshair has the middle of the screen.
+	 *
+	 * Y is right and Z is up in the arm's own frame, so the shoulder stays over the shoulder as the
+	 * view pitches and swings. Right rather than left because that is the convention nearly
+	 * everywhere, and because aiming will be right-handed when M6 arrives.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	FVector ShoulderOffset = FVector(0.0, 55.0, 20.0);
+
+	/** The camera distance ShoulderOffset was framed at. The offset scales with the zoom from here. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ShoulderReferenceArmCentimetres = 400.0;
+
 	/** Takes a wheel notch. Positive zooms in. */
 	void ZoomView(float Value);
 

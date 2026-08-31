@@ -1193,6 +1193,13 @@ void ASpaceMMOShipPawn::ApplyView(const double DeltaSeconds)
 		ZoomSmoothingSeconds > 0.0 ? 1.0 / ZoomSmoothingSeconds : 0.0));
 
 	CameraBoom->SetRelativeRotation(FRotator(View.Orbit.Pitch, View.Orbit.Yaw, 0.0));
+
+	// In the arm's rotated frame, so the hull stays low in shot through a swing rather than sliding
+	// across the screen as the view comes round.
+	CameraBoom->SocketOffset = FThirdPersonView::ShoulderAt(
+		ShoulderOffset,
+		CameraBoom->TargetArmLength,
+		ShoulderReferenceArmCentimetres);
 }
 
 void ASpaceMMOShipPawn::StartBoost() { PendingInput.bBoost = true; }

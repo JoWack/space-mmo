@@ -3706,6 +3706,27 @@ space.
 **It says nothing the simulation reads**, which is `design-bible.md` §8 and worth stating because a
 crosshair is the most tempting thing on a HUD to quietly promote into an aiming rule.
 
+### And then the character was standing in it
+
+The first playtest put the reticle over the character's head, which is what a centred camera and a
+centred crosshair do.
+
+**The camera steps aside, and the pawn never does.** Sliding a character sideways to make room would
+put its real position somewhere other than where it is drawn -- the same fault as a hull 77 m from
+its pivot, differing only in scale. `USpringArmComponent::SocketOffset` carries it, and that one
+rather than `TargetOffset` because it is applied in the arm's rotated frame: the shoulder stays over
+the shoulder through a pitch or an orbit, where a world-space offset would slide across the character
+as the view came round.
+
+**Over the right shoulder on foot; straight up in the ship.** A hull framed over one shoulder reads
+as flying from beside your own ship, so the camera lifts instead and the hull sits low with clear sky
+ahead of the nose — which is also where the velocity marker needs room to roam.
+
+**Scaled with the zoom**, or the framing holds at exactly one distance: an offset that composes well
+at four metres is proportionally three times as wide wound in to one and a half, and puts the
+character half off screen. Verified by mutation — replacing the scaling with the authored offset
+turns the framing test red.
+
 ---
 
 ## Done

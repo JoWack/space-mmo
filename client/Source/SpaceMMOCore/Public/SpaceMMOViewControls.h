@@ -88,4 +88,23 @@ struct SPACEMMOCORE_API FThirdPersonView
 
 	/** Eases the swing back to centre when the key is not held. */
 	void Advance(double DeltaSeconds, double ReturnSeconds);
+
+	/**
+	 * Where the camera sits beside the pawn, at whatever distance it is currently at.
+	 *
+	 * <strong>The pawn is never moved. The camera is.</strong> Sliding a character sideways to clear
+	 * the middle of the screen would put its real position somewhere other than where it is drawn,
+	 * which is the fault a ship spent a session on when its hull turned up 77 m from its pivot. The
+	 * spring arm carries the offset instead, and the world is untouched.
+	 *
+	 * <strong>Scaled with the arm, or the framing only holds at one zoom.</strong> A shoulder offset
+	 * that looks right at four metres is proportionally three times as wide wound in to one and a
+	 * half, and puts the character half off screen. Keeping the ratio keeps the composition.
+	 *
+	 * @param AtReference    The offset that frames it correctly at the reference distance.
+	 * @param ArmCentimetres Where the camera is now.
+	 * @param ReferenceArmCentimetres The distance AtReference was chosen at.
+	 */
+	static FVector ShoulderAt(
+		const FVector& AtReference, double ArmCentimetres, double ReferenceArmCentimetres);
 };

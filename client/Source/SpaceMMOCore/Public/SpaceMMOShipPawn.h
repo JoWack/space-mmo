@@ -290,6 +290,20 @@ protected:
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
 	double OrbitMaxPitchDegrees = 80.0;
 
+	/**
+	 * How far the camera sits off the hull, so the crosshair has the middle of the screen.
+	 *
+	 * <strong>Up, not sideways.</strong> A ship framed over one shoulder reads as flying from beside
+	 * your own hull. Lifting the camera instead sits the ship low with clear sky ahead of the nose,
+	 * which is what every space sim does and where the velocity marker has room to roam.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	FVector ShoulderOffset = FVector(0.0, 0.0, 90.0);
+
+	/** The camera distance ShoulderOffset was framed at. The offset scales with the zoom from here. */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
+	double ShoulderReferenceArmCentimetres = 1200.0;
+
 	/** Takes a wheel notch. Positive zooms in. */
 	void ZoomView(float Value);
 

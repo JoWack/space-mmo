@@ -101,3 +101,18 @@ void FThirdPersonView::Advance(const double DeltaSeconds, const double ReturnSec
 
 	Orbit = FViewOrbit::Recentred(Orbit, DeltaSeconds, ReturnSeconds);
 }
+
+FVector FThirdPersonView::ShoulderAt(
+	const FVector& AtReference,
+	const double ArmCentimetres,
+	const double ReferenceArmCentimetres)
+{
+	// A reference of nothing names no ratio, and dividing by it would put the camera somewhere
+	// arbitrary. The authored offset is the one answer that cannot be wrong.
+	if (ReferenceArmCentimetres <= 0.0 || ArmCentimetres <= 0.0)
+	{
+		return AtReference;
+	}
+
+	return AtReference * (ArmCentimetres / ReferenceArmCentimetres);
+}

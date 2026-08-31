@@ -1399,6 +1399,14 @@ void ASpaceMMOCharacterPawn::ApplyView(const double DeltaSeconds)
 	// the key returns the swing and leaves the player looking where they were looking.
 	CameraBoom->SetRelativeRotation(
 		FRotator(ViewPitchDegrees + View.Orbit.Pitch, View.Orbit.Yaw, 0.0));
+
+	// SocketOffset rather than TargetOffset: this one is applied in the arm's rotated frame, so the
+	// shoulder stays over the shoulder through a pitch or a swing. TargetOffset is world space and
+	// would slide around the character as the view turned.
+	CameraBoom->SocketOffset = FThirdPersonView::ShoulderAt(
+		ShoulderOffset,
+		CameraBoom->TargetArmLength,
+		ShoulderReferenceArmCentimetres);
 }
 
 void ASpaceMMOCharacterPawn::MoveForward(const float Value)

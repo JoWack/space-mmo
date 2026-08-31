@@ -151,4 +151,63 @@ bool FSpaceMMOViewOrbitReturnsTheShortWayTest::RunTest(const FString& Parameters
 	return true;
 }
 
+
+/**
+ * The camera steps aside, and keeps stepping aside by the same proportion at every zoom.
+ *
+ * <strong>The pawn is never moved to make room.</strong> Sliding a character sideways so a reticle
+ * can have the middle of the screen would put its real position somewhere other than where it is
+ * drawn -- the same fault a ship spent a session on when its hull turned up 77 m from its pivot,
+ * differing only in scale. The arm carries the offset and the world is untouched.
+ *
+ * The scaling is the part with a wrong answer available: a fixed offset frames correctly at exactly
+ * one distance and puts the character half off screen wound all the way in.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOViewShoulderHoldsItsFramingTest,
+	"SpaceMMO.View.ShoulderHoldsItsFraming",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOViewShoulderHoldsItsFramingTest::RunTest(const FString& Parameters)
+{
+	const FVector Authored(0.0, 55.0, 20.0);
+
+	constexpr double Reference = 400.0;
+
+	// At the distance it was framed at, the authored offset is used exactly.
+	const FVector AtHome = FThirdPersonView::ShoulderAt(Authored, Reference, Reference);
+
+	TestTrue(TEXT("At the reference distance the offset is as authored"), AtHome.Equals(Authored));
+
+	// Twice as far out, twice as wide: the character occupies the same part of the frame.
+	const FVector Far = FThirdPersonView::ShoulderAt(Authored, Reference * 2.0, Reference);
+
+	TestEqual(TEXT("Twice the arm is twice the offset"), Far.Y, Authored.Y * 2.0, 0.001);
+	TestEqual(TEXT("...on every axis"), Far.Z, Authored.Z * 2.0, 0.001);
+
+	// And wound in, proportionally smaller rather than proportionally enormous, which is the whole
+	// reason this scales at all.
+	const FVector Near = FThirdPersonView::ShoulderAt(Authored, Reference * 0.375, Reference);
+
+	TestTrue(TEXT("Wound in, the offset shrinks with it"), Near.Y < Authored.Y);
+
+	TestEqual(
+		TEXT("...keeping the same share of the distance"),
+		Near.Y / (Reference * 0.375),
+		Authored.Y / Reference,
+		0.0001);
+
+	// A reference of nothing names no ratio. Using the authored offset is the one answer that
+	// cannot be wrong; dividing by it would put the camera somewhere arbitrary.
+	TestTrue(
+		TEXT("A reference of zero falls back to the authored offset"),
+		FThirdPersonView::ShoulderAt(Authored, 400.0, 0.0).Equals(Authored));
+
+	TestTrue(
+		TEXT("...and so does an arm of zero"),
+		FThirdPersonView::ShoulderAt(Authored, 0.0, Reference).Equals(Authored));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
