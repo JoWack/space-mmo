@@ -3727,6 +3727,21 @@ at four metres is proportionally three times as wide wound in to one and a half,
 character half off screen. Verified by mutation — replacing the scaling with the authored offset
 turns the framing test red.
 
+**The ship's lift was picked by eye and was half of what it needed.** 90 cm against a hull 186 cm
+tall left the reticle squarely on the engine glow; the shift was real, about 72 px, and swallowed by
+a hull some 300 px tall.
+
+The arithmetic says it should never have been a distance at all. **Whether the reticle clears the
+hull does not depend on how far back the camera is**: the hull's on-screen half-height and the
+camera's lift both fall off with distance in the same proportion, so it is a ratio of two centimetre
+figures and nothing else. Anything above one clears it; the rest is how much sky sits between.
+
+So it is a multiple of the hull's own drawn half-height now, measured when the mesh is applied, and
+logged — which also means it stays right if the ship is ever swapped, where a hand-tuned figure
+would quietly stop being. The character keeps a written offset, because there the goal is a
+composition rather than a clearance and no measurement of the body tells you where a shoulder
+belongs.
+
 ---
 
 ## Done

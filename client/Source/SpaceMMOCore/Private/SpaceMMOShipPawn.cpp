@@ -547,6 +547,16 @@ void ASpaceMMOShipPawn::ApplyHullMesh()
 	// you can walk through looks exactly like the boarding prompt being broken.
 	SpaceMMOSolidity::ReportIfIntangible(Mesh, TEXT("Ship"), GetName());
 
+	// How far the camera has to sit above the hull for the reticle to clear it.
+	//
+	// Screen geometry, not taste: the hull's on-screen half-height and the camera's lift both fall
+	// off with distance in the same proportion, so whether one clears the other is a ratio of two
+	// centimetre figures and does not depend on how far back the camera is. That is why this is a
+	// multiple of the half-height and not a distance somebody liked the look of.
+	const double DrawnHalfHeight = Extent.Z * Scale;
+
+	ShoulderOffset = FVector(0.0, 0.0, DrawnHalfHeight * FMath::Max(0.0, HullClearanceMultiple));
+
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("Ship drawing as '%s': authored %.1f cm on its longest axis, scaled %.3f to %.1f m; "
 			"rotated %s, offset %s. Collision is still a %.1f m sphere."),
@@ -569,6 +579,11 @@ void ASpaceMMOShipPawn::ApplyHullMesh()
 	// The longest axis is named too: this is scaled along whichever axis is longest, but +X is
 	// forward, and a hull whose length runs along Y is one that flies sideways until
 	// HullMeshRotation says otherwise.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  camera sits %.0f cm above a hull %.0f cm tall, so the reticle clears it."),
+		ShoulderOffset.Z,
+		Extent.Z * Scale * 2.0);
+
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("  hull bounds: extent %s cm, pivot %s cm off centre (%.1f cm once scaled, and "
 			"subtracted); longest axis is %s."),

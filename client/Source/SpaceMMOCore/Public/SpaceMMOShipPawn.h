@@ -291,18 +291,32 @@ protected:
 	double OrbitMaxPitchDegrees = 80.0;
 
 	/**
-	 * How far the camera sits off the hull, so the crosshair has the middle of the screen.
+	 * How far the camera sits above the hull, as a multiple of the hull's own drawn half-height.
 	 *
 	 * <strong>Up, not sideways.</strong> A ship framed over one shoulder reads as flying from beside
-	 * your own hull. Lifting the camera instead sits the ship low with clear sky ahead of the nose,
-	 * which is what every space sim does and where the velocity marker has room to roam.
+	 * your own hull. Lifting the camera sits it low with clear sky ahead of the nose, which is what
+	 * every space sim does and where the velocity marker has room to roam.
+	 *
+	 * <strong>Measured off the hull rather than written in centimetres</strong>, because the number
+	 * that matters is how much of the screen the ship takes up and that is what a half-height is. A
+	 * hand-picked 90 cm against a hull 186 cm tall left the reticle sitting squarely on the engine
+	 * glow -- the shift was real, and about half what it needed to be. Anything above 1 clears the
+	 * hull; the rest is how much sky sits between the two.
 	 */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
-	FVector ShoulderOffset = FVector(0.0, 0.0, 90.0);
+	double HullClearanceMultiple = 1.6;
 
-	/** The camera distance ShoulderOffset was framed at. The offset scales with the zoom from here. */
+	/** The camera distance the clearance is framed at. It scales with the zoom from here. */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|View")
 	double ShoulderReferenceArmCentimetres = 1200.0;
+
+	/**
+	 * The lift the clearance works out to for the hull actually loaded, in centimetres.
+	 *
+	 * Computed once when the hull is applied rather than every frame: it depends only on the mesh
+	 * and the fit, and both are settled by then.
+	 */
+	FVector ShoulderOffset = FVector::ZeroVector;
 
 	/** Takes a wheel notch. Positive zooms in. */
 	void ZoomView(float Value);
