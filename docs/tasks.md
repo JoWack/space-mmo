@@ -3500,7 +3500,32 @@ What is left is the one property of an asset that code cannot compensate for —
 collision disagreeing with each other**. `HullCanBeBumpedInto` asserts that ratio and says nothing
 about the size, which is allowed to be anything.
 
-### What was ruled out first, and what is still not explained
+### The complete picture, once collision was measured for position and not only size
+
+    collision  extent (358.32, 527.87, 163.50) cm  at (-1687.33, -7499.78, 0)
+    render     extent (  3.58,   5.28,   1.63) cm  at (0, 0, 0)
+
+**The import applied the FBX object's transform to the collision and not to the mesh.** With *Bake
+Meshes* off the render geometry got neither the 100x scale nor the 77 m translation, and the
+collision got both. Every measurement taken before this one was of extents, which cannot see half of
+it.
+
+**That also explains the part that was filed as unexplained.** The sweep reported nothing not because
+a sweep beginning inside a hull is mishandled, but because the character was never inside it: 7499.78
+cm of offset multiplied by the runtime fit of 113.7 puts the collision **8.5 km** from the ship. It
+was not near anybody. No second theory was needed, and the note that said "measure again rather than
+layering a second theory on the first" was right.
+
+**And it explains why the automatic centring did not save it.** The pawn subtracts the *render*
+bounds origin, which is (0, 0, 0) here, so it correctly did nothing — while the collision sat
+somewhere else entirely. Centring can move the two together; it cannot fix them disagreeing, which is
+the one thing the test is for.
+
+**Re-import with *Bake Meshes* on** — the original default. Collision is unaffected by that setting,
+so it stays at 358 @ (-1687, -7500), and the render mesh joins it there instead of at the origin.
+They then agree in size and in place, and the pawn's centring moves both onto the ship.
+
+### What was ruled out first, and what was unexplained until the position was measured
 
 The character's sweep is fine: the same session logged 23 `Blocked by BP_Station_A02_CapitalHub_C_0`
 and not one against the ship, which clears the channel, the responses, the capsule and the walk code
@@ -3510,11 +3535,9 @@ own two-metre sphere from task 131, not the mesh.
 `CTF_UseComplexAsSimple` was the other candidate and the flag says 0, so the hulls are reachable in
 principle.
 
-**What is not explained is why the sweep reports nothing at all.** A character standing beside the
-ship is deep inside a four-hundred-metre hull, and a sweep that begins inside a shape should return
-an initial overlap and be logged. It is not. Fix the scale first and measure again rather than
-layering a second theory on the first — the mismatch is unambiguous and wrong either way, and this
-file already records three rounds lost to reasoning where a number was available.
+**Why the sweep reported nothing at all** was carried as unexplained for two rounds, with a note not
+to theorise about it until the numbers underneath it were sound. That was the right call: the answer
+fell out of the position measurement above and needed no theory.
 
 ### The check that should have caught it
 
@@ -3525,6 +3548,10 @@ testing rules warn about: asserting that a value exists rather than asserting th
 It now also warns when the collision has drifted from the mesh by more than a factor of two, and when
 the collision complexity is *Use Complex Collision As Simple* — which leaves hulls present, drawn in
 the editor, counted correctly, and unreachable to every sweep this project runs.
+
+**And the test measures where the collision is, not only how big it is.** Four measurements of this
+asset were taken before anybody asked that question, and the answer was the whole fault. Size was
+only ever half of "they agree".
 
 ---
 

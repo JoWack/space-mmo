@@ -90,9 +90,15 @@ bool FSpaceMMOShipHullCanBeBumpedIntoTest::RunTest(const FString& Parameters)
 	const FVector CollisionExtent = Collision.GetExtent();
 	const FVector RenderExtent = Mesh->GetBounds().BoxExtent;
 
+	const FVector CollisionCentre = Collision.GetCenter();
+	const FVector RenderCentre = Mesh->GetBounds().Origin;
+
 	AddInfo(FString::Printf(
-		TEXT("collision extent %s cm against render extent %s cm."),
-		*CollisionExtent.ToCompactString(), *RenderExtent.ToCompactString()));
+		TEXT("collision extent %s cm at %s, against render extent %s cm at %s."),
+		*CollisionExtent.ToCompactString(),
+		*CollisionCentre.ToCompactString(),
+		*RenderExtent.ToCompactString(),
+		*RenderCentre.ToCompactString()));
 
 	// Generous, because a convex hull is an approximation and nobody should be editing this test to
 	// tune a mesh. Wide enough to pass anything reasonable, narrow enough to catch collision left
@@ -107,6 +113,22 @@ bool FSpaceMMOShipHullCanBeBumpedIntoTest::RunTest(const FString& Parameters)
 			TEXT("The collision is the size of the ship (%.2f cm against %.2f cm)"),
 			LargestCollision, Largest),
 		LargestCollision > Largest * 0.5 && LargestCollision < Largest * 2.0);
+
+	// And in the same place as it.
+	//
+	// <strong>Size was only ever half of "they agree".</strong> The pawn centres the hull on the
+	// mesh's bounds, which moves the collision with it -- so collision sitting somewhere else in the
+	// asset survives that untouched and ends up somewhere else in the world too. Every measurement
+	// taken of this ship so far has been of extents, which cannot see it.
+	//
+	// Judged against the ship's own size rather than in centimetres, because the size is allowed to
+	// be anything: a tenth of the hull is close enough to be a pivot somebody chose and far too
+	// small to be a transform that got baked into one and not the other.
+	TestTrue(
+		FString::Printf(
+			TEXT("...and in the same place as it (collision at %s, mesh at %s)"),
+			*CollisionCentre.ToCompactString(), *RenderCentre.ToCompactString()),
+		FVector::Dist(CollisionCentre, RenderCentre) < Largest * 0.1);
 
 	return true;
 }
