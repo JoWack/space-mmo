@@ -30,7 +30,53 @@ public static class Sim
     public static readonly string[] PlanetLockedOres =
         [TerranFerrite, AresRegolith, VerdantAmber, GrimholdSlag];
 
-    /// <summary>Ten of each, from <c>build_alloy_frame</c> in <c>data/recipes/core.json</c>.</summary>
+    /// <summary>
+    /// The recipes this simulation runs, restated from <c>data/recipes/core.json</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Restated, not read — and that is a deliberate constraint rather than laziness.</strong>
+    /// EconSim references SpaceMMO.Domain and nothing else, which is the whole reason it can run
+    /// tens of thousands of days in seconds, and ADR-0003 forbids file I/O in Domain outright. So
+    /// the numbers cannot come from the pack without either a second JSON reader living here or the
+    /// SpaceMMO.Data reference the project file explicitly rules out.
+    /// </para>
+    /// <para>
+    /// What makes that safe is <c>EconSimMatchesTheContentPackTests</c>, which reads the real
+    /// <c>data/</c> directory and fails if any of these has drifted. Without it the sim would go on
+    /// modelling a recipe nobody ships, answering confidently about a game that no longer exists —
+    /// and its answers are what ADR-0008 and the freighter both rest on.
+    /// </para>
+    /// <para>
+    /// Named rather than written inline at the call site, so the test has something to hold and a
+    /// reader has something to follow.
+    /// </para>
+    /// </remarks>
+    public const string RefiningRecipeKey = "refine_ferrite_plate";
+
+    /// <summary>Ore consumed by one run of <see cref="RefiningRecipeKey"/>.</summary>
+    public const int OrePerRefiningRun = 20;
+
+    /// <summary>Plates produced by one run of it.</summary>
+    public const int PlatesPerRefiningRun = 4;
+
+    /// <summary>How long that run takes.</summary>
+    public const int RefiningJobSeconds = 60;
+
+    public const string ShipcraftingRecipeKey = "build_shuttle_hull_section";
+
+    /// <summary>Plates consumed by one run of <see cref="ShipcraftingRecipeKey"/>.</summary>
+    public const int PlatesPerSectionRun = 4;
+
+    /// <summary>Sections produced by one run of it.</summary>
+    public const int SectionsPerSectionRun = 1;
+
+    /// <summary>How long that run takes.</summary>
+    public const int ShipcraftingJobSeconds = 300;
+
+    public const string FrameRecipeKey = "build_alloy_frame";
+
+    /// <summary>Ten of each, from <see cref="FrameRecipeKey"/>.</summary>
     public const int OrePerFrame = 10;
 
     public static readonly string[] TradedItems =

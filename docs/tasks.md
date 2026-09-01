@@ -3808,7 +3808,7 @@ belongs.
 
 ## 142 — EconSim hand-copies the recipe numbers it simulates
 
-**Pending.** Belongs to **M1 — backend economy core**, which is where EconSim was built, and matters
+**Done 31 August.** Belongs to **M1 — backend economy core**, which is where EconSim was built, and matters
 to **M4** because that is where the recipes get tuned.
 
 Found on 31 August while answering "is the ore-to-plate ratio load-bearing for EconSim". It is, and
@@ -3838,15 +3838,44 @@ question anyway, confidently, about a game that no longer exists. That is the sa
 diagnostic that reports on an experiment which never ran, and it costs more here because nobody is
 watching for it: the sim always produces plausible numbers.
 
-**The cheap fix is a test, not a refactor.** `ContentLoaderTests` already loads the real `data/`
-directory — "These load the *real* files from `data/`, not a fixture" — so a test that reads the pack
-and asserts EconSim's constants against it is a few lines. It needs the literals promoted to named
-constants on `Sim` first, which `OrePerFrame` already shows the shape of.
+### The better fix is ruled out, and by an ADR rather than by taste
 
-**The better fix is for EconSim to read the pack**, and it is not obviously right: the sim is
-deliberately free of database and HTTP, and its value is partly that it runs on nothing. Reading
-JSON breaks neither of those, but it does mean a malformed pack stops the sim rather than the
-server, so it wants deciding rather than assuming.
+Having EconSim read the pack would remove the duplication instead of policing it, and that was the
+preferred option until the constraint turned up. `ContentLoader.ReadAsync` is static and touches no
+database — but it lives in `SpaceMMO.Data`, and EconSim's project file says outright: *"References
+SpaceMMO.Domain only — no database, no HTTP. If this ever needs SpaceMMO.Data, something has leaked
+out of Domain that belonged in it."*
+
+Moving the reader into Domain is the obvious response and
+**[ADR-0003](adr/0003-topology.md) forbids it** — its module-boundary decision is that "`Domain` has
+no I/O", and the project file spells that out as "no database, no HTTP, **no file I/O**, no clock, no
+randomness". So the choices were a second JSON reader living inside the tool — trading a
+duplication of numbers for a duplication of the reader that parses them — or leaving the numbers and
+guarding them.
+
+The numbers are what change; the file format almost never does. And a drifting reader fails loudly
+where drifting numbers fail silently, which is the whole complaint here.
+
+### What was built
+
+The literals are named constants on `Sim` now, each citing its recipe key, and
+`EconSimMatchesTheContentPackTests` reads the real `data/` directory and checks all four against it:
+refining, shipcrafting, the frame's ten-of-each, and that every item the sim trades is actually
+shipped. `SpaceMMO.Data.Tests` gained a project reference to the tool to do it, which is unusual and
+explained in the project file.
+
+**Verified by tuning the content rather than the code**, which is the drift this exists to catch:
+changing `refine_ferrite_plate` from four plates to three turns exactly one test red, and the message
+names the recipe.
+
+The frame test carries the reason it matters in its own body — ADR-0008 rests on a frame being the
+point where material crosses the faction line, so a frame that stops needing four ores stops being
+the reason anybody trades across it, and the contested zone becomes scenery.
+
+**Seed prices are deliberately not covered.** `SimWorld.SeedPrice` opens markets that have never
+traded, and the pack's `factionBuyPrice` is a standing order on raw materials. They are different
+numbers answering different questions, and asserting one against the other would invent a
+relationship nobody decided on.
 
 ## 143 — The greybox method is a skill, not one build script
 

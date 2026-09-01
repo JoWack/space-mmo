@@ -63,13 +63,19 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
                 // same homeworld. That is what keeps four local books worth opening.
                 case "refiner":
                     RunIndustry(
-                        character, day, "refining", Sim.Ore, 20, Sim.Plate, 4, 60,
+                        character, day, "refining",
+                        Sim.Ore, Sim.OrePerRefiningRun,
+                        Sim.Plate, Sim.PlatesPerRefiningRun,
+                        Sim.RefiningJobSeconds,
                         inputMarket: Sim.Capital, outputMarket: character.HomeBody);
                     break;
 
                 case "crafter":
                     RunIndustry(
-                        character, day, "shipcrafting", Sim.Plate, 4, Sim.Section, 1, 300,
+                        character, day, "shipcrafting",
+                        Sim.Plate, Sim.PlatesPerSectionRun,
+                        Sim.Section, Sim.SectionsPerSectionRun,
+                        Sim.ShipcraftingJobSeconds,
                         inputMarket: character.HomeBody, outputMarket: character.HomeBody);
                     break;
 

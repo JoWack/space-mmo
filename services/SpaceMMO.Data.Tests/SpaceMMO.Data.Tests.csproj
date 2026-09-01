@@ -29,6 +29,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SpaceMMO.Data\SpaceMMO.Data.csproj" />
+
+    <!--
+      The economy simulator, so its recipe constants can be checked against the shipped
+      content pack. EconSim restates those numbers rather than reading them, because it
+      references SpaceMMO.Domain and nothing else and ADR-0003 forbids file I/O there -
+      so something has to notice when they drift, and a comment cannot.
+
+      Here rather than in SpaceMMO.Domain.Tests because reading the pack is ContentLoader's
+      job and that lives in SpaceMMO.Data. It needs no database, unlike most of this project.
+    -->
+    <ProjectReference Include="..\..\tools\SpaceMMO.EconSim\SpaceMMO.EconSim.csproj" />
   </ItemGroup>
 
 </Project>
