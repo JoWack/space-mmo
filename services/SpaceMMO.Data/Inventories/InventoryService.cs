@@ -375,6 +375,103 @@ public sealed class InventoryService(SpaceMmoDbContext database)
     }
 
     /// <summary>
+    /// The cargo hold belonging to one hull, creating it if it does not exist.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Keyed on the hull, not on its owner (ADR-0012).</strong> Two ships mean two holds and
+    /// they do not pool. Hanging the hold off the character instead is one line shorter and works
+    /// until somebody owns a second ship, at which point their cargo pools across a fleet and
+    /// <c>Inventory.ShipItemInstanceId</c> — which has described this arrangement since the first
+    /// migration — becomes false.
+    /// </para>
+    /// <para>
+    /// <strong>The capacity comes from the hull's own item definition.</strong> A shuttle and a
+    /// freighter differ by that number and by nothing else in the schema, which is what ADR-0014
+    /// added <c>HoldCapacityM3</c> for. A hull whose definition does not name one gets nothing
+    /// rather than everything: an unlimited hold on a ship is a bank account you can fly, and
+    /// ADR-0008's planet-locked materials become a shopping list rather than a journey.
+    /// </para>
+    /// <para>
+    /// Creating it is not the same as reaching it. Who may open a hold, and from where, is a
+    /// separate rule — ADR-0012 says with the ship or docked beside it — and it does not belong in
+    /// a factory that also runs during crafting.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InventoryTransferException">
+    /// If the instance is unknown, or is not a hull.
+    /// </exception>
+    public async Task<Inventory> GetOrCreateShipHoldAsync(
+        long hullInstanceId, CancellationToken cancellationToken = default)
+    {
+        Inventory? existing = await _database.Inventories.FirstOrDefaultAsync(
+            i => i.ShipItemInstanceId == hullInstanceId && i.Kind == InventoryKind.ShipHold,
+            cancellationToken);
+
+        ItemInstance? hull = await _database.ItemInstances
+            .Include(x => x.ItemDef)
+            .Include(x => x.Inventory)
+            .FirstOrDefaultAsync(x => x.Id == hullInstanceId, cancellationToken);
+
+        if (hull is null)
+        {
+            throw new InventoryTransferException(
+                $"No item instance {hullInstanceId} to hang a hold off.");
+        }
+
+        if (hull.Inventory is null)
+        {
+            // ItemInstance.InventoryId is null once an instance has been destroyed, and a hold has
+            // to belong to somebody -- Inventory.CharacterId is not nullable. A hold for a ship
+            // nobody owns would be a container addressed to no one, which is the state ADR-0006
+            // describes as being inside the explosion rather than surviving it.
+            throw new InventoryTransferException(
+                $"Item instance {hullInstanceId} is in no inventory, so nobody owns it.");
+        }
+
+        if (hull.ItemDef!.Category != ItemCategory.Hull)
+        {
+            // A hold on a mining laser is not a smaller mistake than a hold on nothing. Refusing
+            // here keeps ShipItemInstanceId meaning what its own comment says it means.
+            throw new InventoryTransferException(
+                $"Item instance {hullInstanceId} is a {hull.ItemDef.Category}, not a hull.");
+        }
+
+        // Assigned on the way past, like a character's pockets and for the same reason: how much a
+        // hull carries is a property of the hull, and re-authoring it in content has to reach the
+        // holds that already exist.
+        double capacity = hull.ItemDef.HoldCapacityM3 ?? 0.0;
+
+        if (existing is not null)
+        {
+            if (existing.CapacityM3 != capacity)
+            {
+                existing.CapacityM3 = capacity;
+                await _database.SaveChangesAsync(cancellationToken);
+            }
+
+            return existing;
+        }
+
+        var hold = new Inventory
+        {
+            // Whoever owns the hull right now. A ship that changes hands should take its hold with
+            // it rather than leave a container addressed to somebody who no longer has the ship --
+            // and nothing transfers hulls between people yet, so this is the shape rather than a
+            // rule anybody has exercised.
+            CharacterId = hull.Inventory.CharacterId,
+            ShipItemInstanceId = hull.Id,
+            Kind = InventoryKind.ShipHold,
+            CapacityM3 = capacity,
+        };
+
+        _database.Inventories.Add(hold);
+        await _database.SaveChangesAsync(cancellationToken);
+
+        return hold;
+    }
+
+    /// <summary>
     /// The inventory a character carries on their person, creating it if it does not exist.
     /// </summary>
     /// <remarks>
@@ -387,10 +484,9 @@ public sealed class InventoryService(SpaceMmoDbContext database)
     /// can pick anything up would be friction with no gameplay behind it.
     /// </para>
     /// <para>
-    /// Capacity is left unlimited for now and is the piece task 112 changes: carrying is meant to
-    /// be bounded by weight, which is what turns planet-locked materials (ADR-0008) into flights
-    /// rather than paperwork. Nothing enforces any capacity today, so a limit here would be the
-    /// only one in the game and would read as arbitrary.
+    /// Capacity is <see cref="CarriedCapacityM3"/> (ADR-0014), and it is assigned on every access
+    /// rather than only on creation: how much a person can carry is a rule, not something they own,
+    /// and every row that existed before the rule was written was created unlimited.
     /// </para>
     /// </remarks>
     public async Task<Inventory> GetOrCreateCarriedAsync(

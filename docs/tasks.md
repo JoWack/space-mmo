@@ -1748,8 +1748,58 @@ belongs with 115.
 
 ## 115 — A ship is a thing you earn, and its hold belongs to it
 
-**Pending. Decided 15 August: [ADR-0012](adr/0012-a-ship-is-earned-and-carries-its-own-hold.md).**
-The ADR is the decision; what follows is the shape of the work and what it runs into.
+**In progress.** Decided 15 August:
+[ADR-0012](adr/0012-a-ship-is-earned-and-carries-its-own-hold.md). The ADR is the decision; what
+follows is the shape of the work and what it runs into.
+
+### What was already true, and the ADR does not know it
+
+Measured on 31 August before starting, and it makes this task much smaller than it reads:
+
+- **The opening already changed.** ADR-0012 calls it "the largest cost" that "every connection
+  currently spawns flying" — `SpaceMMOGameMode` sets `DefaultPawnClass = ASpaceMMOCharacterPawn`
+  now. Task 120 did it a fortnight after the ADR was written, and nobody came back to strike the
+  cost out.
+- **Crafted hulls are already owned instances.** `IndustryService` creates an `ItemInstance` for any
+  non-stackable output, so `hull_shuttle` off the questline is already a thing somebody owns.
+- **What stands in for a ship is a prop.** The game mode spawns an unowned `ASpaceMMOShipPawn` 30 m
+  from the player so boarding could be tested. It belongs to nobody and carries nothing.
+
+### Done: a hull has a hold
+
+`GetOrCreateShipHoldAsync` — keyed on the hull instance exactly as `Inventory.ShipItemInstanceId`
+has described since the first migration, with the capacity read from the hull's own
+`HoldCapacityM3` (ADR-0014). Before this, **`ShipHold` appeared exactly once in the whole service
+layer, in a comment**: the schema said the game worked one way and the game worked another.
+
+It is the first thing in this game that has ever told a shuttle from a freighter — 80 m³ against 360,
+which is one resource node against four and a half.
+
+Four rules the tests hold down, each of which would be silently wrong otherwise:
+
+- **Keyed on the hull, not the owner.** Hanging it off the character is one line shorter and works
+  until somebody owns a second ship, at which point a fleet shares one boot.
+- **Re-rating a hull in content reaches the holds that already exist.** Assigning capacity only on
+  creation is the mistake the carried inventories made, and it applied the rule to nobody who
+  already had pockets.
+- **A hull nobody owns gets no hold.** `ItemInstance.InventoryId` is null once destroyed, and a
+  container addressed to nobody is the state ADR-0006 calls being inside the explosion.
+- **An unrated hull carries nothing rather than everything.** Zero means unlimited on that column,
+  which is right for a station hangar and wrong for a ship: an unlimited hold is a bank account you
+  can fly, and ADR-0008's planet-locked materials become a shopping list rather than a journey.
+
+Verified by making every hold unrated and watching four of the eight go red.
+
+### Still open, and it is the half that needs decisions
+
+Creating a hold is not reaching one. ADR-0012 point 4 says a hold is reachable "docked at a station
+with their active ship, or sitting in that ship", and **neither of those states exists**: nothing
+links a ship pawn to a hull instance, and "active ship" is new state the ADR itself lists as a cost.
+
+That, and summoning, run straight into the four questions ADR-0012 deliberately left open — where a
+shipless character starts, whether summoning costs anything, what happens to a ship left parked, and
+whether a hull must be repaired or fuelled first. They are Joe's to answer, and guessing would make
+the ADR say more than was decided.
 
 - **Nobody starts with a ship.** A player crafts a hull and **summons** it — at a docking station or
   ship hangar — through the main questline.
