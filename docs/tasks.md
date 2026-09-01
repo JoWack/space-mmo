@@ -1817,15 +1817,39 @@ the hangar beside it — which is what keeps hauling a journey rather than a ban
 Verified by mutation, one rule at a time: never refusing somebody else's hull, and making a hold
 reachable wherever you stand, each turn exactly one test red.
 
+### Done: the server offers it
+
+`POST /ships/summon` and `GET /ships/{id}/hold`, registered beside docking.
+
+**A player's own token, unlike docking, and the difference is the point.** Docking records where a
+ship *is*, which only the simulation knows, so it takes the service credential. Every fact summoning
+depends on — being docked, at what kind of station, owning the hull — is a row the server checks for
+itself, so a client that lies gets a refusal rather than a ship. The service credential is still
+accepted, because the dedicated server will eventually offer summoning as a station action.
+
+**A refusal is a 409 rather than a 400**: nothing about the request is malformed, and every one of
+them is a fact that could be different in a minute — walk to a spaceport, dock, craft a hull. The
+messages are written to be shown to a player as they stand.
+
+**"You have no ship here" is a 200 with a null**, not a 404. The client asks that question every time
+an inventory screen opens and having no ship to hand is an ordinary state; a missing-resource error
+would have callers treating it as a fault.
+
 ### Still open
 
 - **"Sitting in that ship" is not checked**, and it is half of ADR-0012 point 4. Nothing on the
   server knows whether a character is aboard, and being undocked cannot stand in for it — somebody
   walking around a planet is undocked too, and that would open the hold from a rock. It wants the
   server told when somebody boards, which is a change to the pawn rather than to the service.
-- **Nothing calls any of this yet.** There is no endpoint, no client verb, and the game mode still
-  spawns an unowned prop ship thirty metres from the player so boarding has something to board. The
-  rules exist and the game has not been introduced to them.
+- **No client verb, and no ship in the world.** The endpoints exist and nothing in the game calls
+  them. The game mode still spawns an unowned prop ship thirty metres from the player so that
+  boarding has something to board, and summoning a hull does not put a pawn anywhere — it records
+  which hull is yours and gives it a hold.
+
+  Those two are one piece of work and they want doing together: retiring the prop before a summoned
+  ship can appear leaves a game with no ship at all, which is correct by ADR-0012 and unplayable
+  until the questline is finished. Both need the interface question answered first — where
+  summoning lives, and what a player with no ship sees.
 
 - **Nobody starts with a ship.** A player crafts a hull and **summons** it — at a docking station or
   ship hangar — through the main questline.
