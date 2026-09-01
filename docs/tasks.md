@@ -1485,7 +1485,7 @@ had grown two halves. They are filed here rather than under M6 — which is wher
 combat tasks and gathering bugs and test tooling under one heading — because a milestone is a claim
 about what the game will be able to do, and none of these are that yet.
 
-Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
+Task 142 belongs to **M1**, where EconSim was built. Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
 125, 126, 129, 130, 131, 132, 139, and the existing 89, 96 and 97. Tasks 133 to 138 belong to **M5 — an
 interface**, which was widened on 29 August to name perspective and controls: `design-bible.md` §8
 describes them and no milestone had ever hosted it. They are left in place here rather than moved, because a task's
@@ -3842,6 +3842,48 @@ to write this down was before any of them are.
 **No siblings to fix yet, and that is worth saying plainly.** A-01 and A-03 to A-07 have the same
 trap in them, because they are drawn the same way — but none is greyboxed, so there is nothing built
 to measure. The check runs on whatever is built next, which is where it will catch them.
+
+## 142 — EconSim hand-copies the recipe numbers it simulates
+
+**Pending.** Belongs to **M1 — backend economy core**, which is where EconSim was built, and matters
+to **M4** because that is where the recipes get tuned.
+
+Found on 31 August while answering "is the ore-to-plate ratio load-bearing for EconSim". It is, and
+not in the way expected: the sim does not read the ratio, it **repeats** it.
+
+`Bots.cs:66` runs refining as `Sim.Ore, 20, Sim.Plate, 4`, and `data/recipes/core.json` says
+`refine_ferrite_plate` takes 20 ore and yields 4 plates. They agree today. Nothing makes them agree
+tomorrow.
+
+The same shape appears at least three more times:
+
+| EconSim | Authored content |
+|---|---|
+| `Bots.cs:66` refining 20 → 4 | `refine_ferrite_plate` |
+| `Bots.cs:72` shipcrafting 4 → 1 | `build_shuttle_hull_section` |
+| `Sim.OrePerFrame = 10` | `build_alloy_frame`, ten of each |
+| `SimWorld.SeedPrice` | the item pack's own prices |
+
+**The comments already know.** `Sim.OrePerFrame` says "Ten of each, from `build_alloy_frame` in
+`data/recipes/core.json`", and `Sim` itself says "Keys match `data/items/core.json`". Somebody wrote
+down where the numbers came from, which is exactly right, and nothing checks they still match.
+
+**Why it matters more than an ordinary duplication.** EconSim's output is used to justify decisions
+— ADR-0008 rests on frames staying worth building, and the freighter exists because a five-year run
+found composite frames piling up unsold. A sim that quietly models the old recipe answers the
+question anyway, confidently, about a game that no longer exists. That is the same failure as a
+diagnostic that reports on an experiment which never ran, and it costs more here because nobody is
+watching for it: the sim always produces plausible numbers.
+
+**The cheap fix is a test, not a refactor.** `ContentLoaderTests` already loads the real `data/`
+directory — "These load the *real* files from `data/`, not a fixture" — so a test that reads the pack
+and asserts EconSim's constants against it is a few lines. It needs the literals promoted to named
+constants on `Sim` first, which `OrePerFrame` already shows the shape of.
+
+**The better fix is for EconSim to read the pack**, and it is not obviously right: the sim is
+deliberately free of database and HTTP, and its value is partly that it runs on nothing. Reading
+JSON breaks neither of those, but it does mean a malformed pack stops the sim rather than the
+server, so it wants deciding rather than assuming.
 
 ---
 
