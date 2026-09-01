@@ -402,6 +402,22 @@ public sealed class InventoryService(SpaceMmoDbContext database)
 
         if (existing is not null)
         {
+            // Assigned on the way past, not only on creation.
+            //
+            // <strong>How much a person can carry is a rule, not something they own.</strong> Every
+            // carried inventory that existed before ADR-0014 was created at zero, which means
+            // unlimited -- so setting the capacity only where a row is created left the limit
+            // applying to nobody who already had pockets, which was everybody. A playtest carried
+            // fifty ore through a six cubic metre pack, and the row said 0.
+            //
+            // The same reasoning the content loader uses for a faction price: assigned rather than
+            // merged, so changing the number in one place actually changes it.
+            if (existing.CapacityM3 != CarriedCapacityM3)
+            {
+                existing.CapacityM3 = CarriedCapacityM3;
+                await _database.SaveChangesAsync(cancellationToken);
+            }
+
             return existing;
         }
 

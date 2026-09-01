@@ -104,6 +104,36 @@ public sealed class InventoryCapacityTests(DatabaseFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task A_pack_that_existed_before_the_rule_gets_the_rule()
+    {
+        // The case the first version of these tests could not see, because it seeded a character
+        // who had never had pockets and so only ever exercised the path that creates them.
+        //
+        // Every carried inventory in the live database was created at zero -- unlimited -- before
+        // ADR-0014 existed. Setting the capacity only where a row is created left the limit applying
+        // to nobody who already had one, which was everybody: a playtest carried fifty ore through a
+        // six cubic metre pack and the column read 0.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        Inventory carried = await context.Inventories.FirstAsync(i => i.Id == _carriedId);
+
+        carried.CapacityM3 = 0;
+        await context.SaveChangesAsync();
+
+        await using SpaceMmoDbContext reopened = _fixture.CreateContext();
+
+        Character owner = await reopened.Characters.FirstAsync();
+
+        Inventory found = await Service(reopened).GetOrCreateCarriedAsync(owner.Id);
+
+        Assert.Equal(InventoryService.CarriedCapacityM3, found.CapacityM3, 3);
+
+        // And it binds, rather than merely being written down.
+        await Assert.ThrowsAsync<InventoryFullException>(
+            () => Service(reopened).AddAsync(found.Id, _oreId, 50, Credits.Zero));
+    }
+
+    [Fact]
     public async Task A_station_hangar_is_still_unlimited()
     {
         // Rented storage with rent as its sink (InventoryKind.StationHangar). Capping it as well
