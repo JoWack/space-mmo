@@ -96,3 +96,6 @@ player-login.txt
 
 # Blender autosave backups (the .blend itself is source and is kept)
 *.blend1
+
+# Python bytecode from the greybox build scripts importing greybox_lib
+__pycache__/

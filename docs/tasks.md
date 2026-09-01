@@ -3885,6 +3885,54 @@ deliberately free of database and HTTP, and its value is partly that it runs on 
 JSON breaks neither of those, but it does mean a malformed pack stops the sim rather than the
 server, so it wants deciding rather than assuming.
 
+## 143 — The greybox method is a skill, not one build script
+
+**Done 31 August.** Belongs to **M7 — a world worth being in**. Nothing in the game references any
+of it; this is tooling and one more unbuilt shell.
+
+A-02 cost a playtest, a flicker report and an impassable corridor to get right (127, 142), and every
+one of those faults was invisible in the drawing and invisible in the source numbers. All of that
+knowledge lived in one build script for one building, which is the same failure this file exists to
+prevent, one level up.
+
+`.claude/skills/blender-greybox/` now carries it. `SKILL.md` has the workflow and the reasoning;
+`references/` has what is only worth reading when relevant — how each check works and what it
+becomes for a ship or a character, headless Blender, and Unreal's naming and collision rules.
+
+**`scripts/greybox_lib.py` is the payload, not the prose.** Geometry primitives, all four checks,
+collision hulls, the render setup and the FBX export. A future run spends its effort on the
+transcription instead of rediscovering that an area light in frame blows out the shot, or that
+Workbench renders every ceiling black from below, or that a stair tread level with its landing
+fights the floor it lands on.
+
+**The four checks are the method**: derive the scale from the source and prove it against a second
+dimension; assert the model against the numbers the source publishes; drive cross-material
+coincident faces to zero; measure every gap against the character that walks through it.
+
+**Tested by building A-01 Trading Hub from the skill alone**, a sheet nobody had greyboxed, and it
+earned itself on the first run. The derived scale proved itself on three independent numbers — the
+6 m workshop dimension, the airlock at exactly the parts schedule's 6.0 x 3.5 m, and both room
+areas — and the schedule check then confirmed 454, 150, 21 and 625 m² against the sheet. It went on
+to find **two impassable gaps** (0.15 m beside the quest stand and 0.45 m behind it, both from
+putting furniture exactly where the drawing's rectangles sit), three 0.95 m slots behind the
+industry bays, and ten coincident faces over two rounds — the last four being 0.04 m² slivers where
+the roof seam landed on a wall junction.
+
+**`greybox_lib.py` is committed twice on purpose.** Once in the skill, so the skill is portable and
+self-contained; once in `tools/greybox/`, so a build script imports it from beside itself rather
+than depending on where skills happen to live. If they drift, the skill's copy is the original. The
+alternative — build scripts importing out of `.claude/skills/` — couples content to a tooling path,
+which is worse than a duplicate file that is regenerated rather than edited.
+
+**What it has not been tested on is anything but an architectural plan.** A-01 is the closest
+possible case to the one the skill was written from: same artifact, same conventions, same
+draughtsman. The ship and character guidance in it is reasoned rather than exercised and should be
+read as a hypothesis until somebody builds one. That is worth knowing before trusting it on a hull.
+
+**A-01 is a greybox and nothing points at it.** It sits in `client/RawContent/Stations/` beside
+A-02, wired to no station key and no Blueprint, exactly as A-02 is. The plan set's build order puts
+collision on station meshes and R4's decision ahead of either being walked into for real.
+
 ---
 
 ## Done
