@@ -102,4 +102,52 @@ bool FSpaceMMOGatherToneMatchesTheWordingTest::RunTest(const FString& Parameters
 	return true;
 }
 
+
+/**
+ * A full pack is told apart from a cooldown and from a spent deposit.
+ *
+ * <strong>Zero has three reasons and only two of them are worth waiting out.</strong> This was
+ * found in a playtest: capacity started binding, mining stopped, and the message said "give it a
+ * moment" — so the answer looked like patience when it was in the player's own pockets. The only
+ * way to discover otherwise was to move something to a hangar and try again.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOGatherMessageTellsAFullPackFromAWaitTest,
+	"SpaceMMO.Gathering.MessageTellsAFullPackFromAWait",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOGatherMessageTellsAFullPackFromAWaitTest::RunTest(const FString& Parameters)
+{
+	const FString Full =
+		USpaceMMOGatheringComponent::FormatGatherMessage(0, 0, 180, TEXT("Ferrite Ore"), true);
+
+	const FString Waiting =
+		USpaceMMOGatheringComponent::FormatGatherMessage(0, 0, 180, TEXT("Ferrite Ore"), false);
+
+	TestNotEqual(
+		TEXT("A full pack does not read as a cooldown"), Full, Waiting);
+
+	TestTrue(
+		TEXT("...and says what is actually wrong"),
+		Full.Contains(TEXT("carrying")) || Full.Contains(TEXT("fit")));
+
+	// Checked before the deposit, because a full pack is the player's problem wherever they are
+	// standing. Being told a deposit is worked out while the answer is in your own pockets sends
+	// somebody walking to another rock to meet the same wall.
+	const FString FullAtASpentNode =
+		USpaceMMOGatheringComponent::FormatGatherMessage(0, 0, 0, TEXT("Ferrite Ore"), true);
+
+	TestEqual(
+		TEXT("A full pack at a spent deposit still names the pack"), FullAtASpentNode, Full);
+
+	// And a successful swing is unaffected, whatever the flag says: something arrived, so nothing
+	// about room is worth saying.
+	const FString Yield =
+		USpaceMMOGatheringComponent::FormatGatherMessage(3, 15, 180, TEXT("Ferrite Ore"), true);
+
+	TestTrue(TEXT("A yield still reports the yield"), Yield.Contains(TEXT("+3")));
+
+	return true;
+}
+
 #endif

@@ -201,7 +201,11 @@ void USpaceMMOGatheringComponent::ServerGather_Implementation()
 				if (USpaceMMOGatheringComponent* Component = WeakThis.Get())
 				{
 					Component->ClientGatherResult(
-						Result.Quantity, Result.XpAwarded, Result.NodeRemaining, ItemName);
+						Result.Quantity,
+						Result.XpAwarded,
+						Result.NodeRemaining,
+						ItemName,
+						Result.bNoRoom);
 				}
 			}),
 		USpaceMMOBackendClient::FOnGatherFailed::CreateLambda(
@@ -238,7 +242,11 @@ void USpaceMMOGatheringComponent::ClientGatherRefused_Implementation(const FStri
 }
 
 FString USpaceMMOGatheringComponent::FormatGatherMessage(
-	const int32 Quantity, const int64 XpAwarded, const int32 NodeRemaining, const FString& ItemName)
+	const int32 Quantity,
+	const int64 XpAwarded,
+	const int32 NodeRemaining,
+	const FString& ItemName,
+	const bool bNoRoom)
 {
 	if (Quantity > 0)
 	{
@@ -250,7 +258,18 @@ FString USpaceMMOGatheringComponent::FormatGatherMessage(
 			NodeRemaining);
 	}
 
-	// Nothing yielded, and the reason matters. Too soon is worth waiting out; spent is not.
+	// Nothing yielded, and the reason matters. Two of the three are worth waiting out and one never
+	// is -- a player told to give it a moment while standing at a full pack will stand there giving
+	// it a moment, which is exactly what happened the first time capacity bound.
+	//
+	// Checked before the node, because a full pack is the player's problem wherever they are
+	// standing: being told a deposit is worked out while the real answer is in your own pockets
+	// sends somebody looking for another rock.
+	if (bNoRoom)
+	{
+		return FString(TEXT("You are carrying all you can - nothing more will fit"));
+	}
+
 	return NodeRemaining > 0
 		? FString(TEXT("Nothing yet - give it a moment"))
 		: FString(TEXT("This deposit is worked out"));
@@ -262,9 +281,14 @@ ESpaceMMOMessageTone USpaceMMOGatheringComponent::GatherTone(const int32 Quantit
 }
 
 void USpaceMMOGatheringComponent::ClientGatherResult_Implementation(
-	const int32 Quantity, const int64 XpAwarded, const int32 NodeRemaining, const FString& ItemName)
+	const int32 Quantity,
+	const int64 XpAwarded,
+	const int32 NodeRemaining,
+	const FString& ItemName,
+	const bool bNoRoom)
 {
-	const FString Message = FormatGatherMessage(Quantity, XpAwarded, NodeRemaining, ItemName);
+	const FString Message =
+		FormatGatherMessage(Quantity, XpAwarded, NodeRemaining, ItemName, bNoRoom);
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s"), *Message);
 

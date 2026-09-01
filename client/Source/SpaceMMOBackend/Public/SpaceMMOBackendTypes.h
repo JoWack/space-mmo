@@ -892,6 +892,15 @@ struct SPACEMMOBACKEND_API FBackendGatherResult
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	bool bDepleted = false;
+
+	/**
+	 * True if the swing was stopped by a full pack rather than by time or by an empty deposit.
+	 *
+	 * The three reasons a gather yields nothing are not interchangeable, and two of them are worth
+	 * waiting out while this one never is.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bNoRoom = false;
 };
 
 /**

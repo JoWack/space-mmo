@@ -18,14 +18,25 @@ namespace SpaceMMO.Data.Gathering;
 /// <param name="XpAwarded">Skill XP granted, proportional to units.</param>
 /// <param name="NodeRemaining">What the node still holds afterwards.</param>
 /// <param name="RespawnAt">When the node refills, if this attempt exhausted it.</param>
+/// <param name="NoRoom">
+/// True if the swing was stopped by a full pack rather than by time or by an empty node.
+/// </param>
 public readonly record struct GatherResult(
     int ItemDefId,
     int Quantity,
     long XpAwarded,
     int NodeRemaining,
-    DateTimeOffset? RespawnAt)
+    DateTimeOffset? RespawnAt,
+    bool NoRoom = false)
 {
     /// <summary>True if nothing was extracted.</summary>
+    /// <remarks>
+    /// <strong>Zero has three reasons and they are not interchangeable.</strong> Too little time has
+    /// passed, the node is spent, or there is nowhere to put it -- and a player who is told to give
+    /// it a moment while standing at a full pack will stand there giving it a moment. That is what
+    /// happened the first time capacity bound: mining stopped with a message about waiting, and the
+    /// only way to find out was to empty a pocket and try again.
+    /// </remarks>
     public bool IsEmpty => Quantity == 0;
 
     /// <summary>True if this attempt exhausted the node.</summary>
@@ -163,11 +174,13 @@ public sealed class GatheringService(SpaceMmoDbContext database)
             // Nothing happened. Not an error, and deliberately not a spent cooldown either: banked
             // time is not consumed below, so a player standing at a rock with a full pack has lost
             // nothing but the keypress.
+            //
+            // Said out loud, because the alternative is a zero that looks exactly like waiting.
             await _database.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
             return new GatherResult(
-                node.ItemDefId, 0, 0, state.QuantityRemaining, state.RespawnAt);
+                node.ItemDefId, 0, 0, state.QuantityRemaining, state.RespawnAt, NoRoom: true);
         }
 
         state.QuantityRemaining -= quantity;

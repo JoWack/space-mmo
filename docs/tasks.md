@@ -1617,6 +1617,22 @@ yield and about what crafting reaches for, and a six cubic metre pack made capac
 all of them. Failures there would have read as gathering bugs. They ask for room deliberately now,
 and say why.
 
+### A zero with three reasons
+
+Found in the playtest after the rule started binding: mining stopped and the message read **"Nothing
+yet - give it a moment"**, so the answer looked like patience when it was in the player's own
+pockets. The only way to discover otherwise was to move something to a hangar and try again.
+
+`FormatGatherMessage` already carried the comment *"Nothing yielded, and the reason matters. Too soon
+is worth waiting out; spent is not"* — and capacity added a third reason it had never anticipated.
+`GatherResult` says which now, and the full pack is checked **before** the deposit: being told a
+deposit is worked out while the answer is in your own pockets sends somebody walking to another rock
+to meet the same wall.
+
+**A full pack behind a running cooldown still reads as "give it a moment"**, because at that instant
+waiting genuinely is the next thing to do. The test says so rather than leaving it to be rediscovered
+— it resets the clock before asking, or it would pass for the wrong reason.
+
 ### Not in this, deliberately
 
 - **Capacity from `stamina`, and backpacks.** Both were in the 14 August direction. `stamina` does

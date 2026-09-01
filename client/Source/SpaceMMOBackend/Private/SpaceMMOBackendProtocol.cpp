@@ -1199,6 +1199,7 @@ bool FSpaceMMOBackendProtocol::ParseGatherResult(
 	}
 
 	Object->TryGetBoolField(TEXT("depleted"), OutResult.bDepleted);
+	Object->TryGetBoolField(TEXT("noRoom"), OutResult.bNoRoom);
 
 	return true;
 }

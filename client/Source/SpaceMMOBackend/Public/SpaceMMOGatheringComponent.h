@@ -91,7 +91,11 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Gathering")
 	static FString FormatGatherMessage(
-		int32 Quantity, int64 XpAwarded, int32 NodeRemaining, const FString& ItemName);
+		int32 Quantity,
+		int64 XpAwarded,
+		int32 NodeRemaining,
+		const FString& ItemName,
+		bool bNoRoom = false);
 
 	/**
 	 * Whether a gather result is something gained or something to explain.
@@ -121,7 +125,11 @@ private:
 	 */
 	UFUNCTION(Client, Reliable)
 	void ClientGatherResult(
-		int32 Quantity, int64 XpAwarded, int32 NodeRemaining, const FString& ItemName);
+		int32 Quantity,
+		int64 XpAwarded,
+		int32 NodeRemaining,
+		const FString& ItemName,
+		bool bNoRoom);
 
 	/**
 	 * A refusal, delivered to the player who pressed the key.

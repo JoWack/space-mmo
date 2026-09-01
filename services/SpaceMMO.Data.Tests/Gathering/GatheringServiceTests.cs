@@ -222,11 +222,23 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         Assert.Equal(PackHolds, await HeldAsync(verify, _alice, _oreId));
 
         // And a swing into a pack with no room left takes nothing and leaves the node alone.
+        //
+        // The clock is reset first, or the cooldown answers before capacity ever gets asked -- which
+        // is correct in the game and would make this test pass for the wrong reason. It is also the
+        // order a player meets: a full pack behind a running cooldown still reads as "give it a
+        // moment", because at that instant waiting genuinely is the next thing to do.
+        await ResetGatherClockAsync(_alice);
+
         await using SpaceMmoDbContext again = _fixture.CreateContext();
 
         GatherResult none = await new GatheringService(again).GatherAsync(_alice, _sharedNodeId);
 
         Assert.Equal(0, none.Quantity);
+
+        // And it says why. Zero has three reasons -- too soon, spent, no room -- and only two of
+        // them are worth waiting out; a player told to give it a moment at a full pack will stand
+        // there giving it a moment.
+        Assert.True(none.NoRoom);
 
         await using SpaceMmoDbContext untouched = _fixture.CreateContext();
 
