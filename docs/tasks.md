@@ -3806,43 +3806,6 @@ would quietly stop being. The character keeps a written offset, because there th
 composition rather than a clearance and no measurement of the body tells you where a shoulder
 belongs.
 
-## 142 — A plan drawn to centrelines does not say whether a person fits
-
-**Done 31 August**, from a playtest: Joe walked the A-02 greybox and could not get through parts of
-it, worst on Level 01. Belongs to **M7 — a world worth being in**, and it is a rule for every sheet
-in the plan set, not a fix to one of them.
-
-`ASpaceMMOCharacterPawn` sweeps a capsule of `CollisionRadiusCentimetres = 34` and stands
-`CharacterHeightCentimetres = 180`, so **a character is 0.68 m across**. Every dimension on the
-Origin Station Plans is to wall centrelines, which is not the space anybody walks in: two walls a
-metre apart on the drawing leave 0.50 m of air once each takes its 0.25 m, and 0.50 m stops the
-pawn dead. **Nothing about the drawing looks wrong when a corridor is impassable.**
-
-**Measured, not eyeballed.** `report_tight_gaps` takes every pair of solids that obstruct walking,
-finds those facing each other across a gap within the band a standing character occupies, and
-reports the clear width. Eleven failures, and the split matters:
-
-- **One impassable route.** The Level 01 south gallery walk, 0.50 m clear over 4.1 m — and it is the
-  *only* way from the landing to the six career alcoves. The sheet draws the core wall at `y=31.8`,
-  0.8 m off the void edge; wall and parapet eat 0.75 m of that. Moved to 32.6 for 1.30 m clear,
-  which is the most the drawn stair at `y=33` allows without moving the stair too.
-- **Ten dead slots**, all 0.25 m: eight market terminals and the hangar racking standing a quarter
-  metre off the wall behind them, because that is where the plan's rectangles sit. Not routes, but
-  a gap a pawn cannot enter and cannot see the back of. Seated flush.
-
-**The threshold is 1.20 m, not 0.68 m.** The pawn plus a hand either side. Under 0.68 is a wall with
-a gap in it; between the two is somewhere a player scrapes along and the camera fights the geometry.
-Furniture goes flush to its wall or 1.2 m off it, never a quarter metre.
-
-**Recorded where the next sheet will be read, not only here.** Constraint 3 on the plan set now
-states the pawn's width, shows why a centreline dimension hides it, and gives the 1.2 m rule; A-02's
-notes carry the specific change. The set has seven sheets and six are unbuilt, so the cheap moment
-to write this down was before any of them are.
-
-**No siblings to fix yet, and that is worth saying plainly.** A-01 and A-03 to A-07 have the same
-trap in them, because they are drawn the same way — but none is greyboxed, so there is nothing built
-to measure. The check runs on whatever is built next, which is where it will catch them.
-
 ## 142 — EconSim hand-copies the recipe numbers it simulates
 
 **Pending.** Belongs to **M1 — backend economy core**, which is where EconSim was built, and matters
@@ -3890,7 +3853,7 @@ server, so it wants deciding rather than assuming.
 **Done 31 August.** Belongs to **M7 — a world worth being in**. Nothing in the game references any
 of it; this is tooling and one more unbuilt shell.
 
-A-02 cost a playtest, a flicker report and an impassable corridor to get right (127, 142), and every
+A-02 cost a playtest, a flicker report and an impassable corridor to get right (127, 144), and every
 one of those faults was invisible in the drawing and invisible in the source numbers. All of that
 knowledge lived in one build script for one building, which is the same failure this file exists to
 prevent, one level up.
@@ -3932,6 +3895,47 @@ read as a hypothesis until somebody builds one. That is worth knowing before tru
 **A-01 is a greybox and nothing points at it.** It sits in `client/RawContent/Stations/` beside
 A-02, wired to no station key and no Blueprint, exactly as A-02 is. The plan set's build order puts
 collision on station meshes and R4's decision ahead of either being walked into for real.
+
+## 144 — A plan drawn to centrelines does not say whether a person fits
+
+**Done 31 August**, from a playtest: Joe walked the A-02 greybox and could not get through parts of
+it, worst on Level 01. Belongs to **M7 — a world worth being in**, and it is a rule for every sheet
+in the plan set, not a fix to one of them.
+
+`ASpaceMMOCharacterPawn` sweeps a capsule of `CollisionRadiusCentimetres = 34` and stands
+`CharacterHeightCentimetres = 180`, so **a character is 0.68 m across**. Every dimension on the
+Origin Station Plans is to wall centrelines, which is not the space anybody walks in: two walls a
+metre apart on the drawing leave 0.50 m of air once each takes its 0.25 m, and 0.50 m stops the
+pawn dead. **Nothing about the drawing looks wrong when a corridor is impassable.**
+
+**Measured, not eyeballed.** `report_tight_gaps` takes every pair of solids that obstruct walking,
+finds those facing each other across a gap within the band a standing character occupies, and
+reports the clear width. Eleven failures, and the split matters:
+
+- **One impassable route.** The Level 01 south gallery walk, 0.50 m clear over 4.1 m — and it is the
+  *only* way from the landing to the six career alcoves. The sheet draws the core wall at `y=31.8`,
+  0.8 m off the void edge; wall and parapet eat 0.75 m of that. Moved to 32.6 for 1.30 m clear,
+  which is the most the drawn stair at `y=33` allows without moving the stair too.
+- **Ten dead slots**, all 0.25 m: eight market terminals and the hangar racking standing a quarter
+  metre off the wall behind them, because that is where the plan's rectangles sit. Not routes, but
+  a gap a pawn cannot enter and cannot see the back of. Seated flush.
+
+**The threshold is 1.20 m, not 0.68 m.** The pawn plus a hand either side. Under 0.68 is a wall with
+a gap in it; between the two is somewhere a player scrapes along and the camera fights the geometry.
+Furniture goes flush to its wall or 1.2 m off it, never a quarter metre.
+
+**Recorded where the next sheet will be read, not only here.** Constraint 3 on the plan set now
+states the pawn's width, shows why a centreline dimension hides it, and gives the 1.2 m rule; A-02's
+notes carry the specific change. The set has seven sheets and six are unbuilt, so the cheap moment
+to write this down was before any of them are.
+
+**No siblings to fix yet, and that is worth saying plainly.** A-01 and A-03 to A-07 have the same
+trap in them, because they are drawn the same way — but none is greyboxed, so there is nothing built
+to measure. The check runs on whatever is built next, which is where it will catch them.
+
+**Numbered 142 until 31 August.** Two sessions took the next free number in the same hour.
+The other 142 was committed first and is cited from the milestone list above, so this one
+moved rather than that one. Nothing outside this file referred to the old number.
 
 ---
 
