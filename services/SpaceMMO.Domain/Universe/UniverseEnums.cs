@@ -51,6 +51,30 @@ public enum StationKind
     Capital = 4,
 }
 
+/// <summary>What a station is for, beyond having a name.</summary>
+public static class StationKindExtensions
+{
+    /// <summary>
+    /// True if a ship can be summoned here (ADR-0012).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Read off what the kinds already say rather than invented: <see cref="StationKind.Spaceport"/>
+    /// is documented as "ship docking, refitting, and industry facilities" and
+    /// <see cref="StationKind.Capital"/> as "everything". A market hub, a house and a bar are not
+    /// places a hull arrives.
+    /// </para>
+    /// <para>
+    /// <strong>A rule about kinds, not about a flag somebody sets per station.</strong> A boolean on
+    /// the row would let two spaceports disagree about whether they are spaceports, and the first
+    /// time one is authored without it the failure is a player standing at a shipyard that will not
+    /// give them their ship.
+    /// </para>
+    /// </remarks>
+    public static bool AllowsShipSummoning(this StationKind kind) =>
+        kind is StationKind.Spaceport or StationKind.Capital;
+}
+
 /// <summary>
 /// A region's lawfulness, which governs whether player-versus-player killing is punished.
 /// </summary>

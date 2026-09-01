@@ -1790,16 +1790,42 @@ Four rules the tests hold down, each of which would be silently wrong otherwise:
 
 Verified by making every hold unrated and watching four of the eight go red.
 
-### Still open, and it is the half that needs decisions
+### Done: summoning, and an active ship
 
-Creating a hold is not reaching one. ADR-0012 point 4 says a hold is reachable "docked at a station
-with their active ship, or sitting in that ship", and **neither of those states exists**: nothing
-links a ship pawn to a hull instance, and "active ship" is new state the ADR itself lists as a cost.
+Settled by Joe on 31 August, against the four questions ADR-0012 left open: the opening stays as it
+is, summoning is free and instant, a ship stays where it was left and summoning elsewhere moves it,
+and no repair or fuel gate — **and summoning happens only at stations that handle ships.**
 
-That, and summoning, run straight into the four questions ADR-0012 deliberately left open — where a
-shipless character starts, whether summoning costs anything, what happens to a ship left parked, and
-whether a hull must be repaired or fuelled first. They are Joe's to answer, and guessing would make
-the ADR say more than was decided.
+`StationKindExtensions.AllowsShipSummoning` reads that off what the kinds already document rather
+than inventing it: a `Spaceport` is "ship docking, refitting, and industry facilities" and the
+`Capital` is "everything". A rule about kinds rather than a flag per station, because a boolean on
+the row lets two spaceports disagree about whether they are spaceports, and the first one authored
+without it is a player standing at a shipyard that will not give them their ship.
+
+**Where a ship is needs no column, which is the part worth keeping.** An owned hull is an
+`ItemInstance` sitting in an inventory, and for a parked ship that inventory is the station hangar it
+was left in. Summoning moves the instance into the hangar of the station the player is standing in —
+so "summoning elsewhere moves it" is one assignment, and a ship is always somewhere by construction
+rather than by a coordinate somebody has to maintain. `Character.ActiveShipItemInstanceId` is the
+only new state, and it is the one the ADR named as a cost.
+
+Reachability is the same shape of rule as station stock: the hold opens when the active hull is
+parked where the player is docked, and nowhere else. Somebody who flew home and left their freighter
+at the capital has an active ship they are nowhere near, and its hold is exactly as out of reach as
+the hangar beside it — which is what keeps hauling a journey rather than a bank transfer.
+
+Verified by mutation, one rule at a time: never refusing somebody else's hull, and making a hold
+reachable wherever you stand, each turn exactly one test red.
+
+### Still open
+
+- **"Sitting in that ship" is not checked**, and it is half of ADR-0012 point 4. Nothing on the
+  server knows whether a character is aboard, and being undocked cannot stand in for it — somebody
+  walking around a planet is undocked too, and that would open the hold from a rock. It wants the
+  server told when somebody boards, which is a change to the pawn rather than to the service.
+- **Nothing calls any of this yet.** There is no endpoint, no client verb, and the game mode still
+  spawns an unowned prop ship thirty metres from the player so boarding has something to board. The
+  rules exist and the game has not been introduced to them.
 
 - **Nobody starts with a ship.** A player crafts a hull and **summons** it — at a docking station or
   ship hangar — through the main questline.

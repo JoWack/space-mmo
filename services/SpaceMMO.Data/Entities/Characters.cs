@@ -85,6 +85,26 @@ public class Character
     /// </remarks>
     public int? DockedStationId { get; set; }
 
+    /// <summary>
+    /// The hull this character flies, or would summon. Null for somebody on foot with no ship.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>New state ADR-0012 named as a cost and nobody modelled.</strong> A character may own
+    /// several hulls and exactly one is the one they are flying; the hold's reachability depends on
+    /// which, and so does knowing what pawn to put them in.
+    /// </para>
+    /// <para>
+    /// Where the ship <em>is</em> needs no column of its own: an owned hull is an
+    /// <c>ItemInstance</c> sitting in an inventory, and for a parked ship that inventory is the
+    /// station hangar it was left in. Summoning moves the instance to the hangar of the station the
+    /// player is standing in, which is what "summoning elsewhere moves it" means in rows.
+    /// </para>
+    /// </remarks>
+    public long? ActiveShipItemInstanceId { get; set; }
+
+    public ItemInstance? ActiveShipItemInstance { get; set; }
+
     public Station? DockedStation { get; set; }
 
     public ICollection<CharacterSkill> Skills { get; } = [];
