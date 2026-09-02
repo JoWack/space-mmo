@@ -1485,7 +1485,8 @@ had grown two halves. They are filed here rather than under M6 — which is wher
 combat tasks and gathering bugs and test tooling under one heading — because a milestone is a claim
 about what the game will be able to do, and none of these are that yet.
 
-Task 142 belongs to **M1**, where EconSim was built. Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
+Tasks 144 and 145 are the opening: where a returning character comes back, and where a new one
+starts. Task 142 belongs to **M1**, where EconSim was built. Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
 125, 126, 129, 130, 131, 132, 139, and the existing 89, 96 and 97. Tasks 133 to 138 belong to **M5 — an
 interface**, which was widened on 29 August to name perspective and controls: `design-bible.md` §8
 describes them and no milestone had ever hosted it. They are left in place here rather than moved, because a task's
@@ -4146,6 +4147,74 @@ immediately.
 
 It logs `Stood on the ground at ... rather than falling to it.`, so a spawn that still falls is a
 spawn where no planet was ever found, which is a different fault with a different fix.
+
+## 144 — You come back where you left off
+
+**Pending.** Decided by Joe, 1 September. Belongs to **M5 — an interface**, as part of what the
+opening feels like.
+
+Quit and reopen the game and your character is back at the configured starting point, falling. Being
+docked when you quit does not survive either — boarding a ship afterwards teleports you to the hub
+the database still thinks you are docked at, which is the database being right and the world having
+forgotten.
+
+**Wherever a player is, and whatever they are doing, is where they come back.** Joe's words: on foot
+on a planet, docked at a station, or flying — all three restore as they were.
+
+**Quitting in a ship restores you flying that ship, where it was.** Raised as a teleport risk and it
+is not one: you resume exactly where you stopped, so there is nothing to gain. It is the version that
+needs no special case, and a special case here — "you wake at the last station" — is the one that
+would let somebody park badly and log out to escape it.
+
+### Three things to settle in the building
+
+1. **When position is written.** There is no logout today; closing the game drops a connection.
+   Periodic writes are cheap and slightly stale; a write on disconnect is exact and lost in a crash.
+   Both, with periodic as the floor.
+2. **What is stored.** A system coordinate on `Character`, and enough to know what a player was
+   doing: on foot, or flying a particular hull. `ActiveShipItemInstanceId` already answers the second
+   half, so the new state is a position and a flag.
+3. **A migration**, and `--seed` is the only thing that applies one.
+
+### What it does not settle
+
+Where a **new** character starts, which is task 145 and a different problem: this one restores a
+position that exists, and that one has to decide on one.
+
+---
+
+## 145 — A new character starts on their race's homeworld
+
+**Pending.** Belongs to **M7 — a world worth being in** for the zone, and to **M5** for the opening.
+
+**The rule is already written down and nothing implements it.** `design-bible.md` §1 gives every race
+a starting body — `body_terra`, `body_ares`, `body_verdance`, `body_grimhold` — and says "the player
+begins on their race's starting planet and ends flying a ship they built". `Character.HomeBodyId`
+carries it: "the starting planet, set from `Races.HomeBodyKeyFor` at creation".
+
+What the game does is spawn everybody at `StartingDirection` on `USpaceMMOWorldSubsystem::
+StartingPlanet()`, which is compiled in and the same for all four races.
+
+### The constraint this runs into, and it is not small
+
+**The client renders one body, chosen by `BodyKey` in `DefaultGame.ini`** — currently
+`body_capital`. So "each race spawns on their homeworld" is not a spawn-position change: it is the
+scene following the character rather than a config file. Everything that reads `BodyKey` today
+— terrain, the deposit and station subsystems, the authoring panel — assumes one answer chosen
+before anybody signs in, and signing in is when the character's race becomes known.
+
+That ordering is the whole of the work. It is the same shape as task 129: something is chosen before
+the thing that decides it has arrived.
+
+### And a starter zone, which is content rather than code
+
+Joe, 1 September: each homeworld wants a zone where new players arrive and can walk the intro
+questline to their first hull. Four of them, and today only `body_capital` has anything on it at all
+— the A-02 hub, five deposits. The other three are terrain with nothing standing on them.
+
+**Blocked on nothing, but large.** Worth splitting when it is picked up: the scene following the
+character is one job, and four starter zones is another that task 97's settlements work would
+otherwise duplicate.
 
 ---
 
