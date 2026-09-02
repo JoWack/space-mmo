@@ -4192,13 +4192,13 @@ skill, done the day before. Nothing outside this file referred to the old number
 
 ## 147 — You come back where you left off
 
-**Pending.** Decided by Joe, 1 September. Belongs to **M5 — an interface**, as part of what the
-opening feels like.
+**Done 2 September**, awaiting a playtest. Decided by Joe, 1 September. Belongs to **M5 — an
+interface**, as part of what the opening feels like.
 
-Quit and reopen the game and your character is back at the configured starting point, falling. Being
-docked when you quit does not survive either — boarding a ship afterwards teleports you to the hub
-the database still thinks you are docked at, which is the database being right and the world having
-forgotten.
+Quit and reopen the game and your character was back at the configured starting point, falling.
+Being docked when you quit did not survive either — boarding a ship afterwards teleported you to
+the hub the database still thought you were docked at, which was the database being right and the
+world having forgotten.
 
 **Wherever a player is, and whatever they are doing, is where they come back.** Joe's words: on foot
 on a planet, docked at a station, or flying — all three restore as they were.
@@ -4208,23 +4208,66 @@ is not one: you resume exactly where you stopped, so there is nothing to gain. I
 needs no special case, and a special case here — "you wake at the last station" — is the one that
 would let somebody park badly and log out to escape it.
 
-### Three things to settle in the building
+### The three questions, answered
 
-1. **When position is written.** There is no logout today; closing the game drops a connection.
-   Periodic writes are cheap and slightly stale; a write on disconnect is exact and lost in a crash.
-   Both, with periodic as the floor.
-2. **What is stored.** A system coordinate on `Character`, and enough to know what a player was
-   doing: on foot, or flying a particular hull. `ActiveShipItemInstanceId` already answers the second
-   half, so the new state is a position and a flag.
-3. **A migration**, and `--seed` is the only thing that applies one.
+1. **When position is written.** Both, with the periodic write as the floor: every fifteen seconds
+   while playing, and once more when the connection goes. Fifteen seconds of travel is what a hard
+   crash costs.
+2. **What is stored.** `last_system_x/y/z` and `last_seen_flying` on `characters`. Three nullable
+   columns rather than a type, because null has to mean something: a character who has never been
+   anywhere is not at the origin, and the origin is a real place at the centre of the star system.
+   The flag is separate from `ActiveShipItemInstanceId`, which says which hull is yours to fly and
+   stays true while you are stood on a planet beside it.
+3. **A migration**: `20260902203518_Whereabouts`. **`--seed` is the only thing that applies one**,
+   and the API refuses to start until it has been.
 
-### What it does not settle
+### Where the exact write lives, which the engine decided
 
-Where a **new** character starts, which is task 145 and a different problem: this one restores a
-position that exists, and that one has to decide on one.
+The write on disconnect started in `EndPlay` and would have done nothing at all.
+`APlayerController::Destroyed` unpossesses or destroys the pawn *before* calling up to
+`AActor::Destroyed`, and it is `AActor::Destroyed` that routes EndPlay (`Actor.cpp:3311`). So a
+position read in EndPlay is read from a controller with no pawn to read it from — no error, no
+warning, and a result indistinguishable from a player who never moved.
 
-**Numbered 144 until 2 September.** 144 was already the corridor-width rule. Renumbered alongside
-146 for the same reason; 145 kept its number, because nothing else had claimed it.
+It is in `Destroyed`, before `Super`, where the pawn is still there. `EndPlay` keeps a call for
+server shutdown, which destroys nothing and routes EndPlay across every actor while the pawns are
+still standing. `RecordWhereabouts` logs the no-pawn branch rather than returning quietly, because
+that is the branch that would make the whole feature stop working silently.
+
+### No free teleports, enforced rather than intended
+
+`POST /whereabouts` takes the service credential and refuses a player's own token, exactly as
+docking does. That refusal is what makes restoring a position safe: somebody who could write this
+column could quit, name a place across the system, and sign back in there.
+`WhereaboutsEndpointTests.A_player_cannot_write_their_own_position` is the test that says so, and it
+checks the column as well as the status code.
+
+### What is deliberately not restored
+
+- **Facing and velocity.** You come back at rest, pointing wherever a fresh pawn points. Position
+  was the ask; a heading is a second decision and a moving restore is a third.
+- **The hull you were flying.** A restored pilot gets a plain ship pawn, because nothing yet builds
+  a pawn from an owned hull — the unfinished half of **115**. When that lands, this is the call site
+  that changes, and a character whose hull has since been sold or destroyed should wake on foot
+  rather than in a ship that does not exist.
+- **Geometry.** A character restored before the planet actor exists is placed at the recorded
+  position and left to ordinary ground contact. Somebody who logs out standing on a station roof
+  comes back at that position, not projected onto the terrain under it — which is why
+  `bResumedFromRecord` is sticky: the first-planet placement from **146** re-arms itself every frame
+  there is no planet, and would otherwise fire later and move them.
+
+### How it would fail
+
+- A returning player standing at the configured start point, falling. Look for
+  `Put back at ... where the world last saw this character.` in `ClientA.log`; its absence means
+  either nothing was recorded or `bHasLastPosition` came back false.
+- A returning player at the centre of the star system, 640 km below the ground. That is a missing
+  position read as `(0, 0, 0)`, which is what the flag and its four tests exist to prevent.
+- A brief moment at the start point before being put back, which is expected: the pawn is spawned
+  before the backend has said who this connection is, and the restore happens when the answer
+  arrives.
+- A second ship parked at the world's starting point after a flying restore. That is
+  `bSpawnStarterShip` scaffolding, not this — **115** retires it.
 
 ---
 

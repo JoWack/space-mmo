@@ -1133,7 +1133,7 @@ void USpaceMMOBackendClient::ResolveCharacterAsServer(
 		UE_LOG(LogSpaceMMOBackend, Warning,
 			TEXT("Cannot identify players: this machine holds no service credential."));
 
-		OnResolved.ExecuteIfBound(0, 0, FString(), 0);
+		OnResolved.ExecuteIfBound(FBackendResolvedCharacter());
 
 		return;
 	}
@@ -1155,18 +1155,50 @@ void USpaceMMOBackendClient::ResolveCharacterAsServer(
 
 			if (!FSpaceMMOBackendProtocol::ParseResolvedCharacter(ResponseBody, Resolved))
 			{
-				OnResolved.ExecuteIfBound(0, 0, FString(), 0);
+				OnResolved.ExecuteIfBound(FBackendResolvedCharacter());
 
 				return;
 			}
 
-			OnResolved.ExecuteIfBound(
-				Resolved.AccountId,
-				Resolved.CharacterId,
-				Resolved.CharacterName,
-				Resolved.DockedStationId);
+			OnResolved.ExecuteIfBound(Resolved);
 		},
 		ServiceSecret);
+}
+
+void USpaceMMOBackendClient::RecordWhereaboutsAsServer(
+	const int32 CharacterId, const FVector& PositionKilometres, const bool bFlying)
+{
+	if (ServiceSecret.IsEmpty() || CharacterId == 0)
+	{
+		return;
+	}
+
+	// Refused here rather than sent and refused there. A NaN cannot be written as JSON at all --
+	// it would go out as the literal text "nan" and be rejected as a malformed body -- so a fault
+	// upstream would present as a silent failure to save rather than as anything anybody could
+	// read. The API keeps its own guard for the same reason; this one exists so the log says so.
+	if (PositionKilometres.ContainsNaN())
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Refusing to record where character %d is: %s is not a position."),
+			CharacterId, *PositionKilometres.ToString());
+
+		return;
+	}
+
+	// Nine decimal places on a value in kilometres, which is finer than anything can be measured
+	// and deliberately so. Default %f gives six, and %g gives six significant figures -- which at
+	// system scale is tens of metres, and a returning player standing tens of metres from where
+	// they left is a bug nobody would think to look for in a format string.
+	const FString Body = FString::Printf(
+		TEXT("{\"characterId\":%d,\"x\":%.9f,\"y\":%.9f,\"z\":%.9f,\"flying\":%s}"),
+		CharacterId,
+		PositionKilometres.X,
+		PositionKilometres.Y,
+		PositionKilometres.Z,
+		bFlying ? TEXT("true") : TEXT("false"));
+
+	Send(TEXT("POST"), TEXT("/whereabouts"), Body, false, nullptr, ServiceSecret);
 }
 
 void USpaceMMOBackendClient::FetchBodies()

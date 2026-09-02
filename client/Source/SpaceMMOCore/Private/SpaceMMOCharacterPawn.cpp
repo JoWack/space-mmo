@@ -347,7 +347,11 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 
 	// Still no planet. Keep waiting: one arrives a few hundred milliseconds after a connection gets
 	// its pawn, and until then there is nowhere to stand.
-	if (!bFoundAPlanet)
+	//
+	// Never for a character who was put back somewhere recorded. They are already standing where
+	// they were standing, and re-arming this would move them to whatever the height field says is
+	// under that spot the moment a planet appeared -- off a roof, out of a station, down a cliff.
+	if (!bFoundAPlanet && !bResumedFromRecord)
 	{
 		bAwaitingFirstGround = true;
 	}
@@ -949,6 +953,28 @@ void ASpaceMMOCharacterPawn::SetSystemPosition(const FSystemCoordinate& NewPosit
 
 	PublishRenderOrigin();
 	ApplyWorldTransform();
+}
+
+void ASpaceMMOCharacterPawn::ResumeAt(const FSystemCoordinate& Where)
+{
+	// Both before SetSystemPosition, which resolves the surface on the way through. It is
+	// ResolveSurface that carries the first-planet placement, and arriving there still armed would
+	// move the character off the position being restored in the same call that set it.
+	bResumedFromRecord = true;
+	bAwaitingFirstGround = false;
+
+	// Nothing carries over from a spawn that is being undone. A restored character standing still
+	// with the spawn's downward velocity would start by falling, which is the exact appearance
+	// this is meant to remove.
+	WalkState.Velocity = FVector::ZeroVector;
+
+	SetSystemPosition(Where);
+
+	// Said out loud, because a restore that silently did not happen looks exactly like a character
+	// who never went anywhere -- and this is the one line that tells the two apart in a log.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Put back at %s, where the world last saw this character."),
+		*Where.ToString());
 }
 
 void ASpaceMMOCharacterPawn::RequestEmbark()

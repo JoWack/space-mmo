@@ -80,6 +80,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Character")
 	void SetSystemPosition(const FSystemCoordinate& NewPosition);
 
+	/**
+	 * Puts a returning character back where the world last saw them (task 147).
+	 *
+	 * <strong>Not the same call as SetSystemPosition</strong>, because this has to stop the
+	 * first-planet placement as well as move the pawn. That placement exists so a character spawned
+	 * before the world had a planet in it meets the ground instead of falling fifty metres to it
+	 * (task 146) — and left armed, it would fire a moment later and move a restored character to
+	 * whatever the height field says is under them, which is not the same thing as where they were.
+	 */
+	void ResumeAt(const FSystemCoordinate& Where);
+
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
 	bool IsOnGround() const { return bOnGround; }
 
@@ -317,6 +328,15 @@ private:
 	 * contact function either way, applied at once instead of after a fall.
 	 */
 	bool bAwaitingFirstGround = false;
+
+	/**
+	 * Whether this character was put back somewhere recorded rather than spawned.
+	 *
+	 * Sticky, and it has to be: the first-planet placement re-arms itself every frame there is no
+	 * planet to stand on, so clearing the flag once would only postpone it until the planet
+	 * arrived (which is later than a restore, every time).
+	 */
+	bool bResumedFromRecord = false;
 
 	/** What the character is currently standing on, if it is geometry. Diagnostic only. */
 	TWeakObjectPtr<const AActor> StoodOn;

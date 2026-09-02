@@ -1182,6 +1182,26 @@ bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(
 
 	Object->TryGetStringField(TEXT("characterName"), OutResolved.CharacterName);
 
+	// Where the world last saw them (task 147). All three or none: the server sends null for a
+	// character who has never been anywhere, and a position assembled from two of them plus an
+	// implied zero is a point in space indistinguishable from a real one. The flag is what the
+	// caller reads; the vector on its own cannot say whether the origin is an answer or an absence.
+	double LastX = 0.0;
+	double LastY = 0.0;
+	double LastZ = 0.0;
+
+	if (Object->TryGetNumberField(TEXT("lastSystemX"), LastX)
+		&& Object->TryGetNumberField(TEXT("lastSystemY"), LastY)
+		&& Object->TryGetNumberField(TEXT("lastSystemZ"), LastZ))
+	{
+		OutResolved.bHasLastPosition = true;
+		OutResolved.LastPositionKilometres = FVector(LastX, LastY, LastZ);
+	}
+
+	// Read regardless, because it is false without a position anyway and a flag that is only
+	// populated on one branch is one more thing to be wrong about later.
+	Object->TryGetBoolField(TEXT("lastSeenFlying"), OutResolved.bLastSeenFlying);
+
 	return true;
 }
 

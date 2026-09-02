@@ -691,6 +691,32 @@ struct SPACEMMOBACKEND_API FBackendResolvedCharacter
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 DockedStationId = 0;
+
+	/**
+	 * Whether the backend had a position for this character at all.
+	 *
+	 * <strong>A flag rather than a zero test, and this is the whole of it.</strong> A character who
+	 * has never been anywhere has no position; the origin is a real place, at the centre of the
+	 * star system, and reading "no answer" as that place is how a new character gets teleported
+	 * into the middle of nowhere on their first sign-in. The parse sets this only when the server
+	 * sent all three coordinates — two and an implied zero is a point in space that looks exactly
+	 * like a real one (task 147).
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bHasLastPosition = false;
+
+	/** Where the world last saw them, in system kilometres. Meaningless without the flag above. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FVector LastPositionKilometres = FVector::ZeroVector;
+
+	/**
+	 * Whether they were flying when it did, rather than stood on something.
+	 *
+	 * Decides which pawn they wake up in. Not the same question as whether they own a hull, which
+	 * stays true while they are stood on a planet beside it.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bLastSeenFlying = false;
 };
 
 /** A planet or moon, as the server describes it. */

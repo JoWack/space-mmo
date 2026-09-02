@@ -161,8 +161,14 @@ public:
 	/** The session token, so the client can present it to the game server. Never logged. */
 	FString GetSessionToken() const { return Session.Token; }
 
-	/** Reports a resolved identity, or zero when the backend refused. */
-	DECLARE_DELEGATE_FourParams(FOnCharacterResolved, int32 /*AccountId*/, int32 /*CharacterId*/, const FString& /*Name*/, int32 /*DockedStationId*/);
+	/**
+	 * Reports a resolved identity, or a character id of zero when the backend refused.
+	 *
+	 * Carries the whole answer rather than a parameter per field. It grew a fourth on task 114 and
+	 * three more on 147, and every one of them is a fact about a connecting player that something
+	 * downstream has to place — which is a struct.
+	 */
+	DECLARE_DELEGATE_OneParam(FOnCharacterResolved, const FBackendResolvedCharacter& /*Resolved*/);
 
 	/**
 	 * Asks the backend whether a token really entitles its bearer to a character.
@@ -172,6 +178,21 @@ public:
 	 */
 	void ResolveCharacterAsServer(
 		const FString& Token, int32 ClaimedCharacterId, FOnCharacterResolved OnResolved);
+
+	/**
+	 * Records where a character is now, so signing back in puts them there (task 147).
+	 *
+	 * <strong>Server-side only, and that is the design rather than a detail.</strong> It presents
+	 * the service credential because it is stating a position, and a client that could state its
+	 * own position could state any of them — which would turn "you come back where you left off"
+	 * into a teleport to anywhere in the game. The API refuses a player token here for the same
+	 * reason it refuses one on docking.
+	 *
+	 * Fire and forget: a lost write costs the last few seconds of travel, and there is nothing
+	 * useful to do about one that a later write does not already do.
+	 */
+	void RecordWhereaboutsAsServer(
+		int32 CharacterId, const FVector& PositionKilometres, bool bFlying);
 
 	/** Loads every body in the starting system. Unauthenticated, like the deposits. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")

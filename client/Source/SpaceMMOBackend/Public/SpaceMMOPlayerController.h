@@ -32,6 +32,24 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/**
+	 * The exact half of remembering where a player was.
+	 *
+	 * <strong>Here rather than in EndPlay, and the engine decides that.</strong>
+	 * <c>APlayerController::Destroyed</c> unpossesses or destroys the pawn before it calls up to
+	 * <c>AActor::Destroyed</c>, which is what routes EndPlay (Actor.cpp:3311) — so a position read
+	 * in EndPlay is read from a controller that no longer has a pawn to read it from. It would have
+	 * written nothing, silently, and looked exactly like a player who never moved.
+	 *
+	 * There is no logout in this game: closing the window drops a connection, and this is what the
+	 * server runs when one goes. It is the write that makes "where you were when you quit" exact
+	 * rather than up to fifteen seconds stale.
+	 */
+	virtual void Destroyed() override;
+
+	/** Server shutdown, where nothing is destroyed and EndPlay is all there is (task 147). */
+	virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
+
 	virtual void SetupInputComponent() override;
 
 	/** Pushes identity onto each new pawn, since a player swaps between ship and character. */
@@ -230,6 +248,28 @@ public:
 	/** So docking somewhere new can open the overlay, and undocking can close it. */
 	int32 LastDockedStationId = 0;
 
+	/**
+	 * Where the backend says this character was last seen, and what they were doing.
+	 *
+	 * Held for the same reason ResumeAtStationId is: identity and possession race, and whichever
+	 * of them is last has to be the one that puts the player back.
+	 */
+	bool bHasResumePosition = false;
+
+	FVector ResumePositionKilometres = FVector::ZeroVector;
+
+	bool bResumeFlying = false;
+
+	/**
+	 * Whether this connection has been put where it belongs, one way or the other.
+	 *
+	 * <strong>Guards the write as much as the restore.</strong> Until this is true the pawn is
+	 * standing wherever the spawn put it, and recording that would overwrite the very position
+	 * about to be restored — turning a crash during sign-in into a permanent trip back to the
+	 * starting point.
+	 */
+	bool bPlacedForThisSession = false;
+
 
 	/**
 	 * Renders a whole number with thousands separators, e.g. 1234567 as "1,234,567".
@@ -356,11 +396,39 @@ private:
 	void ServerIdentify(const FString& Token, int32 ClaimedCharacterId);
 
 	/** Applies a resolved identity and tells anything that was waiting for it. */
-	void AdoptIdentity(
-		int32 ResolvedCharacterId, const FString& ResolvedName, int32 ResolvedDockedStationId);
+	void AdoptIdentity(const FBackendResolvedCharacter& Resolved);
 
 	/** Pushes the identity onto whatever the player is currently possessing. */
 	void RefreshPossessedPawn();
+
+	/**
+	 * Puts a returning player back where they were, on foot or flying (task 147).
+	 *
+	 * Runs on the server, once, as soon as both an identity and a pawn exist. Restoring a player
+	 * who was flying means giving them a ship pawn at that position and possessing it, which is the
+	 * same swap boarding does — so a player who quit in flight resumes in flight rather than
+	 * standing in the air where their ship used to be.
+	 */
+	void RestoreWhereabouts();
+
+	/**
+	 * Tells the backend where this player is now.
+	 *
+	 * Server-side, and it reads the position off the pawn rather than being told one: what is
+	 * being recorded is where the simulation has put somebody, and the simulation is here.
+	 */
+	void RecordWhereabouts();
+
+	FTimerHandle WhereaboutsTimer;
+
+	/**
+	 * How often a position is written while somebody is playing.
+	 *
+	 * The floor under the write on disconnect, and only that. Fifteen seconds of travel is what a
+	 * hard crash costs, which is a walk back rather than a lost session; a faster timer would buy
+	 * very little and cost a database write per player per tick of it.
+	 */
+	static constexpr float WhereaboutsIntervalSeconds = 15.0f;
 
 	/** Draws the panel. Local client only; a dedicated server has nobody to draw for. */
 	/**

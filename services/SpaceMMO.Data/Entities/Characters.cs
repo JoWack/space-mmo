@@ -105,6 +105,38 @@ public class Character
 
     public ItemInstance? ActiveShipItemInstance { get; set; }
 
+    /// <summary>
+    /// Where this character was last seen, in system kilometres, or null if they never have been.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Three columns rather than a type, because null has to mean something.</strong> A
+    /// character who has never been anywhere is not at the origin; they have no position at all, and
+    /// that is the one case that gets sent to a starting point instead of restored. A struct of
+    /// three doubles would have to invent a sentinel to say the same thing.
+    /// </para>
+    /// <para>
+    /// Written by the game server and nobody else, for the reason
+    /// <see cref="DockedStationId"/> is: this is a position, and a client that could report its own
+    /// position could report any of them (ADR-0003).
+    /// </para>
+    /// </remarks>
+    public double? LastSystemX { get; set; }
+
+    public double? LastSystemY { get; set; }
+
+    public double? LastSystemZ { get; set; }
+
+    /// <summary>
+    /// Whether they were flying when last seen, rather than standing on something.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Not derivable from <see cref="ActiveShipItemInstanceId"/>.</strong> That says which
+    /// hull is theirs to fly, and it stays set while they are stood on a planet beside it. The
+    /// question here is what they were doing, and the two answers differ every time somebody parks.
+    /// </remarks>
+    public bool LastSeenFlying { get; set; }
+
     public Station? DockedStation { get; set; }
 
     public ICollection<CharacterSkill> Skills { get; } = [];

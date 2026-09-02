@@ -1455,11 +1455,7 @@ void ASpaceMMOPlayerController::ServerIdentify_Implementation(
 		Token,
 		ClaimedCharacterId,
 		USpaceMMOBackendClient::FOnCharacterResolved::CreateLambda(
-			[WeakThis, ClaimedCharacterId](
-				const int32 AccountId,
-				const int32 ResolvedCharacterId,
-				const FString& Name,
-				const int32 DockedStationId)
+			[WeakThis, ClaimedCharacterId](const FBackendResolvedCharacter& Resolved)
 			{
 				ASpaceMMOPlayerController* Controller = WeakThis.Get();
 
@@ -1468,7 +1464,7 @@ void ASpaceMMOPlayerController::ServerIdentify_Implementation(
 					return;
 				}
 
-				if (ResolvedCharacterId == 0)
+				if (Resolved.CharacterId == 0)
 				{
 					// Logged, and the connection simply stays anonymous. Kicking would be the
 					// harsher option and is worth considering once there is a login screen to send
@@ -1480,25 +1476,52 @@ void ASpaceMMOPlayerController::ServerIdentify_Implementation(
 					return;
 				}
 
-				Controller->AdoptIdentity(ResolvedCharacterId, Name, DockedStationId);
+				Controller->AdoptIdentity(Resolved);
 
 				UE_LOG(LogSpaceMMOBackend, Log,
 					TEXT("Connection identified as character %d (%s) on account %d."),
-					ResolvedCharacterId, *Name, AccountId);
+					Resolved.CharacterId, *Resolved.CharacterName, Resolved.AccountId);
 			}));
 }
 
-void ASpaceMMOPlayerController::AdoptIdentity(
-	const int32 ResolvedCharacterId,
-	const FString& ResolvedName,
-	const int32 ResolvedDockedStationId)
+void ASpaceMMOPlayerController::AdoptIdentity(const FBackendResolvedCharacter& Resolved)
 {
-	CharacterId = ResolvedCharacterId;
-	CharacterName = ResolvedName;
+	CharacterId = Resolved.CharacterId;
+	CharacterName = Resolved.CharacterName;
 
 	// Where they were left. Handed to the docking component below, which is the thing that can put
 	// the ship back there -- see USpaceMMODockingComponent::ResumeDockedAt and task 114.
-	ResumeAtStationId = ResolvedDockedStationId;
+	ResumeAtStationId = Resolved.DockedStationId;
+
+	// And where they were standing or flying, which is the finer-grained version of the same fact
+	// (task 147). The flag rather than a zero test: the origin is a real place, and a character who
+	// has never been anywhere is not at it.
+	bHasResumePosition = Resolved.bHasLastPosition;
+	ResumePositionKilometres = Resolved.LastPositionKilometres;
+	bResumeFlying = Resolved.bLastSeenFlying;
+
+	// Nothing to put back, so nothing is waiting: the spawn is where they belong, and the periodic
+	// write may start recording it. Without this a brand new character would never be recorded at
+	// all, because the guard below would stay shut for the whole session.
+	if (!bHasResumePosition)
+	{
+		bPlacedForThisSession = true;
+	}
+
+	// Server-side only. A dedicated server runs this for every connection; a listen or standalone
+	// server runs it for its own. A client has no service credential and would be refused anyway.
+	if (HasAuthority() && CharacterId != 0)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(
+				WhereaboutsTimer,
+				this,
+				&ASpaceMMOPlayerController::RecordWhereabouts,
+				WhereaboutsIntervalSeconds,
+				true);
+		}
+	}
 
 	RefreshPossessedPawn();
 
@@ -1509,8 +1532,169 @@ void ASpaceMMOPlayerController::AdoptIdentity(
 	RefreshCharacterState();
 }
 
+void ASpaceMMOPlayerController::RestoreWhereabouts()
+{
+	// Server-side, like docking's resume and for the same reason: the client's copy has no
+	// authority over where anything is, and moving a pawn there would be corrected by replication
+	// a frame later.
+	if (!HasAuthority() || bPlacedForThisSession || !bHasResumePosition)
+	{
+		return;
+	}
+
+	APawn* Possessed = GetPawn();
+	UWorld* World = GetWorld();
+
+	// Identity arrived first. Possession calls back into here, and that pass does the work.
+	if (Possessed == nullptr || World == nullptr)
+	{
+		return;
+	}
+
+	// Set before anything can fail, not after. Every branch below is a decision about where this
+	// player belongs, and retrying one that went wrong would mean moving somebody who has since
+	// walked away from wherever they were put.
+	bPlacedForThisSession = true;
+
+	const FSystemCoordinate Where(ResumePositionKilometres);
+
+	if (!bResumeFlying)
+	{
+		if (ASpaceMMOCharacterPawn* OnFoot = Cast<ASpaceMMOCharacterPawn>(Possessed))
+		{
+			OnFoot->ResumeAt(Where);
+		}
+
+		return;
+	}
+
+	// Flying. A ship pawn at the recorded position, possessed, and the character pawn destroyed --
+	// which is exactly the swap boarding performs, run in reverse of stepping out.
+	//
+	// The hull is a plain ship pawn rather than one built from this character's
+	// ActiveShipItemInstanceId, because nothing yet builds a pawn from an owned hull: that is the
+	// unfinished half of task 115. When it lands, this is the call site that changes, and a
+	// character whose hull has since been sold or destroyed should wake on foot rather than in a
+	// ship that does not exist.
+	ASpaceMMOShipPawn* Ship = World->SpawnActorDeferred<ASpaceMMOShipPawn>(
+		ASpaceMMOShipPawn::StaticClass(),
+		FTransform::Identity,
+		nullptr,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (Ship == nullptr)
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Character %d was flying at %s and no ship could be spawned; left on foot."),
+			CharacterId, *Where.ToString());
+
+		return;
+	}
+
+	// Before FinishSpawning, like every other placed spawn here: BeginPlay resolves the surface,
+	// so a position applied afterwards is a frame too late and the first frame is spent elsewhere.
+	Ship->SetStartingSystemPosition(Where.Kilometres);
+	Ship->FinishSpawning(FTransform::Identity);
+
+	Possess(Ship);
+
+	// After possession has moved on, never before -- destroying first leaves the controller
+	// briefly possessing nothing, and anything running in that window has no pawn to ask.
+	if (Possessed != nullptr)
+	{
+		Possessed->Destroy();
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Character %d quit while flying and resumes flying, at %s."),
+		CharacterId, *Where.ToString());
+}
+
+void ASpaceMMOPlayerController::RecordWhereabouts()
+{
+	// Nothing to say until this connection has been put where it belongs. Recording before then
+	// would write the spawn position over the very one waiting to be restored, and a player whose
+	// machine died during sign-in would come back to the starting point permanently.
+	if (!HasAuthority() || CharacterId == 0 || !bPlacedForThisSession)
+	{
+		return;
+	}
+
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr)
+	{
+		return;
+	}
+
+	// Read off the pawn rather than passed in. What is being recorded is where the simulation has
+	// put somebody, and asking anything else for a position is asking somebody's opinion of it.
+	//
+	// The pawn's class is also the answer to what they were doing, which is why the flag needs no
+	// separate bookkeeping and cannot drift: a player in a ship pawn is flying, by construction.
+	const APawn* Possessed = GetPawn();
+
+	// Said out loud, because this is the branch that would make the whole feature quietly stop
+	// working: no pawn means no position, and a write that does not happen looks exactly like a
+	// player who has not moved since the last one that did.
+	if (Possessed == nullptr)
+	{
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Character %d has no pawn to read a position from; leaving the last recorded one."),
+			CharacterId);
+
+		return;
+	}
+
+	if (const ASpaceMMOShipPawn* Ship = Cast<ASpaceMMOShipPawn>(Possessed))
+	{
+		Client->RecordWhereaboutsAsServer(
+			CharacterId, Ship->GetSystemPosition().Kilometres, true);
+
+		return;
+	}
+
+	if (const ASpaceMMOCharacterPawn* OnFoot = Cast<ASpaceMMOCharacterPawn>(Possessed))
+	{
+		Client->RecordWhereaboutsAsServer(
+			CharacterId, OnFoot->GetSystemPosition().Kilometres, false);
+	}
+}
+
+void ASpaceMMOPlayerController::Destroyed()
+{
+	// Before Super, and that is the whole point of overriding this rather than EndPlay.
+	// APlayerController::Destroyed unpossesses or destroys the pawn and only then calls up to
+	// AActor::Destroyed, which is what routes EndPlay -- so the position has to be taken here,
+	// while there is still a pawn to take it from.
+	RecordWhereabouts();
+
+	Super::Destroyed();
+}
+
+void ASpaceMMOPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Server shutdown, which destroys nothing: EndPlay is routed across every actor and the pawns
+	// are still standing where they were. A disconnect has already been handled in Destroyed, and
+	// recording the same position twice costs one request and changes nothing.
+	RecordWhereabouts();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(WhereaboutsTimer);
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void ASpaceMMOPlayerController::RefreshPossessedPawn()
 {
+	// First, because restoring somebody who was flying replaces the pawn everything below is about
+	// to be pushed onto. Possessing the ship calls straight back into here, so the work is not
+	// skipped -- it is done once, on the pawn the player is actually going to be in.
+	RestoreWhereabouts();
+
 	// Identity can arrive before or after a pawn — the backend round trip races possession — so
 	// both orders have to work. This handles "identity last"; the component asks the controller
 	// when it is spawned, which handles "identity first".

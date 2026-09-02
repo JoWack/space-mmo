@@ -11,6 +11,7 @@ using SpaceMMO.Data.Inventories;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Market;
 using SpaceMMO.Data.Quests;
+using SpaceMMO.Data.Whereabouts;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Items;
 
@@ -40,6 +41,7 @@ builder.Services.AddScoped<DockingService>();
 builder.Services.AddScoped<ShipService>();
 builder.Services.AddScoped<QuestService>();
 builder.Services.AddScoped<InventoryService>();
+builder.Services.AddScoped<WhereaboutsService>();
 builder.Services.AddScoped<Caller>();
 
 // The Unreal dedicated server's own credential. Absent unless configured, and absent means every
@@ -289,6 +291,7 @@ app.MapAccountEndpoints();
 app.MapCharacterEndpoints();
 app.MapGatheringEndpoints();
 app.MapDockingEndpoints();
+app.MapWhereaboutsEndpoints();
 app.MapShipEndpoints();
 app.MapIndustryEndpoints();
 app.MapMarketEndpoints();

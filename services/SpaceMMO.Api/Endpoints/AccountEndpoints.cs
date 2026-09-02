@@ -22,8 +22,28 @@ public sealed record ResolveCharacterRequest(string Token, int CharacterId);
 /// default spawn (task 114). Fetching it separately would be a second round trip for a field that
 /// lives on the record already being read.
 /// </param>
+/// <param name="LastSystemX">
+/// Where the world last saw this character, in system kilometres, or null for somebody it never
+/// has.
+/// </param>
+/// <param name="LastSeenFlying">
+/// Whether they were flying when it did. Meaningless without a position, and false there.
+/// </param>
+/// <remarks>
+/// The whereabouts ride along for the reason the docked station does, one step further: this is the
+/// request a connecting server already makes, and where to put somebody is needed at exactly this
+/// moment. It is also the only moment it is needed — nothing asks again until the next sign-in
+/// (task 147).
+/// </remarks>
 public sealed record ResolvedCharacter(
-    int AccountId, int CharacterId, string CharacterName, int? DockedStationId);
+    int AccountId,
+    int CharacterId,
+    string CharacterName,
+    int? DockedStationId,
+    double? LastSystemX,
+    double? LastSystemY,
+    double? LastSystemZ,
+    bool LastSeenFlying);
 
 /// <summary>
 /// Account registration and login.
@@ -100,7 +120,14 @@ public static class AccountEndpoints
         return character is null
             ? Results.NotFound()
             : Results.Ok(new ResolvedCharacter(
-                accountId.Value, character.Id, character.Name, character.DockedStationId));
+                accountId.Value,
+                character.Id,
+                character.Name,
+                character.DockedStationId,
+                character.LastSystemX,
+                character.LastSystemY,
+                character.LastSystemZ,
+                character.LastSeenFlying));
     }
 
     private static async Task<IResult> RegisterAsync(
