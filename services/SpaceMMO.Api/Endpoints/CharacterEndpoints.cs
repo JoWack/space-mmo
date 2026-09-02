@@ -26,7 +26,17 @@ public sealed record CharacterResponse(
     Race Race,
     Faction Faction,
     int HomeBodyId,
-    long BalanceMinorUnits);
+    long BalanceMinorUnits,
+
+    /// <summary>
+    /// The hull this character flies, or null for somebody on foot with no ship (ADR-0012).
+    /// </summary>
+    /// <remarks>
+    /// Here rather than on its own endpoint because every screen that cares already has the
+    /// character: the ships list marks which row is the active one, and a separate request to
+    /// answer that would be a second round trip to decorate a list the client already has.
+    /// </remarks>
+    long? ActiveShipItemInstanceId);
 
 /// <param name="XpToNextLevel">
 /// XP still needed to reach the next level, or 0 at the cap.
@@ -565,5 +575,6 @@ public static class CharacterEndpoints
         character.Race,
         Races.FactionFor(character.Race),
         character.HomeBodyId,
-        character.Balance.MinorUnits);
+        character.Balance.MinorUnits,
+        character.ActiveShipItemInstanceId);
 }

@@ -258,6 +258,49 @@ struct SPACEMMOBACKEND_API FSpaceMMOMyOrderRowText
 	bool bElsewhere = false;
 };
 
+/** One owned hull's widget. Its own, because each row carries a summon. */
+UCLASS()
+class SPACEMMOBACKEND_API USpaceMMOShipRow : public UUserWidget
+{
+	GENERATED_BODY()
+
+public:
+	void SetRow(const FSpaceMMOShipRowText& Row);
+
+	void SetOwningOverlay(class USpaceMMOStationOverlay* Overlay) { OwningOverlay = Overlay; }
+
+	/** Brings this hull here. Wire the row's summon button to it. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
+	void Summon();
+
+	/** Bind the summon button's enabled state to this. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bCanSummon = false;
+
+	/** Bind a marker to this: the ship this character is flying. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bIsActive = false;
+
+protected:
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> NameText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> WhereText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> ConditionText;
+
+	/** Why the button is off. Empty when it is on, so a bound row can hide it. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> RefusalText;
+
+private:
+	FSpaceMMOShipRowText Row;
+
+	TWeakObjectPtr<class USpaceMMOStationOverlay> OwningOverlay;
+};
+
 /** One resting order's widget. Its own, because each row carries a cancel. */
 UCLASS()
 class SPACEMMOBACKEND_API USpaceMMOMyOrderRow : public UUserWidget
@@ -365,6 +408,17 @@ public:
 		bool bStationHandlesShips,
 		int64 ActiveHullId);
 
+	/**
+	 * Whether ships are summoned at a station of this kind (ADR-0012).
+	 *
+	 * <strong>Compared as a string, because that is what the world endpoint sends</strong> — and
+	 * that makes this a copy of a server rule rather than the rule itself. The server refuses
+	 * anyway, so the worst a drift here does is offer a button that comes back with a sentence
+	 * explaining why not; the reverse, greying a button the server would have honoured, is the one
+	 * worth noticing, which is why both names are asserted rather than one.
+	 */
+	static bool StationHandlesShips(const FString& StationKind);
+
 	/** What the tab says when there is nothing in it. */
 	static FString BuildShipsFooter(
 		const TArray<FBackendItemInstance>& Owned, bool bStationHandlesShips);
@@ -427,6 +481,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|HUD")
 	void CancelRestingOrder(int64 OrderId);
 
+	/** Brings one of this character's hulls to the station they are docked at. */
+	void SummonShip(int64 HullItemInstanceId);
+
 	/** Picks the item whose book is shown below the list. */
 	void SelectMarketItem(int32 ItemDefId);
 
@@ -485,6 +542,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bMyOrdersTab = false;
 
+	/** Bind the Ships tab's visibility to this. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bShipsTab = false;
+
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
 
@@ -542,11 +603,21 @@ protected:
 	TObjectPtr<class UPanelWidget> MyOrderRows;
 
 	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UPanelWidget> ShipRows;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> ShipsFooterText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> MyOrdersFooterText;
 
 	/** What one resting-order row looks like. Set this in the Widget Blueprint's class defaults. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	TSubclassOf<USpaceMMOMyOrderRow> MyOrderRowClass;
+
+	/** The row widget the Ships tab stamps out, one per owned hull. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|HUD")
+	TSubclassOf<USpaceMMOShipRow> ShipRowClass;
 
 	/** The market's item list, above the book. */
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -597,6 +668,8 @@ private:
 
 	/** And the resting-order rows. */
 	FString MyOrdersSignature;
+
+	FString ShipsSignature;
 
 	/** And the book rows. */
 	FString BookSignature;

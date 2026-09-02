@@ -364,6 +364,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Market")
 	void CancelOrder(int32 CharacterId, int64 OrderId);
 
+	/**
+	 * Brings a hull this character owns to the station they are docked at (ADR-0012).
+	 *
+	 * <strong>The refusals are the interesting half</strong>, and they arrive as a 409 with a
+	 * sentence written to be shown: standing at a market, owning nothing, being undocked. They go to
+	 * the same transient message channel as everything else a player is told no about.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
+	void SummonShip(int32 CharacterId, int64 HullItemInstanceId);
+
 	/** Loads the journal and the list of quests that could be taken. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Quests")
 	void FetchQuests(int32 CharacterId);

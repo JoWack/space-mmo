@@ -1869,8 +1869,37 @@ state for most of the opening and is the state ADR-0012 deliberately creates.
 
 Verified by mutation: filtering by name instead of category turns one test red.
 
-- **No client verb, and no ship in the world.** The rows exist, the endpoint exists, and nothing in
-  the game calls either. The game mode still spawns an unowned prop ship thirty metres from the player so that
+### Done: the client can summon
+
+`USpaceMMOBackendClient::SummonShip`, a `USpaceMMOShipRow` widget carrying the button, the tab on
+the station overlay bound to **5**, and `ActiveShipItemInstanceId` travelling with the character so a
+row can mark which ship is being flown — on the character rather than an endpoint of its own,
+because every screen that cares already has the character and a second round trip to decorate a list
+would be one request to answer one boolean.
+
+**The fleet is built from what the character already owns**, not from a request of its own: the
+inventory is fetched whenever anything moves, and every field a row needs is in that answer.
+
+**`StationHandlesShips` is a copy of a server rule and knowingly so.** The station kind reaches the
+client as a string, so this is the client's opinion; the server refuses regardless. The failure that
+matters is asymmetric, which is why both allowed names are asserted rather than one: offering a
+button that comes back refused costs a sentence, while greying one the server would have honoured
+strands somebody at a shipyard with a ship they cannot call.
+
+**The row checks `bCanSummon` before firing, and that is not redundant with the server.** The server's
+refusal is the one that decides; this one stops a button already displaying "Not a shipyard" from
+sending a request whose only possible answer is the sentence already on screen.
+
+### Still open
+
+- **No ship in the world.** Summoning records which hull is yours and gives it a hold; nothing spawns
+  a pawn for it. The game mode still puts an unowned prop ship thirty metres from the player, so the
+  Ships tab is testable — press Summon, watch the row become "Already here" — and the ship being
+  flown is still the prop.
+- **A Widget Blueprint for the tab and its rows.** `ShipRows`, `ShipsFooterText` and `ShipRowClass`
+  are optional bindings, so the overlay works without them and the tab is simply empty until they
+  exist. `USpaceMMOShipRow` wants a Widget Blueprint parented to it with `NameText`, `WhereText`,
+  `ConditionText`, `RefusalText` and a button bound to `Summon`. The game mode still spawns an unowned prop ship thirty metres from the player so that
   boarding has something to board, and summoning a hull does not put a pawn anywhere — it records
   which hull is yours and gives it a hold.
 

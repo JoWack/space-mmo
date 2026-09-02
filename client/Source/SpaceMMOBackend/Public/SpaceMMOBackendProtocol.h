@@ -144,6 +144,9 @@ public:
 	/** The body for withdrawing one. */
 	static FString MakeCancelOrderBody(int32 CharacterId, int64 OrderId);
 
+	/** The body of a summon: which character, and which hull of theirs. */
+	static FString MakeSummonShipBody(int32 CharacterId, int64 HullItemInstanceId);
+
 	/** Every tradeable item at a station, with whatever the market is doing with each. */
 	static bool ParseMarketListings(
 		const FString& Json, TArray<FBackendMarketListing>& OutListings);

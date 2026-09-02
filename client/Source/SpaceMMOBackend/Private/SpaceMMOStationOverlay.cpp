@@ -9,6 +9,44 @@
 #include "SpaceMMOInventoryScreen.h"
 #include "SpaceMMOPlayerController.h"
 
+namespace
+{
+	/** What kind the station a player is docked at is, or empty if they are docked nowhere. */
+	FString KindOfStation(const USpaceMMOBackendClient& Client, const int32 StationId)
+	{
+		if (StationId == 0)
+		{
+			return FString();
+		}
+
+		for (const FBackendStation& Station : Client.GetStations())
+		{
+			if (Station.Id == StationId)
+			{
+				return Station.Kind;
+			}
+		}
+
+		return FString();
+	}
+
+	/** The hull the selected character flies, or zero. */
+	int64 ActiveHullOf(const USpaceMMOBackendClient& Client)
+	{
+		const int32 Selected = Client.GetSelectedCharacterId();
+
+		for (const FBackendCharacter& Character : Client.GetCharacters())
+		{
+			if (Character.Id == Selected)
+			{
+				return Character.ActiveShipItemInstanceId;
+			}
+		}
+
+		return 0;
+	}
+}
+
 void USpaceMMOTextRow::SetLine(const FString& Line)
 {
 	if (LineText != nullptr)
@@ -662,6 +700,7 @@ void USpaceMMOStationOverlay::SetTab(const ESpaceMMOStationTab Tab)
 	bIndustryTab = Tab == ESpaceMMOStationTab::Industry;
 	bQuestsTab = Tab == ESpaceMMOStationTab::Quests;
 	bMyOrdersTab = Tab == ESpaceMMOStationTab::MyOrders;
+	bShipsTab = Tab == ESpaceMMOStationTab::Ships;
 
 	// Asked for again every time the tab is opened, not once ever. A bool that latched was exactly
 	// the bug the catalogue had at a different station: the list is only wrong while somebody is
@@ -805,6 +844,64 @@ void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float 
 					Widget->SetRow(Row);
 
 					BookRows->AddChild(Widget);
+				}
+			}
+		}
+	}
+
+	// The fleet. Built from what the character already owns rather than from a request of its own:
+	// the inventory is fetched whenever anything moves, and every field a ship row needs -- name,
+	// condition, which station it sits at, and now its category -- is already in that answer.
+	if (ShipRows != nullptr && ShipRowClass != nullptr)
+	{
+		if (USpaceMMOBackendClient* Client = MarketClient())
+		{
+			const ASpaceMMOPlayerController* Owner =
+				Cast<ASpaceMMOPlayerController>(GetOwningPlayer());
+
+			const int32 Here = Owner != nullptr ? Owner->DockedStationId() : 0;
+
+			const TArray<FSpaceMMOShipRowText> Rows = BuildShipRows(
+				Client->GetItemInstances(),
+				Here,
+				StationHandlesShips(KindOfStation(*Client, Here)),
+				ActiveHullOf(*Client));
+
+			FString Signature;
+
+			for (const FSpaceMMOShipRowText& Row : Rows)
+			{
+				Signature += Row.Name + Row.Where + Row.Condition + Row.Refusal
+					+ (Row.bCanSummon ? TEXT("1") : TEXT("0")) + TEXT("|");
+			}
+
+			if (Signature != ShipsSignature)
+			{
+				ShipsSignature = Signature;
+
+				ShipRows->ClearChildren();
+
+				for (const FSpaceMMOShipRowText& Row : Rows)
+				{
+					USpaceMMOShipRow* Widget =
+						CreateWidget<USpaceMMOShipRow>(GetOwningPlayer(), ShipRowClass);
+
+					if (Widget == nullptr)
+					{
+						continue;
+					}
+
+					Widget->SetOwningOverlay(this);
+					Widget->SetRow(Row);
+
+					ShipRows->AddChild(Widget);
+				}
+
+				if (ShipsFooterText != nullptr)
+				{
+					ShipsFooterText->SetText(FText::FromString(BuildShipsFooter(
+						Client->GetItemInstances(),
+						StationHandlesShips(KindOfStation(*Client, Here)))));
 				}
 			}
 		}
@@ -1003,4 +1100,65 @@ FString USpaceMMOStationOverlay::BuildShipsFooter(
 	return bStationHandlesShips
 		? FString::Printf(TEXT("%d ship(s)."), Hulls)
 		: FString::Printf(TEXT("%d ship(s). Ships are summoned at a spaceport."), Hulls);
+}
+
+void USpaceMMOShipRow::SetRow(const FSpaceMMOShipRowText& InRow)
+{
+	Row = InRow;
+
+	bCanSummon = Row.bCanSummon;
+	bIsActive = Row.bIsActive;
+
+	auto Set = [](UTextBlock* Block, const FString& Value)
+	{
+		if (Block != nullptr)
+		{
+			Block->SetText(FText::FromString(Value));
+		}
+	};
+
+	Set(NameText, Row.Name);
+	Set(WhereText, Row.Where);
+	Set(ConditionText, Row.Condition);
+	Set(RefusalText, Row.Refusal);
+}
+
+void USpaceMMOShipRow::Summon()
+{
+	// Checked here as well as on the server, and neither is redundant. The server's refusal is the
+	// one that decides; this one stops a button that is already saying "Not a shipyard" from firing
+	// a request whose only possible answer is the sentence already on screen.
+	if (!bCanSummon)
+	{
+		return;
+	}
+
+	if (USpaceMMOStationOverlay* Overlay = OwningOverlay.Get())
+	{
+		Overlay->SummonShip(Row.HullId);
+	}
+}
+
+void USpaceMMOStationOverlay::SummonShip(const int64 HullItemInstanceId)
+{
+	ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer());
+
+	USpaceMMOBackendClient* Client = MarketClient();
+
+	if (Controller == nullptr || Client == nullptr || HullItemInstanceId <= 0)
+	{
+		return;
+	}
+
+	// No confirmation. Summoning costs nothing and moves a ship the player already owns, so the
+	// worst a misclick does is bring a hull to a station it was going to be brought to eventually.
+	Client->SummonShip(Controller->GetCharacterId(), HullItemInstanceId);
+}
+
+bool USpaceMMOStationOverlay::StationHandlesShips(const FString& StationKind)
+{
+	// The same two kinds the server allows, by the names the world endpoint sends. A spaceport is
+	// documented as "ship docking, refitting, and industry facilities" and the capital as
+	// "everything".
+	return StationKind == TEXT("Spaceport") || StationKind == TEXT("Capital");
 }

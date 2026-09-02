@@ -151,6 +151,22 @@ bool FSpaceMMOBackendProtocol::ParseMyOrders(
 	return true;
 }
 
+FString FSpaceMMOBackendProtocol::MakeSummonShipBody(
+	const int32 CharacterId, const int64 HullItemInstanceId)
+{
+	FString Output;
+
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+
+	Writer->WriteObjectStart();
+	Writer->WriteValue(TEXT("characterId"), CharacterId);
+	Writer->WriteValue(TEXT("hullItemInstanceId"), HullItemInstanceId);
+	Writer->WriteObjectEnd();
+	Writer->Close();
+
+	return Output;
+}
+
 FString FSpaceMMOBackendProtocol::MakeCancelOrderBody(const int32 CharacterId, const int64 OrderId)
 {
 	FString Output;
@@ -376,6 +392,10 @@ bool FSpaceMMOBackendProtocol::ParseCharacter(
 	}
 
 	ReadInt64(Object, TEXT("balanceMinorUnits"), OutCharacter.BalanceMinorUnits);
+
+	// Absent or null both leave it zero, which is the same answer: no ship. A character who has
+	// never crafted a hull is the ordinary case for the whole of the opening.
+	ReadInt64(Object, TEXT("activeShipItemInstanceId"), OutCharacter.ActiveShipItemInstanceId);
 
 	return true;
 }

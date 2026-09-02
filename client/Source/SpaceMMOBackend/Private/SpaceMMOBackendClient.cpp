@@ -1011,6 +1011,34 @@ void USpaceMMOBackendClient::FetchMyOrders(const int32 CharacterId)
 		});
 }
 
+void USpaceMMOBackendClient::SummonShip(const int32 CharacterId, const int64 HullItemInstanceId)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/ships/summon"),
+		FSpaceMMOBackendProtocol::MakeSummonShipBody(CharacterId, HullItemInstanceId),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			USpaceMMOBackendClient* Self = WeakThis.Get();
+
+			if (Self == nullptr)
+			{
+				return;
+			}
+
+			Self->OnIndustryMessage.Broadcast(TEXT("Ship summoned"), true);
+
+			// Both have moved: the hull now sits in this station's hangar, and the character has an
+			// active ship it did not have. Asked for rather than adjusted here -- a client that
+			// guessed would be inventing rows the server owns.
+			Self->SelectCharacter(CharacterId);
+			Self->FetchCharacters();
+		});
+}
+
 void USpaceMMOBackendClient::CancelOrder(const int32 CharacterId, const int64 OrderId)
 {
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);

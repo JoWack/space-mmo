@@ -127,6 +127,9 @@ public:
 	/** And 4, for the orders this character has resting anywhere. */
 	void ShowMyOrdersTab();
 
+	/** The fleet, and what can be brought here (ADR-0012). */
+	void ShowShipsTab();
+
 	/**
 	 * Prints where the player is standing, as a direction ready to paste into content. Bound to P.
 	 *

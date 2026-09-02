@@ -88,6 +88,16 @@ struct SPACEMMOBACKEND_API FBackendCharacter
 
 	/** Formatted for display, e.g. 1234567 minor units as "12,345.67". */
 	FString FormatBalance() const;
+
+	/**
+	 * The hull this character flies, or zero for somebody on foot with no ship (ADR-0012).
+	 *
+	 * Zero rather than an optional, matching how every other absent id travels here: the server
+	 * sends null and there is no id zero, so the two agree without a second field to say whether
+	 * the first means anything.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 ActiveShipItemInstanceId = 0;
 };
 
 /** Skill categories, mirroring the server. */

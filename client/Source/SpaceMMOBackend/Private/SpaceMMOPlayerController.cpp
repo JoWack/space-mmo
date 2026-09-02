@@ -300,6 +300,9 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			TEXT("StationTabMyOrders"), IE_Pressed, this, &ASpaceMMOPlayerController::ShowMyOrdersTab);
 
 		InputComponent->BindAction(
+			TEXT("StationTabShips"), IE_Pressed, this, &ASpaceMMOPlayerController::ShowShipsTab);
+
+		InputComponent->BindAction(
 			TEXT("CaptureDirection"), IE_Pressed, this,
 			&ASpaceMMOPlayerController::CaptureDirection);
 
@@ -897,6 +900,14 @@ void ASpaceMMOPlayerController::ShowMyOrdersTab()
 	if (StationOverlay != nullptr && bStationOverlayOpen)
 	{
 		StationOverlay->SetTab(ESpaceMMOStationTab::MyOrders);
+	}
+}
+
+void ASpaceMMOPlayerController::ShowShipsTab()
+{
+	if (StationOverlay != nullptr && bStationOverlayOpen)
+	{
+		StationOverlay->SetTab(ESpaceMMOStationTab::Ships);
 	}
 }
 

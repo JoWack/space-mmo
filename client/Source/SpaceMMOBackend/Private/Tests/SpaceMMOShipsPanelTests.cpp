@@ -153,4 +153,48 @@ bool FSpaceMMOShipsPanelFooterTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+
+/**
+ * Which stations hand over ships, by the names the world endpoint sends.
+ *
+ * <strong>A copy of a server rule, and knowingly so.</strong> The kind arrives as a string, so this
+ * is the client's opinion rather than the rule itself — the server refuses regardless. The failure
+ * that matters is the asymmetric one: offering a button that comes back refused merely costs a
+ * sentence, while greying a button the server would have honoured strands somebody at a shipyard
+ * with a ship they cannot call. Both names are asserted rather than one, for that reason.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOShipsPanelKnowsAShipyardTest,
+	"SpaceMMO.Ships.PanelKnowsAShipyard",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOShipsPanelKnowsAShipyardTest::RunTest(const FString& Parameters)
+{
+	TestTrue(
+		TEXT("A spaceport hands over ships"),
+		USpaceMMOStationOverlay::StationHandlesShips(TEXT("Spaceport")));
+
+	TestTrue(
+		TEXT("...and so does the capital"),
+		USpaceMMOStationOverlay::StationHandlesShips(TEXT("Capital")));
+
+	TestFalse(
+		TEXT("A market does not"),
+		USpaceMMOStationOverlay::StationHandlesShips(TEXT("TradingHub")));
+
+	TestFalse(
+		TEXT("Nor a house"), USpaceMMOStationOverlay::StationHandlesShips(TEXT("Housing")));
+
+	TestFalse(
+		TEXT("Nor a bar"), USpaceMMOStationOverlay::StationHandlesShips(TEXT("Social")));
+
+	// Docked nowhere. An empty kind must not read as a shipyard, or the tab offers a summon to
+	// somebody standing on a planet.
+	TestFalse(
+		TEXT("Docked nowhere is not a shipyard"),
+		USpaceMMOStationOverlay::StationHandlesShips(FString()));
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS
