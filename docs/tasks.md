@@ -1485,7 +1485,7 @@ had grown two halves. They are filed here rather than under M6 — which is wher
 combat tasks and gathering bugs and test tooling under one heading — because a milestone is a claim
 about what the game will be able to do, and none of these are that yet.
 
-Tasks 144 and 145 are the opening: where a returning character comes back, and where a new one
+Tasks 147 and 145 are the opening: where a returning character comes back, and where a new one
 starts. Task 142 belongs to **M1**, where EconSim was built. Several belong to **M7 — a world worth being in**, added to the roadmap on 18 August: 121, 122, 124,
 125, 126, 129, 130, 131, 132, 139, and the existing 89, 96 and 97. Tasks 133 to 138 belong to **M5 — an
 interface**, which was widened on 29 August to name perspective and controls: `design-bible.md` §8
@@ -4124,63 +4124,6 @@ to measure. The check runs on whatever is built next, which is where it will cat
 The other 142 was committed first and is cited from the milestone list above, so this one
 moved rather than that one. Nothing outside this file referred to the old number.
 
-## 143 — A character is dropped into the world from fifty metres up
-
-**Done 1 September**, awaiting a playtest. Belongs to **M5 — an interface**, as part of what the
-opening feels like.
-
-Spawning fell. `SpaceMMOGameMode` places a character above where the ground will be and lets contact
-catch them, and the comment says why: *"so ground contact catches the character rather than the spawn
-positioning it onto the ground by hand — which is what proves the height function and the mesh agree
-about where the ground is."*
-
-**The deeper reason is not that, and it is why this could not simply be deleted.** A connection is
-given its pawn 323 ms before the world has a planet in it — measured, and recorded in the game mode.
-At the moment of spawning there is nothing to ask where the surface is. Dropping is robust to that,
-and robust to the planet arriving wearing terrain the spawn had never heard of, which is task 129's
-whole subject.
-
-So the character is placed **the first time a planet appears** rather than at spawn: same height
-function contact uses, applied at once instead of after a fall, and answered against whatever terrain
-the actor is wearing by then. Not the spawn positioning somebody by hand — the ground being met
-immediately.
-
-It logs `Stood on the ground at ... rather than falling to it.`, so a spawn that still falls is a
-spawn where no planet was ever found, which is a different fault with a different fix.
-
-## 144 — You come back where you left off
-
-**Pending.** Decided by Joe, 1 September. Belongs to **M5 — an interface**, as part of what the
-opening feels like.
-
-Quit and reopen the game and your character is back at the configured starting point, falling. Being
-docked when you quit does not survive either — boarding a ship afterwards teleports you to the hub
-the database still thinks you are docked at, which is the database being right and the world having
-forgotten.
-
-**Wherever a player is, and whatever they are doing, is where they come back.** Joe's words: on foot
-on a planet, docked at a station, or flying — all three restore as they were.
-
-**Quitting in a ship restores you flying that ship, where it was.** Raised as a teleport risk and it
-is not one: you resume exactly where you stopped, so there is nothing to gain. It is the version that
-needs no special case, and a special case here — "you wake at the last station" — is the one that
-would let somebody park badly and log out to escape it.
-
-### Three things to settle in the building
-
-1. **When position is written.** There is no logout today; closing the game drops a connection.
-   Periodic writes are cheap and slightly stale; a write on disconnect is exact and lost in a crash.
-   Both, with periodic as the floor.
-2. **What is stored.** A system coordinate on `Character`, and enough to know what a player was
-   doing: on foot, or flying a particular hull. `ActiveShipItemInstanceId` already answers the second
-   half, so the new state is a position and a flag.
-3. **A migration**, and `--seed` is the only thing that applies one.
-
-### What it does not settle
-
-Where a **new** character starts, which is task 145 and a different problem: this one restores a
-position that exists, and that one has to decide on one.
-
 ---
 
 ## 145 — A new character starts on their race's homeworld
@@ -4215,6 +4158,73 @@ questline to their first hull. Four of them, and today only `body_capital` has a
 **Blocked on nothing, but large.** Worth splitting when it is picked up: the scene following the
 character is one job, and four starter zones is another that task 97's settlements work would
 otherwise duplicate.
+
+---
+
+## 146 — A character is dropped into the world from fifty metres up
+
+**Done 1 September**, awaiting a playtest. Belongs to **M5 — an interface**, as part of what the
+opening feels like.
+
+Spawning fell. `SpaceMMOGameMode` places a character above where the ground will be and lets contact
+catch them, and the comment says why: *"so ground contact catches the character rather than the spawn
+positioning it onto the ground by hand — which is what proves the height function and the mesh agree
+about where the ground is."*
+
+**The deeper reason is not that, and it is why this could not simply be deleted.** A connection is
+given its pawn 323 ms before the world has a planet in it — measured, and recorded in the game mode.
+At the moment of spawning there is nothing to ask where the surface is. Dropping is robust to that,
+and robust to the planet arriving wearing terrain the spawn had never heard of, which is task 129's
+whole subject.
+
+So the character is placed **the first time a planet appears** rather than at spawn: same height
+function contact uses, applied at once instead of after a fall, and answered against whatever terrain
+the actor is wearing by then. Not the spawn positioning somebody by hand — the ground being met
+immediately.
+
+It logs `Stood on the ground at ... rather than falling to it.`, so a spawn that still falls is a
+spawn where no planet was ever found, which is a different fault with a different fix.
+
+**Numbered 143 until 2 September**, when the collision was noticed: 143 was already the greybox
+skill, done the day before. Nothing outside this file referred to the old number.
+
+---
+
+## 147 — You come back where you left off
+
+**Pending.** Decided by Joe, 1 September. Belongs to **M5 — an interface**, as part of what the
+opening feels like.
+
+Quit and reopen the game and your character is back at the configured starting point, falling. Being
+docked when you quit does not survive either — boarding a ship afterwards teleports you to the hub
+the database still thinks you are docked at, which is the database being right and the world having
+forgotten.
+
+**Wherever a player is, and whatever they are doing, is where they come back.** Joe's words: on foot
+on a planet, docked at a station, or flying — all three restore as they were.
+
+**Quitting in a ship restores you flying that ship, where it was.** Raised as a teleport risk and it
+is not one: you resume exactly where you stopped, so there is nothing to gain. It is the version that
+needs no special case, and a special case here — "you wake at the last station" — is the one that
+would let somebody park badly and log out to escape it.
+
+### Three things to settle in the building
+
+1. **When position is written.** There is no logout today; closing the game drops a connection.
+   Periodic writes are cheap and slightly stale; a write on disconnect is exact and lost in a crash.
+   Both, with periodic as the floor.
+2. **What is stored.** A system coordinate on `Character`, and enough to know what a player was
+   doing: on foot, or flying a particular hull. `ActiveShipItemInstanceId` already answers the second
+   half, so the new state is a position and a flag.
+3. **A migration**, and `--seed` is the only thing that applies one.
+
+### What it does not settle
+
+Where a **new** character starts, which is task 145 and a different problem: this one restores a
+position that exists, and that one has to decide on one.
+
+**Numbered 144 until 2 September.** 144 was already the corridor-width rule. Renumbered alongside
+146 for the same reason; 145 kept its number, because nothing else had claimed it.
 
 ---
 
