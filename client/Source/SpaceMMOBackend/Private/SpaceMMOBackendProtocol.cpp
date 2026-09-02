@@ -603,6 +603,11 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 				Instance.StationId = static_cast<int32>(Number);
 			}
 
+			if (ReadInt64(Object, TEXT("category"), Number))
+			{
+				Instance.Category = ToEnum(Number, EBackendItemCategory::Raw, 8);
+			}
+
 			OutInstances.Add(Instance);
 		}
 	}

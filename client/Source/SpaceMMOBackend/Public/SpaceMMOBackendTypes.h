@@ -765,6 +765,28 @@ struct SPACEMMOBACKEND_API FBackendBody
  * condition are two things, and a quantity of two would say they were one. Kept apart on the wire
  * for the same reason (ADR-0006 insures each instance against its own acquisition value).
  */
+/**
+ * What kind of thing an item is, mirroring <c>SpaceMMO.Domain.Items.ItemCategory</c>.
+ *
+ * <strong>The numbers are the contract.</strong> They arrive over the wire as integers, so a value
+ * inserted in the middle on the server silently reclassifies everything after it here — a Hull
+ * becoming a Weapon reads as a ship you cannot summon and a gun you cannot fire, with nothing in the
+ * payload looking wrong. Append only.
+ */
+UENUM(BlueprintType)
+enum class EBackendItemCategory : uint8
+{
+	Raw = 0,
+	Refined = 1,
+	Component = 2,
+	Consumable = 3,
+	Tool = 4,
+	Module = 5,
+	Armor = 6,
+	Weapon = 7,
+	Hull = 8,
+};
+
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendItemInstance
 {
@@ -798,6 +820,16 @@ struct SPACEMMOBACKEND_API FBackendItemInstance
 	/** Set for a station hangar; zero for anything that travels with its owner. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 StationId = 0;
+
+	/**
+	 * What kind of thing this is, so a hull can be told from a tool.
+	 *
+	 * The key looks like it would do the job and does not: <c>hull_shuttle</c> against
+	 * <c>shuttle_hull_section</c> is one Component away from a prefix match being wrong, and it is
+	 * already shipped.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendItemCategory Category = EBackendItemCategory::Raw;
 };
 
 /**

@@ -1841,8 +1841,36 @@ would have callers treating it as a fault.
   server knows whether a character is aboard, and being undocked cannot stand in for it — somebody
   walking around a planet is undocked too, and that would open the hold from a rock. It wants the
   server told when somebody boards, which is a change to the pawn rather than to the service.
-- **No client verb, and no ship in the world.** The endpoints exist and nothing in the game calls
-  them. The game mode still spawns an unowned prop ship thirty metres from the player so that
+### Done: the Ships tab's wording, as a pure function
+
+`BuildShipRows` and `BuildShipsFooter` on the station overlay, following the panel-builder pattern:
+the wording is a pure function of what the server said, testable without a widget, a world or a
+backend.
+
+Settled by Joe on 31 August: the tab lives on the station overlay rather than behind a key, because
+summoning is a thing you do standing still at a station and it belongs where the rest of a station's
+business is.
+
+**Listed by category, never by key.** The inventory wire now carries `ItemCategory`, because
+`hull_shuttle` and `shuttle_hull_section` are one prefix match away from listing a component as a
+ship and both are already shipped. The client enum mirrors the server's numbering and is marked
+append-only: the values cross as integers, so one inserted in the middle would silently reclassify
+everything after it — a Hull becoming a Weapon reads as a ship you cannot summon and a gun you
+cannot fire, with nothing in the payload looking wrong.
+
+**Hulls elsewhere are still listed**, with where they are, because knowing you own a freighter at the
+capital is the point of a fleet list. **And a refusal is a reason rather than a greyed button**:
+"Summon" disabled with nothing beside it tells somebody they are wrong without saying about what, and
+the two reasons are not equivalent — "Not a shipyard" sends a player walking and "Already here" means
+there is nothing to do.
+
+The empty tab says `No ships yet. Craft a hull to fly one.`, because owning none is the ordinary
+state for most of the opening and is the state ADR-0012 deliberately creates.
+
+Verified by mutation: filtering by name instead of category turns one test red.
+
+- **No client verb, and no ship in the world.** The rows exist, the endpoint exists, and nothing in
+  the game calls either. The game mode still spawns an unowned prop ship thirty metres from the player so that
   boarding has something to board, and summoning a hull does not put a pawn anywhere — it records
   which hull is yours and gives it a hold.
 

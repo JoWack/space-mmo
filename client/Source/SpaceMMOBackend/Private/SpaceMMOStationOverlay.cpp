@@ -929,3 +929,78 @@ void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float 
 	FillPanel(IndustryRows, Industry, IndustrySignature);
 	FillPanel(QuestRows, Quests, QuestSignature);
 }
+
+TArray<FSpaceMMOShipRowText> USpaceMMOStationOverlay::BuildShipRows(
+	const TArray<FBackendItemInstance>& Owned,
+	const int32 DockedStationId,
+	const bool bStationHandlesShips,
+	const int64 ActiveHullId)
+{
+	TArray<FSpaceMMOShipRowText> Rows;
+
+	for (const FBackendItemInstance& Instance : Owned)
+	{
+		// By category, not by key. `hull_shuttle` and `shuttle_hull_section` are one prefix match
+		// away from listing a component as a ship, and both are already shipped.
+		if (Instance.Category != EBackendItemCategory::Hull)
+		{
+			continue;
+		}
+
+		FSpaceMMOShipRowText Row;
+
+		Row.HullId = Instance.Id;
+		Row.Name = Instance.Name;
+		Row.Condition = FString::Printf(TEXT("%d%%"), Instance.Condition);
+		Row.bIsActive = ActiveHullId != 0 && Instance.Id == ActiveHullId;
+
+		const bool bHere = DockedStationId != 0 && Instance.StationId == DockedStationId;
+
+		Row.Where = bHere ? TEXT("Here") : TEXT("At another station");
+
+		// The reasons, in the order a player can act on them. Standing somewhere ships are not
+		// handled is worth saying before "it is already yours to fly", because one of them sends
+		// somebody walking and the other is not a problem.
+		if (Row.bIsActive && bHere)
+		{
+			Row.Refusal = TEXT("Already here");
+		}
+		else if (!bStationHandlesShips)
+		{
+			Row.Refusal = TEXT("Not a shipyard");
+		}
+		else
+		{
+			Row.bCanSummon = true;
+		}
+
+		Rows.Add(Row);
+	}
+
+	return Rows;
+}
+
+FString USpaceMMOStationOverlay::BuildShipsFooter(
+	const TArray<FBackendItemInstance>& Owned, const bool bStationHandlesShips)
+{
+	int32 Hulls = 0;
+
+	for (const FBackendItemInstance& Instance : Owned)
+	{
+		if (Instance.Category == EBackendItemCategory::Hull)
+		{
+			++Hulls;
+		}
+	}
+
+	// An empty list is the ordinary state for most of the opening, so it says what to do next rather
+	// than reporting that there is nothing. "No ships" alone is a dead end wearing a label.
+	if (Hulls == 0)
+	{
+		return TEXT("No ships yet. Craft a hull to fly one.");
+	}
+
+	return bStationHandlesShips
+		? FString::Printf(TEXT("%d ship(s)."), Hulls)
+		: FString::Printf(TEXT("%d ship(s). Ships are summoned at a spaceport."), Hulls);
+}

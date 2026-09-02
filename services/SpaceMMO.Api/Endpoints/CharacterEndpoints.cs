@@ -95,7 +95,8 @@ public sealed record ItemInstanceResponse(
     string Name,
     int Condition,
     InventoryKind Kind,
-    int? StationId);
+    int? StationId,
+    ItemCategory Category);
 
 /// <summary>
 /// Everything a character owns, in the two shapes owning something can take.
@@ -383,7 +384,12 @@ public static class CharacterEndpoints
                 i.ItemDef.Name,
                 i.Condition,
                 i.Inventory!.Kind,
-                i.Inventory.StationId))
+                i.Inventory.StationId,
+
+                // What kind of thing it is, so a client can tell a hull from a tool without
+                // reading its key. Key prefixes look like they would do -- and `hull_shuttle`
+                // against `shuttle_hull_section` is one Component away from proving they do not.
+                i.ItemDef.Category))
             .ToListAsync(cancellation);
 
         // Every container, not only the ones holding something. Transfer is addressed by inventory

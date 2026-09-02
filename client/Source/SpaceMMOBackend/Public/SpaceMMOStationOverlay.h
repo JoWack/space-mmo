@@ -21,6 +21,55 @@ enum class ESpaceMMOStationTab : uint8
 	 * be anywhere -- see task 119.
 	 */
 	MyOrders,
+
+	/**
+	 * The hulls this character owns, and which of them can be brought here (ADR-0012).
+	 *
+	 * On the station overlay rather than behind a key, because summoning is a thing you do standing
+	 * still at a station, and it belongs where the rest of a station's business is.
+	 */
+	Ships,
+};
+
+/**
+ * One hull a character owns, as a row in the Ships tab.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FSpaceMMOShipRowText
+{
+	GENERATED_BODY()
+
+	/** The instance id, which is what a summon names. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	int64 HullId = 0;
+
+	/** "Shuttle", "Freighter". */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Name;
+
+	/** "Here", or "At another station" -- where the hull is now. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Where;
+
+	/** Condition as a player reads it, e.g. "100%". */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Condition;
+
+	/**
+	 * Why the button is off, or empty when it is on.
+	 *
+	 * A reason rather than a disabled control with no explanation: "Summon" greyed out with nothing
+	 * beside it is the interface telling somebody they are wrong without saying about what.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Refusal;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bCanSummon = false;
+
+	/** True for the ship this character currently flies. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bIsActive = false;
 };
 
 /**
@@ -302,6 +351,24 @@ public:
 	 * A dash rather than a zero where nobody is trading: zero is a legal price, and a market showing
 	 * "0.00 cr" for an item nobody has ever offered is stating a price that does not exist.
 	 */
+	/**
+	 * One owned hull, already worded.
+	 *
+	 * <strong>Every row is answerable from where the player is standing.</strong> A hull somewhere
+	 * else is still listed -- knowing you own a freighter at the capital is the point of a fleet
+	 * list -- but the row says where it is and why the button is off, rather than offering an action
+	 * that fails.
+	 */
+	static TArray<FSpaceMMOShipRowText> BuildShipRows(
+		const TArray<FBackendItemInstance>& Owned,
+		int32 DockedStationId,
+		bool bStationHandlesShips,
+		int64 ActiveHullId);
+
+	/** What the tab says when there is nothing in it. */
+	static FString BuildShipsFooter(
+		const TArray<FBackendItemInstance>& Owned, bool bStationHandlesShips);
+
 	static TArray<FSpaceMMOMarketRowText> BuildMarketRows(
 		const TArray<FBackendMarketListing>& Listings);
 
