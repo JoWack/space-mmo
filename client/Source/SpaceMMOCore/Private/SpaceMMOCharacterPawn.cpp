@@ -214,6 +214,10 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 	Gravity = FVector::ZeroVector;
 	const bool bWasOnGround = bOnGround;
 
+	// Nothing to stand on yet. Recorded rather than ignored, so the first planet to appear can put
+	// the character on the ground instead of above it.
+	bool bFoundAPlanet = false;
+
 	bOnGround = false;
 	SurfaceNormal = FVector::UpVector;
 
@@ -221,7 +225,39 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 
 	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
 	{
+		bFoundAPlanet = true;
+
 		const FPlanetConfig& Planet = It->GetPlanetConfig();
+
+		// The first planet this character has ever seen, and it is below them: the spawn placed
+		// them above where the ground was going to be, because at that moment nothing could say
+		// where that was.
+		//
+		// Placed rather than dropped, using the same height function contact uses -- so this is not
+		// the spawn positioning somebody by hand, it is the ground being met immediately instead of
+		// after fifty metres of falling. Which planet's terrain it lands on is whatever the actor is
+		// wearing now, so a body reshaped by content after the spawn is still the one answered
+		// against (task 129).
+		if (bAwaitingFirstGround)
+		{
+			bAwaitingFirstGround = false;
+
+			const FVector Up =
+				(Navigation.SystemPosition.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
+
+			if (!Up.IsNearlyZero())
+			{
+				Navigation.SystemPosition = FSystemCoordinate(FPlanetTerrain::SurfacePosition(
+					Planet, It->GetTerrainConfig(), Up).Kilometres
+					+ (Up * StandingHeightKilometres));
+
+				WalkState.Velocity = FVector::ZeroVector;
+
+				UE_LOG(LogSpaceMMO, Log,
+					TEXT("Stood on the ground at %s rather than falling to it."),
+					*Navigation.SystemPosition.ToString());
+			}
+		}
 
 		Gravity += FPlanetPhysics::GravityAcceleration(Planet, Navigation.SystemPosition);
 
@@ -307,6 +343,13 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 						+ ((Local.Origin.Z + Local.BoxExtent.Z) * Scale.Z));
 			}
 		}
+	}
+
+	// Still no planet. Keep waiting: one arrives a few hundred milliseconds after a connection gets
+	// its pawn, and until then there is nowhere to stand.
+	if (!bFoundAPlanet)
+	{
+		bAwaitingFirstGround = true;
 	}
 
 	// Both answers are in. One of them is now applied.

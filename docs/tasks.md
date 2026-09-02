@@ -4123,6 +4123,30 @@ to measure. The check runs on whatever is built next, which is where it will cat
 The other 142 was committed first and is cited from the milestone list above, so this one
 moved rather than that one. Nothing outside this file referred to the old number.
 
+## 143 — A character is dropped into the world from fifty metres up
+
+**Done 1 September**, awaiting a playtest. Belongs to **M5 — an interface**, as part of what the
+opening feels like.
+
+Spawning fell. `SpaceMMOGameMode` places a character above where the ground will be and lets contact
+catch them, and the comment says why: *"so ground contact catches the character rather than the spawn
+positioning it onto the ground by hand — which is what proves the height function and the mesh agree
+about where the ground is."*
+
+**The deeper reason is not that, and it is why this could not simply be deleted.** A connection is
+given its pawn 323 ms before the world has a planet in it — measured, and recorded in the game mode.
+At the moment of spawning there is nothing to ask where the surface is. Dropping is robust to that,
+and robust to the planet arriving wearing terrain the spawn had never heard of, which is task 129's
+whole subject.
+
+So the character is placed **the first time a planet appears** rather than at spawn: same height
+function contact uses, applied at once instead of after a fall, and answered against whatever terrain
+the actor is wearing by then. Not the spawn positioning somebody by hand — the ground being met
+immediately.
+
+It logs `Stood on the ground at ... rather than falling to it.`, so a spawn that still falls is a
+spawn where no planet was ever found, which is a different fault with a different fix.
+
 ---
 
 ## Done

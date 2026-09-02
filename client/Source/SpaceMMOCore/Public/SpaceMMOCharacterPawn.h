@@ -303,6 +303,21 @@ private:
 	/** Applies what the height field decided, which every path that declines geometry must do. */
 	void StandOnGround(const FGroundContact& Ground);
 
+	/**
+	 * Whether this character is still waiting to meet the ground for the first time.
+	 *
+	 * <strong>A connection gets its pawn before the world has a planet in it</strong> — 323 ms
+	 * apart, measured, and recorded in SpaceMMOGameMode. So the spawn cannot place anybody on the
+	 * surface: there is nothing to ask where the surface is. It puts them above where the ground
+	 * will be and lets contact catch them, which is robust to the planet arriving late and to it
+	 * arriving wearing terrain the spawn had never heard of (task 129).
+	 *
+	 * Robust, and it reads as being dropped into the world from fifty metres up. So the first time a
+	 * planet does appear, the character is placed on it rather than dropped onto it — the same
+	 * contact function either way, applied at once instead of after a fall.
+	 */
+	bool bAwaitingFirstGround = false;
+
 	/** What the character is currently standing on, if it is geometry. Diagnostic only. */
 	TWeakObjectPtr<const AActor> StoodOn;
 
