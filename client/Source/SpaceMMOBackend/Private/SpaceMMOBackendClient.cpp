@@ -439,7 +439,15 @@ void USpaceMMOBackendClient::Send(
 				return;
 			}
 
-			OnSuccess(ResponseBody);
+			// Checked, because "succeeded, and nobody needs the answer" is a real shape: the
+			// whereabouts write is fire and forget, and there is nothing useful to do with a 200
+			// that the next write does not already do. Calling an unbound TFunction asserts
+			// (Function.cpp:9) and takes the game down -- fifteen seconds after launch, on the
+			// first tick of the timer, which is a long way from the line that passed the null.
+			if (OnSuccess)
+			{
+				OnSuccess(ResponseBody);
+			}
 		});
 
 	Request->ProcessRequest();

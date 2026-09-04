@@ -4256,6 +4256,25 @@ checks the column as well as the status code.
   `bResumedFromRecord` is sticky: the first-planet placement from **146** re-arms itself every frame
   there is no planet, and would otherwise fire later and move them.
 
+### It crashed the game on the first write, and the guard was already there
+
+**Found in a playtest, 3 September.** Fifteen seconds after launch, every time: `Assertion failed:
+Callable [Function.cpp:9] Attempting to call an unbound TFunction!`, from
+`SpaceMMOBackendClient.cpp:442` by way of `FCurlHttpRequest::FinishRequest` — the callstack is in
+`SpaceMMO.log:2244` and names the line.
+
+The whereabouts write is fire and forget, so it passed `nullptr` for the success handler, and
+`Send` called it unconditionally. **Its twin was already guarded**: `if (OnFailure)` sits eleven
+lines above the crash. One branch had been checked and the other had not, and passing a null into
+the unchecked one without looking is the whole of the fault.
+
+Fixed in `Send` rather than at the call site, because "succeeded, and nobody needs the answer" is a
+shape any later caller will reach for. Those two are the only `TFunction` call sites in the module;
+everything else uses `ExecuteIfBound`, which is safe by construction.
+
+**The request had already returned 2xx**, so the migration, the service credential and the write
+were all working — the crash was on the way back, after the work was done.
+
 ### How it would fail
 
 - A returning player standing at the configured start point, falling. Look for
