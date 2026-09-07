@@ -4404,12 +4404,23 @@ It also means **nobody has ever flown a hull they crafted**. Summoning, holds, b
 Ships tab are all built and tested against hulls inserted by hand, and the first end-to-end run of
 the thing they exist for has never happened.
 
-### What each break wants
+### Break one is fixed, 6 September
 
-**The level gate** is a content decision, not code: either `build_shuttle_hull_section` drops to
-shipcrafting 1, or a level-1 shipcrafting recipe exists below it for the same reason
-`craft_crude_mining_laser` needs no tool — "or the chain could never start", as its own comment
-says. Dropping the requirement is one number; a starter recipe is a new item nobody has designed.
+`build_shuttle_hull_section` now requires **shipcrafting 1**, and the recipe carries why. The
+alternative — a level-1 shipcrafting recipe below it — is a new item nobody has designed, and it
+would exist only to be a stepping stone.
+
+The chain past it works out, and tightly: crafting the section pays 900 XP and the quest pays 900
+more, which is 1800 against the 1154 that shipcrafting 10 needs for the shuttle. The materials are
+just as tight — *Salvage Rights* gathers 10 scrap alloy, the mining laser eats 8, and the hull
+section needs exactly the 2 that are left.
+
+**`TheOpeningCanBeWalkedTests` is the test this leaves behind**, and it fails on both breaks: put
+the level back to 5 and it reports *"By this point the questline has paid out 0 shipcrafting XP,
+which is level 1"*; empty its `KnownUnobtainable` set and it reports the thruster. That set is the
+remaining half of this task written down where a build can see it.
+
+### Break two is still open
 
 **The thruster** wants a faction **supply** order: the mirror of the standing order that already
 exists, selling a small set of authored items at a price deliberately above what players would

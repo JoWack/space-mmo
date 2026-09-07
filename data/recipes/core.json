@@ -29,11 +29,12 @@
       ]
     },
     {
+      "$comment": "Level 1, and it has to be. Every source of shipcrafting XP in the pack is a recipe requiring level 5 or more, or a quest rewarded for running one of them -- so a requirement above 1 here is a skill nobody can ever start, and the onboarding chain stopped dead at 'Bones of a Ship' (task 148). The same reasoning craft_crude_mining_laser records for needing no tool: or the chain could never start.",
       "key": "build_shuttle_hull_section",
       "output": "shuttle_hull_section",
       "outputQuantity": 1,
       "skill": "shipcrafting",
-      "requiredLevel": 5,
+      "requiredLevel": 1,
       "jobSeconds": 300,
       "xpPerRun": 900,
       "requiredTool": null,
