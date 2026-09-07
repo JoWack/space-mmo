@@ -1957,8 +1957,8 @@ its first frame climbing out of ground it was already inside.
   end to end** — retiring it first leaves a game with no ship at all, which is correct by ADR-0012
   and unplayable. Turning the flag off is the whole of the change; the questline is the blocker.
 - **The questline that hands over the first hull**, which is what makes the flag safe to turn off.
-  **Blocked by 148**: `assemble_hull_shuttle` needs a `crude_thruster` and nothing in the game sells,
-  crafts or grants one, so the chain stops one step from its point and cannot be walked end to end.
+  **Blocked by 148**, which breaks in two places: shipcrafting cannot be levelled past 1, and
+  nothing sells, crafts or grants a `crude_thruster`. The chain cannot be walked end to end.
 - **A restored pilot flies a generic pawn, not their hull.** Task 147 spawns a plain
   `ASpaceMMOShipPawn` for somebody who quit in flight; now that `AboardShipItemInstanceId` says
   which hull they were in, that spawn can carry the id and a character whose hull has since been
@@ -4341,12 +4341,42 @@ were all working — the crash was on the way back, after the work was done.
 
 ---
 
-## 148 — The questline cannot be finished, because nothing sells a thruster
+## 148 — The questline cannot be finished, and it breaks in two places
 
 **Pending.** Found in a playtest on 6 September: Joe opened the industry panel to craft a hull and
-asked where Crude Thruster comes from. It comes from nowhere.
+asked where Crude Thruster comes from. It comes from nowhere — and measuring that turned up a
+second break, one step earlier, which is the one he would have hit first.
 
-**`assemble_hull_shuttle` needs one `crude_thruster`, and there is no way to obtain one.**
+**Retitled the same day.** It was written as "nothing sells a thruster" before the skill gate was
+measured. Same task, fuller diagnosis: the subject is the chain, not the item.
+
+### Break one: shipcrafting cannot be levelled at all
+
+`build_shuttle_hull_section` requires **shipcrafting 5**, which is 388 XP on
+`SkillCurve` — and every source of shipcrafting XP in shipped content sits behind that gate or
+higher:
+
+| Source | Needs | Grants |
+| --- | --- | --- |
+| `build_shuttle_hull_section` | shipcrafting 5 | 900 |
+| `assemble_hull_shuttle` | shipcrafting 10 | 1200 |
+| `build_alloy_frame` | shipcrafting 20 | 4000 |
+| `assemble_hull_freighter` | shipcrafting 25 | 9000 |
+| quest `intro_build_hull` | crafting a hull section | 900 |
+| quest `intro_assemble_ship` | crafting a shuttle | 1200 |
+
+A new character has 0. **The only way to earn shipcrafting XP is to do something that needs
+shipcrafting 5**, including the quest, whose objective is that very craft. `IndustryService` enforces
+it (`level < recipe.RequiredLevel` throws `SkillTooLowException`), so this is not a display fault —
+the job cannot start.
+
+Every other skill in the chain starts at a recipe requiring level 1: toolcrafting has
+`craft_crude_mining_laser`, refining has `refine_ferrite_plate`, and gathering and mining are earned
+by doing them. Shipcrafting is the only one with no ground floor.
+
+### Break two: nothing sells a Crude Thruster
+
+`assemble_hull_shuttle` needs one `crude_thruster`, and there is no way to obtain one.
 
 - No recipe produces it. It is the only input in `data/recipes/core.json` with no recipe of its own.
 - No quest grants it. The whole of `main-story.json` grants credits and skill XP, never an item.
@@ -4355,48 +4385,54 @@ asked where Crude Thruster comes from. It comes from nowhere.
   last resort, and there is no purchase path in the service at all.
 - The player market cannot supply it, because no player can make one either.
 
-So the onboarding chain stops dead one step from its point. `intro_assemble_ship` — "Your Own Two
-Hands" — is uncompletable, and so is `intro_fly_to_capital` behind it.
+**The content already says what the answer is.** `data/items/core.json` on `crude_thruster`: *"The
+one intentional exception to everything being player-made. Bought from a faction supply order so the
+onboarding chain can complete before the electronics skill exists. Remove once players can
+manufacture thrusters."*
 
-### The content already says what the answer is
+The decision was made and written down; the supply order was never built. That is the same shape as
+the combat milestone that lived in three ADRs and no roadmap — a comment describing a mechanism
+nothing implements reads exactly like one describing a mechanism that does.
 
-`data/items/core.json` on `crude_thruster`: *"The one intentional exception to everything being
-player-made. Bought from a faction supply order so the onboarding chain can complete before the
-electronics skill exists. Remove once players can manufacture thrusters."*
+### Why it matters more than two rows of content
 
-**The decision was made and written down; the supply order was never built.** This is the same shape
-as the combat milestone that existed in three ADRs and no roadmap — a comment describing a mechanism
-that nothing implements reads exactly like one describing a mechanism that does.
+**It is what blocks retiring the prop ship**, task 115's last open item. Joe's instruction on 31
+August was to keep `bSpawnStarterShip` until the questline is verifiable end to end, and the
+questline cannot be walked at all. 115 cannot close, and neither can the opening ADR-0012 describes.
 
-### Why it matters more than one item
+It also means **nobody has ever flown a hull they crafted**. Summoning, holds, boarding and the
+Ships tab are all built and tested against hulls inserted by hand, and the first end-to-end run of
+the thing they exist for has never happened.
 
-**It is what blocks retiring the prop ship**, which is task 115's last open item. Joe's instruction
-on 31 August was to keep `bSpawnStarterShip` until the questline is verifiable end to end, and the
-questline cannot be verified at all until this exists. 115 cannot close, and neither can the opening
-ADR-0012 describes.
+### What each break wants
 
-It also means **nobody has ever flown a hull they crafted**, so every ship in this game to date has
-been the prop. Summoning, holds and boarding are all built and tested against hulls inserted by
-hand.
+**The level gate** is a content decision, not code: either `build_shuttle_hull_section` drops to
+shipcrafting 1, or a level-1 shipcrafting recipe exists below it for the same reason
+`craft_crude_mining_laser` needs no tool — "or the chain could never start", as its own comment
+says. Dropping the requirement is one number; a starter recipe is a new item nobody has designed.
 
-### What it wants
+**The thruster** wants a faction **supply** order: the mirror of the standing order that already
+exists, selling a small set of authored items at a price deliberately above what players would
+charge, for the same reason the buy price is deliberately below — it must never be the good deal, or
+it replaces the market rather than backstopping it. Three things to settle:
 
-A faction **supply** order: the mirror of the standing order that already exists, selling a small
-set of authored items at a price deliberately above what players would charge, for the same reason
-the buy price is deliberately below — it must never be the good deal, or it replaces the market
-rather than backstopping it.
-
-Three things to settle in the building:
-
-1. **Whether credits spent here leave the economy.** The buy side routes through `FaucetBudget`
+1. **Whether credits spent there leave the economy.** The buy side routes through `FaucetBudget`
    because it creates credits. This destroys them, which is a sink rather than a faucet, and the two
-   want thinking about together rather than one at a time.
-2. **What else is on the list.** A supply order that sells exactly one item is a special case
-   wearing a general name. The honest minimum is the items the content marks as not player-made,
-   and today that is one.
-3. **Where a player buys it**, which is an interface question: the Market tab already exists and
-   already lists what the faction pays, so it is the obvious home — but "what the faction sells" is
-   a second list on a screen built around one.
+   want thinking about together.
+2. **What else is on the list.** A supply order selling exactly one item is a special case wearing a
+   general name. The honest minimum is whatever the content marks as not player-made, and today that
+   is one thing.
+3. **Where a player buys it**, which is an interface question. The Market tab already lists what the
+   faction pays, so it is the obvious home — but "what the faction sells" is a second list on a
+   screen built around one.
+
+### How this was missed
+
+Every part of it is individually tested and correct. The recipes load, the skill curve is right, the
+gate is enforced, the quests chain in the right order, and EconSim runs five simulated years over
+the same pack. **Nothing anywhere asks whether a new character can actually walk the chain**, and
+that is the test this task should leave behind: start from nothing, follow `main-story.json` in
+order, and assert each step is reachable with what the previous ones give you.
 
 ---
 
