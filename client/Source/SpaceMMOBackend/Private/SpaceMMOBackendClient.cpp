@@ -1115,6 +1115,33 @@ void USpaceMMOBackendClient::FetchQuests(const int32 CharacterId)
 		});
 }
 
+void USpaceMMOBackendClient::TurnInQuest(const int32 CharacterId, const FString& QuestKey)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		TEXT("/quests/turn-in"),
+		FSpaceMMOBackendProtocol::MakeAcceptQuestBody(CharacterId, QuestKey),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			USpaceMMOBackendClient* Self = WeakThis.Get();
+
+			if (Self == nullptr)
+			{
+				return;
+			}
+
+			// Everything the payout moved, asked for rather than adjusted here: the balance, the
+			// skill the quest rewards, the journal, and whatever becomes available next. A client
+			// that added the numbers itself would be guessing at a faucet cap it cannot see.
+			Self->SelectCharacter(CharacterId);
+			Self->FetchCharacters();
+			Self->FetchQuests(CharacterId);
+		});
+}
+
 void USpaceMMOBackendClient::AcceptQuest(const int32 CharacterId, const FString& QuestKey)
 {
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);

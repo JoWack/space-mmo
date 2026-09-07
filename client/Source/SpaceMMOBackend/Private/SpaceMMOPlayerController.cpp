@@ -532,6 +532,23 @@ void ASpaceMMOPlayerController::AcceptNextQuest()
 		return;
 	}
 
+	// Finished work first. A player standing on a quest that is done wants paying, and offering
+	// them the next one before the reward for the last is the wrong order to do two things in --
+	// the chain hands out one at a time, so these are never both waiting anyway.
+	for (const FBackendJournalEntry& Entry : Client->GetJournal())
+	{
+		if (Entry.State != EBackendQuestState::ReadyToTurnIn)
+		{
+			continue;
+		}
+
+		Client->TurnInQuest(CharacterId, Entry.QuestKey);
+
+		ShowNotice(FString::Printf(TEXT("Handed in %s"), *Entry.Name), true);
+
+		return;
+	}
+
 	const TArray<FBackendAvailableQuest>& Available = Client->GetAvailableQuests();
 
 	if (Available.Num() == 0)
@@ -1120,9 +1137,23 @@ TArray<FString> ASpaceMMOPlayerController::BuildQuestPanel(
 	// The hint only when the key does something. Advertising it with nothing on offer is how a
 	// quest already running came to read as one waiting to be accepted -- the player pressed the
 	// key the header named, got "Nothing to accept", and concluded the system was broken.
-	Lines.Add(Available.Num() > 0
-		? TEXT("-- Quests --  J accepts the next one")
-		: TEXT("-- Quests --"));
+	// Names what the key will actually do. One key doing the obvious next thing is only obvious
+	// while the panel says which thing that is -- and handing in comes first, because a player
+	// standing on finished work wants paying before they are offered more of it.
+	const FBackendJournalEntry* Ready = Journal.FindByPredicate(
+		[](const FBackendJournalEntry& Entry)
+		{ return Entry.State == EBackendQuestState::ReadyToTurnIn; });
+
+	if (Ready != nullptr)
+	{
+		Lines.Add(FString::Printf(TEXT("-- Quests --  J hands in %s"), *Ready->Name));
+	}
+	else
+	{
+		Lines.Add(Available.Num() > 0
+			? TEXT("-- Quests --  J accepts the next one")
+			: TEXT("-- Quests --"));
+	}
 
 	bool bAnyActive = false;
 

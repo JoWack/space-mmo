@@ -453,6 +453,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Quests")
 	void AcceptQuest(int32 CharacterId, const FString& QuestKey);
 
+	/**
+	 * Hands in a quest whose objectives are done, and collects the reward.
+	 *
+	 * The server refuses anything it has not already moved to <c>ReadyToTurnIn</c>, so this is a
+	 * player choosing to collect rather than a client claiming to have finished. Asking is safe
+	 * even when the answer is no.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Quests")
+	void TurnInQuest(int32 CharacterId, const FString& QuestKey);
+
 	/** Fires when the catalog or the job list changes. */
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Industry")
 	FOnBackendIndustryChanged OnIndustryChanged;

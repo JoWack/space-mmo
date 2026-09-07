@@ -278,6 +278,77 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.NotEqual(0, gatedInDatabase);
     }
 
+    /// <summary>
+    /// A finished quest waits to be handed in, all the way from the pack to the column.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The assertion that crosses the boundary, and the one that was missing.</strong>
+    /// <c>QuestDef.RequiresTurnIn</c> existed, <c>QuestService</c> branched on it, and every test of
+    /// the service passed — including one proving a quest that requires turning in finishes unpaid.
+    /// What nothing checked was whether any <em>shipped</em> quest could ever set it. Content had no
+    /// field for it and the loader never wrote it, so the column was false for all seven, the
+    /// ReadyToTurnIn state was unreachable, and every quest paid out on the last swing of a pickaxe
+    /// (task 150).
+    /// </para>
+    /// <para>
+    /// Asserted against the pack rather than a literal seven, for the reason the counts above are.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task QuestsAreHandedIn_RatherThanPayingOutWhereThePlayerStands()
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        Assert.NotEmpty(pack.Quests);
+
+        foreach (QuestContent quest in pack.Quests)
+        {
+            QuestDef stored = await verify.QuestDefs.SingleAsync(q => q.Key == quest.Key);
+
+            Assert.True(
+                stored.RequiresTurnIn == quest.TurnInRequired,
+                $"'{quest.Key}' is authored as turn-in {quest.TurnInRequired} and reached the "
+                + $"database as {stored.RequiresTurnIn}. The loader is dropping the field, which "
+                + "leaves every quest paying out the instant its last objective completes.");
+        }
+
+        // And that the shipped pack really does require it, which the loop above would satisfy
+        // just as happily if everything were false on both sides.
+        Assert.True(
+            await verify.QuestDefs.AllAsync(q => q.RequiresTurnIn),
+            "Every shipped quest should be handed in rather than paying out where the player "
+            + "stands. A quest that opts out is authoring requiresTurnIn: false deliberately.");
+    }
+
+    /// <summary>
+    /// Content that says nothing gets a hand-in; content that says false gets its way.
+    /// </summary>
+    /// <remarks>
+    /// The default is the load-bearing half. Whether System.Text.Json honours an optional
+    /// constructor parameter's default for an absent property has changed between versions, and a
+    /// silent false is exactly the bug being fixed — so the pack models "unspecified" as null and
+    /// resolves it in one place, and this is what holds that down.
+    /// </remarks>
+    [Fact]
+    public void AQuestThatSaysNothingAboutHandingIn_IsHandedIn()
+    {
+        QuestContent silent = new(
+            "silent", "Silent", QuestKind.MainStory, null, 0, null, 0, null, []);
+
+        Assert.True(silent.TurnInRequired);
+
+        QuestContent optedOut = new(
+            "auto", "Auto", QuestKind.MainStory, null, 0, null, 0, null, [], RequiresTurnIn: false);
+
+        Assert.False(optedOut.TurnInRequired);
+    }
+
     [Fact]
     public async Task TheShippedContentReallyLocksTheFourMaterials()
     {

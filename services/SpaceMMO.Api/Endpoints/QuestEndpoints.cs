@@ -2,11 +2,22 @@ using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Data;
 using SpaceMMO.Data.Quests;
+using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Quests;
 
 namespace SpaceMMO.Api.Endpoints;
 
 public sealed record AcceptQuestRequest(int CharacterId, string QuestKey);
+
+public sealed record TurnInQuestRequest(int CharacterId, string QuestKey);
+
+/// <summary>What handing a quest in paid.</summary>
+/// <param name="WithheldMinorUnits">
+/// Credits the daily faucet cap kept back. Reported rather than hidden, so a player who was paid
+/// less than the quest advertises can be told why instead of concluding the reward is wrong.
+/// </param>
+public sealed record TurnInQuestResponse(
+    string QuestKey, long GrantedMinorUnits, long WithheldMinorUnits);
 
 /// <summary>
 /// One quest in a character's journal, including what it currently wants.
@@ -60,6 +71,7 @@ public static class QuestEndpoints
         RouteGroupBuilder group = routes.MapGroup("/quests").WithTags("Quests");
 
         group.MapPost("/accept", AcceptAsync);
+        group.MapPost("/turn-in", TurnInAsync);
         group.MapGet("/journal/{characterId:int}", JournalAsync);
         group.MapGet("/available/{characterId:int}", AvailableAsync);
     }
@@ -98,6 +110,60 @@ public static class QuestEndpoints
             // SingleAsync throws this when the quest key matches nothing. A bad key is the
             // caller's mistake, not a server fault.
             return Results.NotFound(new { error = $"No quest with key '{request.QuestKey}'." });
+        }
+    }
+
+    /// <summary>
+    /// Hands in a quest whose objectives are already done, and pays out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A player's own token, like accepting, and for the same reason.</strong> Choosing to
+    /// hand in is a player's decision; whether the work was done is not, and the service refuses
+    /// anything the server has not already moved to <c>ReadyToTurnIn</c>. A client asserting that a
+    /// step is finished remains impossible — that is a consequence of what a character did,
+    /// recorded by whichever service did it.
+    /// </para>
+    /// <para>
+    /// <strong>The service has existed since 5 August and nothing exposed it</strong>, so every
+    /// quest paid out the moment its last objective completed and the whole
+    /// <c>ReadyToTurnIn</c> state was unreachable (task 150). The endpoint is the missing middle,
+    /// not new behaviour.
+    /// </para>
+    /// <para>
+    /// A conflict rather than a not-found when the quest is not ready: the quest exists and the
+    /// character has it, and "you have not finished it yet" is a state that changes rather than a
+    /// missing resource.
+    /// </para>
+    /// </remarks>
+    private static async Task<IResult> TurnInAsync(
+        TurnInQuestRequest request,
+        HttpContext context,
+        Caller caller,
+        QuestService quests,
+        CancellationToken cancellation)
+    {
+        OwnershipResult owned =
+            await caller.ServiceOrOwnedCharacterAsync(context, request.CharacterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        try
+        {
+            FaucetGrant reward = await quests.TurnInAsync(
+                request.CharacterId, request.QuestKey, cancellation);
+
+            return Results.Ok(new TurnInQuestResponse(
+                request.QuestKey,
+                reward.Granted.MinorUnits,
+                reward.Withheld.MinorUnits));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = "not_ready" });
         }
     }
 

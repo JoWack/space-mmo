@@ -4528,6 +4528,69 @@ own. `PanelSeparatesHeldFromOffered` now checks the pair, including the ordering
 
 ---
 
+## 150 — Quests pay themselves out, because nothing could ever hand one in
+
+**Done 7 September**, awaiting a playtest. Found in a playtest the same day: Joe gathered the scrap
+for Salvage Rights, and instead of the quest reading READY TO HAND IN it paid out and closed on the
+last unit. *"That shouldn't happen."*
+
+**The hand-in mechanism was entirely built and unreachable at three separate levels.**
+
+1. **Content could not ask for it.** `QuestDef.RequiresTurnIn` existed on the entity with a
+   paragraph explaining itself, and `RecordProgressAsync` branched on it — but `QuestContent` had no
+   such field, the loader never wrote one, and the seeder never set it. All seven shipped quests
+   were `false`, so the service set `ReadyToTurnIn` and paid out two lines later in the same call.
+2. **No endpoint exposed it.** `QuestService.TurnInAsync` was written on 5 August, documented, and
+   covered by four tests. `QuestEndpoints` mapped `accept`, `journal` and `available`.
+3. **No client path.** The panel could render `READY TO HAND IN` — there was even a test for that
+   wording — and nothing anywhere could act on it.
+
+So the state was displayable and unreachable, and every quest in the game finished itself.
+
+### Settled by Joe, 7 September
+
+**Handing in is the norm, not the exception.** `requiresTurnIn` defaults to **true** when content
+says nothing; a quest opts out by authoring `false`. Nothing had to be added to
+`main-story.json` — the default is the decision.
+
+**One key does the obvious next thing.** J hands in finished work if there is any, and otherwise
+accepts what is on offer, and the panel header always names which: *"J hands in Salvage Rights"* or
+*"J accepts the next one"*. The chain grants one quest at a time, so the two are never both waiting
+— and finished work comes first, because a player standing on a completed quest wants paying before
+being offered more of it.
+
+### A nullable in content, and why it is not a plain bool
+
+`QuestContent.RequiresTurnIn` is `bool?`, resolved by `TurnInRequired => RequiresTurnIn ?? true`.
+Whether System.Text.Json honours an optional constructor parameter's default for an *absent* JSON
+property has changed between versions, and a silent `false` there is precisely the bug being fixed.
+Null cannot be mistaken for an authored value, and the seeder resolves it in one place.
+
+### The tests that were missing, which is the interesting part
+
+Every existing test passed throughout, including `AQuestRequiringTurnIn_FinishesUnpaid` — a service
+test that proves exactly the behaviour players never saw, because it seeded `RequiresTurnIn = true`
+by hand. **A service nobody can call still behaves correctly when called.**
+
+Two new ones cross the boundaries nothing was watching:
+
+- `QuestsAreHandedIn_RatherThanPayingOutWhereThePlayerStands` loads the shipped pack into a database
+  and asserts the column matches what content asked for, and that the shipped quests really do
+  require it. Deleting the loader's one assignment turns it red.
+- `QuestEndpointTests` posts to `/quests/turn-in` over HTTP. A missing route is invisible everywhere
+  else: the client gets a 404 and quietly does nothing, which looks exactly like an unbound key.
+
+### How it would fail
+
+- Gathering the tenth scrap and being paid immediately — that is the seeder still writing `false`,
+  so check `select key, requires_turn_in from quest_defs`.
+- `READY TO HAND IN` showing but J saying nothing happened: the route or the token, and the API log
+  will say which.
+- Being paid twice for one quest. `TurnInAsync` refuses the second and the endpoint answers 409, and
+  there is a test for it, but it is the failure worth watching for.
+
+---
+
 ## Done
 
 Nothing yet under this file's numbering.

@@ -79,6 +79,25 @@ public sealed record QuestStepContent(
 /// <summary>A quest, as authored in <c>data/quests/</c>.</summary>
 /// <param name="RewardCredits">Whole credits, not minor units — content is authored in the unit
 /// designers think in, and converted on load.</param>
+/// <param name="RequiresTurnIn">
+/// Whether finishing the objectives leaves the quest waiting to be handed in, rather than paying
+/// out where the player stands.
+/// </param>
+/// <remarks>
+/// <para>
+/// <strong>Nullable so that "content did not say" is a state, and it resolves to true.</strong>
+/// A quest is finished by going back and reporting it; auto-payment is the exception a quest has to
+/// ask for. Before 7 September nothing could ask for either — the column existed on the entity, the
+/// service branched on it, and content had no field to set it, so every quest paid out on the last
+/// swing of a pickaxe (task 150).
+/// </para>
+/// <para>
+/// A nullable rather than a plain bool defaulting to true, deliberately: whether
+/// System.Text.Json honours an optional constructor parameter's default for an absent property has
+/// changed between versions, and a silent false there is the exact bug being fixed. Null cannot be
+/// mistaken for an authored value, and the seeder resolves it in one place.
+/// </para>
+/// </remarks>
 public sealed record QuestContent(
     string Key,
     string Name,
@@ -88,7 +107,12 @@ public sealed record QuestContent(
     string? RewardSkill,
     long RewardXp,
     int? CooldownSeconds,
-    IReadOnlyList<QuestStepContent> Steps);
+    IReadOnlyList<QuestStepContent> Steps,
+    bool? RequiresTurnIn = null)
+{
+    /// <summary>What the seeder writes: true unless the content says otherwise.</summary>
+    public bool TurnInRequired => RequiresTurnIn ?? true;
+}
 
 /// <summary>A star system, as authored in <c>data/universe/</c>.</summary>
 /// <param name="GalaxyX">Galaxy-space coordinates in kilometres, int64 (ADR-0001). These never

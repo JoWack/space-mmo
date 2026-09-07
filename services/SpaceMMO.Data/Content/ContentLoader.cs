@@ -297,6 +297,14 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             quest.RewardSkillId = content.RewardSkill is string skill ? skillIds[skill] : null;
             quest.RewardXp = content.RewardXp;
             quest.CooldownSeconds = content.CooldownSeconds;
+
+            // Resolved here rather than at the record, so "the content did not say" is turned into
+            // a value in exactly one place.
+            quest.RequiresTurnIn = content.TurnInRequired;
+
+            // Resolved here rather than at the record, so "the content did not say" is turned into
+            // a value in exactly one place.
+
         }
 
         await _database.SaveChangesAsync(cancellationToken);
