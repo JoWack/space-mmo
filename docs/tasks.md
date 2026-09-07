@@ -1958,18 +1958,17 @@ its first frame climbing out of ground it was already inside.
 
 ### Still open
 
-- **The prop ship is still there.** `bSpawnStarterShip` puts an unowned ship thirty metres from the
-  spawn point, and Joe's instruction on 31 August was to keep it **until the questline is verifiable
-  end to end** — retiring it first leaves a game with no ship at all, which is correct by ADR-0012
-  and unplayable. Turning the flag off is the whole of the change; the questline is the blocker.
+- ~~**The prop ship is still there.**~~ **Off on 7 September** (task 152), once Joe had walked the
+  questline end to end and flown a shuttle he built. `bSpawnStarterShip = false`; the switch stays
+  because it is still the cheapest route to flight while flight is being worked on.
 - **The questline that hands over the first hull**, which is what makes the flag safe to turn off.
   **148 unblocked it on 6 September** — the chain is proved walkable from nothing by
   `TheOpeningCanBeWalkedTests`. What remains is somebody actually walking it in a playtest, which
   is what "verifiable end to end" meant.
-- **A restored pilot flies a generic pawn, not their hull.** Task 147 spawns a plain
-  `ASpaceMMOShipPawn` for somebody who quit in flight; now that `AboardShipItemInstanceId` says
-  which hull they were in, that spawn can carry the id and a character whose hull has since been
-  sold or destroyed can wake on foot instead. One call site, and it wants a playtest of its own.
+- ~~**A restored pilot flies a generic pawn, not their hull.**~~ **Fixed on 7 September**
+  (task 152): the pawn is stamped with its hull the moment the backend answers, which is also what
+  stops a second copy being placed at the station. A character whose hull has since been sold or
+  destroyed still wakes in a pawn rather than on foot, which is the remainder of this.
 
 ### What this changes that is not obvious
 
@@ -4685,6 +4684,52 @@ only disagree for a character who has never been anywhere since the migration la
 - Boarding a summoned ship and ending up inside the station: the reposition is back.
 - Signing in docked and immediately being told "Left docking range": the record is being set before
   the station exists, which is what the wait prevents.
+
+---
+
+## 152 — Coming back in your ship left a copy of it at the station
+
+**Done 7 September**, awaiting a playtest. Reported alongside the prop ship being retired: quitting
+while flying and signing back in left **three** ships — the prop at the spawn point, one at the dock,
+and the one the player was sitting in.
+
+**Two of the three were the same hull.** Task 147 restores a player into a ship pawn at the position
+they left. Task 115 asks the backend which hull is theirs and where it is parked, and the hull is
+still recorded in the hangar it was summoned to — nothing moves it out when somebody climbs in — so
+a second pawn was placed at the station.
+
+**The duplicate guard could not see it.** `PlaceSummonedShip` skips a hull already in the world by
+comparing `HullItemInstanceId`, and 147's restored pawn had none: the restore runs off a position
+and a flag, before anything has asked the backend anything, so it spawned a plain ship pawn with an
+id of zero.
+
+Both halves are answered by the same three lines. `ActiveShipAsync` already reports whether the
+character is aboard, so **a hull somebody is sitting in is never placed** — and that branch is also
+the first moment the hull's identity is known, so it stamps the id onto the restored pawn on the way
+past. `ReportedAboardHullId` is set with it, because the server already has them aboard and the
+alternative is a board request for a state that is already true.
+
+### The prop ship is off, which closes 115
+
+`bSpawnStarterShip = false`. ADR-0012 says nobody starts with a ship, and the prop existed only so
+that flight was reachable before a questline that grants a hull existed. Joe walked that questline
+end to end on 7 September — crafted a shuttle, summoned it, boarded it, flew it — so the scaffolding
+has nothing left to hold up.
+
+Kept as a switch rather than deleted: it is still the cheapest way to reach flight without spending
+a questline on it, which is worth having while flight is being worked on.
+
+### Still open, and it is the next one of these
+
+**A ship left anywhere that is not a station does not come back where you left it.** Pawns do not
+survive a restart, and `PlaceSummonedShip` puts a hull at the station its instance is recorded in —
+so stepping out on a planet, quitting, and signing back in leaves the player on foot beside nothing,
+with their shuttle back at the hangar it was summoned to.
+
+ADR-0012's "where a ship is needs no column" is true exactly while ships live in hangars. Being
+aboard is now a second answer to where a hull is; being parked on a hillside is a third, and nothing
+records it. That wants deciding before somebody loses a freighter to it — the honest options are a
+position on the hull instance, or a rule that a ship left outside a station is recovered to one.
 
 ---
 

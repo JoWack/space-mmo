@@ -76,13 +76,19 @@ protected:
 	double StartingDropKilometres = 0.05;
 
 	/**
-	 * Whether to leave a ship on the ground for the player to board.
+	 * Whether to leave an unowned ship on the ground for anyone to board.
 	 *
-	 * Scaffolding until 115 makes summoning real, and deliberately a separate flag so that turning
-	 * it off is how "nobody starts with a ship" gets tested before the questline exists.
+	 * <strong>Off since 7 September, and that is task 115 closing.</strong> ADR-0012 says nobody
+	 * starts with a ship, and this existed only so that flight — the most-tested thing in the
+	 * project — was reachable before a questline that grants a hull existed. On 7 September Joe
+	 * walked that questline end to end, crafted a shuttle, summoned it and flew it, so the
+	 * scaffolding has nothing left to hold up.
+	 *
+	 * Kept as a switch rather than deleted: it is still the cheapest way to reach flight without
+	 * spending a questline on it, which is worth having while flight is being worked on.
 	 */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO")
-	bool bSpawnStarterShip = true;
+	bool bSpawnStarterShip = false;
 
 private:
 	void SpawnTestScene();

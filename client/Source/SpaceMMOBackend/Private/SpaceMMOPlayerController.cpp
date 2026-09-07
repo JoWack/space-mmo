@@ -1788,9 +1788,38 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship
 		return;
 	}
 
-	// Not parked at a station at all, which is what being flown looks like from the database: the
-	// hull instance is in a hold rather than a hangar. Nothing to place -- either somebody is
-	// already in it, or task 147 is about to put them back in it.
+	// Already being flown, which is the answer that matters most on a sign-in: task 147 has
+	// restored the player into a ship pawn and the hull is still recorded in the hangar it was
+	// summoned to, so placing one here put a second copy at the station every time somebody quit
+	// in flight and came back.
+	//
+	// It is also where the restored pawn learns which hull it is. The restore runs before anything
+	// has asked the backend anything -- it has a position and a flag and nothing else -- so the
+	// pawn is spawned without an id and this is the first moment one is known.
+	if (Ship.bAboard)
+	{
+		if (ASpaceMMOShipPawn* Flying = Cast<ASpaceMMOShipPawn>(GetPawn()))
+		{
+			if (Flying->HullItemInstanceId == 0)
+			{
+				Flying->HullItemInstanceId = Ship.HullItemInstanceId;
+
+				// The server already has them aboard this hull, so there is nothing to report --
+				// only something to stop being reported. Without this the next possession would
+				// send a board request for a state that is already true.
+				ReportedAboardHullId = Ship.HullItemInstanceId;
+
+				UE_LOG(LogSpaceMMOBackend, Log,
+					TEXT("The ship character %d came back in is %s (hull %lld)."),
+					CharacterId, *Ship.Name, Ship.HullItemInstanceId);
+			}
+		}
+
+		return;
+	}
+
+	// Not parked at a station at all: the hull instance is in a hold rather than a hangar, so
+	// there is nowhere to put it and nobody in it either.
 	if (Ship.StationId == 0)
 	{
 		return;
