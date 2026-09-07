@@ -1957,6 +1957,8 @@ its first frame climbing out of ground it was already inside.
   end to end** — retiring it first leaves a game with no ship at all, which is correct by ADR-0012
   and unplayable. Turning the flag off is the whole of the change; the questline is the blocker.
 - **The questline that hands over the first hull**, which is what makes the flag safe to turn off.
+  **Blocked by 148**: `assemble_hull_shuttle` needs a `crude_thruster` and nothing in the game sells,
+  crafts or grants one, so the chain stops one step from its point and cannot be walked end to end.
 - **A restored pilot flies a generic pawn, not their hull.** Task 147 spawns a plain
   `ASpaceMMOShipPawn` for somebody who quit in flight; now that `AboardShipItemInstanceId` says
   which hull they were in, that spawn can carry the id and a character whose hull has since been
@@ -4336,6 +4338,65 @@ were all working — the crash was on the way back, after the work was done.
   arrives.
 - A second ship parked at the world's starting point after a flying restore. That is
   `bSpawnStarterShip` scaffolding, not this — **115** retires it.
+
+---
+
+## 148 — The questline cannot be finished, because nothing sells a thruster
+
+**Pending.** Found in a playtest on 6 September: Joe opened the industry panel to craft a hull and
+asked where Crude Thruster comes from. It comes from nowhere.
+
+**`assemble_hull_shuttle` needs one `crude_thruster`, and there is no way to obtain one.**
+
+- No recipe produces it. It is the only input in `data/recipes/core.json` with no recipe of its own.
+- No quest grants it. The whole of `main-story.json` grants credits and skill XP, never an item.
+- The faction does not sell it. `FactionOrderService` has `SellAsync` and nothing else — it is
+  documented as "the faction standing orders that **buy** raw material for credits", the faucet of
+  last resort, and there is no purchase path in the service at all.
+- The player market cannot supply it, because no player can make one either.
+
+So the onboarding chain stops dead one step from its point. `intro_assemble_ship` — "Your Own Two
+Hands" — is uncompletable, and so is `intro_fly_to_capital` behind it.
+
+### The content already says what the answer is
+
+`data/items/core.json` on `crude_thruster`: *"The one intentional exception to everything being
+player-made. Bought from a faction supply order so the onboarding chain can complete before the
+electronics skill exists. Remove once players can manufacture thrusters."*
+
+**The decision was made and written down; the supply order was never built.** This is the same shape
+as the combat milestone that existed in three ADRs and no roadmap — a comment describing a mechanism
+that nothing implements reads exactly like one describing a mechanism that does.
+
+### Why it matters more than one item
+
+**It is what blocks retiring the prop ship**, which is task 115's last open item. Joe's instruction
+on 31 August was to keep `bSpawnStarterShip` until the questline is verifiable end to end, and the
+questline cannot be verified at all until this exists. 115 cannot close, and neither can the opening
+ADR-0012 describes.
+
+It also means **nobody has ever flown a hull they crafted**, so every ship in this game to date has
+been the prop. Summoning, holds and boarding are all built and tested against hulls inserted by
+hand.
+
+### What it wants
+
+A faction **supply** order: the mirror of the standing order that already exists, selling a small
+set of authored items at a price deliberately above what players would charge, for the same reason
+the buy price is deliberately below — it must never be the good deal, or it replaces the market
+rather than backstopping it.
+
+Three things to settle in the building:
+
+1. **Whether credits spent here leave the economy.** The buy side routes through `FaucetBudget`
+   because it creates credits. This destroys them, which is a sink rather than a faucet, and the two
+   want thinking about together rather than one at a time.
+2. **What else is on the list.** A supply order that sells exactly one item is a special case
+   wearing a general name. The honest minimum is the items the content marks as not player-made,
+   and today that is one.
+3. **Where a player buys it**, which is an interface question: the Market tab already exists and
+   already lists what the faction pays, so it is the obvious home — but "what the faction sells" is
+   a second list on a screen built around one.
 
 ---
 
