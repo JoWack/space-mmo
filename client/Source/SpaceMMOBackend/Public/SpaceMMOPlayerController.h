@@ -402,6 +402,55 @@ private:
 	void RefreshPossessedPawn();
 
 	/**
+	 * Puts a pawn in the world for the hull this character has summoned (ADR-0012, task 115).
+	 *
+	 * <strong>Server-side, and asked rather than told.</strong> The summon itself is a request the
+	 * client made and the backend accepted; what exists in the world is the simulation's to decide,
+	 * so this asks the backend which hull is actually this character's and where it is parked
+	 * before spawning anything. A client saying "I summoned a freighter" is a client naming a ship
+	 * it would like to have.
+	 *
+	 * Idempotent: a pawn already carrying that hull id is the answer, not a reason to make another.
+	 * Called on summoning and on signing in, and those overlap every time somebody quits beside
+	 * their parked ship.
+	 */
+	void EnsureActiveShipInWorld();
+
+	/** Spawns the ship a resolved answer describes, beside the station it is parked at. */
+	void PlaceSummonedShip(const struct FBackendActiveShip& Ship);
+
+	/**
+	 * Tells the backend what this character is sitting in, when it changes.
+	 *
+	 * Read off the possessed pawn rather than hooked into boarding, because every route into and
+	 * out of a ship comes through possession — boarding, stepping out, being restored into a ship
+	 * on sign-in (task 147), and any route nobody has written yet.
+	 */
+	void ReportBoarding();
+
+	/** The hull the backend has been told this character is in, or 0. Stops repeat requests. */
+	int64 ReportedAboardHullId = 0;
+
+	UFUNCTION(Server, Reliable)
+	void ServerShipSummoned();
+
+	UFUNCTION()
+	void HandleShipSummoned(const FString& ShipName);
+
+	/** How far from a station a summoned ship waits, in kilometres. */
+	static constexpr double SummonedShipOffsetKilometres = 0.03;
+
+	/**
+	 * How far above the ground a summoned ship is placed, in kilometres.
+	 *
+	 * Above rather than on: the server simulates every ship pawn whether anybody is flying it or
+	 * not, so one placed a few metres up settles onto the terrain the same way a landing ship does.
+	 * Placed exactly on the surface it would spend its first frame resolving its way out of the
+	 * ground it was already inside.
+	 */
+	static constexpr double SummonedShipLiftKilometres = 0.005;
+
+	/**
 	 * Puts a returning player back where they were, on foot or flying (task 147).
 	 *
 	 * Runs on the server, once, as soon as both an identity and a pawn exist. Restoring a player

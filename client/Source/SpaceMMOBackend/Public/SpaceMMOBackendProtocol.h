@@ -57,6 +57,15 @@ public:
 		TArray<FBackendInventoryContainer>& OutContainers);
 
 	/** Parses a resolved identity. Fails if the character id is missing or zero. */
+	/**
+	 * Reads which ship a character has and where it is.
+	 *
+	 * A hull id of zero is the ordinary answer for most of the opening rather than a failure, so
+	 * this returns true for it: ADR-0012 has nobody starting with a ship, and a parse that failed
+	 * on "you have none" would make the common case indistinguishable from a broken response.
+	 */
+	static bool ParseActiveShip(const FString& Json, FBackendActiveShip& OutShip);
+
 	static bool ParseResolvedCharacter(const FString& Json, FBackendResolvedCharacter& OutResolved);
 
 	/** Parses one gathering result. */

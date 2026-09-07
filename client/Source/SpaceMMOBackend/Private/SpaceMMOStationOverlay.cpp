@@ -1135,11 +1135,12 @@ void USpaceMMOShipRow::Summon()
 
 	if (USpaceMMOStationOverlay* Overlay = OwningOverlay.Get())
 	{
-		Overlay->SummonShip(Row.HullId);
+		Overlay->SummonShip(Row.HullId, Row.Name);
 	}
 }
 
-void USpaceMMOStationOverlay::SummonShip(const int64 HullItemInstanceId)
+void USpaceMMOStationOverlay::SummonShip(
+	const int64 HullItemInstanceId, const FString& ShipName)
 {
 	ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer());
 
@@ -1152,7 +1153,7 @@ void USpaceMMOStationOverlay::SummonShip(const int64 HullItemInstanceId)
 
 	// No confirmation. Summoning costs nothing and moves a ship the player already owns, so the
 	// worst a misclick does is bring a hull to a station it was going to be brought to eventually.
-	Client->SummonShip(Controller->GetCharacterId(), HullItemInstanceId);
+	Client->SummonShip(Controller->GetCharacterId(), HullItemInstanceId, ShipName);
 }
 
 bool USpaceMMOStationOverlay::StationHandlesShips(const FString& StationKind)

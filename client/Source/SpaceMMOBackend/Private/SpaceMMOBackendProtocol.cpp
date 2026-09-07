@@ -1143,6 +1143,38 @@ bool FSpaceMMOBackendProtocol::ParseCredits(const FString& Text, int64& OutMinor
 	return true;
 }
 
+bool FSpaceMMOBackendProtocol::ParseActiveShip(
+	const FString& Json, FBackendActiveShip& OutShip)
+{
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	if (!Object.IsValid())
+	{
+		return false;
+	}
+
+	// Null for somebody with no ship, which is most of the opening. Absent and null both leave the
+	// id at zero, and zero is the answer -- "you have no ship" is a state, not a fault.
+	int64 HullId = 0;
+
+	if (ReadInt64(Object, TEXT("hullItemInstanceId"), HullId))
+	{
+		OutShip.HullItemInstanceId = HullId;
+	}
+
+	int64 StationId = 0;
+
+	if (ReadInt64(Object, TEXT("stationId"), StationId))
+	{
+		OutShip.StationId = static_cast<int32>(StationId);
+	}
+
+	Object->TryGetStringField(TEXT("name"), OutShip.Name);
+	Object->TryGetBoolField(TEXT("aboard"), OutShip.bAboard);
+
+	return true;
+}
+
 bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(
 	const FString& Json, FBackendResolvedCharacter& OutResolved)
 {

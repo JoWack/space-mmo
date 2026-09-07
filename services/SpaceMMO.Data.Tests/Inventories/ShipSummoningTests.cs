@@ -227,6 +227,243 @@ public sealed class ShipSummoningTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.Null(await Ships(context).ReachableHoldAsync(_pilotId));
     }
 
+    /// <summary>
+    /// The second half of ADR-0012 point 4: sitting in the ship opens its hold.
+    /// </summary>
+    /// <remarks>
+    /// The case the first half cannot cover, and the one hauling is actually made of: a ship in
+    /// flight is docked nowhere at all, so a rule that only asked "are you docked where your ship
+    /// is parked" closed the hold the moment somebody left the station with cargo in it.
+    /// </remarks>
+    [Fact]
+    public async Task Sitting_in_your_ship_opens_its_hold_from_anywhere()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            Inventory hold = await Ships(summon).SummonAsync(_pilotId, hull);
+
+            await Inventories(summon).AddAsync(hold.Id, _oreId, 100, Credits.Zero);
+            await summon.SaveChangesAsync();
+        }
+
+        await using (SpaceMmoDbContext board = _fixture.CreateContext())
+        {
+            await Ships(board).BoardAsync(_pilotId, hull);
+        }
+
+        // Undocked and away. Nothing about being docked is true any more, which is exactly the
+        // state a ship spends most of its life in.
+        await DockAsync(_pilotId, null);
+
+        await using SpaceMmoDbContext flying = _fixture.CreateContext();
+
+        Inventory? reachable = await Ships(flying).ReachableHoldAsync(_pilotId);
+
+        Assert.NotNull(reachable);
+        Assert.Equal(100, await Inventories(flying).QuantityOfAsync(reachable!.Id, _oreId));
+    }
+
+    /// <summary>
+    /// Stepping out closes it again, wherever you are standing.
+    /// </summary>
+    /// <remarks>
+    /// The pair to the test above, and the one that stops "aboard" being a latch. A flag that is
+    /// only ever set opens a hold from a rock on a planet for the rest of a character's life,
+    /// which is the exploit being undocked would have been.
+    /// </remarks>
+    [Fact]
+    public async Task Stepping_out_on_a_planet_closes_the_hold_again()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, hull);
+        }
+
+        await using (SpaceMmoDbContext board = _fixture.CreateContext())
+        {
+            await Ships(board).BoardAsync(_pilotId, hull);
+        }
+
+        await DockAsync(_pilotId, null);
+
+        await using (SpaceMmoDbContext step = _fixture.CreateContext())
+        {
+            await Ships(step).DisembarkAsync(_pilotId);
+
+            // Twice, because a ship is left in ways nobody sends a message about -- a disconnect,
+            // a crash, a server restart -- and every one eventually produces a second one.
+            await Ships(step).DisembarkAsync(_pilotId);
+        }
+
+        await using SpaceMmoDbContext onFoot = _fixture.CreateContext();
+
+        Assert.Null(await Ships(onFoot).ReachableHoldAsync(_pilotId));
+    }
+
+    /// <summary>
+    /// Boarding a hull that is not yours is refused, and changes nothing.
+    /// </summary>
+    /// <remarks>
+    /// Only the game server may say who boarded what, so this guards against a fault rather than a
+    /// hostile client -- a stale pawn, a mistaken cast, a hull sold out from under somebody. It is
+    /// worth one row, because being aboard is what opens a hold.
+    /// </remarks>
+    [Fact]
+    public async Task Boarding_a_hull_that_is_not_yours_is_refused()
+    {
+        long theirs = await OwnAsync(_strangerId, _spaceportId, _shuttleId);
+
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            await Assert.ThrowsAsync<ShipSummonException>(
+                () => Ships(context).BoardAsync(_pilotId, theirs));
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Character pilot = await verify.Characters.SingleAsync(c => c.Id == _pilotId);
+
+        Assert.Null(pilot.AboardShipItemInstanceId);
+
+        // And the refusal did not quietly make it theirs either, which is the worse half of
+        // getting this wrong: boarding sets the active ship, so a missing check would hand over
+        // somebody elses shuttle rather than merely opening its hold.
+        Assert.Null(pilot.ActiveShipItemInstanceId);
+    }
+
+    [Fact]
+    public async Task Boarding_something_that_is_not_a_ship_is_refused()
+    {
+        long laser = await OwnAsync(_pilotId, _spaceportId, _laserId);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await Assert.ThrowsAsync<ShipSummonException>(
+            () => Ships(context).BoardAsync(_pilotId, laser));
+    }
+
+    /// <summary>
+    /// Climbing into the other one changes which ship is yours.
+    /// </summary>
+    /// <remarks>
+    /// The ship you are flying is the ship you are flying. Making somebody summon it again to say
+    /// so would be ceremony, and it would leave the hold of a shuttle they are not in open while
+    /// the one they are sitting in stayed shut.
+    /// </remarks>
+    [Fact]
+    public async Task Boarding_the_other_hull_makes_that_one_the_active_ship()
+    {
+        long first = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        long second = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, first);
+        }
+
+        await using (SpaceMmoDbContext board = _fixture.CreateContext())
+        {
+            await Ships(board).BoardAsync(_pilotId, second);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ShipService.ActiveShip? active = await Ships(verify).ActiveShipAsync(_pilotId);
+
+        Assert.NotNull(active);
+        Assert.Equal(second, active!.HullItemInstanceId);
+        Assert.True(active.Aboard);
+    }
+
+    /// <summary>
+    /// Where the game server is told to put a ship in the world.
+    /// </summary>
+    /// <remarks>
+    /// The station is the load-bearing field: a pawn spawned without it has nowhere to go, and one
+    /// spawned at the wrong station is a ship a player walks out of a hub and cannot find.
+    /// </remarks>
+    [Fact]
+    public async Task An_active_ship_says_where_it_is_parked()
+    {
+        long hull = await OwnAsync(_pilotId, _marketId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, hull);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ShipService.ActiveShip? active = await Ships(verify).ActiveShipAsync(_pilotId);
+
+        Assert.NotNull(active);
+
+        // Summoned to the spaceport, so it is parked there rather than at the market it was left
+        // at. "Summoning elsewhere moves it" is the whole of that sentence.
+        Assert.Equal(_spaceportId, active!.StationId);
+
+        // Named, because the message a player reads says which ship arrived, and "Ship summoned"
+        // is what this field existing prevents.
+        Assert.False(string.IsNullOrWhiteSpace(active.Name));
+
+        // Summoned is not boarded. A ship waiting outside is not one you are sitting in, and the
+        // hold rule turns on the difference.
+        Assert.False(active.Aboard);
+    }
+
+    /// <summary>
+    /// Sitting in one ship does not open the hold of a different one.
+    /// </summary>
+    /// <remarks>
+    /// Reachable without doing anything strange: board the shuttle, walk back into the station and
+    /// summon the freighter. The active ship is now the freighter and the body is still in the
+    /// shuttle, so "aboard" on its own is not the question -- "aboard the ship whose hold this is"
+    /// is, and that is why the two ids are compared rather than one being read for truth.
+    /// </remarks>
+    [Fact]
+    public async Task Sitting_in_one_ship_does_not_open_the_others_hold()
+    {
+        long shuttle = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        long freighter = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext board = _fixture.CreateContext())
+        {
+            await Ships(board).SummonAsync(_pilotId, shuttle);
+            await Ships(board).BoardAsync(_pilotId, shuttle);
+        }
+
+        await using (SpaceMmoDbContext swap = _fixture.CreateContext())
+        {
+            await Ships(swap).SummonAsync(_pilotId, freighter);
+        }
+
+        // Away from the station, so the docked half of the rule cannot answer either.
+        await DockAsync(_pilotId, null);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.Null(await Ships(verify).ReachableHoldAsync(_pilotId));
+    }
+
+    [Fact]
+    public async Task Somebody_with_no_ship_has_no_active_ship()
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        Assert.Null(await Ships(context).ActiveShipAsync(_pilotId));
+    }
+
     private async Task SeedAsync()
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();

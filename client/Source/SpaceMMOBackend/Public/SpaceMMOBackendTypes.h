@@ -719,6 +719,34 @@ struct SPACEMMOBACKEND_API FBackendResolvedCharacter
 	bool bLastSeenFlying = false;
 };
 
+/**
+ * Which hull is a character's, where it is parked, and whether they are sitting in it.
+ *
+ * What the game server asks so it can put a ship in the world (ADR-0012, task 115). Summoning
+ * records the hull and moves it into a hangar; nothing about that puts a pawn anywhere, and the
+ * party that can is the simulation.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendActiveShip
+{
+	GENERATED_BODY()
+
+	/** The hull instance, or 0 for somebody who owns no ship. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 HullItemInstanceId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Name;
+
+	/** Where it is parked, or 0 when it is not in a hangar at all. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 StationId = 0;
+
+	/** Whether the character is currently sitting in it. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bAboard = false;
+};
+
 /** A planet or moon, as the server describes it. */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendBody

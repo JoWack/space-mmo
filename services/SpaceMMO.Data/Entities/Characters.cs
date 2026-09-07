@@ -106,6 +106,32 @@ public class Character
     public ItemInstance? ActiveShipItemInstance { get; set; }
 
     /// <summary>
+    /// The hull this character is sitting in, or null for somebody on foot.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The half of ADR-0012 point 4 the server could not prove.</strong> A hold is reachable
+    /// "docked at a station with their active ship, <em>or sitting in that ship</em>", and nothing
+    /// here knew whether anybody was aboard. Being undocked could not stand in for it: a character
+    /// walking around a planet is undocked too, and that would open the hold from a rock.
+    /// </para>
+    /// <para>
+    /// <strong>Not the same fact as <see cref="LastSeenFlying"/>.</strong> That says a player was in
+    /// a ship pawn; this says which owned hull. They differ while the unowned prop ship exists,
+    /// which is exactly the case that must not open somebody's hold from a shuttle they left at
+    /// another station.
+    /// </para>
+    /// <para>
+    /// Durable across sessions, deliberately. Task 147 restores a player flying the ship they quit
+    /// in, so "sitting in hull 4" has to survive a disconnect — it is cleared by stepping out, not
+    /// by logging off.
+    /// </para>
+    /// </remarks>
+    public long? AboardShipItemInstanceId { get; set; }
+
+    public ItemInstance? AboardShipItemInstance { get; set; }
+
+    /// <summary>
     /// Where this character was last seen, in system kilometres, or null if they never have been.
     /// </summary>
     /// <remarks>

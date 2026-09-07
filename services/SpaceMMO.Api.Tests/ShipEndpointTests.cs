@@ -179,6 +179,167 @@ public sealed class ShipEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifeti
         Assert.Null(elsewhere.HoldInventoryId);
     }
 
+    private sealed record ActiveShipPayload(
+        long? HullItemInstanceId, string? Name, int? StationId, bool Aboard);
+
+    /// <summary>
+    /// A player cannot say they are sitting in their ship.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The refusal that keeps a hold a place rather than an account.</strong> Being aboard
+    /// opens the hold from anywhere in the game, by design — a ship in flight is docked nowhere.
+    /// So a client that could assert it could reach its cargo from a rock on a planet, which is
+    /// exactly the rule ADR-0012 point 4 exists to stop.
+    /// </para>
+    /// <para>
+    /// Summoning takes a player token and this does not, and the line between them is the one
+    /// docking already draws: summoning is a request whose every fact the server checks from its
+    /// own rows, and being aboard is a fact about where a body is in the world.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task A_player_cannot_claim_to_be_aboard_their_own_ship()
+    {
+        await DockAsync(_spaceportId);
+        (await SummonAsync(_hullId)).EnsureSuccessStatusCode();
+
+        var request = new HttpRequestMessage(
+            HttpMethod.Post, new Uri("/ships/board", UriKind.Relative))
+        {
+            Content = JsonContent.Create(
+                new { characterId = _characterId, hullItemInstanceId = _hullId }),
+        };
+
+        // Their own valid token, their own character, their own hull. Still refused.
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        // And nothing was recorded, so the refusal is not a status code on a change that happened
+        // anyway. Undocked, the hold is only reachable to somebody actually sitting in the ship.
+        await DockAsync(null);
+
+        HttpResponseMessage hold = await HoldAsync();
+
+        hold.EnsureSuccessStatusCode();
+
+        HoldPayload? payload = await hold.Content.ReadFromJsonAsync<HoldPayload>();
+
+        Assert.Null(payload!.HoldInventoryId);
+    }
+
+    /// <summary>
+    /// The game server boards somebody, and the hold travels with them.
+    /// </summary>
+    /// <remarks>
+    /// The end-to-end version of ADR-0012 point 4, over the wire the game actually uses: board,
+    /// leave the station entirely, and the hold is still there.
+    /// </remarks>
+    [Fact]
+    public async Task The_game_server_can_board_somebody_and_the_hold_goes_with_them()
+    {
+        await DockAsync(_spaceportId);
+        (await SummonAsync(_hullId)).EnsureSuccessStatusCode();
+
+        var board = new HttpRequestMessage(
+            HttpMethod.Post, new Uri("/ships/board", UriKind.Relative))
+        {
+            Content = JsonContent.Create(
+                new { characterId = _characterId, hullItemInstanceId = _hullId }),
+        };
+
+        board.Headers.Add("X-SpaceMMO-Service", ApiFactory.TestServiceSecret);
+
+        (await _client.SendAsync(board)).EnsureSuccessStatusCode();
+
+        // Away from every station.
+        await DockAsync(null);
+
+        HttpResponseMessage hold = await HoldAsync();
+
+        hold.EnsureSuccessStatusCode();
+
+        HoldPayload? payload = await hold.Content.ReadFromJsonAsync<HoldPayload>();
+
+        Assert.NotNull(payload!.HoldInventoryId);
+
+        // Stepping out closes it again, wherever they are standing. Without this the flag is a
+        // latch, and a latch opens the hold from a planet for the rest of the character's life.
+        var step = new HttpRequestMessage(
+            HttpMethod.Post, new Uri("/ships/disembark", UriKind.Relative))
+        {
+            Content = JsonContent.Create(new { characterId = _characterId }),
+        };
+
+        step.Headers.Add("X-SpaceMMO-Service", ApiFactory.TestServiceSecret);
+
+        (await _client.SendAsync(step)).EnsureSuccessStatusCode();
+
+        HttpResponseMessage after = await HoldAsync();
+
+        after.EnsureSuccessStatusCode();
+
+        Assert.Null((await after.Content.ReadFromJsonAsync<HoldPayload>())!.HoldInventoryId);
+    }
+
+    /// <summary>
+    /// What the game server reads to decide what to put in the world.
+    /// </summary>
+    /// <remarks>
+    /// The station is the load-bearing field, and the field names are pinned here because the game
+    /// client parses them by hand: a parser that finds nothing leaves the hull id at zero, which
+    /// reads as "this character owns no ship" and silently spawns nothing at all.
+    /// </remarks>
+    [Fact]
+    public async Task The_active_ship_says_what_to_spawn_and_where()
+    {
+        await DockAsync(_spaceportId);
+        (await SummonAsync(_hullId)).EnsureSuccessStatusCode();
+
+        var request = new HttpRequestMessage(
+            HttpMethod.Get, new Uri($"/ships/{_characterId}/active", UriKind.Relative));
+
+        request.Headers.Add("X-SpaceMMO-Service", ApiFactory.TestServiceSecret);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string json = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains("\"hullItemInstanceId\":", json);
+        Assert.Contains("\"stationId\":", json);
+
+        ActiveShipPayload? active = await response.Content.ReadFromJsonAsync<ActiveShipPayload>();
+
+        Assert.Equal(_hullId, active!.HullItemInstanceId);
+        Assert.Equal(_spaceportId, active.StationId);
+        Assert.False(active.Aboard);
+        Assert.False(string.IsNullOrWhiteSpace(active.Name));
+    }
+
+    [Fact]
+    public async Task Owning_no_ship_answers_with_nulls_rather_than_a_missing_resource()
+    {
+        var request = new HttpRequestMessage(
+            HttpMethod.Get, new Uri($"/ships/{_characterId}/active", UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        // 200 with nulls, like the hold. Owning no ship is the ordinary state for most of the
+        // opening, and a 404 would have callers treating it as a fault.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        ActiveShipPayload? active = await response.Content.ReadFromJsonAsync<ActiveShipPayload>();
+
+        Assert.Null(active!.HullItemInstanceId);
+    }
+
     private async Task SeedAsync()
     {
         HttpResponseMessage registered = await _client.PostAsJsonAsync(

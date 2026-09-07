@@ -482,7 +482,7 @@ public:
 	void CancelRestingOrder(int64 OrderId);
 
 	/** Brings one of this character's hulls to the station they are docked at. */
-	void SummonShip(int64 HullItemInstanceId);
+	void SummonShip(int64 HullItemInstanceId, const FString& ShipName);
 
 	/** Picks the item whose book is shown below the list. */
 	void SelectMarketItem(int32 ItemDefId);

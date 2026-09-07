@@ -20,11 +20,74 @@
 #include "SpaceMMOCrosshair.h"
 #include "SpaceMMOOnFootReadout.h"
 #include "SpaceMMOCharacterPawn.h"
+#include "SpaceMMOBoarding.h"
 #include "SpaceMMOPlanetActor.h"
+#include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOShipPawn.h"
+#include "SpaceMMOStationActor.h"
 #include "SpaceMMOSkillsScreen.h"
 #include "SpaceMMOStationOverlay.h"
 #include "SpaceMMOTransientMessages.h"
+
+namespace
+{
+	/**
+	 * Where a summoned ship waits: on the ground, a short walk from the station.
+	 *
+	 * <strong>The sideways step is FBoarding's, not a new one.</strong> Offsetting "to the side" of
+	 * something standing on a sphere is the same arithmetic as stepping out of a parked ship, and
+	 * the naive version -- add thirty metres of a world axis -- buries the result in the hillside
+	 * whenever the station is not near the pole that axis points at.
+	 *
+	 * The ground is then asked where it is, rather than assumed to be at the station's own height:
+	 * a station sits on the terrain under it, and thirty metres away the terrain is somewhere else.
+	 */
+	bool ParkingPositionBeside(
+		UWorld* World,
+		const ASpaceMMOStationActor& Station,
+		const double OffsetKilometres,
+		const double LiftKilometres,
+		FSystemCoordinate& OutPosition)
+	{
+		const FSystemCoordinate StationPosition = Station.GetSystemPosition();
+
+		for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+		{
+			const FPlanetConfig& Planet = It->GetPlanetConfig();
+
+			const FVector Up =
+				(StationPosition.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
+
+			if (Up.IsNearlyZero())
+			{
+				continue;
+			}
+
+			// Any tangent direction will do -- there is no side of a station that is its front --
+			// and StepOutPosition flattens whatever it is given into the tangent plane, so a world
+			// axis is a perfectly good thing to hand it.
+			const FSystemCoordinate Beside = FBoarding::StepOutPosition(
+				StationPosition, Up, FVector::UpVector, OffsetKilometres);
+
+			const FVector BesideDirection =
+				(Beside.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
+
+			if (BesideDirection.IsNearlyZero())
+			{
+				continue;
+			}
+
+			OutPosition = FSystemCoordinate(
+				FPlanetTerrain::SurfacePosition(
+					Planet, It->GetTerrainConfig(), BesideDirection).Kilometres
+				+ (BesideDirection * LiftKilometres));
+
+			return true;
+		}
+
+		return false;
+	}
+}
 
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
 {
@@ -993,6 +1056,11 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 		Client->OnIndustryMessage.AddDynamic(
 			this, &ASpaceMMOPlayerController::HandleIndustryMessage);
 
+		// Bound beside the industry delegates and guarded by the same flag, because identity can
+		// resolve more than once and a second binding would say everything twice.
+		Client->OnShipSummoned.AddDynamic(
+			this, &ASpaceMMOPlayerController::HandleShipSummoned);
+
 		Client->FetchRecipes();
 
 		// Polled, because nothing pushes a countdown and nothing pushes another player's trade.
@@ -1523,6 +1591,11 @@ void ASpaceMMOPlayerController::AdoptIdentity(const FBackendResolvedCharacter& R
 		}
 	}
 
+	// A ship summoned in a previous session is still parked where it was left, and nothing has put
+	// a pawn there since the world restarted. Asked once identity exists, which is the first moment
+	// there is anybody to ask about.
+	EnsureActiveShipInWorld();
+
 	RefreshPossessedPawn();
 
 	// Also here, not only in OnRep_CharacterId. A replication callback does not fire on the machine
@@ -1530,6 +1603,198 @@ void ASpaceMMOPlayerController::AdoptIdentity(const FBackendResolvedCharacter& R
 	// OnRep never runs and the panel would sit empty forever. On a dedicated server this is a no-op,
 	// because the connection's controller is not local there.
 	RefreshCharacterState();
+}
+
+void ASpaceMMOPlayerController::ReportBoarding()
+{
+	if (!HasAuthority() || CharacterId == 0)
+	{
+		return;
+	}
+
+	const ASpaceMMOShipPawn* Ship = Cast<ASpaceMMOShipPawn>(GetPawn());
+
+	// Zero for on foot, and zero for the unowned prop the game mode still spawns. Deliberately the
+	// same answer: sitting in a ship nobody owns is not sitting in your ship, and it must not open
+	// the hold of a hull parked at a station on the other side of the system.
+	const int64 Aboard = Ship != nullptr ? Ship->HullItemInstanceId : 0;
+
+	if (Aboard == ReportedAboardHullId)
+	{
+		return;
+	}
+
+	ReportedAboardHullId = Aboard;
+
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr)
+	{
+		return;
+	}
+
+	if (Aboard > 0)
+	{
+		Client->BoardAsServer(CharacterId, Aboard);
+
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Character %d is aboard hull %lld; its hold travels with them."),
+			CharacterId, Aboard);
+
+		return;
+	}
+
+	Client->DisembarkAsServer(CharacterId);
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Character %d is no longer in a ship of their own."), CharacterId);
+}
+
+void ASpaceMMOPlayerController::ServerShipSummoned_Implementation()
+{
+	// Carries nothing. Which hull was summoned, and whether it really was, are the backend's to
+	// say -- this is a nudge telling the server the answer has changed, not a claim about what it
+	// changed to.
+	EnsureActiveShipInWorld();
+}
+
+void ASpaceMMOPlayerController::HandleShipSummoned(const FString& ShipName)
+{
+	ShowTransientMessage(
+		FString::Printf(
+			TEXT("%s summoned. It is waiting outside."),
+			ShipName.IsEmpty() ? TEXT("Your ship") : *ShipName),
+		ESpaceMMOMessageTone::Positive);
+
+	// The world half. The client cannot spawn anything anybody else would see, so it asks the
+	// server to look again at what this character owns.
+	ServerShipSummoned();
+}
+
+void ASpaceMMOPlayerController::EnsureActiveShipInWorld()
+{
+	if (!HasAuthority() || CharacterId == 0)
+	{
+		return;
+	}
+
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr)
+	{
+		return;
+	}
+
+	TWeakObjectPtr<ASpaceMMOPlayerController> WeakThis(this);
+
+	Client->FetchActiveShipAsServer(
+		CharacterId,
+		USpaceMMOBackendClient::FOnActiveShipResolved::CreateLambda(
+			[WeakThis](const FBackendActiveShip& Ship)
+			{
+				if (ASpaceMMOPlayerController* Controller = WeakThis.Get())
+				{
+					Controller->PlaceSummonedShip(Ship);
+				}
+			}));
+}
+
+void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship)
+{
+	UWorld* World = GetWorld();
+
+	if (!HasAuthority() || World == nullptr || Ship.HullItemInstanceId <= 0)
+	{
+		return;
+	}
+
+	// Not parked at a station at all, which is what being flown looks like from the database: the
+	// hull instance is in a hold rather than a hangar. Nothing to place -- either somebody is
+	// already in it, or task 147 is about to put them back in it.
+	if (Ship.StationId == 0)
+	{
+		return;
+	}
+
+	// Already there. Summoning twice, or summoning and then signing in beside it, both arrive here
+	// and neither should make a second copy of one ship.
+	for (TActorIterator<ASpaceMMOShipPawn> It(World); It; ++It)
+	{
+		if (It->HullItemInstanceId == Ship.HullItemInstanceId)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("%s (hull %lld) is already in the world; not spawning another."),
+				*Ship.Name, Ship.HullItemInstanceId);
+
+			return;
+		}
+	}
+
+	const ASpaceMMOStationActor* Station = nullptr;
+
+	for (TActorIterator<ASpaceMMOStationActor> It(World); It; ++It)
+	{
+		if (It->GetStation().Id == Ship.StationId)
+		{
+			Station = *It;
+
+			break;
+		}
+	}
+
+	// The station has not been built in the world yet. Stations arrive from the backend a moment
+	// after a connection does, so this is an ordinary race rather than a fault -- signing in asks
+	// again, and so does the next summon.
+	if (Station == nullptr)
+	{
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Station %d is not in the world yet; %s stays in its hangar for now."),
+			Ship.StationId, *Ship.Name);
+
+		return;
+	}
+
+	FSystemCoordinate Parking;
+
+	if (!ParkingPositionBeside(
+		World,
+		*Station,
+		SummonedShipOffsetKilometres,
+		SummonedShipLiftKilometres,
+		Parking))
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("No planet under station %d, so %s has no ground to sit on."),
+			Ship.StationId, *Ship.Name);
+
+		return;
+	}
+
+	ASpaceMMOShipPawn* Waiting = World->SpawnActorDeferred<ASpaceMMOShipPawn>(
+		ASpaceMMOShipPawn::StaticClass(),
+		FTransform::Identity,
+		nullptr,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (Waiting == nullptr)
+	{
+		return;
+	}
+
+	// Before FinishSpawning, like every other placed spawn: BeginPlay resolves the surface, so a
+	// position applied afterwards is a frame too late.
+	Waiting->SetStartingSystemPosition(Parking.Kilometres);
+	Waiting->HullItemInstanceId = Ship.HullItemInstanceId;
+	Waiting->FinishSpawning(FTransform::Identity);
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("%s (hull %lld) is waiting %.0f m from station %d, at %s."),
+		*Ship.Name,
+		Ship.HullItemInstanceId,
+		SummonedShipOffsetKilometres * 1000.0,
+		Ship.StationId,
+		*Parking.ToString());
 }
 
 void ASpaceMMOPlayerController::RestoreWhereabouts()
@@ -1694,6 +1959,11 @@ void ASpaceMMOPlayerController::RefreshPossessedPawn()
 	// to be pushed onto. Possessing the ship calls straight back into here, so the work is not
 	// skipped -- it is done once, on the pawn the player is actually going to be in.
 	RestoreWhereabouts();
+
+	// What they are sitting in, which decides whether a hold opens (ADR-0012 point 4). Here rather
+	// than in the boarding code because every route into and out of a ship comes through
+	// possession, including being restored into one on sign-in.
+	ReportBoarding();
 
 	// Identity can arrive before or after a pawn — the backend round trip races possession — so
 	// both orders have to work. This handles "identity last"; the component asks the controller

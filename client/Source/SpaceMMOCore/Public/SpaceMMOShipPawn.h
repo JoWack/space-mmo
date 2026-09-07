@@ -83,6 +83,25 @@ public:
 	void SetSystemPosition(const FSystemCoordinate& NewPosition);
 
 	/**
+	 * Which owned hull this pawn is, or 0 for a ship nobody owns.
+	 *
+	 * <strong>The link between a row in a database and a thing in the world (ADR-0012).</strong>
+	 * Summoning records which hull is yours and moves it into a hangar; this is how the pawn that
+	 * appears says which one it is, so that boarding it can tell the server what somebody is
+	 * sitting in — which is what opens its hold.
+	 *
+	 * Zero is the prop the game mode still spawns so that flight is reachable before the questline
+	 * that grants a hull exists. It is deliberately not a valid hull: boarding it makes somebody a
+	 * pilot of nothing, which is exactly what it is.
+	 *
+	 * <strong>Core knows the number and nothing else about it.</strong> No item, no inventory, no
+	 * request — an integer the backend layer sets and reads, so this module stays free of any
+	 * notion that a server exists.
+	 */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "SpaceMMO|Ship")
+	int64 HullItemInstanceId = 0;
+
+	/**
 	 * Where the ship will be when it begins play.
 	 *
 	 * Must be called on a deferred spawn, before FinishSpawning — the same contract as

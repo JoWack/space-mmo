@@ -10,6 +10,16 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendFailed, const FBackendFail
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharactersLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharacterStateLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendDepositsLoaded, int32, BodyId);
+
+/**
+ * A summon the server accepted, and the name of the ship that arrived.
+ *
+ * Carries the name so the message a player reads says which ship it was. The name comes from the
+ * row they pressed rather than from a second request: it is display text on a decision that has
+ * already been made, and the server's answer to "which hull is now yours" is the id, which is the
+ * part that has to be right.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendShipSummoned, const FString&, ShipName);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendBodiesLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendStationsLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
@@ -193,6 +203,30 @@ public:
 	 */
 	void RecordWhereaboutsAsServer(
 		int32 CharacterId, const FVector& PositionKilometres, bool bFlying);
+
+	/** Reports which hull a character has and where it is parked. */
+	DECLARE_DELEGATE_OneParam(FOnActiveShipResolved, const FBackendActiveShip& /*Ship*/);
+
+	/**
+	 * Asks which ship this character has, so the server can put a pawn where it is parked.
+	 *
+	 * Service credential, because the caller is the simulation deciding what exists in the world.
+	 * The same question with a player's own token answers a screen; with this one it answers
+	 * "what do I have to spawn".
+	 */
+	void FetchActiveShipAsServer(int32 CharacterId, FOnActiveShipResolved OnResolved);
+
+	/**
+	 * Records that a character has climbed into one of their hulls, or stepped out (ADR-0012).
+	 *
+	 * <strong>Service credential, unlike summoning, and the difference decides a rule.</strong>
+	 * Summoning is a request whose every fact the server can check from its own rows. Being aboard
+	 * is a fact about where a body is in the world, which only the simulation knows — and it opens
+	 * a hold, so a client that could assert it could open its own cargo from anywhere in the game.
+	 */
+	void BoardAsServer(int32 CharacterId, int64 HullItemInstanceId);
+
+	void DisembarkAsServer(int32 CharacterId);
 
 	/** Loads every body in the starting system. Unauthenticated, like the deposits. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
@@ -393,7 +427,11 @@ public:
 	 * the same transient message channel as everything else a player is told no about.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
-	void SummonShip(int32 CharacterId, int64 HullItemInstanceId);
+	void SummonShip(int32 CharacterId, int64 HullItemInstanceId, const FString& ShipName);
+
+	/** Fires on a summon the server accepted. */
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
+	FOnBackendShipSummoned OnShipSummoned;
 
 	/** Loads the journal and the list of quests that could be taken. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Quests")

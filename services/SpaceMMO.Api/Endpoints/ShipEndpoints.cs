@@ -11,6 +11,15 @@ public sealed record SummonShipRequest(int CharacterId, long HullItemInstanceId)
 /// <param name="CapacityM3">How much it carries. Zero when there is no hold to speak of.</param>
 public sealed record ShipHoldResponse(long? HoldInventoryId, double CapacityM3);
 
+public sealed record BoardShipRequest(int CharacterId, long HullItemInstanceId);
+
+public sealed record DisembarkRequest(int CharacterId);
+
+/// <summary>Which hull a character would fly, where it is parked, and whether they are in it.</summary>
+/// <param name="StationId">The station it is parked at, or null if it is not in a hangar.</param>
+public sealed record ActiveShipResponse(
+    long? HullItemInstanceId, string? Name, int? StationId, bool Aboard);
+
 /// <summary>
 /// Summoning a hull you own, and finding the hold of the ship you have with you (ADR-0012).
 /// </summary>
@@ -34,6 +43,114 @@ public static class ShipEndpoints
 
         group.MapPost("/summon", SummonAsync);
         group.MapGet("/{characterId:int}/hold", HoldAsync);
+        group.MapGet("/{characterId:int}/active", ActiveAsync);
+        group.MapPost("/board", BoardAsync);
+        group.MapPost("/disembark", DisembarkAsync);
+    }
+
+    /// <summary>
+    /// Which hull is this character's, and where is it sitting.
+    /// </summary>
+    /// <remarks>
+    /// What the game server asks so it can put a ship in the world where the player can walk to it.
+    /// A player's own token works too, because every field is one they can already see in the Ships
+    /// tab.
+    /// </remarks>
+    private static async Task<IResult> ActiveAsync(
+        int characterId,
+        HttpContext context,
+        Caller caller,
+        ShipService ships,
+        CancellationToken cancellation)
+    {
+        OwnershipResult owned =
+            await caller.ServiceOrOwnedCharacterAsync(context, characterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        ShipService.ActiveShip? active = await ships.ActiveShipAsync(characterId, cancellation);
+
+        // A 200 with nulls rather than a 404, exactly as the hold answers. Owning no ship is the
+        // ordinary state for most of the opening, and a missing-resource error would have callers
+        // treating it as a fault.
+        return Results.Ok(active is null
+            ? new ActiveShipResponse(null, null, null, false)
+            : new ActiveShipResponse(
+                active.HullItemInstanceId, active.Name, active.StationId, active.Aboard));
+    }
+
+    /// <summary>
+    /// Records that a character has climbed into one of their hulls.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Service credential only, unlike summoning, and the difference is the same one
+    /// docking draws.</strong> Summoning is a request the server can check every fact of from its
+    /// own rows. Being aboard is a fact about where a body is in the world, which only the
+    /// simulation knows — and it opens a hold, so a client that could assert it could open its own
+    /// cargo from anywhere in the game.
+    /// </remarks>
+    private static async Task<IResult> BoardAsync(
+        BoardShipRequest request,
+        HttpContext context,
+        ServiceCredential service,
+        ShipService ships,
+        CancellationToken cancellation)
+    {
+        if (!service.IsServiceCaller(context))
+        {
+            return Results.Problem(
+                title: "Who is sitting in what is decided by the game server.",
+                detail: "Only the simulation knows who boarded anything.",
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        try
+        {
+            await ships.BoardAsync(request.CharacterId, request.HullItemInstanceId, cancellation);
+
+            return Results.Ok(new ActiveShipResponse(
+                request.HullItemInstanceId, null, null, true));
+        }
+        catch (ShipSummonException refusal)
+        {
+            // 409 like summoning's refusals: nothing about the request is malformed, and the game
+            // server asking to board a hull that is not this character's is a fault worth reading
+            // rather than a validation error.
+            return Results.Problem(
+                title: refusal.Message,
+                detail: "cannot_board",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+    }
+
+    private static async Task<IResult> DisembarkAsync(
+        DisembarkRequest request,
+        HttpContext context,
+        ServiceCredential service,
+        ShipService ships,
+        CancellationToken cancellation)
+    {
+        if (!service.IsServiceCaller(context))
+        {
+            return Results.Problem(
+                title: "Who is sitting in what is decided by the game server.",
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        try
+        {
+            await ships.DisembarkAsync(request.CharacterId, cancellation);
+
+            return Results.Ok(new ActiveShipResponse(null, null, null, false));
+        }
+        catch (ShipSummonException refusal)
+        {
+            return Results.Problem(
+                title: refusal.Message, statusCode: StatusCodes.Status404NotFound);
+        }
     }
 
     private static async Task<IResult> SummonAsync(

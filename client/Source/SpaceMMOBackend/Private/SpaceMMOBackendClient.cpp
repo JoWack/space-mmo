@@ -1019,7 +1019,8 @@ void USpaceMMOBackendClient::FetchMyOrders(const int32 CharacterId)
 		});
 }
 
-void USpaceMMOBackendClient::SummonShip(const int32 CharacterId, const int64 HullItemInstanceId)
+void USpaceMMOBackendClient::SummonShip(
+	const int32 CharacterId, const int64 HullItemInstanceId, const FString& ShipName)
 {
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
 
@@ -1028,7 +1029,7 @@ void USpaceMMOBackendClient::SummonShip(const int32 CharacterId, const int64 Hul
 		TEXT("/ships/summon"),
 		FSpaceMMOBackendProtocol::MakeSummonShipBody(CharacterId, HullItemInstanceId),
 		true,
-		[WeakThis, CharacterId](const FString&)
+		[WeakThis, CharacterId, ShipName](const FString&)
 		{
 			USpaceMMOBackendClient* Self = WeakThis.Get();
 
@@ -1037,7 +1038,10 @@ void USpaceMMOBackendClient::SummonShip(const int32 CharacterId, const int64 Hul
 				return;
 			}
 
-			Self->OnIndustryMessage.Broadcast(TEXT("Ship summoned"), true);
+			// Named, and only on the answer. Saying it on the press would announce a ship for
+			// every refusal too -- standing at a market, owning nothing, undocked -- and those are
+			// exactly the cases a player most needs told the truth about.
+			Self->OnShipSummoned.Broadcast(ShipName);
 
 			// Both have moved: the hull now sits in this station's hangar, and the character has an
 			// active ship it did not have. Asked for rather than adjusted here -- a client that
@@ -1207,6 +1211,71 @@ void USpaceMMOBackendClient::RecordWhereaboutsAsServer(
 		bFlying ? TEXT("true") : TEXT("false"));
 
 	Send(TEXT("POST"), TEXT("/whereabouts"), Body, false, nullptr, ServiceSecret);
+}
+
+void USpaceMMOBackendClient::FetchActiveShipAsServer(
+	const int32 CharacterId, FOnActiveShipResolved OnResolved)
+{
+	if (ServiceSecret.IsEmpty() || CharacterId == 0)
+	{
+		OnResolved.ExecuteIfBound(FBackendActiveShip());
+
+		return;
+	}
+
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/ships/%d/active"), CharacterId),
+		FString(),
+		false,
+		[OnResolved](const FString& Body)
+		{
+			FBackendActiveShip Ship;
+
+			FSpaceMMOBackendProtocol::ParseActiveShip(Body, Ship);
+
+			OnResolved.ExecuteIfBound(Ship);
+		},
+		ServiceSecret);
+}
+
+void USpaceMMOBackendClient::BoardAsServer(
+	const int32 CharacterId, const int64 HullItemInstanceId)
+{
+	if (ServiceSecret.IsEmpty() || CharacterId == 0 || HullItemInstanceId <= 0)
+	{
+		return;
+	}
+
+	Send(
+		TEXT("POST"),
+		TEXT("/ships/board"),
+		FString::Printf(
+			TEXT("{\"characterId\":%d,\"hullItemInstanceId\":%lld}"),
+			CharacterId,
+			HullItemInstanceId),
+		false,
+		nullptr,
+		ServiceSecret);
+}
+
+void USpaceMMOBackendClient::DisembarkAsServer(const int32 CharacterId)
+{
+	if (ServiceSecret.IsEmpty() || CharacterId == 0)
+	{
+		return;
+	}
+
+	// Sent even when the server believes nobody was aboard, because the service is idempotent for
+	// the reason undocking is: a ship is left in ways nobody sends a message about, and the cost of
+	// one redundant request is far below the cost of a hold that stays open on a planet.
+	Send(
+		TEXT("POST"),
+		TEXT("/ships/disembark"),
+		FString::Printf(TEXT("{\"characterId\":%d}"), CharacterId),
+		false,
+		nullptr,
+		ServiceSecret);
 }
 
 void USpaceMMOBackendClient::FetchBodies()

@@ -1749,7 +1749,7 @@ belongs with 115.
 
 ## 115 — A ship is a thing you earn, and its hold belongs to it
 
-**In progress.** Decided 15 August:
+**In progress**, and everything but the questline is now built — 6 September. Decided 15 August:
 [ADR-0012](adr/0012-a-ship-is-earned-and-carries-its-own-hold.md). The ADR is the decision; what
 follows is the shape of the work and what it runs into.
 
@@ -1836,12 +1836,32 @@ messages are written to be shown to a player as they stand.
 an inventory screen opens and having no ship to hand is an ordinary state; a missing-resource error
 would have callers treating it as a fault.
 
-### Still open
+### Done: sitting in that ship, which is the other half of point 4
 
-- **"Sitting in that ship" is not checked**, and it is half of ADR-0012 point 4. Nothing on the
-  server knows whether a character is aboard, and being undocked cannot stand in for it — somebody
-  walking around a planet is undocked too, and that would open the hold from a rock. It wants the
-  server told when somebody boards, which is a change to the pawn rather than to the service.
+**6 September.** `Character.AboardShipItemInstanceId`, written by the game server when a pawn is
+possessed and cleared when one is left. `ReachableHoldAsync` now answers both halves of the rule:
+docked where your ship is parked, **or** sitting in it — and the second is the half hauling is
+actually made of, because a ship in flight is docked nowhere at all.
+
+**Not the same fact as task 147's `LastSeenFlying`.** That says somebody was in a ship pawn; this
+says which owned hull. They differ while the unowned prop exists, and that difference is exactly the
+case that must not open a hold: sitting in a ship nobody owns is not sitting in your ship.
+
+**Aboard is compared against the active hull rather than believed on its own.** The active hull is
+the one ownership was proved for, at summoning and again at boarding. That comparison is reachable
+without doing anything strange — board the shuttle, walk back inside and summon the freighter, and
+your body is in one ship while your active ship is the other. Loosening it to "aboard anything"
+turns exactly one test red.
+
+**Boarding is a service-credential write, unlike summoning**, and the line is the one docking draws.
+Summoning is a request whose every fact the server checks from its own rows; being aboard is a fact
+about where a body is in the world, and it opens a hold from anywhere in the game. A client that
+could assert it could reach its cargo from a rock on a planet.
+
+**Reported from possession rather than from the boarding code.** Every route into and out of a ship
+comes through `OnPossess` — boarding, stepping out, and being restored into a ship on sign-in
+(task 147) — including routes nobody has written yet.
+
 ### Done: the Ships tab's wording, as a pure function
 
 `BuildShipRows` and `BuildShipsFooter` on the station overlay, following the panel-builder pattern:
@@ -1891,23 +1911,36 @@ strands somebody at a shipyard with a ship they cannot call.
 refusal is the one that decides; this one stops a button already displaying "Not a shipyard" from
 sending a request whose only possible answer is the sentence already on screen.
 
-### Still open
+### Done: a summoned ship is a thing in the world
 
-- **No ship in the world.** Summoning records which hull is yours and gives it a hold; nothing spawns
-  a pawn for it. The game mode still puts an unowned prop ship thirty metres from the player, so the
-  Ships tab is testable — press Summon, watch the row become "Already here" — and the ship being
-  flown is still the prop.
-- **A Widget Blueprint for the tab and its rows.** `ShipRows`, `ShipsFooterText` and `ShipRowClass`
-  are optional bindings, so the overlay works without them and the tab is simply empty until they
-  exist. `USpaceMMOShipRow` wants a Widget Blueprint parented to it with `NameText`, `WhereText`,
-  `ConditionText`, `RefusalText` and a button bound to `Summon`. The game mode still spawns an unowned prop ship thirty metres from the player so that
-  boarding has something to board, and summoning a hull does not put a pawn anywhere — it records
-  which hull is yours and gives it a hold.
+**6 September.** Pressing Summon now puts a ship pawn on the ground beside the station, about thirty
+metres out, and says so: *"Shuttle summoned. It is waiting outside."* Placement and wording both
+settled by Joe the same day, against sketches.
 
-  Those two are one piece of work and they want doing together: retiring the prop before a summoned
-  ship can appear leaves a game with no ship at all, which is correct by ADR-0012 and unplayable
-  until the questline is finished. Both need the interface question answered first — where
-  summoning lives, and what a player with no ship sees.
+**The pawn carries the hull instance id**, which is the link between a row in a database and a thing
+in the world. Zero is the prop, deliberately — boarding it makes somebody the pilot of nothing,
+which is what it is.
+
+**Asked, not told.** The client's summon is a request the backend accepted; what exists in the world
+is the simulation's to decide, so the server asks `GET /ships/{id}/active` for which hull is actually
+this character's and where it is parked before spawning anything. A client saying "I summoned a
+freighter" is a client naming a ship it would like to have.
+
+**Idempotent, and it has to be.** A pawn already carrying that hull id is the answer rather than a
+reason to make a second one — summoning twice, and signing in beside a ship summoned last session,
+both arrive at the same place.
+
+**The sideways step is `FBoarding::StepOutPosition`, not new arithmetic.** Offsetting to the side of
+something standing on a sphere is the same problem as stepping out of a parked ship, and the naive
+version — add thirty metres of a world axis — buries the result in the hillside whenever the
+station is not near the pole that axis points at. The ground is then asked where it is rather than
+assumed to be at the station's height, because thirty metres away the terrain is somewhere else.
+
+Placed five metres up rather than exactly on the surface: the server simulates every ship pawn
+whether anybody is flying it or not, so it settles the way a landing ship does instead of spending
+its first frame climbing out of ground it was already inside.
+
+### What the ADR decides, for reference
 
 - **Nobody starts with a ship.** A player crafts a hull and **summons** it — at a docking station or
   ship hangar — through the main questline.
@@ -1916,6 +1949,18 @@ sending a request whose only possible answer is the sentence already on screen.
   hulls as instances.
 - **A hold is reachable only when the player is with it**: docked at a station with their active
   ship, or sitting in that ship with the inventory open.
+
+### Still open
+
+- **The prop ship is still there.** `bSpawnStarterShip` puts an unowned ship thirty metres from the
+  spawn point, and Joe's instruction on 31 August was to keep it **until the questline is verifiable
+  end to end** — retiring it first leaves a game with no ship at all, which is correct by ADR-0012
+  and unplayable. Turning the flag off is the whole of the change; the questline is the blocker.
+- **The questline that hands over the first hull**, which is what makes the flag safe to turn off.
+- **A restored pilot flies a generic pawn, not their hull.** Task 147 spawns a plain
+  `ASpaceMMOShipPawn` for somebody who quit in flight; now that `AboardShipItemInstanceId` says
+  which hull they were in, that spawn can carry the id and a character whose hull has since been
+  sold or destroyed can wake on foot instead. One call site, and it wants a playtest of its own.
 
 ### What this changes that is not obvious
 

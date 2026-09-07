@@ -429,6 +429,10 @@ void ASpaceMMOShipPawn::GetLifetimeReplicatedProps(
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
+	// To everyone, not just the owner. Which hull a ship is decides what it is called and, later,
+	// what it looks like, and both of those are things other players see from outside it.
+	DOREPLIFETIME(ASpaceMMOShipPawn, HullItemInstanceId);
+
 	DOREPLIFETIME(ASpaceMMOShipPawn, NetState);
 }
 
