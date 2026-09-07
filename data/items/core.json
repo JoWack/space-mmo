@@ -81,7 +81,7 @@
       "name": "Crude Thruster",
       "category": "Component",
       "volumeM3": 5.0,
-      "$comment": "The one intentional exception to everything being player-made. Bought from a faction supply order so the onboarding chain can complete before the electronics skill exists. Remove once players can manufacture thrusters."
+      "$comment": "Was the one intentional exception to everything being player-made, bought from a faction supply order that was never built -- so the questline could not be finished at all from the first day of content until 6 September (task 148). craft_crude_thruster makes it now, under electronics, brought forward one milestone. Joe on being offered the shop instead: every item in the game should be craftable."
     },
     {
       "key": "shuttle_hull_section",

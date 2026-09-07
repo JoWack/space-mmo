@@ -5,6 +5,7 @@
     { "key": "mining", "name": "Mining", "category": "Life" },
     { "key": "refining", "name": "Refining", "category": "Life" },
     { "key": "toolcrafting", "name": "Toolcrafting", "category": "Life" },
-    { "key": "shipcrafting", "name": "Shipcrafting", "category": "Life" }
+    { "key": "shipcrafting", "name": "Shipcrafting", "category": "Life" },
+    { "$comment": "Ahead of the rest of the post-M1 list, because the opening needed it. crude_thruster was authored as the one thing players could not make, waiting on this skill, and the faction supply order that was supposed to sell it in the meantime was never built -- so the questline could not be finished at all (task 148). Everything is player-made, so the skill arrives rather than the exception staying.", "key": "electronics", "name": "Electronics", "category": "Life" }
   ]
 }

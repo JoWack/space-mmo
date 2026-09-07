@@ -79,7 +79,7 @@ Three categories. The M1 slice implements only the skills marked **[M1]**.
 | `cooking` | Cooking | Consumables, buffs |
 | `armorcrafting` | Armorcrafting | Personal armor |
 | `weaponcrafting` | Weaponcrafting | Personal weapons |
-| `electronics` | Electronics | Ship modules, sensors, computers |
+| `electronics` | Electronics | **[M1]** Ship modules, sensors, computers — brought forward for the thruster |
 | `construction` | Construction | Player housing, station modules |
 
 ### Combat skills (`combat`)
@@ -188,14 +188,21 @@ The complete item set for the onboarding chain. This is `data/items/` and
 | `ferrite_ore` | Ferrite Ore | `raw` | 0.4 | Requires a mining tool |
 | `ferrite_plate` | Ferrite Plate | `refined` | 0.2 | Refined; denser than its inputs by design |
 | `crude_mining_laser` | Crude Mining Laser | `tool` | 2.0 | Gates `mining` |
-| `crude_thruster` | Crude Thruster | `component` | 5.0 | Buyable at start; not craftable in M1 |
+| `crude_thruster` | Crude Thruster | `component` | 5.0 | `electronics` 1 |
 | `shuttle_hull_section` | Shuttle Hull Section | `component` | 20.0 | First real manufactured good |
 | `hull_shuttle` | Shuttle | `hull` | 200.0 | The player's first ship |
 
-`crude_thruster` is deliberately **purchasable from a faction supply order rather
-than craftable** in M1. It gives the market something to do on day one, and it is
-the one intentional exception to "everything is player-made" — flagged for removal
-once `electronics` exists and players can manufacture thrusters.
+**Everything is player-made, with no exceptions.** `crude_thruster` was the one, held
+back until `electronics` existed and bought from a faction supply order in the meantime
+— and that supply order was never built, so from the first day of content to 6 September
+the questline could not be finished at all (task 148). The exception was removed rather
+than the missing shop added: `electronics` arrives one milestone early with a single
+level-1 recipe, which is a smaller thing than a shop that sells goods no player made.
+
+Joe, 6 September, on being offered the shop: *"Every item in the game should be
+craftable."* The rule was always here; what it lacked was anything checking it.
+`TheOpeningCanBeWalkedTests` now does, and its allowlist of unmakeable items is empty
+and meant to stay so.
 
 ### Recipes
 
@@ -203,13 +210,22 @@ once `electronics` exists and players can manufacture thrusters.
 |---|---|---|---|---|---|
 | `crude_mining_laser` | 1 | `toolcrafting` | 1 | 30 s | 8 × `scrap_alloy` |
 | `ferrite_plate` | 4 | `refining` | 1 | 60 s | 20 × `ferrite_ore` |
-| `shuttle_hull_section` | 1 | `shipcrafting` | 5 | 300 s | 4 × `ferrite_plate`, 2 × `scrap_alloy` |
+| `crude_thruster` | 1 | `electronics` | 1 | 120 s | 2 × `ferrite_plate`, 4 × `scrap_alloy` |
+| `shuttle_hull_section` | 1 | `shipcrafting` | 1 | 300 s | 4 × `ferrite_plate`, 2 × `scrap_alloy` |
 | `hull_shuttle` | 1 | `shipcrafting` | 10 | 900 s | 1 × `shuttle_hull_section`, 1 × `crude_thruster` |
 
-Level requirements are set so the questline's own XP rewards carry the player past
-each gate — quest 4 grants enough `shipcrafting` XP context to reach level 5, and so
-on. **These numbers are first-draft and expected to change once EconSim runs.** They
-live in JSON precisely so that changing them is not a deploy.
+Level requirements are set so the questline's own XP rewards carry the player past each
+gate. **The first recipe in any skill must be level 1**, and that is a rule rather than a
+preference: a skill's own recipes are the only thing that grants its XP, so a first gate
+above 1 is a skill nobody can ever start. `shuttle_hull_section` asked for `shipcrafting`
+5 until 6 September and the questline stopped there for every player who ever tried it
+(task 148). The same reasoning `craft_crude_mining_laser` records for needing no tool: or
+the chain could never start.
+
+**These numbers are first-draft and expected to change once EconSim runs.** They live in
+JSON precisely so that changing them is not a deploy — but `TheOpeningCanBeWalkedTests`
+walks the chain against whatever is in there, so a change that strands a player fails a
+build rather than a playtest.
 
 ### Resource nodes
 

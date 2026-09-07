@@ -29,6 +29,21 @@
       ]
     },
     {
+      "$comment": "Level 1 for the same reason build_shuttle_hull_section is: it is the only source of electronics XP in the pack, so anything above 1 is a skill nobody can start. The inputs are the two materials a player already has by this point in the questline -- no third gathering loop to introduce one component -- and it is deliberately cheaper than the hull section it is fitted to, because a thruster is the smaller half of a shuttle.",
+      "key": "craft_crude_thruster",
+      "output": "crude_thruster",
+      "outputQuantity": 1,
+      "skill": "electronics",
+      "requiredLevel": 1,
+      "jobSeconds": 120,
+      "xpPerRun": 600,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "ferrite_plate", "quantity": 2 },
+        { "item": "scrap_alloy", "quantity": 4 }
+      ]
+    },
+    {
       "$comment": "Level 1, and it has to be. Every source of shipcrafting XP in the pack is a recipe requiring level 5 or more, or a quest rewarded for running one of them -- so a requirement above 1 here is a skill nobody can ever start, and the onboarding chain stopped dead at 'Bones of a Ship' (task 148). The same reasoning craft_crude_mining_laser records for needing no tool: or the chain could never start.",
       "key": "build_shuttle_hull_section",
       "output": "shuttle_hull_section",

@@ -52,24 +52,23 @@ public sealed class TheOpeningCanBeWalkedTests
     }
 
     /// <summary>
-    /// Items the game deliberately does not let a player make, and does not yet let them buy.
+    /// Items no player can make, which is meant to be none of them.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>This set must empty, and the task to empty it is 148.</strong> Its own content
-    /// comment says <c>crude_thruster</c> is "bought from a faction supply order so the onboarding
-    /// chain can complete" — and <c>FactionOrderService</c> only ever buys, so no such order exists.
-    /// Until it does, the chain genuinely cannot be finished and this test would be red for a reason
-    /// already written down.
+    /// <strong>Empty, and it is supposed to stay that way.</strong> Everything is player-made
+    /// (design bible §5). It held <c>crude_thruster</c> for one commit, because the content had
+    /// authored it as the single exception to that rule and the faction supply order meant to sell
+    /// it in the meantime was never built — so the questline could not be finished at all.
     /// </para>
     /// <para>
-    /// <strong>Listed rather than skipped</strong>, so it is one line of a diff away from being
-    /// noticed, and so that anything <em>else</em> becoming unobtainable still fails. An allowlist
-    /// that grows is the failure this shape invites; adding to it is a decision worth arguing about,
-    /// which is exactly what naming it here forces.
+    /// <strong>Kept rather than deleted</strong>, because the next thing authored as an exception
+    /// should have to be written down here, in a diff, next to a comment saying the rule is that
+    /// there are none. An allowlist that grows is the failure this shape invites; the cost of
+    /// adding to it is meant to be an argument.
     /// </para>
     /// </remarks>
-    private static readonly HashSet<string> KnownUnobtainable = ["crude_thruster"];
+    private static readonly HashSet<string> KnownUnobtainable = [];
 
     [Fact]
     public async Task Every_craft_in_the_opening_is_reachable_with_the_skill_it_has_earned()

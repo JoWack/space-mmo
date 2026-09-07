@@ -1957,8 +1957,9 @@ its first frame climbing out of ground it was already inside.
   end to end** — retiring it first leaves a game with no ship at all, which is correct by ADR-0012
   and unplayable. Turning the flag off is the whole of the change; the questline is the blocker.
 - **The questline that hands over the first hull**, which is what makes the flag safe to turn off.
-  **Blocked by 148**, which breaks in two places: shipcrafting cannot be levelled past 1, and
-  nothing sells, crafts or grants a `crude_thruster`. The chain cannot be walked end to end.
+  **148 unblocked it on 6 September** — the chain is proved walkable from nothing by
+  `TheOpeningCanBeWalkedTests`. What remains is somebody actually walking it in a playtest, which
+  is what "verifiable end to end" meant.
 - **A restored pilot flies a generic pawn, not their hull.** Task 147 spawns a plain
   `ASpaceMMOShipPawn` for somebody who quit in flight; now that `AboardShipItemInstanceId` says
   which hull they were in, that spawn can carry the id and a character whose hull has since been
@@ -4343,7 +4344,7 @@ were all working — the crash was on the way back, after the work was done.
 
 ## 148 — The questline cannot be finished, and it breaks in two places
 
-**Pending.** Found in a playtest on 6 September: Joe opened the industry panel to craft a hull and
+**Done 6 September**, awaiting a playtest. Found in a playtest on 6 September: Joe opened the industry panel to craft a hull and
 asked where Crude Thruster comes from. It comes from nowhere — and measuring that turned up a
 second break, one step earlier, which is the one he would have hit first.
 
@@ -4420,24 +4421,34 @@ the level back to 5 and it reports *"By this point the questline has paid out 0 
 which is level 1"*; empty its `KnownUnobtainable` set and it reports the thruster. That set is the
 remaining half of this task written down where a build can see it.
 
-### Break two is still open
+### Break two is fixed too, and not the way it was sketched
 
-**The thruster** wants a faction **supply** order: the mirror of the standing order that already
-exists, selling a small set of authored items at a price deliberately above what players would
-charge, for the same reason the buy price is deliberately below — it must never be the good deal, or
-it replaces the market rather than backstopping it. Three things to settle:
+**Joe, 6 September, on being offered a faction supply order: *"Every item in the game should be
+craftable."*** The rule was already written down — design bible §5 called the thruster "the one
+intentional exception to 'everything is player-made'" — so this removed the exception rather than
+building the shop that existed to serve it.
 
-1. **Whether credits spent there leave the economy.** The buy side routes through `FaucetBudget`
-   because it creates credits. This destroys them, which is a sink rather than a faucet, and the two
-   want thinking about together.
-2. **What else is on the list.** A supply order selling exactly one item is a special case wearing a
-   general name. The honest minimum is whatever the content marks as not player-made, and today that
-   is one thing.
-3. **Where a player buys it**, which is an interface question. The Market tab already lists what the
-   faction pays, so it is the obvious home — but "what the faction sells" is a second list on a
-   screen built around one.
+`craft_crude_thruster`: **electronics 1**, 120 s, 2 × `ferrite_plate` + 4 × `scrap_alloy`.
 
-### How this was missed
+**The `electronics` skill arrives one milestone early**, which is the whole cost. It was always the
+skill that owned thrusters — the bible's own note said the exception was "flagged for removal once
+`electronics` exists" — and bringing it forward with a single level-1 recipe is a smaller thing than
+a shop selling goods no player made. Its first recipe is level 1 for the same reason the hull
+section's now is: a skill's own recipes are the only source of its XP.
+
+**Inputs are what the player already has**, deliberately: no third gathering loop to introduce one
+component. It is cheaper than the hull section it is fitted to, because a thruster is the smaller
+half of a shuttle.
+
+**What the supply order would have been for is lost, and worth naming.** The bible said it "gives
+the market something to do on day one". Players crafting thrusters and selling them to each other is
+that, and better — but nothing now sells anything to a player, so a character who spends to zero
+still has only the faction buy order to climb back out with. That was already true.
+
+`KnownUnobtainable` in `TheOpeningCanBeWalkedTests` is now **empty**, which is the whole chain
+proved walkable from nothing.
+
+### How this was missed### How this was missed
 
 Every part of it is individually tested and correct. The recipes load, the skill curve is right, the
 gate is enforced, the quests chain in the right order, and EconSim runs five simulated years over
