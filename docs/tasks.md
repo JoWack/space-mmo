@@ -4733,6 +4733,48 @@ position on the hull instance, or a rule that a ship left outside a station is r
 
 ---
 
+## 153 — A docked ship should leave the world until it is summoned again
+
+**Pending.** Decided by Joe, 7 September, after flying the first player-built shuttle.
+
+**Docking a ship should remove its pawn from the world.** It comes back by being summoned, which is
+the verb that already exists for exactly that (ADR-0012).
+
+### It is the rule the data model has been describing all along
+
+`ShipService.SummonAsync` moves the hull instance into the hangar of the station the player is
+standing at, and ADR-0012 says *"where a ship is needs no column: an owned hull is an `ItemInstance`
+sitting in an inventory, and for a parked ship that inventory is the station hangar it was left
+in."* A ship inside a hangar is not a ship standing on the apron, and until now the pawn stayed
+anyway — so the world and the record disagreed for every ship anybody docked.
+
+Summoning already reads as "fetch it out of the hangar". This makes docking the other half of the
+same sentence.
+
+### What it settles, and what it does not
+
+**It answers half of 152's open question.** A ship left *at a station* now has one unambiguous
+place: inside it, invisible, until summoned. What still has no answer is a ship left **on a
+hillside** — landed, stepped out of, and logged off beside. Pawns do not survive a restart and
+nothing records a position for a hull, so that one still reappears at the hangar it was summoned to.
+
+Worth settling both at once, because they are the same question asked twice: **the states a hull can
+be in are "in a hangar", "being flown", and "parked somewhere that is neither"**, and only the first
+two are modelled. Being aboard became a real answer on 7 September
+(`AboardShipItemInstanceId`); the third is still nothing.
+
+### Things to work out in the building
+
+1. **What removing the pawn means for somebody sitting in it.** Docking happens from the pilot's
+   seat, so the pawn being destroyed is the pawn the player is possessing — the same swap stepping
+   out already performs, and it wants to reuse that rather than invent a second one.
+2. **Whether the hold stays reachable.** It should: `ReachableHoldAsync` already opens a hold for
+   somebody docked where their active hull is parked, which is exactly the state this creates.
+3. **What another player sees.** A ship vanishing as its pilot docks is correct and will look
+   abrupt; whether that matters is a question for when two people are at one station.
+
+---
+
 ## Done
 
 Nothing yet under this file's numbering.
