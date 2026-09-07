@@ -536,7 +536,12 @@ void ASpaceMMOPlayerController::AcceptNextQuest()
 
 	if (Available.Num() == 0)
 	{
-		ShowNotice(TEXT("Nothing to accept"), false);
+		// Names the quest already running, because that is almost always why there is nothing on
+		// offer: the chain hands out one at a time, so having no next quest means holding the
+		// current one.
+		const FString Refusal = AcceptRefusal(Client->GetJournal());
+
+		ShowNotice(Refusal.IsEmpty() ? TEXT("Nothing to accept") : Refusal, false);
 
 		return;
 	}
@@ -1077,13 +1082,47 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 	Client->FetchJobs(CharacterId);
 }
 
+FString ASpaceMMOPlayerController::AcceptRefusal(const TArray<FBackendJournalEntry>& Journal)
+{
+	for (const FBackendJournalEntry& Entry : Journal)
+	{
+		if (Entry.State == EBackendQuestState::Completed
+			|| Entry.State == EBackendQuestState::Abandoned)
+		{
+			continue;
+		}
+
+		if (Entry.State == EBackendQuestState::ReadyToTurnIn)
+		{
+			return FString::Printf(TEXT("%s is finished - hand it in"), *Entry.Name);
+		}
+
+		// The authored step, because it is the thing to go and do. "Salvage Rights is already
+		// active" on its own says why the key did nothing without saying what would move it.
+		if (!Entry.StepDescription.IsEmpty())
+		{
+			return FString::Printf(
+				TEXT("%s is already active - %s"), *Entry.Name, *Entry.StepDescription);
+		}
+
+		return FString::Printf(TEXT("%s is already active"), *Entry.Name);
+	}
+
+	return FString();
+}
+
 TArray<FString> ASpaceMMOPlayerController::BuildQuestPanel(
 	const TArray<FBackendJournalEntry>& Journal,
 	const TArray<FBackendAvailableQuest>& Available)
 {
 	TArray<FString> Lines;
 
-	Lines.Add(TEXT("-- Quests --  J accepts the next one"));
+	// The hint only when the key does something. Advertising it with nothing on offer is how a
+	// quest already running came to read as one waiting to be accepted -- the player pressed the
+	// key the header named, got "Nothing to accept", and concluded the system was broken.
+	Lines.Add(Available.Num() > 0
+		? TEXT("-- Quests --  J accepts the next one")
+		: TEXT("-- Quests --"));
 
 	bool bAnyActive = false;
 
@@ -1095,6 +1134,14 @@ TArray<FString> ASpaceMMOPlayerController::BuildQuestPanel(
 			// Finished quests are history. A journal that lists everything ever done buries the one
 			// line saying what to do next, which is the only line being looked for.
 			continue;
+		}
+
+		// Headed, and only once there is something under it. Without this an active quest and an
+		// offered one are two identical lines, and the whole difference between them -- that one is
+		// yours and the other is not -- is left for the player to infer.
+		if (!bAnyActive)
+		{
+			Lines.Add(TEXT("  ACTIVE"));
 		}
 
 		bAnyActive = true;
@@ -1124,7 +1171,9 @@ TArray<FString> ASpaceMMOPlayerController::BuildQuestPanel(
 	// display that has to be readable at a glance.
 	if (Available.Num() > 0)
 	{
-		Lines.Add(FString::Printf(TEXT("   available: %s"), *Available[0].Name));
+		Lines.Add(TEXT("  AVAILABLE"));
+
+		Lines.Add(FString::Printf(TEXT("   %s"), *Available[0].Name));
 
 		if (Available.Num() > 1)
 		{

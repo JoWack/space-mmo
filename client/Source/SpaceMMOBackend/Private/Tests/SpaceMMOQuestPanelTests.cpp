@@ -132,6 +132,107 @@ bool FSpaceMMOQuestPanelSpeaksWhenEmptyTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+/**
+ * A quest you have and a quest you could take are told apart.
+ *
+ * <strong>From a playtest, 7 September.</strong> Joe pressed the accept key on Salvage Rights and
+ * was told "Nothing to accept". It was true: the quest had been accepted three weeks earlier and
+ * was sitting at 0/10. The panel listed it as a bare line under a header advertising the accept
+ * key, so a quest that was already his read exactly like one being offered, and the whole quest
+ * system read as broken.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOQuestPanelSeparatesHeldFromOfferedTest,
+	"SpaceMMO.Quests.PanelSeparatesHeldFromOffered",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOQuestPanelSeparatesHeldFromOfferedTest::RunTest(const FString& Parameters)
+{
+	const TArray<FBackendJournalEntry> Journal{
+		MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 0, 10),
+	};
+
+	const TArray<FString> Held = ASpaceMMOPlayerController::BuildQuestPanel(
+		Journal, TArray<FBackendAvailableQuest>());
+
+	TestTrue(TEXT("The held one is headed"), AnyLineContains(Held, TEXT("ACTIVE")));
+
+	// The exact fault: with nothing on offer, nothing may suggest there is. The header advertised
+	// a key that could not do anything, which is what invited pressing it.
+	TestFalse(TEXT("No offer heading"), AnyLineContains(Held, TEXT("AVAILABLE")));
+	TestFalse(TEXT("...and no hint for a key with nothing to do"), AnyLineContains(Held, TEXT("J accepts")));
+
+	// Both at once, which is the case the headings exist for: two lines that would otherwise be
+	// indistinguishable, one of them yours and one of them not.
+	const TArray<FString> Both = ASpaceMMOPlayerController::BuildQuestPanel(
+		Journal, { MakeAvailable(TEXT("First Tools")) });
+
+	const int32 Active = IndexOfLineContaining(Both, TEXT("ACTIVE"));
+	const int32 Offered = IndexOfLineContaining(Both, TEXT("AVAILABLE"));
+
+	TestTrue(TEXT("Both headings appear"), Active != INDEX_NONE && Offered != INDEX_NONE);
+
+	TestTrue(
+		TEXT("What you hold comes before what you could take"),
+		Active < Offered);
+
+	TestTrue(
+		TEXT("...and the held quest sits under the held heading"),
+		IndexOfLineContaining(Both, TEXT("Salvage Rights")) > Active
+			&& IndexOfLineContaining(Both, TEXT("Salvage Rights")) < Offered);
+
+	TestTrue(
+		TEXT("...and the offered one under the offer heading"),
+		IndexOfLineContaining(Both, TEXT("First Tools")) > Offered);
+
+	TestTrue(TEXT("The hint returns with something to accept"), AnyLineContains(Both, TEXT("J accepts")));
+
+	return true;
+}
+
+/**
+ * The refusal says which quest is in the way, and what would move it.
+ *
+ * "Nothing to accept" was true and unusable: the chain hands out one quest at a time, so having
+ * nothing on offer is caused by holding the current one, and the message named neither.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOQuestAcceptRefusalNamesTheReasonTest,
+	"SpaceMMO.Quests.AcceptRefusalNamesTheReason",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOQuestAcceptRefusalNamesTheReasonTest::RunTest(const FString& Parameters)
+{
+	const FString Running = ASpaceMMOPlayerController::AcceptRefusal({
+		MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 0, 10),
+	});
+
+	TestTrue(TEXT("Names the quest in the way"), Running.Contains(TEXT("Salvage Rights")));
+
+	// The step, not just the name. Being told which quest is blocking says why the key did nothing
+	// without saying what would ever change it.
+	TestTrue(TEXT("...and what to go and do"), Running.Contains(TEXT("Collect scrap")));
+
+	// Finished work waiting to be paid is a different instruction entirely: there is nothing left
+	// to gather, and telling somebody to gather would send them back to a deposit for nothing.
+	const FString Ready = ASpaceMMOPlayerController::AcceptRefusal({
+		MakeEntry(TEXT("An Errand"), EBackendQuestState::ReadyToTurnIn, 10, 10),
+	});
+
+	TestTrue(TEXT("A finished quest asks to be handed in"), Ready.Contains(TEXT("hand it in")));
+	TestFalse(TEXT("...and does not repeat the step"), Ready.Contains(TEXT("Collect scrap")));
+
+	// Finished quests are not reasons. A character whose journal is all history has nothing in the
+	// way, and naming an old quest would be a refusal about something that ended weeks ago.
+	const FString Nothing = ASpaceMMOPlayerController::AcceptRefusal({
+		MakeEntry(TEXT("Old News"), EBackendQuestState::Completed),
+	});
+
+	TestTrue(TEXT("History explains nothing"), Nothing.IsEmpty());
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOQuestParsesTheJournalTest,
 	"SpaceMMO.Quests.ParsesTheJournal",

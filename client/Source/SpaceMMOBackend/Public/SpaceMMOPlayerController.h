@@ -309,6 +309,20 @@ public:
 		const TArray<FBackendAvailableQuest>& Available);
 
 	/**
+	 * Why the accept key did nothing, in a sentence a player can act on.
+	 *
+	 * <strong>"Nothing to accept" was true and useless.</strong> A character partway through the
+	 * onboarding chain has no available quest precisely <em>because</em> they have one running, and
+	 * the refusal said neither half of that — so a quest sitting at 0/10 for three weeks read as a
+	 * broken quest system rather than as one waiting to be worked on.
+	 *
+	 * Empty when there is genuinely nothing to say, which is a character with no active quest and
+	 * nothing on offer: that one is rare and is not a mistake anybody is making.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Quests")
+	static FString AcceptRefusal(const TArray<FBackendJournalEntry>& Journal);
+
+	/**
 	 * Builds the industry panel's lines: what can be built, and what is cooking.
 	 *
 	 * Pure and static, like the other panel builders, so the selection arithmetic and the

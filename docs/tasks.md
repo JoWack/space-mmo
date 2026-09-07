@@ -4458,6 +4458,76 @@ order, and assert each step is reachable with what the previous ones give you.
 
 ---
 
+## 149 — A quest you have looks exactly like a quest you could take
+
+**Done 7 September**, awaiting a playtest. Belongs to **M5 — an interface**.
+
+**Reported as "the quest system seems to be broken."** Joe, docked, pressed the accept key on
+Salvage Rights and was told *"Nothing to accept"*.
+
+**Nothing was wrong with the quest system.** The database:
+
+```
+character 10 (Prospector5752)
+  intro_gather_scrap  "Salvage Rights"  InProgress  step 1  progress 0/10
+  started 2026-08-14
+```
+
+The quest had been accepted three weeks earlier. The chain hands out one at a time, so nothing was
+available *because* one was already held, and the refusal was literally true.
+
+### What the panel actually said
+
+```
+-- Quests --  J accepts the next one
+   Salvage Rights  0/10
+      Gather 10 scrap alloy from the debris scattered across the surface.
+```
+
+Three faults in four lines:
+
+- **Nothing said which section was which.** A quest you hold and a quest you could take rendered as
+  the same bare indented line. The distinction — the only one that matters here — was left to be
+  inferred.
+- **The header advertised a key with nothing to do.** It named the accept key unconditionally, which
+  is what invited pressing it.
+- **The refusal named no reason**, when the reason was one sentence away and already in the client's
+  own journal.
+
+Now: `ACTIVE` and `AVAILABLE` headings, each shown only with something under it; the hint only when
+something is on offer; and a refusal that names the quest in the way and the step that would move it
+— *"Salvage Rights is already active - Gather 10 scrap alloy..."*. A quest waiting to be handed in
+says that instead, because sending somebody back to a deposit for nothing is worse than saying
+nothing.
+
+### Why the progress was zero, which is not a fault
+
+`step_progress` counts **gathering events, not holdings**. The character had 11 scrap alloy in a
+station hangar and 150 gathering XP, all of it from before the quest was accepted, and none of it
+counts. That is the design working — a quest completable from the market teaches nothing — but the
+panel offers no hint of it, and "0/10 while holding 11" is a fair thing to be confused by.
+
+**Deliberately not changed**, and Joe chose it: showing what you already hold beside the count was
+offered and declined, as was counting holdings toward the step. Worth revisiting if it catches
+anybody else.
+
+### What this is really an instance of
+
+The panel builders are pure functions with headless tests, and all four existing ones passed — they
+assert that the quest is named, that progress renders, that finished quests are dropped. **None
+asserted that two different kinds of thing were distinguishable**, because each was checked on its
+own. `PanelSeparatesHeldFromOffered` now checks the pair, including the ordering, and
+`AcceptRefusalNamesTheReason` checks the sentence.
+
+### How it would fail
+
+- The Quests tab showing an active quest with no `ACTIVE` above it, or `AVAILABLE` with nothing
+  under it.
+- The accept key still saying "Nothing to accept" while a quest is running — that would mean the
+  journal reached the panel but not the refusal, which are two different calls on the same client.
+
+---
+
 ## Done
 
 Nothing yet under this file's numbering.
