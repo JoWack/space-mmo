@@ -105,10 +105,12 @@ public sealed class ShipSummoningTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Ships_are_not_summoned_at_a_market()
+    public async Task A_ship_is_not_brought_to_a_market()
     {
-        // Spaceports and the capital handle ships; a trading hub is an order book with a roof.
-        long hull = await OwnAsync(_pilotId, _marketId, _shuttleId);
+        // Spaceports and the capital handle ships; a trading hub is an order book with a roof. The
+        // hull is at the spaceport and the player is standing at the market, so summoning it here
+        // is asking for it to be *brought* -- which is the act the kind gate is about.
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
         await DockAsync(_pilotId, _marketId);
 
         await using SpaceMmoDbContext context = _fixture.CreateContext();
@@ -117,6 +119,41 @@ public sealed class ShipSummoningTests(DatabaseFixture fixture) : IAsyncLifetime
             () => Ships(context).SummonAsync(_pilotId, hull));
 
         Assert.Contains("TradingHub", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A ship parked in the hangar you are standing in comes back out, whatever kind of station it is.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pair to the test above, and the thing that stops docking stranding anybody. Docking puts
+    /// a ship in the hangar of whatever station you docked at (task 153) — so if the gate that
+    /// refuses to <em>bring</em> a ship to a market also refused to hand back one already inside it,
+    /// docking at Terra Outpost would leave a player on foot on Terra with their only ship locked in
+    /// the building in front of them.
+    /// </para>
+    /// <para>
+    /// Written to fail against the rule it replaces: with the gate reading <c>Kind</c> alone, this
+    /// throws.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task A_ship_parked_at_a_market_is_fetched_back_out_of_it()
+    {
+        long hull = await OwnAsync(_pilotId, _marketId, _shuttleId);
+        await DockAsync(_pilotId, _marketId);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        Inventory hold = await Ships(context).SummonAsync(_pilotId, hull);
+
+        Assert.Equal(hull, hold.ShipItemInstanceId);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Character pilot = await verify.Characters.SingleAsync(c => c.Id == _pilotId);
+
+        Assert.Equal(hull, pilot.ActiveShipItemInstanceId);
     }
 
     [Fact]
@@ -225,6 +262,187 @@ public sealed class ShipSummoningTests(DatabaseFixture fixture) : IAsyncLifetime
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
         Assert.Null(await Ships(context).ReachableHoldAsync(_pilotId));
+    }
+
+    /// <summary>
+    /// Docking a ship puts it in that station's hangar, which is what ADR-0012 always said it was.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The test that would have caught the fault, rather than the one that shows the
+    /// feature.</strong> Before task 153 nothing moved a hull when its pilot docked, so a ship flown
+    /// from the spaceport to the market was still recorded in the spaceport's hangar. This asserts
+    /// the one consequence a player would actually meet: the hold does not open where they are
+    /// standing, because <see cref="ShipService.ReachableHoldAsync"/> asks where the hull is parked.
+    /// </para>
+    /// <para>
+    /// Take the <c>StowAsync</c> call out and it fails on the reachable hold, not on a count.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task Docking_a_ship_parks_it_where_you_docked_and_its_hold_opens_there()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            Inventory hold = await Ships(summon).SummonAsync(_pilotId, hull);
+
+            await Inventories(summon).AddAsync(hold.Id, _oreId, 40, Credits.Zero);
+            await summon.SaveChangesAsync();
+        }
+
+        await using (SpaceMmoDbContext board = _fixture.CreateContext())
+        {
+            await Ships(board).BoardAsync(_pilotId, hull);
+        }
+
+        // Flown to the market and docked there, which is what the game server reports at the moment
+        // it takes the pawn out of the world.
+        await DockAsync(_pilotId, _marketId);
+
+        await using (SpaceMmoDbContext stow = _fixture.CreateContext())
+        {
+            await Ships(stow).StowAsync(_pilotId, hull, _marketId);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemInstance parked = await verify.ItemInstances
+            .Include(i => i.Inventory)
+            .SingleAsync(i => i.Id == hull);
+
+        Assert.Equal(_marketId, parked.Inventory!.StationId);
+        Assert.Equal(InventoryKind.StationHangar, parked.Inventory.Kind);
+
+        Character pilot = await verify.Characters.SingleAsync(c => c.Id == _pilotId);
+
+        // Off the ship as well as into the hangar. Aboard is what opens a hold from anywhere, and a
+        // character left aboard a hull inside a building could walk away and still reach its cargo.
+        Assert.Null(pilot.AboardShipItemInstanceId);
+
+        // Still theirs to summon: parking a ship does not stop it being your ship.
+        Assert.Equal(hull, pilot.ActiveShipItemInstanceId);
+
+        Inventory? reachable = await Ships(verify).ReachableHoldAsync(_pilotId);
+
+        Assert.NotNull(reachable);
+        Assert.Equal(40, await Inventories(verify).QuantityOfAsync(reachable!.Id, _oreId));
+    }
+
+    /// <summary>
+    /// Parking is keyed off the hull the caller names, not off what the character is aboard.
+    /// </summary>
+    /// <remarks>
+    /// Docking a ship possesses a character pawn, and possession is what reports boarding, so the
+    /// game server sends a disembark for the same keypress this parks a ship for. A stow that read
+    /// <see cref="Character.AboardShipItemInstanceId"/> would race that disembark and find nothing,
+    /// leaving the hull in whatever hangar it was last summoned to while its pawn was gone from the
+    /// world. This is that race, run in the order that loses.
+    /// </remarks>
+    [Fact]
+    public async Task A_ship_is_parked_even_if_the_disembark_landed_first()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, hull);
+        }
+
+        await using (SpaceMmoDbContext board = _fixture.CreateContext())
+        {
+            await Ships(board).BoardAsync(_pilotId, hull);
+        }
+
+        await DockAsync(_pilotId, _marketId);
+
+        await using (SpaceMmoDbContext step = _fixture.CreateContext())
+        {
+            await Ships(step).DisembarkAsync(_pilotId);
+        }
+
+        await using (SpaceMmoDbContext stow = _fixture.CreateContext())
+        {
+            await Ships(stow).StowAsync(_pilotId, hull, _marketId);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemInstance parked = await verify.ItemInstances
+            .Include(i => i.Inventory)
+            .SingleAsync(i => i.Id == hull);
+
+        Assert.Equal(_marketId, parked.Inventory!.StationId);
+    }
+
+    [Fact]
+    public async Task Somebody_elses_hull_is_not_yours_to_park()
+    {
+        // The same check summoning and boarding make, for a harder reason: parking writes into a
+        // hangar, so an id that arrived wrong would move another player's ship across the system.
+        long theirs = await OwnAsync(_strangerId, _spaceportId, _shuttleId);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await Assert.ThrowsAsync<ShipSummonException>(
+            () => Ships(context).StowAsync(_pilotId, theirs, _marketId));
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemInstance untouched = await verify.ItemInstances
+            .Include(i => i.Inventory)
+            .SingleAsync(i => i.Id == theirs);
+
+        Assert.Equal(_spaceportId, untouched.Inventory!.StationId);
+        Assert.Equal(_strangerId, untouched.Inventory.CharacterId);
+    }
+
+    [Fact]
+    public async Task A_mining_laser_is_not_something_you_park()
+    {
+        long laser = await OwnAsync(_pilotId, _spaceportId, _laserId);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await Assert.ThrowsAsync<ShipSummonException>(
+            () => Ships(context).StowAsync(_pilotId, laser, _marketId));
+    }
+
+    /// <summary>
+    /// Docking somewhere, then summoning there, is a round trip that ends where it started.
+    /// </summary>
+    /// <remarks>
+    /// The two halves of ADR-0012's sentence run against each other. Summoning takes a hull out of a
+    /// hangar and docking puts it back, so the hull that comes out has to be the one that went in,
+    /// at the station it went in at. Without the relaxed gate this throws, and a player who docked
+    /// at a market has parked their only ship into a building nothing opens.
+    /// </remarks>
+    [Fact]
+    public async Task A_ship_docked_at_a_market_is_summoned_back_out_of_that_market()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, hull);
+        }
+
+        await DockAsync(_pilotId, _marketId);
+
+        await using (SpaceMmoDbContext stow = _fixture.CreateContext())
+        {
+            await Ships(stow).StowAsync(_pilotId, hull, _marketId);
+        }
+
+        await using SpaceMmoDbContext again = _fixture.CreateContext();
+
+        Inventory hold = await Ships(again).SummonAsync(_pilotId, hull);
+
+        Assert.Equal(hull, hold.ShipItemInstanceId);
     }
 
     /// <summary>

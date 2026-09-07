@@ -74,9 +74,35 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	/**
+	 * Adopts a docking the backend already knows about, without asking it again.
+	 *
+	 * <strong>How the record survives the pawn (task 153).</strong> Docking a ship destroys the
+	 * pawn this component is on, and the character who steps out gets a fresh one holding zero — so
+	 * the key that was "undock" a moment ago would be "dock" again, and the range check that keeps
+	 * a docking honest would not run at all.
+	 */
+	void AdoptDocking(int32 StationId);
+
 private:
 	/** One key, toggling. Docking when docked and undocking when not are both no-ops worth avoiding. */
 	void RequestToggleDock();
+
+	/**
+	 * Puts the ship away, if this component is on one, and stands the pilot beside the station.
+	 *
+	 * <strong>Docking is the other half of summoning (ADR-0012, task 153).</strong> Summoning takes
+	 * a hull out of a hangar and puts a pawn in the world; docking puts it back, and until it did
+	 * the ship stood on the apron while its row said it was inside.
+	 *
+	 * Called only where there is ground to stand a pilot on; a station with none -- Deepdock, which
+	 * orbits nothing -- leaves the ship alongside, and the caller says so on screen.
+	 *
+	 * @return True when the ship was actually put away, which is what decides whether the record is
+	 *         told about it. The record follows the world here rather than leading it.
+	 */
+	bool StowShipAt(
+		const class ASpaceMMOStationActor& Station, const FSystemCoordinate& Ashore);
 
 	/** Places the ship at ResumeStationId if that station exists yet. True when it did. */
 	bool TryResume();
@@ -111,6 +137,14 @@ private:
 	 * nothing on screen to distinguish it from the bug being fixed.
 	 */
 	static constexpr double ResumeTimeoutSeconds = 30.0;
+
+	/**
+	 * How far from the station a docking pilot is set down, in kilometres.
+	 *
+	 * Fifteen metres, inside the thirty a summoned ship parks at, so stepping off a ship you have
+	 * just docked does not put you where the next one you summon will appear.
+	 */
+	static constexpr double DockArrivalOffsetKilometres = 0.015;
 
 	/**
 	 * How often the server re-checks that a docked ship is still alongside.

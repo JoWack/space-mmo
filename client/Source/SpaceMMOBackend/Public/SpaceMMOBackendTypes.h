@@ -331,8 +331,9 @@ struct SPACEMMOBACKEND_API FBackendStation
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	FSystemCoordinate Position;
 
+	/** A hundred metres, matching the server's default. Authored per station in data/universe/. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
-	double DockingRangeKilometres = 5.0;
+	double DockingRangeKilometres = 0.1;
 };
 
 /** Which side of the order book, mirroring the server. */

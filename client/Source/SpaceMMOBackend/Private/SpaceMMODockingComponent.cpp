@@ -7,7 +7,11 @@
 #include "GameFramework/Pawn.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMOBoarding.h"
+#include "SpaceMMOCharacterPawn.h"
+#include "SpaceMMOPlayerController.h"
 #include "SpaceMMORenderOrigin.h"
+#include "SpaceMMOShipPawn.h"
 #include "SpaceMMOStationActor.h"
 
 USpaceMMODockingComponent::USpaceMMODockingComponent()
@@ -100,6 +104,16 @@ void USpaceMMODockingComponent::ServerToggleDock_Implementation()
 		Backend->UndockAsServer(CharacterId);
 		DockedStationId = 0;
 
+		// So a pawn possessed after this one is not handed a station this player has just left.
+		if (const APawn* Pawn = Cast<APawn>(GetOwner()))
+		{
+			if (ASpaceMMOPlayerController* Controller =
+				Cast<ASpaceMMOPlayerController>(Pawn->GetController()))
+			{
+				Controller->NoteDockedStation(0);
+			}
+		}
+
 		ClientDockResult(TEXT("Undocked."), true);
 
 		return;
@@ -118,8 +132,121 @@ void USpaceMMODockingComponent::ServerToggleDock_Implementation()
 
 	Backend->DockAsServer(CharacterId, DockedStationId);
 
+	// Read before anything is destroyed. StowShipAt possesses a new pawn and destroys this
+	// component's owner, so every field of this object -- and this pointer -- is gone afterwards.
+	const int32 StationId = DockedStationId;
+	const int32 DockingCharacterId = CharacterId;
+	const FString StationName = Station->GetStation().Name;
+
+	const ASpaceMMOShipPawn* Ship = Cast<ASpaceMMOShipPawn>(GetOwner());
+
+	if (Ship == nullptr)
+	{
+		ClientDockResult(FString::Printf(TEXT("Docked at %s."), *StationName), true);
+
+		return;
+	}
+
+	const int64 HullItemInstanceId = Ship->HullItemInstanceId;
+
+	FSystemCoordinate Ashore;
+
+	const bool bCanStepAshore =
+		Station->GroundPositionBeside(DockArrivalOffsetKilometres, 0.0, Ashore);
+
+	// Sent before the swap, deliberately: this is an RPC on a component that is about to be
+	// destroyed with its owner, and one sent afterwards has nothing to send it from.
 	ClientDockResult(
-		FString::Printf(TEXT("Docked at %s."), *Station->GetStation().Name), true);
+		bCanStepAshore
+			? FString::Printf(TEXT("Docked at %s. Your ship is in the hangar."), *StationName)
+			: FString::Printf(
+				TEXT("Docked at %s. There is nowhere to step out, so your ship stays alongside."),
+				*StationName),
+		true);
+
+	if (bCanStepAshore && StowShipAt(*Station, Ashore))
+	{
+		// Only once the pawn has actually gone, and off locals rather than off this component:
+		// StowShipAt destroyed the owner, and every field of this object went with it.
+		//
+		// The record follows the world rather than leading it, which is the whole point of the
+		// task -- a hull recorded in a hangar it is standing outside of is what is being removed.
+		Backend->StowAsServer(DockingCharacterId, HullItemInstanceId, StationId);
+	}
+}
+
+void USpaceMMODockingComponent::AdoptDocking(const int32 StationId)
+{
+	DockedStationId = StationId;
+
+	// Reset with it. The new pawn has never been range-checked, and inheriting a partly elapsed
+	// interval from the pawn that was destroyed would check it at an arbitrary moment.
+	SecondsSinceRangeCheck = 0.0;
+	ResumeStationId = 0;
+}
+
+bool USpaceMMODockingComponent::StowShipAt(
+	const ASpaceMMOStationActor& Station, const FSystemCoordinate& Ashore)
+{
+	ASpaceMMOShipPawn* Ship = Cast<ASpaceMMOShipPawn>(GetOwner());
+
+	if (Ship == nullptr)
+	{
+		return false;
+	}
+
+	const int32 StationId = DockedStationId;
+
+	// Facing the station, because you have just walked off a ship into it and the alternative is
+	// arriving with your back to the only thing there is to do here.
+	const FVector Up = Ship->SurfaceUpHere();
+
+	const FQuat Facing = FBoarding::StepOutRotation(
+		Up, (Station.GetSystemPosition().Kilometres - Ashore.Kilometres).GetSafeNormal());
+
+	// Held before the swap: GetController() answers null the moment possession moves on, and the
+	// station has to be handed to the controller as well as to the pawn.
+	ASpaceMMOPlayerController* Controller =
+		Cast<ASpaceMMOPlayerController>(Ship->GetController());
+
+	// The same swap stepping out performs, and the same code performing it (task 153 point 1). The
+	// pawn being destroyed is the one the player possesses, so the possession has to move first.
+	ASpaceMMOCharacterPawn* AshorePilot = Ship->StepPilotOut(Ashore, Facing);
+
+	if (AshorePilot == nullptr)
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Docked at %s but no pilot could be put ashore; the ship stays alongside."),
+			*Station.GetStation().Name);
+
+		return false;
+	}
+
+	// Onto the pawn the player is now in, before the old one goes. A freshly spawned component
+	// holds zero, which is "not docked" -- so without this the key would offer to dock again and
+	// the range check that keeps a docking honest would never run at all.
+	if (USpaceMMODockingComponent* Arrived =
+		AshorePilot->FindComponentByClass<USpaceMMODockingComponent>())
+	{
+		Arrived->CharacterId = CharacterId;
+		Arrived->AdoptDocking(StationId);
+	}
+
+	// And on the controller, which pushes it onto every pawn possessed after this one.
+	if (Controller != nullptr)
+	{
+		Controller->NoteDockedStation(StationId);
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("%s is in station %d's hangar; its pawn has left the world, and its pilot is "
+			"standing at %s."),
+		*Station.GetStation().Name, StationId, *Ashore.ToString());
+
+	// Last, and nothing touches this component afterwards: destroying the owner destroys this.
+	Ship->Destroy();
+
+	return true;
 }
 
 void USpaceMMODockingComponent::ClientDockResult_Implementation(
@@ -275,6 +402,17 @@ void USpaceMMODockingComponent::TickComponent(
 	}
 
 	DockedStationId = 0;
+
+	// The same clearing the key performs, for the same reason: the held station is pushed onto the
+	// next pawn, and one this player has flown away from would undock them again on arrival.
+	if (const APawn* Pawn = Cast<APawn>(GetOwner()))
+	{
+		if (ASpaceMMOPlayerController* Controller =
+			Cast<ASpaceMMOPlayerController>(Pawn->GetController()))
+		{
+			Controller->NoteDockedStation(0);
+		}
+	}
 
 	ClientDockResult(TEXT("Left docking range."), false);
 }

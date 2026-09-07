@@ -4,9 +4,12 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMOBoarding.h"
 #include "SpaceMMODepositSettings.h"
+#include "SpaceMMOPlanetActor.h"
 #include "SpaceMMORenderOrigin.h"
 #include "SpaceMMOStationSettings.h"
 #include "UObject/ConstructorHelpers.h"
@@ -293,6 +296,53 @@ bool ASpaceMMOStationActor::IsWithinDockingRange(
 		(Position.Kilometres - StationPosition.Kilometres).Size();
 
 	return Distance <= Station.DockingRangeKilometres;
+}
+
+bool ASpaceMMOStationActor::GroundPositionBeside(
+	const double OffsetKilometres,
+	const double LiftKilometres,
+	FSystemCoordinate& OutPosition) const
+{
+	UWorld* World = GetWorld();
+
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		const FPlanetConfig& Body = It->GetPlanetConfig();
+
+		const FVector Up = (SystemPosition.Kilometres - Body.Centre.Kilometres).GetSafeNormal();
+
+		if (Up.IsNearlyZero())
+		{
+			continue;
+		}
+
+		// StepOutPosition flattens whatever direction it is given into the tangent plane, so a
+		// world axis is a perfectly good thing to hand it -- except where that axis is the up it
+		// is being flattened against, which is every station near a pole.
+		const FSystemCoordinate Beside = FBoarding::StepOutPosition(
+			SystemPosition, Up, FVector::UpVector, OffsetKilometres);
+
+		const FVector BesideDirection =
+			(Beside.Kilometres - Body.Centre.Kilometres).GetSafeNormal();
+
+		if (BesideDirection.IsNearlyZero())
+		{
+			continue;
+		}
+
+		OutPosition = FSystemCoordinate(
+			FPlanetTerrain::SurfacePosition(Body, It->GetTerrainConfig(), BesideDirection).Kilometres
+			+ (BesideDirection * LiftKilometres));
+
+		return true;
+	}
+
+	return false;
 }
 
 void ASpaceMMOStationActor::BeginPlay()

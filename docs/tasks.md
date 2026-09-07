@@ -4594,53 +4594,6 @@ Two new ones cross the boundaries nothing was watching:
 - Being paid twice for one quest. `TurnInAsync` refuses the second and the endpoint answers 409, and
   there is a test for it, but it is the failure worth watching for.
 
-## 151 - Borlash City is an exterior blockout in five editable districts
-
-**Built 7 September; awaiting Unreal import and walk-through.** Belongs to M7,
-continuing 97, 127, 143 and 144. The input was the Origin Station Plans PDF,
-CapitalGrandDistrict concept image and current design bible.
-
-`tools/greybox/a07_borlash_city.py` creates all 17 A-07 sites, four gates,
-four corner posterns, external docks, avenues, ring road and fountain square.
-The assembled project and five previews are outside the repo, in
-`D:/Documents/SpaceMMOAssets/Blender/Stations/BorlashCity/`. Five district FBXs
-and a manifest of local anchors are in `client/RawContent/Stations/A07_BorlashCity/`.
-
-**The PDF controls the plan and the concept supplies silhouettes.** The 400m
-wall, 584m dock span and 72 x 44m market independently agree at one SVG unit
-per metre. The clipped-square outer wall is retained. Domes, roof bands,
-buttresses and HQ spires interpret the image; the other heights are assumptions
-except the specified 12m wall, 20m gates and 45m HQ. The hotel follows the
-schedule's 40m rather than the drawing's 38m. A-07 has no interior plans, so
-building masses remain closed; entry panels mark future doors. Old supply and
-finance labels do not introduce gameplay mechanics. No runtime data changed.
-
-**Clearance comes from generated collision, not the schedule.** A conservative
-1m grid inflated by 0.60m plus its cell diagonal caught blocked southern dock
-exits and gate towers interrupting the ring. Open dock passages and inward
-ring bypasses fix both. All 17 frontages, four gates and the ring connect with
-at least 1.20m route width for the current 0.68m pawn. A point inside the market
-is the negative control. This covers exterior ground routes, not interiors or
-Unreal's actual sweep. Grid distances are not proof of the PDF's 85-second walk.
-
-**Same material did not make overlap harmless.** Overlapping paving produced
-black Cycles patches. Convex polygon subtraction now partitions the road and
-ground surfaces without overlap, and the arrival render is clean. Workbench's
-large-scene cast-shadow bands were disabled in review drawings; Cycles retains
-physical shadows for the street-level views. Exact duplicate polygon checks
-are still limited for partial intersections; renders were inspected as well.
-
-**Verified after export:** 129 render meshes and 603 matching convex UCX hulls
-re-import from five FBXs with under 0.05mm bounds/anchor error. Built scheduled
-footprints/heights agree, overall bounds 584 x 560m and Z -2 to 45m. Run
-`--check-only` or `--verify-exports-only` to reproduce the checks. FBX roundtrip
-is Blender coverage, not an Unreal import/playtest. Import at authored scale,
-place districts from the manifest once, then walk dock/postern/gate/square routes.
-Do not fit the city to the Capital placeholder's 40m size. Terrain flattening
-and gameplay station placement remain task 97 integration work.
-
----
-
 ## 151 — Boarding your ship teleports it into the station
 
 **Done 7 September**, awaiting a playtest. Found the moment it could be: Joe finished the questline,
@@ -4735,7 +4688,8 @@ position on the hull instance, or a rule that a ship left outside a station is r
 
 ## 153 — A docked ship should leave the world until it is summoned again
 
-**Pending.** Decided by Joe, 7 September, after flying the first player-built shuttle.
+**Done 7 September**, awaiting a playtest. Decided by Joe after flying the first player-built
+shuttle.
 
 **Docking a ship should remove its pawn from the world.** It comes back by being summoned, which is
 the verb that already exists for exactly that (ADR-0012).
@@ -4763,15 +4717,177 @@ be in are "in a hangar", "being flown", and "parked somewhere that is neither"**
 two are modelled. Being aboard became a real answer on 7 September
 (`AboardShipItemInstanceId`); the third is still nothing.
 
-### Things to work out in the building
+### What was decided in the building
 
-1. **What removing the pawn means for somebody sitting in it.** Docking happens from the pilot's
-   seat, so the pawn being destroyed is the pawn the player is possessing — the same swap stepping
-   out already performs, and it wants to reuse that rather than invent a second one.
-2. **Whether the hold stays reachable.** It should: `ReachableHoldAsync` already opens a hold for
-   somebody docked where their active hull is parked, which is exactly the state this creates.
-3. **What another player sees.** A ship vanishing as its pilot docks is correct and will look
-   abrupt; whether that matters is a question for when two people are at one station.
+**The pilot arrives at the station rather than stepping out where the ship was**, chosen by Joe
+against two alternatives on 7 September. Stepping out where the ship was is the smallest change and
+the most literal reuse of the swap, but docking range reached five kilometres — so docking while
+airborne would have dropped a pilot from five kilometres up, and docking at Deepdock would have left
+one floating in space. Requiring the ship to be landed first was the other option, and it takes away
+opening the market from the pilot's seat.
+
+**Docking range went with it: a hundred metres, and five hundred at Deepdock.** The range is how far
+a ship can be teleported now that docking removes it, so five kilometres stopped being a tolerance
+and became a distance. It was also reaching from the capital's spawn point five hundred metres away,
+which meant a new character was docked at the capital before walking anywhere. Deepdock keeps a wider
+ring because finding a 25 m cube in empty space is a different task from flying up to a building
+standing on a hillside.
+
+1. **The pawn being destroyed is the one the player possesses.** `ASpaceMMOShipPawn::StepPilotOut`
+   is the swap stepping out already performed, lifted out of `ServerDisembark` so there is exactly
+   one of it — spawn a character where they belong, possess it, leave the ship behind. Docking calls
+   it with a patch of ground beside the station and then destroys the ship; stepping out calls it
+   with a patch of ground beside the hull and does not.
+2. **The hold stays reachable, and that is the assertion the test makes.**
+   `Docking_a_ship_parks_it_where_you_docked_and_its_hold_opens_there` flies a loaded shuttle from
+   the spaceport to the market and asks for the hold there. Before the stow it answers null, because
+   `ReachableHoldAsync` asks which station the hull is parked at and the answer was still the
+   spaceport — so a ship docked anywhere it was not summoned to had an unreachable hold, which was a
+   second, quieter half of this bug nobody had noticed.
+3. **What another player sees is still open**, and still only matters once two people share a
+   station.
+
+### Two things the building turned up
+
+**A ship docked at a trading hub would have been stranded.** `SummonAsync` refuses a station whose
+kind does not take ships, so docking at Terra Outpost would have put a hull in Terra's hangar and
+then refused to hand it back — leaving a player on foot on Terra with their only ship locked in the
+building in front of them. Joe's decision: **fetching back what you parked here is not the same act
+as having one brought.** A hull already in the hangar of the station you are standing at comes out
+wherever that station is; the kind gate still applies to a hull that would have to travel. That is
+one condition in `SummonAsync` and it is what stops docking behaving two ways.
+
+**The stow names the hull rather than reading what you are aboard.** `StepPilotOut` possesses a
+character pawn, and possession is what reports boarding — so the same keypress sends a disembark, and
+a stow keyed off `AboardShipItemInstanceId` would race it and find nothing, leaving the hull in
+whichever hangar it was last summoned to while its pawn had gone from the world. Both orders are
+tested; `A_ship_is_parked_even_if_the_disembark_landed_first` runs the one that loses.
+
+### A sibling fixed the same day
+
+`ResumeAtStationId` held whatever was true when identity resolved and was never updated, so the
+station it pushed onto each newly possessed pawn could be one the player had long since left — and
+the range check would then undock them from the station they were standing at. It needed a pawn
+change to be reachable, which used to mean landing and stepping out; docking a ship changes the pawn
+in one keypress, so this task made it ordinary. `NoteDockedStation` now keeps it current from all
+three routes: the key, flying out of range, and docking a ship.
+
+### How it would fail
+
+- **Pressing G in a ship and nothing vanishing.** Either the range is not tight enough to be in it
+  (the log says `Nothing in docking range.`) or the stow found no ground — the message says which,
+  and `Docked at %s, which has no ground beside it` is in the log for the second.
+- **Docking and then not being able to summon.** The relaxed gate did not land, or the hull went
+  into a hangar at a different station than the one docked at. `select id, inventory_id from
+  item_instances` against `select id, station_id from inventories` says which.
+- **The ship vanishing but the market not opening.** The docked record went to the ship's component
+  and not the character's — `AdoptDocking` is what carries it, and the overlay reads the backend's
+  copy rather than the pawn's, so the two disagreeing points at the stow request having failed.
+- **Being told "Left docking range" a second after docking.** A hundred metres is now the whole
+  tolerance, and the pilot is set down fifteen metres out; if the arrival lands outside the ring the
+  range check undocks immediately.
+- **Somebody else's ship moving.** The refusals are tested, but this is the one worth watching for.
+
+---
+
+## 154 - Borlash City is an exterior blockout in five editable districts
+
+**Renumbered from 151 on 7 September, and the number it had is gone.** It was written into the
+working tree while task 151 -- boarding your ship teleports it into the station -- was being
+written, and commit bffce83 swept both in under the same identifier. Two things cannot share one,
+so the newer stream of work took the next free number; 151 keeps the meaning the commit message
+that closed it already gave it. Anything written before this date referring to "151" for the city
+means this task.
+
+**Built 7 September; awaiting Unreal import and walk-through.** Belongs to M7,
+continuing 97, 127, 143 and 144. The input was the Origin Station Plans PDF,
+CapitalGrandDistrict concept image and current design bible.
+
+`tools/greybox/a07_borlash_city.py` creates all 17 A-07 sites, four gates,
+four corner posterns, external docks, avenues, ring road and fountain square.
+The assembled project and five previews are outside the repo, in
+`D:/Documents/SpaceMMOAssets/Blender/Stations/BorlashCity/`. Five district FBXs
+and a manifest of local anchors are in `client/RawContent/Stations/A07_BorlashCity/`.
+
+**The PDF controls the plan and the concept supplies silhouettes.** The 400m
+wall, 584m dock span and 72 x 44m market independently agree at one SVG unit
+per metre. The clipped-square outer wall is retained. Domes, roof bands,
+buttresses and HQ spires interpret the image; the other heights are assumptions
+except the specified 12m wall, 20m gates and 45m HQ. The hotel follows the
+schedule's 40m rather than the drawing's 38m. A-07 has no interior plans, so
+building masses remain closed; entry panels mark future doors. Old supply and
+finance labels do not introduce gameplay mechanics. No runtime data changed.
+
+**Clearance comes from generated collision, not the schedule.** A conservative
+1m grid inflated by 0.60m plus its cell diagonal caught blocked southern dock
+exits and gate towers interrupting the ring. Open dock passages and inward
+ring bypasses fix both. All 17 frontages, four gates and the ring connect with
+at least 1.20m route width for the current 0.68m pawn. A point inside the market
+is the negative control. This covers exterior ground routes, not interiors or
+Unreal's actual sweep. Grid distances are not proof of the PDF's 85-second walk.
+
+**Same material did not make overlap harmless.** Overlapping paving produced
+black Cycles patches. Convex polygon subtraction now partitions the road and
+ground surfaces without overlap, and the arrival render is clean. Workbench's
+large-scene cast-shadow bands were disabled in review drawings; Cycles retains
+physical shadows for the street-level views. Exact duplicate polygon checks
+are still limited for partial intersections; renders were inspected as well.
+
+**Verified after export:** 129 render meshes and 603 matching convex UCX hulls
+re-import from five FBXs with under 0.05mm bounds/anchor error. Built scheduled
+footprints/heights agree, overall bounds 584 x 560m and Z -2 to 45m. Run
+`--check-only` or `--verify-exports-only` to reproduce the checks. FBX roundtrip
+is Blender coverage, not an Unreal import/playtest. Import at authored scale,
+place districts from the manifest once, then walk dock/postern/gate/square routes.
+Do not fit the city to the Capital placeholder's 40m size. Terrain flattening
+and gameplay station placement remain task 97 integration work.
+
+---
+
+## 155 — A ship left on a hillside should be there when you come back
+
+**Pending, and decided.** Joe, 7 September, alongside 153. This is 152's open half, and 153 settled
+only the station case.
+
+**A hull should carry a position, the same way a character does.** Joe's words: *"If you disembark
+your ship and log off, your character disappears from the world, and so should your ship. But when
+you log back in, your ship should appear where it was, the same as your character. If a ship gets
+'lost' — a player parks it somewhere and forgets where they left it — they can recover/summon it at
+a hangar/station the same way they can summon ships today."*
+
+So a ship parked outside a station is not recovered to one automatically. Summoning stays the
+recovery, and it is a thing the player chooses to do rather than something that happens to them.
+
+### What is actually missing
+
+The three states a hull can be in are **in a hangar**, **being flown**, and **parked somewhere that
+is neither**, and only the first two are modelled. Being aboard became real on 7 September
+(`AboardShipItemInstanceId`); being in a hangar is the inventory the instance sits in, which 153
+made true on both sides. The third is still nothing, so:
+
+- Landing on a planet, stepping out and quitting puts the ship back at the hangar it was summoned
+  to, because `PlaceSummonedShip` places it at the station its instance is recorded in.
+- Nothing removes an unattended ship's pawn when its owner disconnects, and nothing puts one back.
+
+### It amends ADR-0012
+
+ADR-0012 says *"where a ship is needs no column"*, and that was true exactly while ships lived in
+hangars. It is now false in two directions — being aboard is a second answer, and this is a third —
+so the ADR wants amending rather than quietly contradicting. **That is the first piece of work here,
+before the migration**, because an accepted decision the code disagrees with is worse than either.
+
+### Blocked on nothing, and it wants doing before somebody loses a freighter
+
+The shape is a nullable position on the hull instance, set when a pawn is removed from the world at
+a place that is not a hangar, and read when one is put back. Task 147 is the pattern to copy: a
+position and a flag, written periodically and on disconnect, restored at sign-in — except the owner
+of the position is a hull rather than a character, and a hull with no pilot has nobody whose
+disconnect to hang the write on.
+
+Which is the one genuinely open question: **what writes an unattended ship's position, and when.**
+The honest options are the owner's own whereabouts timer while they are aboard (which covers every
+way a ship stops being flown except the server dying), or a periodic sweep of ship pawns. The first
+is cheaper and has a known hole; say which was taken and why, in the task, when it is.
 
 ---
 

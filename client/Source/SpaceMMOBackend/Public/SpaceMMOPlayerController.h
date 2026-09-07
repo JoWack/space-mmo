@@ -133,6 +133,14 @@ public:
 	int32 DockedStationId() const;
 
 	/**
+	 * Records where this connection is now docked, so a later pawn is handed the right station.
+	 *
+	 * Server-side, and called by the docking component whichever way the state changed: pressing
+	 * the key, flying out of range, or docking a ship and stepping off it.
+	 */
+	void NoteDockedStation(int32 StationId) { ResumeAtStationId = StationId; }
+
+	/**
 	 * Switches the station overlay's tab. Bound to 1, 2 and 3.
 	 *
 	 * Only while the overlay is open, so the number keys stay free for anything else later — and so
@@ -242,6 +250,13 @@ public:
 	 *
 	 * Held because identity and possession race: a pawn can arrive before or after the answer does,
 	 * and whichever is last has to be the one that puts the ship back at the station.
+	 *
+	 * <strong>Kept current after sign-in as well, via NoteDockedStation.</strong> It used to hold
+	 * whatever was true when identity resolved, forever -- so a player who signed in at the capital,
+	 * flew to Grimhold and docked would have the <em>capital</em> pushed onto the next pawn they
+	 * possessed, and the range check would undock them from a station they were standing at. Docking
+	 * a ship makes that reachable in one keypress, because the pawn changes at the moment you dock
+	 * (task 153).
 	 */
 	int32 ResumeAtStationId = 0;
 

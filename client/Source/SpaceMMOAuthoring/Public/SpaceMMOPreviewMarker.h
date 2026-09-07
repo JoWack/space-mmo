@@ -129,7 +129,7 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "SpaceMMO|Station",
 		meta = (EditCondition = "bIsStation", EditConditionHides, ClampMin = "0.1"))
-	double DockingRangeKilometres = 5.0;
+	double DockingRangeKilometres = 0.1;
 
 	UPROPERTY()
 	bool bIsDeposit = true;

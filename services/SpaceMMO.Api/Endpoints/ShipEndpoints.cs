@@ -15,6 +15,8 @@ public sealed record BoardShipRequest(int CharacterId, long HullItemInstanceId);
 
 public sealed record DisembarkRequest(int CharacterId);
 
+public sealed record StowShipRequest(int CharacterId, long HullItemInstanceId, int StationId);
+
 /// <summary>Which hull a character would fly, where it is parked, and whether they are in it.</summary>
 /// <param name="StationId">The station it is parked at, or null if it is not in a hangar.</param>
 public sealed record ActiveShipResponse(
@@ -46,6 +48,7 @@ public static class ShipEndpoints
         group.MapGet("/{characterId:int}/active", ActiveAsync);
         group.MapPost("/board", BoardAsync);
         group.MapPost("/disembark", DisembarkAsync);
+        group.MapPost("/stow", StowAsync);
     }
 
     /// <summary>
@@ -145,6 +148,43 @@ public static class ShipEndpoints
             await ships.DisembarkAsync(request.CharacterId, cancellation);
 
             return Results.Ok(new ActiveShipResponse(null, null, null, false));
+        }
+        catch (ShipSummonException refusal)
+        {
+            return Results.Problem(
+                title: refusal.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+    }
+
+    /// <summary>
+    /// Parks the ship a character is aboard in a station's hangar (task 153).
+    /// </summary>
+    /// <remarks>
+    /// Service credential only, and for the same reason docking is: this asserts that a ship has
+    /// been taken out of the world and put inside a building, and the only party that can know
+    /// that is the one that removed the pawn. A player's own token would let a client park its
+    /// ship in a hangar it is nowhere near.
+    /// </remarks>
+    private static async Task<IResult> StowAsync(
+        StowShipRequest request,
+        HttpContext context,
+        ServiceCredential service,
+        ShipService ships,
+        CancellationToken cancellation)
+    {
+        if (!service.IsServiceCaller(context))
+        {
+            return Results.Problem(
+                title: "Where a ship is parked is decided by the game server.",
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        try
+        {
+            await ships.StowAsync(
+                request.CharacterId, request.HullItemInstanceId, request.StationId, cancellation);
+
+            return Results.Ok(new ActiveShipResponse(null, null, request.StationId, false));
         }
         catch (ShipSummonException refusal)
         {

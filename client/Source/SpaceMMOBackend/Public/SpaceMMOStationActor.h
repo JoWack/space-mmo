@@ -62,6 +62,24 @@ public:
 		const FSystemCoordinate& StationPosition,
 		const FSystemCoordinate& Position);
 
+	/**
+	 * A patch of ground beside this station, for putting something down next to it.
+	 *
+	 * <strong>The ground is asked where it is, rather than assumed to be at the station's own
+	 * height</strong>: a station sits on the terrain under it, and thirty metres away the terrain is
+	 * somewhere else. Any tangent direction will do — there is no side of a station that is its
+	 * front — so a world axis is a perfectly good thing to offset along.
+	 *
+	 * False when no planet is under it, which is not a fault: Deepdock orbits nothing, and the
+	 * honest answer for a deep-space station is that there is nowhere to stand. Both callers treat
+	 * it as a decision rather than an error — a summoned ship stays in its hangar, and a docked one
+	 * stays alongside (task 153).
+	 */
+	bool GroundPositionBeside(
+		double OffsetKilometres,
+		double LiftKilometres,
+		FSystemCoordinate& OutPosition) const;
+
 protected:
 	virtual void BeginPlay() override;
 

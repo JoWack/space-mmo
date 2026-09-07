@@ -978,28 +978,17 @@ void ASpaceMMOShipPawn::RequestDisembark()
 	ServerDisembark();
 }
 
-void ASpaceMMOShipPawn::ServerDisembark_Implementation()
+FVector ASpaceMMOShipPawn::SurfaceUpHere() const
 {
-	// Checked here rather than on the client, because this is where it counts.
-	if (!FBoarding::CanDisembark(bOnGround))
-	{
-		UE_LOG(LogSpaceMMO, Log, TEXT("Cannot step out: the ship is not on the ground."));
-
-		return;
-	}
-
-	AController* OwningController = GetController();
 	UWorld* World = GetWorld();
 
-	if (OwningController == nullptr || World == nullptr)
+	if (World == nullptr)
 	{
-		return;
+		return FVector::UpVector;
 	}
 
 	// Up is whichever planet the ship is resting on. Without it the character would step out along
 	// an arbitrary axis and end up inside the ground or hanging above it.
-	FVector Up = FVector::UpVector;
-
 	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
 	{
 		const FGroundContact Contact = FPlanetTerrain::ResolveContact(
@@ -1011,11 +1000,69 @@ void ASpaceMMOShipPawn::ServerDisembark_Implementation()
 
 		if (Contact.bOnGround)
 		{
-			Up = Contact.SurfaceNormal;
-
-			break;
+			return Contact.SurfaceNormal;
 		}
 	}
+
+	return FVector::UpVector;
+}
+
+ASpaceMMOCharacterPawn* ASpaceMMOShipPawn::StepPilotOut(
+	const FSystemCoordinate& Where, const FQuat& Facing)
+{
+	AController* OwningController = GetController();
+	UWorld* World = GetWorld();
+
+	if (OwningController == nullptr || World == nullptr)
+	{
+		return nullptr;
+	}
+
+	// Assigned in two statements rather than one conditional: TSubclassOf and UClass* both convert
+	// to several common types, so the ternary is ambiguous.
+	TSubclassOf<ASpaceMMOCharacterPawn> SpawnClass = CharacterClass;
+
+	if (SpawnClass == nullptr)
+	{
+		SpawnClass = ASpaceMMOCharacterPawn::StaticClass();
+	}
+
+	ASpaceMMOCharacterPawn* Character = World->SpawnActorDeferred<ASpaceMMOCharacterPawn>(
+		SpawnClass, FTransform(Facing), nullptr, nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (Character == nullptr)
+	{
+		return nullptr;
+	}
+
+	// Before FinishSpawning. BeginPlay resolves the ground and aligns to it, so a position applied
+	// afterwards is a frame too late.
+	Character->SetStartingSystemPosition(Where.Kilometres);
+
+	// The rotation has to survive FinishSpawning, which is why it is on the transform rather than
+	// applied afterwards: BeginPlay reads the actor's quaternion and aligns it to the ground, so a
+	// heading set later is a heading set a frame too late.
+	Character->FinishSpawning(FTransform(Facing));
+
+	// The ship is left unpossessed where it is. Whether it stays there is the caller's decision --
+	// stepping out leaves it to be climbed back into, docking puts it in a hangar (task 153).
+	OwningController->Possess(Character);
+
+	return Character;
+}
+
+void ASpaceMMOShipPawn::ServerDisembark_Implementation()
+{
+	// Checked here rather than on the client, because this is where it counts.
+	if (!FBoarding::CanDisembark(bOnGround))
+	{
+		UE_LOG(LogSpaceMMO, Log, TEXT("Cannot step out: the ship is not on the ground."));
+
+		return;
+	}
+
+	const FVector Up = SurfaceUpHere();
 
 	// Measured off the hull rather than taken from a constant, so a bigger ship steps you out
 	// further and this cannot go stale the next time the drawn ship changes size.
@@ -1047,35 +1094,10 @@ void ASpaceMMOShipPawn::ServerDisembark_Implementation()
 	const FQuat Facing =
 		FBoarding::StepOutRotation(Up, FlightState.Rotation.GetForwardVector());
 
-	// Assigned in two statements rather than one conditional: TSubclassOf and UClass* both convert
-	// to several common types, so the ternary is ambiguous.
-	TSubclassOf<ASpaceMMOCharacterPawn> SpawnClass = CharacterClass;
-
-	if (SpawnClass == nullptr)
-	{
-		SpawnClass = ASpaceMMOCharacterPawn::StaticClass();
-	}
-
-	ASpaceMMOCharacterPawn* Character = World->SpawnActorDeferred<ASpaceMMOCharacterPawn>(
-		SpawnClass, FTransform(Facing), nullptr, nullptr,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-
-	if (Character == nullptr)
+	if (StepPilotOut(StepOut, Facing) == nullptr)
 	{
 		return;
 	}
-
-	// Before FinishSpawning. BeginPlay resolves the ground and aligns to it, so a position applied
-	// afterwards is a frame too late.
-	Character->SetStartingSystemPosition(StepOut.Kilometres);
-
-	// The rotation has to survive FinishSpawning, which is why it is on the transform rather than
-	// applied afterwards: BeginPlay reads the actor's quaternion and aligns it to the ground, so a
-	// heading set later is a heading set a frame too late.
-	Character->FinishSpawning(FTransform(Facing));
-
-	// The ship stays exactly where it is, unpossessed, waiting to be climbed back into.
-	OwningController->Possess(Character);
 
 	// The ship's position as well as the character's, because "the ship moved when I got out" and
 	// "the ship is where it was and I am looking at it from somewhere new" produce the same

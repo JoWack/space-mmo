@@ -137,6 +137,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Ship")
 	void RequestDisembark();
 
+	/**
+	 * Puts the pilot on foot at a position, leaving this ship unpossessed where it is.
+	 *
+	 * <strong>The swap, on its own, so there is exactly one of it.</strong> Stepping out beside the
+	 * hull and docking at a station are the same three actions — spawn a character where they
+	 * belong, possess it, leave the ship behind — differing only in where "where they belong" is.
+	 * Docking additionally destroys the ship afterwards, which is the caller's business and not
+	 * this one's (task 153).
+	 *
+	 * Server-side. Possession on a client decides nothing and is corrected a frame later.
+	 *
+	 * @return The character pawn now being possessed, or null if nothing could be spawned.
+	 */
+	class ASpaceMMOCharacterPawn* StepPilotOut(
+		const FSystemCoordinate& Where, const FQuat& Facing);
+
+	/**
+	 * Which way is up where this ship is, taken from whichever planet it is resting on.
+	 *
+	 * World up when there is no planet under it, which is the honest answer in deep space and the
+	 * one that keeps a step-out from picking an arbitrary axis.
+	 */
+	FVector SurfaceUpHere() const;
+
 	/** Altitude above the nearest planet's surface, in kilometres. Zero if there is none. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Ship")
 	double GetAltitudeKilometres() const;

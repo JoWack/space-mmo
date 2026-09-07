@@ -231,7 +231,7 @@ public sealed record StationContent(
     StationKind Kind,
     double[]? Direction = null,
     double[]? SystemPosition = null,
-    double DockingRangeKm = 5.0)
+    double DockingRangeKm = 0.1)
 {
     /// <summary>
     /// Where it stands on its body, as a direction from that body's centre.

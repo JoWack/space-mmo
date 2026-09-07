@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Domain.Characters;
@@ -283,6 +284,100 @@ public sealed class ShipEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifeti
         after.EnsureSuccessStatusCode();
 
         Assert.Null((await after.Content.ReadFromJsonAsync<HoldPayload>())!.HoldInventoryId);
+    }
+
+    /// <summary>
+    /// A player cannot park their own ship in a hangar they are nowhere near.
+    /// </summary>
+    /// <remarks>
+    /// The same line docking and boarding draw, for the same reason: this asserts that a ship has
+    /// been taken out of the world and put inside a building, and the only party that can know that
+    /// is the one that removed the pawn. A player token that worked here would let a client teleport
+    /// its own hull across the system by asserting it had docked.
+    /// </remarks>
+    [Fact]
+    public async Task A_player_cannot_park_their_own_ship()
+    {
+        await DockAsync(_spaceportId);
+        (await SummonAsync(_hullId)).EnsureSuccessStatusCode();
+
+        var request = new HttpRequestMessage(
+            HttpMethod.Post, new Uri("/ships/stow", UriKind.Relative))
+        {
+            Content = JsonContent.Create(
+                new { characterId = _characterId, hullItemInstanceId = _hullId, stationId = _marketId }),
+        };
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        // And nothing moved, so the refusal is not a status code on a change that happened anyway.
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemInstance hull = await verify.ItemInstances
+            .Include(i => i.Inventory)
+            .SingleAsync(i => i.Id == _hullId);
+
+        Assert.Equal(_spaceportId, hull.Inventory!.StationId);
+    }
+
+    /// <summary>
+    /// Docking a ship parks it, over the wire the game client actually sends (task 153).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The body is written out by hand rather than built from the request record.</strong>
+    /// The client composes this JSON with <c>FString::Printf</c> in
+    /// <c>USpaceMMOBackendClient::StowAsServer</c>, so a field renamed on this side binds to a
+    /// default on the other — <c>hullItemInstanceId</c> becomes 0 and the refusal reads as "that
+    /// hull is not yours", for a hull that is. A test that posted a C# object would agree with
+    /// itself and catch none of it.
+    /// </para>
+    /// <para>
+    /// The hold is asked for afterwards, because that is the consequence a player meets: it opens
+    /// where the ship now is and not where it used to be.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task The_game_server_parks_a_docked_ship_and_its_hold_opens_there()
+    {
+        await DockAsync(_spaceportId);
+        (await SummonAsync(_hullId)).EnsureSuccessStatusCode();
+
+        // Flown to the market and docked there.
+        await DockAsync(_marketId);
+
+        var stow = new HttpRequestMessage(
+            HttpMethod.Post, new Uri("/ships/stow", UriKind.Relative))
+        {
+            Content = new StringContent(
+                $"{{\"characterId\":{_characterId},\"hullItemInstanceId\":{_hullId},"
+                + $"\"stationId\":{_marketId}}}",
+                System.Text.Encoding.UTF8,
+                "application/json"),
+        };
+
+        stow.Headers.Add("X-SpaceMMO-Service", ApiFactory.TestServiceSecret);
+
+        (await _client.SendAsync(stow)).EnsureSuccessStatusCode();
+
+        await using (SpaceMmoDbContext verify = _fixture.CreateContext())
+        {
+            ItemInstance hull = await verify.ItemInstances
+                .Include(i => i.Inventory)
+                .SingleAsync(i => i.Id == _hullId);
+
+            Assert.Equal(_marketId, hull.Inventory!.StationId);
+        }
+
+        HttpResponseMessage hold = await HoldAsync();
+
+        hold.EnsureSuccessStatusCode();
+
+        Assert.NotNull((await hold.Content.ReadFromJsonAsync<HoldPayload>())!.HoldInventoryId);
     }
 
     /// <summary>

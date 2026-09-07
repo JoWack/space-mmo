@@ -174,7 +174,14 @@ public class Station
     /// Content rather than a constant, because a planetary outpost and an orbital shipyard are not
     /// the same size and should not demand the same precision to arrive at.
     /// </remarks>
-    public double DockingRangeKilometres { get; set; } = 5.0;
+    /// <remarks>
+    /// A hundred metres, not five kilometres. Docking used to reach far enough that a character
+    /// standing at the capital's spawn point was already docked at it, five hundred metres away —
+    /// which made docking a state you were in rather than somewhere you went. It matters more now
+    /// that docking puts your ship away (task 153): the ship leaves the world at the moment you
+    /// dock, so how far that can happen from is how far a ship can be teleported.
+    /// </remarks>
+    public double DockingRangeKilometres { get; set; } = 0.1;
 }
 
 /// <summary>

@@ -55,7 +55,7 @@ struct SPACEMMOAUTHORING_API FSpaceMMOAuthoredPlaceable
 
 	FString StationKind = TEXT("TradingHub");
 
-	double DockingRangeKilometres = 5.0;
+	double DockingRangeKilometres = 0.1;
 };
 
 /**

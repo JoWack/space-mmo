@@ -45,8 +45,9 @@ public sealed class ShipService(SpaceMmoDbContext database)
     /// Makes an owned hull the character's active ship, bringing it to the station they are at.
     /// </summary>
     /// <exception cref="ShipSummonException">
-    /// If the character is not docked, the station is not one ships come to, the instance is not
-    /// theirs, or it is not a hull.
+    /// If the character is not docked, the instance is not theirs, it is not a hull, or it would
+    /// have to be <em>brought</em> to a station ships do not come to. A hull already parked in this
+    /// station's own hangar is fetched back wherever that station is (task 153).
     /// </exception>
     public async Task<Inventory> SummonAsync(
         int characterId, long hullInstanceId, CancellationToken cancellationToken = default)
@@ -74,12 +75,6 @@ public sealed class ShipService(SpaceMmoDbContext database)
             throw new ShipSummonException($"No station {stationId}.");
         }
 
-        if (!station.Kind.AllowsShipSummoning())
-        {
-            throw new ShipSummonException(
-                $"{station.Name} is a {station.Kind} and ships are not summoned there.");
-        }
-
         ItemInstance? hull = await _database.ItemInstances
             .Include(i => i.ItemDef)
             .Include(i => i.Inventory)
@@ -104,6 +99,23 @@ public sealed class ShipService(SpaceMmoDbContext database)
                 $"A {hull.ItemDef.Name} is a {hull.ItemDef.Category}, not something you can fly.");
         }
 
+        // <strong>Fetching back what you parked here is not the same act as having one brought.</strong>
+        // The kind gate is about a hull *arriving* somewhere -- "a market hub, a house and a bar are
+        // not places a hull arrives" -- and a ship already sitting in this station's hangar has
+        // arrived, under its own power, with a pilot who flew it.
+        //
+        // It became load-bearing on 7 September, when docking started putting ships away (task 153).
+        // Docking at Terra Outpost parks the hull in Terra's hangar, and a gate that refused to open
+        // it would leave a player on foot on Terra with their only ship locked in the building in
+        // front of them and no way to reach a spaceport to ask for it.
+        bool alreadyHere = hull.Inventory.StationId == stationId;
+
+        if (!alreadyHere && !station.Kind.AllowsShipSummoning())
+        {
+            throw new ShipSummonException(
+                $"{station.Name} is a {station.Kind} and ships are not summoned there.");
+        }
+
         // Brought to where the player is standing. A hull left at another station is not summoned
         // from a distance -- it moves, and afterwards it is parked here rather than there.
         Inventory hangar = await _inventories.GetOrCreateStationHangarAsync(
@@ -121,6 +133,86 @@ public sealed class ShipService(SpaceMmoDbContext database)
         await _database.SaveChangesAsync(cancellationToken);
 
         return hold;
+    }
+
+    /// <summary>
+    /// Parks a hull in a station's hangar, and steps its pilot out of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The other half of the sentence <see cref="SummonAsync"/> starts (task 153).</strong>
+    /// ADR-0012 says a parked ship's inventory <em>is</em> the station hangar it was left in, and
+    /// summoning is how it comes out. Nothing put it back, so a ship anybody docked stood on the
+    /// apron while its row said it was inside — the world and the record disagreeing about one of
+    /// the few things ADR-0012 made unambiguous.
+    /// </para>
+    /// <para>
+    /// <strong>The hull is named rather than read off <see cref="Character.AboardShipItemInstanceId"/>.</strong>
+    /// Docking a ship possesses a character pawn, and possession is what reports boarding — so the
+    /// game server sends a disembark for the same keypress, and a stow that asked what somebody was
+    /// aboard would race it and find nothing. Naming the hull makes the two independent, and it is
+    /// what the caller knows anyway: it is the pawn it just removed from the world.
+    /// </para>
+    /// <para>
+    /// <strong>Called only when the simulation actually removed the pawn</strong>, not from
+    /// <see cref="Docking.DockingService.DockAsync"/>. Docking on foot has nothing to do with
+    /// hulls, and a station with nowhere to step out at — Deepdock, which orbits nothing — leaves
+    /// the ship alongside. Moving the hull there anyway would recreate exactly the disagreement
+    /// this exists to remove, one station further out.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ShipSummonException">
+    /// If the character or station does not exist, or the hull is not this character's.
+    /// </exception>
+    public async Task StowAsync(
+        int characterId,
+        long hullInstanceId,
+        int stationId,
+        CancellationToken cancellationToken = default)
+    {
+        Character character = await _database.Characters
+            .FirstOrDefaultAsync(c => c.Id == characterId, cancellationToken)
+            ?? throw new ShipSummonException($"No character {characterId}.");
+
+        Station station = await _database.Stations
+            .FirstOrDefaultAsync(s => s.Id == stationId, cancellationToken)
+            ?? throw new ShipSummonException($"No station {stationId}.");
+
+        ItemInstance? hull = await _database.ItemInstances
+            .Include(i => i.ItemDef)
+            .Include(i => i.Inventory)
+            .FirstOrDefaultAsync(i => i.Id == hullInstanceId, cancellationToken);
+
+        // Ownership through the inventory the instance sits in, the same way summoning and boarding
+        // read it. Parking is a write to somebody's hangar, so an id that arrived wrong would move
+        // another player's ship across the system.
+        if (hull?.Inventory is null || hull.Inventory.CharacterId != characterId)
+        {
+            throw new ShipSummonException($"Hull {hullInstanceId} is not yours to park.");
+        }
+
+        if (hull.ItemDef!.Category != ItemCategory.Hull)
+        {
+            throw new ShipSummonException(
+                $"A {hull.ItemDef.Name} is a {hull.ItemDef.Category}, not something you can park.");
+        }
+
+        Inventory hangar = await _inventories.GetOrCreateStationHangarAsync(
+            characterId, station.Id, cancellationToken);
+
+        hull.InventoryId = hangar.Id;
+
+        // Out of the ship as well as into the hangar, and only if it was this one. Being aboard is
+        // what opens a hold from anywhere (ADR-0012 point 4), and a character left aboard a hull
+        // that is now inside a building could fly away and still reach its cargo.
+        if (character.AboardShipItemInstanceId == hull.Id)
+        {
+            character.AboardShipItemInstanceId = null;
+        }
+
+        // Still their ship. Stepping out of your shuttle does not stop it being your shuttle, and
+        // ActiveShipItemInstanceId is what SummonAsync brings back out.
+        await _database.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>Where a character's active hull is, and what it is called.</summary>

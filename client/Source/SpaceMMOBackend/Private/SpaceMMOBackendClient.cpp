@@ -1305,6 +1305,33 @@ void USpaceMMOBackendClient::DisembarkAsServer(const int32 CharacterId)
 		ServiceSecret);
 }
 
+void USpaceMMOBackendClient::StowAsServer(
+	const int32 CharacterId, const int64 HullItemInstanceId, const int32 StationId)
+{
+	// A hull id of zero is the prop nobody owns. Parking it would name whichever hull the backend
+	// thought was active and move a ship the player is nowhere near.
+	if (ServiceSecret.IsEmpty() || CharacterId == 0 || HullItemInstanceId <= 0 || StationId == 0)
+	{
+		return;
+	}
+
+	Send(
+		TEXT("POST"),
+		TEXT("/ships/stow"),
+		FString::Printf(
+			TEXT("{\"characterId\":%d,\"hullItemInstanceId\":%lld,\"stationId\":%d}"),
+			CharacterId,
+			HullItemInstanceId,
+			StationId),
+		false,
+		[CharacterId, StationId](const FString&)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Character %d's ship is in station %d's hangar."), CharacterId, StationId);
+		},
+		ServiceSecret);
+}
+
 void USpaceMMOBackendClient::FetchBodies()
 {
 	Bodies.Reset();

@@ -228,6 +228,17 @@ public:
 
 	void DisembarkAsServer(int32 CharacterId);
 
+	/**
+	 * Parks the hull a character is aboard in a station's hangar, and steps them out of it.
+	 *
+	 * <strong>Sent only when the pawn actually left the world (task 153).</strong> ADR-0012 says a
+	 * parked ship's inventory <em>is</em> the station hangar it was left in, so this is the record
+	 * catching up with a ship that is no longer standing on the apron. Sending it for a dock that
+	 * left the ship where it was -- a station with no ground to step out onto -- would put a hull
+	 * inside a building it is parked beside, which is the disagreement this exists to remove.
+	 */
+	void StowAsServer(int32 CharacterId, int64 HullItemInstanceId, int32 StationId);
+
 	/** Loads every body in the starting system. Unauthenticated, like the deposits. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
 	void FetchBodies();

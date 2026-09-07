@@ -20,7 +20,6 @@
 #include "SpaceMMOCrosshair.h"
 #include "SpaceMMOOnFootReadout.h"
 #include "SpaceMMOCharacterPawn.h"
-#include "SpaceMMOBoarding.h"
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOShipPawn.h"
@@ -28,66 +27,6 @@
 #include "SpaceMMOSkillsScreen.h"
 #include "SpaceMMOStationOverlay.h"
 #include "SpaceMMOTransientMessages.h"
-
-namespace
-{
-	/**
-	 * Where a summoned ship waits: on the ground, a short walk from the station.
-	 *
-	 * <strong>The sideways step is FBoarding's, not a new one.</strong> Offsetting "to the side" of
-	 * something standing on a sphere is the same arithmetic as stepping out of a parked ship, and
-	 * the naive version -- add thirty metres of a world axis -- buries the result in the hillside
-	 * whenever the station is not near the pole that axis points at.
-	 *
-	 * The ground is then asked where it is, rather than assumed to be at the station's own height:
-	 * a station sits on the terrain under it, and thirty metres away the terrain is somewhere else.
-	 */
-	bool ParkingPositionBeside(
-		UWorld* World,
-		const ASpaceMMOStationActor& Station,
-		const double OffsetKilometres,
-		const double LiftKilometres,
-		FSystemCoordinate& OutPosition)
-	{
-		const FSystemCoordinate StationPosition = Station.GetSystemPosition();
-
-		for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
-		{
-			const FPlanetConfig& Planet = It->GetPlanetConfig();
-
-			const FVector Up =
-				(StationPosition.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
-
-			if (Up.IsNearlyZero())
-			{
-				continue;
-			}
-
-			// Any tangent direction will do -- there is no side of a station that is its front --
-			// and StepOutPosition flattens whatever it is given into the tangent plane, so a world
-			// axis is a perfectly good thing to hand it.
-			const FSystemCoordinate Beside = FBoarding::StepOutPosition(
-				StationPosition, Up, FVector::UpVector, OffsetKilometres);
-
-			const FVector BesideDirection =
-				(Beside.Kilometres - Planet.Centre.Kilometres).GetSafeNormal();
-
-			if (BesideDirection.IsNearlyZero())
-			{
-				continue;
-			}
-
-			OutPosition = FSystemCoordinate(
-				FPlanetTerrain::SurfacePosition(
-					Planet, It->GetTerrainConfig(), BesideDirection).Kilometres
-				+ (BesideDirection * LiftKilometres));
-
-			return true;
-		}
-
-		return false;
-	}
-}
 
 ASpaceMMOPlayerController::ASpaceMMOPlayerController()
 {
@@ -1865,9 +1804,10 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship
 
 	FSystemCoordinate Parking;
 
-	if (!ParkingPositionBeside(
-		World,
-		*Station,
+	// Moved onto the station itself, because docking needs the same patch of ground to stand a
+	// pilot on and two copies of "beside a station, on the terrain" would be two chances to be
+	// beside it differently (task 153).
+	if (!Station->GroundPositionBeside(
 		SummonedShipOffsetKilometres,
 		SummonedShipLiftKilometres,
 		Parking))
