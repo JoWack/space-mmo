@@ -4891,6 +4891,88 @@ is cheaper and has a known hole; say which was taken and why, in the task, when 
 
 ---
 
+## 156 — G does nothing in a ship that has been boarded twice
+
+**In progress, instrumented, awaiting one playtest.** Reported by Joe on 7 September, immediately
+after 153 landed: *"Nothing happens pressing G while in my ship at the capital."*
+
+### What the log ruled out, before anything was changed
+
+`client/Saved/Logs/SpaceMMO.log`, the run ending 21:25:14, answers most of it without a playtest:
+
+- **Not range**, which was the obvious suspect the day 153 cut it from 5 km to 100 m. Joe stepped
+  out at `(60.493, 0.021, 20.160)` km and the capital is at `(60.524, 0.000, 20.155)` km — **38 m
+  apart**, comfortably inside the ring.
+- **Not identity, not the station, not the server path.** Three seconds later, standing in the same
+  place on foot, G worked both ways: `Character 10 docked at station 1` at 21:25:03 and
+  `Character 10 undocked` at 21:25:04.
+- **Not the key mapping.** `Config/DefaultInput.ini` has Dock on G and Board on F; they do not
+  collide.
+- **Not the new code failing to load.** The same log carries `docking range 0.1 km`, so the build
+  under test is the one 153 produced.
+
+**The discriminating line is the binding.** `Dock key bound on SpaceMMOShipPawn_0` appears exactly
+**once**, at the first boarding. The two later boardings log `SpaceMMOShipPawn_0 will dock as
+character 10` and no bind at all — while every character pawn, being a fresh actor each time, binds
+on every possession.
+
+### The mechanism, read out of the engine rather than guessed
+
+`APawn::UnPossessed()` calls `DestroyPlayerInputComponent()` (`Pawn.cpp:727`), which is
+`InputComponent->DestroyComponent(); InputComponent = nullptr;` (`Pawn.cpp:800`). **Stepping out of
+a ship destroys that ship's input component.** Re-boarding builds a new one in
+`APawn::PawnClientRestart` (`Pawn.cpp:510`), which calls `SetupPlayerInputComponent` on it — which
+is why thrust and the Board key come back and only the dock key stays dead. The docking component's
+binding was on the destroyed one.
+
+This is the same fault the component already carried a comment about, and the comment was right
+about the symptom — *"the key does nothing, silently, because no handler runs to say anything"* —
+and wrong about being fixed. `BoundInput` was introduced so a flag could not mistake "already bound"
+for "bound to something that is gone", and something still lost the re-bind.
+
+**What is not yet pinned is which of the two re-bind routes dropped it.** Both
+`HandlePawnRestarted` (off `ReceiveRestartedDelegate`) and the controller's `RefreshPossessedPawn`
+call `BindInput`, and on paper both should have fired with the new component in hand:
+`APlayerController::OnPossess` skips `DispatchRestart(false)` for a local controller and reaches
+`ClientRestart` → `DispatchRestart(true)` → `PawnClientRestart` → `NotifyRestarted`, so the
+delegate broadcasts *after* the component exists (`PlayerController.cpp:858, 914`). Reading further
+stopped paying, which is where this file's own rule applies: stop proposing causes and print
+numbers.
+
+### What was done about it
+
+**Binding is now self-healing rather than event-ordered.** `TickComponent` compares the pawn's
+current `InputComponent` against the one actually bound, every tick, above the authority guard —
+because on a dedicated server the machine that needs the key bound is the one without authority.
+Comparing against the live component cannot double-bind and cannot go stale, so no ordering between
+possession, restart and component registration can lose the key again.
+
+**Three silent things now speak**, which is the rule 153 broke and this re-learns:
+
+- `RequestToggleDock` logs that the key ran. "G does nothing" covered a dead binding, a station out
+  of range and an unidentified character equally, and nothing in the log separated them.
+- `BindInput` names the input component and says **bound** or **re-bound**. Two possessions of one
+  ship pawn produced one line, and a dead key looked exactly like a working one.
+- The out-of-range refusal logs the nearest station, how far it is, and what its ring is. It reached
+  the player as an on-screen message and nothing else, and an on-screen message is the first thing
+  lost behind a panel.
+
+### How the next run tells the three apart
+
+- **No `Dock key pressed` line on G in a ship** — input never reaches the component, and the
+  self-healing rebind did not fix it. Look for `Dock key re-bound on SpaceMMOShipPawn_0 (input
+  PawnInputComponent1)` on the second boarding; if that line is present and the press is still
+  silent, the binding is live and something upstream is eating the key.
+- **`Dock key pressed` and nothing after it** — the server path, not input.
+- **`Nothing in docking range: nearest is …`** — range after all, with the numbers to say so.
+
+### Blocked on nothing, but it is what 153's playtest is waiting behind
+
+153 is written and tested and cannot be confirmed in a playtest until the key works from the pilot's
+seat. Treat them as one sitting.
+
+---
+
 ## Done
 
 Nothing yet under this file's numbering.

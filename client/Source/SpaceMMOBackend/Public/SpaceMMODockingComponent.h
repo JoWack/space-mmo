@@ -117,6 +117,15 @@ private:
 	/** The nearest station this pawn is within docking range of, or null. */
 	class ASpaceMMOStationActor* FindStationInRange() const;
 
+	/**
+	 * The nearest placed station at any distance, and how far away it is.
+	 *
+	 * Split out so a refusal can say what it refused against. "Nothing in docking range" is true of
+	 * a pilot ten metres too far out and of one in another system, and the two want different
+	 * things done about them.
+	 */
+	class ASpaceMMOStationActor* NearestStation(double& OutKilometres) const;
+
 	/** Where this pawn is, in system space, or false if it cannot be worked out. */
 	bool TryGetSystemPosition(FSystemCoordinate& OutPosition) const;
 
@@ -165,4 +174,13 @@ private:
 	 * the key does nothing, silently, because no handler runs to say anything.
 	 */
 	TWeakObjectPtr<class UInputComponent> BoundInput;
+
+	/**
+	 * Whether the key has ever been bound, so the log can say "bound" from "re-bound".
+	 *
+	 * <strong>Not the guard.</strong> A flag is exactly what could not tell "already bound" from
+	 * "bound to something that is gone", which is the fault this component was already carrying a
+	 * comment about. BoundInput stays the guard; this only decides a word in a log line.
+	 */
+	bool bHasBoundOnce = false;
 };

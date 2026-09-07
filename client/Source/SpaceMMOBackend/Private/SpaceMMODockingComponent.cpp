@@ -54,16 +54,32 @@ void USpaceMMODockingComponent::BindInput(UInputComponent* InputComponent)
 		return;
 	}
 
+	const bool bRebind = BoundInput.IsValid() || bHasBoundOnce;
+
 	InputComponent->BindAction(
 		TEXT("Dock"), IE_Pressed, this, &USpaceMMODockingComponent::RequestToggleDock);
 
 	BoundInput = InputComponent;
+	bHasBoundOnce = true;
 
-	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Dock key bound on %s."), *GetNameSafe(GetOwner()));
+	// The input component is named, because "bound" and "bound to the one the player is driving"
+	// are different facts and the log could not tell them apart. Two possessions of one ship pawn
+	// produced one line, and the second boarding's dead key looked exactly like a working one.
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Dock key %s on %s (input %s)."),
+		bRebind ? TEXT("re-bound") : TEXT("bound"),
+		*GetNameSafe(GetOwner()),
+		*GetNameSafe(InputComponent));
 }
 
 void USpaceMMODockingComponent::RequestToggleDock()
 {
+	// <strong>Says the key ran, before anything can decide it did nothing.</strong> Every refusal
+	// below this reached the player as an on-screen message and nothing else, so "G does nothing"
+	// covered a dead binding, a station out of range and an unidentified character equally -- and
+	// the log could not separate them. This line is what makes a silent key a fact rather than an
+	// absence (task 156).
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Dock key pressed on %s."), *GetNameSafe(GetOwner()));
+
 	// Carries nothing. Which station, and whether we are near it, are the server's to decide.
 	ServerToggleDock();
 }
@@ -123,6 +139,28 @@ void USpaceMMODockingComponent::ServerToggleDock_Implementation()
 
 	if (Station == nullptr)
 	{
+		// Logged as well as shown. An on-screen message is the first thing lost behind a panel, and
+		// a refusal nobody sees is indistinguishable from a key that did nothing -- which is exactly
+		// how the dead binding above was reported. The nearest station and the distance say whether
+		// the answer was right.
+		double NearestKilometres = 0.0;
+
+		const ASpaceMMOStationActor* Nearest = NearestStation(NearestKilometres);
+
+		if (Nearest != nullptr)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Nothing in docking range: nearest is %s at %.0f m, and it docks within %.0f m."),
+				*Nearest->GetStation().Name,
+				NearestKilometres * 1000.0,
+				Nearest->GetStation().DockingRangeKilometres * 1000.0);
+		}
+		else
+		{
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Nothing in docking range, and no station exists in this world to be near."));
+		}
+
 		ClientDockResult(TEXT("Nothing in docking range."), false);
 
 		return;
@@ -336,6 +374,23 @@ void USpaceMMODockingComponent::TickComponent(
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	// <strong>Before the authority guard, because binding is a local concern.</strong> On a
+	// dedicated server the machine that needs the key bound is the one with no authority, and a
+	// rebind that lived below this line would never run there at all.
+	//
+	// <strong>Checked every tick rather than driven by an event.</strong> APawn::UnPossessed
+	// destroys the pawn's input component outright (Pawn.cpp:727, DestroyPlayerInputComponent), so
+	// every re-boarding needs a fresh binding -- and the two events that were supposed to deliver
+	// one, ReceiveRestartedDelegate and the controller's possession pass, both raced the moment the
+	// new component exists. A ship boarded, left and boarded again kept flying and kept stepping
+	// out, because SetupPlayerInputComponent runs on the new component, and only the dock key was
+	// dead. Comparing against the component actually bound cannot double-bind and cannot go stale,
+	// so this is self-healing rather than ordered (task 156).
+	if (const APawn* OwningPawn = Cast<APawn>(GetOwner()))
+	{
+		BindInput(OwningPawn->InputComponent);
+	}
+
 	const AActor* Owner = GetOwner();
 
 	if (Owner == nullptr || !Owner->HasAuthority())
@@ -440,11 +495,14 @@ bool USpaceMMODockingComponent::TryGetSystemPosition(FSystemCoordinate& OutPosit
 	return true;
 }
 
-ASpaceMMOStationActor* USpaceMMODockingComponent::FindStationInRange() const
+ASpaceMMOStationActor* USpaceMMODockingComponent::NearestStation(
+	double& OutKilometres) const
 {
 	UWorld* World = GetWorld();
 
 	FSystemCoordinate Position;
+
+	OutKilometres = 0.0;
 
 	if (World == nullptr || !TryGetSystemPosition(Position))
 	{
@@ -458,15 +516,9 @@ ASpaceMMOStationActor* USpaceMMODockingComponent::FindStationInRange() const
 	{
 		ASpaceMMOStationActor* Station = *It;
 
-		if (Station == nullptr)
-		{
-			continue;
-		}
-
-		// The same rule the client draws with, so a prompt that says "dock available" is never
-		// followed by a refusal.
-		if (!ASpaceMMOStationActor::IsWithinDockingRange(
-			Station->GetStation(), Station->GetSystemPosition(), Position))
+		// An unplaced station is nowhere rather than at the origin, and measuring to it would
+		// report a distance to a place that does not exist.
+		if (Station == nullptr || !Station->GetStation().bPlaced)
 		{
 			continue;
 		}
@@ -481,5 +533,37 @@ ASpaceMMOStationActor* USpaceMMODockingComponent::FindStationInRange() const
 		}
 	}
 
+	if (Nearest != nullptr)
+	{
+		OutKilometres = NearestDistance;
+	}
+
 	return Nearest;
+}
+
+ASpaceMMOStationActor* USpaceMMODockingComponent::FindStationInRange() const
+{
+	FSystemCoordinate Position;
+
+	if (!TryGetSystemPosition(Position))
+	{
+		return nullptr;
+	}
+
+	double Kilometres = 0.0;
+
+	ASpaceMMOStationActor* Nearest = NearestStation(Kilometres);
+
+	if (Nearest == nullptr)
+	{
+		return nullptr;
+	}
+
+	// The same rule the client draws with, so a prompt that says "dock available" is never followed
+	// by a refusal. Asked of the nearest one only: a station further away that happens to have a
+	// wider ring is not the one you are standing at.
+	return ASpaceMMOStationActor::IsWithinDockingRange(
+		Nearest->GetStation(), Nearest->GetSystemPosition(), Position)
+		? Nearest
+		: nullptr;
 }
