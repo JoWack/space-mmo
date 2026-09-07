@@ -1,0 +1,662 @@
+{
+  "asset": "Borlash City / A-07",
+  "phase": "exterior blockout",
+  "sources": [
+    "Origin Station Plans.pdf pp21-30",
+    "CapitalGrandDistrict.png",
+    "docs/design-bible.md"
+  ],
+  "deviations": [
+    "Hotel schedule 40m used over drawing 38m.",
+    "All heights other than wall12/gate20/HQ45 and silhouette details are design assumptions.",
+    "Five district FBXs with local anchors; no gameplay content, Blueprint or terrain changes.",
+    "Market is per-station; bank images interpreted as storage depots; no invented loans or NPC supply.",
+    "400m wall centrelines retained; 2m wall thickness assumed. Ring bypasses at gates added because the drawn gate towers interrupt the ring.",
+    "Interiors are not designed in A-07. All building masses intentionally closed; access validation ends at frontages."
+  ],
+  "fbx_roundtrip": {
+    "Core": {
+      "render_meshes": 29,
+      "convex_hulls": 121,
+      "max_bounds_error_m": 4.2366981506392065e-05,
+      "status": "PASS Blender FBX roundtrip"
+    },
+    "Trading": {
+      "render_meshes": 21,
+      "convex_hulls": 101,
+      "max_bounds_error_m": 4.562139511110619e-05,
+      "status": "PASS Blender FBX roundtrip"
+    },
+    "Civil": {
+      "render_meshes": 32,
+      "convex_hulls": 174,
+      "max_bounds_error_m": 4.562139511110619e-05,
+      "status": "PASS Blender FBX roundtrip"
+    },
+    "Crafting": {
+      "render_meshes": 21,
+      "convex_hulls": 93,
+      "max_bounds_error_m": 4.561779132927768e-05,
+      "status": "PASS Blender FBX roundtrip"
+    },
+    "Refining": {
+      "render_meshes": 26,
+      "convex_hulls": 114,
+      "max_bounds_error_m": 4.561779132927768e-05,
+      "status": "PASS Blender FBX roundtrip"
+    }
+  },
+  "circulation": {
+    "minimum_route_width_m": 1.2,
+    "pawn_diameter_m": 0.68,
+    "pawn_height_m": 1.8,
+    "method": "1m conservative ground grid from generated convex collision, 0.60m clearance plus cell diagonal",
+    "limitations": "Ring route detours inward at gate towers. Exterior ground routes only; no interiors. Manhattan route lengths are upper estimates, not the PDF 85s assertion.",
+    "reachable_cells": 158619,
+    "frontages": {
+      "administration": {
+        "arrival_xy_m": [
+          0,
+          29
+        ],
+        "grid_route_to_square_m": 65
+      },
+      "market": {
+        "arrival_xy_m": [
+          -88,
+          79
+        ],
+        "grid_route_to_square_m": 185
+      },
+      "depot_n": {
+        "arrival_xy_m": [
+          -100,
+          25
+        ],
+        "grid_route_to_square_m": 143
+      },
+      "depot_s": {
+        "arrival_xy_m": [
+          108,
+          -125
+        ],
+        "grid_route_to_square_m": 215
+      },
+      "forgehall": {
+        "arrival_xy_m": [
+          -88,
+          -79
+        ],
+        "grid_route_to_square_m": 149
+      },
+      "refinehall": {
+        "arrival_xy_m": [
+          92,
+          -79
+        ],
+        "grid_route_to_square_m": 153
+      },
+      "guild_craft": {
+        "arrival_xy_m": [
+          -92,
+          -137
+        ],
+        "grid_route_to_square_m": 211
+      },
+      "guild_refine": {
+        "arrival_xy_m": [
+          50,
+          -137
+        ],
+        "grid_route_to_square_m": 169
+      },
+      "hq": {
+        "arrival_xy_m": [
+          72,
+          83
+        ],
+        "grid_route_to_square_m": 173
+      },
+      "hotel": {
+        "arrival_xy_m": [
+          56,
+          29
+        ],
+        "grid_route_to_square_m": 103
+      },
+      "apartments": {
+        "arrival_xy_m": [
+          136,
+          57
+        ],
+        "grid_route_to_square_m": 211
+      },
+      "pub": {
+        "arrival_xy_m": [
+          97,
+          31
+        ],
+        "grid_route_to_square_m": 146
+      },
+      "square": {
+        "arrival_xy_m": [
+          0,
+          -18
+        ],
+        "grid_route_to_square_m": 0
+      },
+      "dock_nw": {
+        "arrival_xy_m": [
+          -260,
+          260
+        ],
+        "grid_route_to_square_m": 538
+      },
+      "dock_ne": {
+        "arrival_xy_m": [
+          260,
+          260
+        ],
+        "grid_route_to_square_m": 538
+      },
+      "dock_sw": {
+        "arrival_xy_m": [
+          -260,
+          -260
+        ],
+        "grid_route_to_square_m": 502
+      },
+      "dock_se": {
+        "arrival_xy_m": [
+          260,
+          -260
+        ],
+        "grid_route_to_square_m": 502
+      }
+    }
+  },
+  "built": {
+    "sites": {
+      "administration": {
+        "footprint_m": [
+          60.0,
+          38.0
+        ],
+        "built_height_m": 22.0
+      },
+      "market": {
+        "footprint_m": [
+          72.0,
+          44.0
+        ],
+        "built_height_m": 25.0
+      },
+      "depot_n": {
+        "footprint_m": [
+          48.0,
+          30.0
+        ],
+        "built_height_m": 15.0
+      },
+      "depot_s": {
+        "footprint_m": [
+          44.0,
+          28.0
+        ],
+        "built_height_m": 15.0
+      },
+      "forgehall": {
+        "footprint_m": [
+          72.0,
+          44.0
+        ],
+        "built_height_m": 23.0
+      },
+      "refinehall": {
+        "footprint_m": [
+          72.0,
+          44.0
+        ],
+        "built_height_m": 27.0
+      },
+      "guild_craft": {
+        "footprint_m": [
+          56.0,
+          34.0
+        ],
+        "built_height_m": 21.0
+      },
+      "guild_refine": {
+        "footprint_m": [
+          56.0,
+          34.0
+        ],
+        "built_height_m": 21.0
+      },
+      "hq": {
+        "footprint_m": [
+          60.0,
+          48.0
+        ],
+        "built_height_m": 45.0
+      },
+      "hotel": {
+        "footprint_m": [
+          40.0,
+          26.0
+        ],
+        "built_height_m": 20.0
+      },
+      "apartments": {
+        "footprint_m": [
+          44.0,
+          30.0
+        ],
+        "built_height_m": 24.0
+      },
+      "pub": {
+        "footprint_m": [
+          30.0,
+          22.0
+        ],
+        "built_height_m": 12.0
+      },
+      "square": {
+        "footprint_m": [
+          48.0,
+          48.0
+        ],
+        "built_height_m": 8.0
+      },
+      "dock_nw": {
+        "footprint_m": [
+          64.0,
+          40.0
+        ],
+        "built_height_m": 14.0
+      },
+      "dock_ne": {
+        "footprint_m": [
+          64.0,
+          40.0
+        ],
+        "built_height_m": 14.0
+      },
+      "dock_sw": {
+        "footprint_m": [
+          64.0,
+          40.0
+        ],
+        "built_height_m": 14.0
+      },
+      "dock_se": {
+        "footprint_m": [
+          64.0,
+          40.0
+        ],
+        "built_height_m": 14.0
+      }
+    },
+    "bounds_m": [
+      [
+        -292.0,
+        292.0
+      ],
+      [
+        -280.0,
+        280.0
+      ],
+      [
+        -2.0,
+        45.0
+      ]
+    ],
+    "render_meshes": 129,
+    "faces": 13171,
+    "convex_hulls": 603,
+    "coplanar_check": "Exact duplicate polygons only, including rotated shapes. Partial polygon overlaps are not exhaustively proven; visually inspect previews and orbit in Blender."
+  },
+  "district_exports": {
+    "Core": {
+      "file": "Borlash_Core.fbx",
+      "city_local_translation_m": [
+        0,
+        0,
+        0
+      ],
+      "mesh_count": 29,
+      "convex_hulls": 121
+    },
+    "Trading": {
+      "file": "Borlash_Trading.fbx",
+      "city_local_translation_m": [
+        -88,
+        104,
+        0
+      ],
+      "mesh_count": 21,
+      "convex_hulls": 101
+    },
+    "Civil": {
+      "file": "Borlash_Civil.fbx",
+      "city_local_translation_m": [
+        72,
+        110,
+        0
+      ],
+      "mesh_count": 32,
+      "convex_hulls": 174
+    },
+    "Crafting": {
+      "file": "Borlash_Crafting.fbx",
+      "city_local_translation_m": [
+        -88,
+        -54,
+        0
+      ],
+      "mesh_count": 21,
+      "convex_hulls": 93
+    },
+    "Refining": {
+      "file": "Borlash_Refining.fbx",
+      "city_local_translation_m": [
+        92,
+        -54,
+        0
+      ],
+      "mesh_count": 26,
+      "convex_hulls": 114
+    }
+  },
+  "stations": {
+    "administration": {
+      "station_key": "station_capital_hub",
+      "district": "Core",
+      "center_m": [
+        0.0,
+        51.0,
+        0
+      ],
+      "footprint_m": [
+        60,
+        38
+      ],
+      "height_m": 22,
+      "kind": "admin",
+      "plate_mesh": "SM_Borlash_Core_administration_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "market": {
+      "station_key": "station_borlash_market",
+      "district": "Trading",
+      "center_m": [
+        -88.0,
+        104.0,
+        0
+      ],
+      "footprint_m": [
+        72,
+        44
+      ],
+      "height_m": 25,
+      "kind": "market",
+      "plate_mesh": "SM_Borlash_Trading_market_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "depot_n": {
+      "station_key": "station_borlash_depot_n",
+      "district": "Trading",
+      "center_m": [
+        -100.0,
+        43.0,
+        0
+      ],
+      "footprint_m": [
+        48,
+        30
+      ],
+      "height_m": 15,
+      "kind": "depot",
+      "plate_mesh": "SM_Borlash_Trading_depot_n_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "depot_s": {
+      "station_key": "station_borlash_depot_s",
+      "district": "Refining",
+      "center_m": [
+        108.0,
+        -108.0,
+        0
+      ],
+      "footprint_m": [
+        44,
+        28
+      ],
+      "height_m": 15,
+      "kind": "depot",
+      "plate_mesh": "SM_Borlash_Refining_depot_s_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "forgehall": {
+      "station_key": "station_borlash_forgehall",
+      "district": "Crafting",
+      "center_m": [
+        -88.0,
+        -54.0,
+        0
+      ],
+      "footprint_m": [
+        72,
+        44
+      ],
+      "height_m": 23,
+      "kind": "forge",
+      "plate_mesh": "SM_Borlash_Crafting_forgehall_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "refinehall": {
+      "station_key": "station_borlash_refinehall",
+      "district": "Refining",
+      "center_m": [
+        92.0,
+        -54.0,
+        0
+      ],
+      "footprint_m": [
+        72,
+        44
+      ],
+      "height_m": 27,
+      "kind": "refine",
+      "plate_mesh": "SM_Borlash_Refining_refinehall_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "guild_craft": {
+      "station_key": "station_borlash_guild_craft",
+      "district": "Crafting",
+      "center_m": [
+        -92.0,
+        -117.0,
+        0
+      ],
+      "footprint_m": [
+        56,
+        34
+      ],
+      "height_m": 21,
+      "kind": "guild",
+      "plate_mesh": "SM_Borlash_Crafting_guild_craft_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "guild_refine": {
+      "station_key": "station_borlash_guild_refine",
+      "district": "Refining",
+      "center_m": [
+        50.0,
+        -117.0,
+        0
+      ],
+      "footprint_m": [
+        56,
+        34
+      ],
+      "height_m": 21,
+      "kind": "guild",
+      "plate_mesh": "SM_Borlash_Refining_guild_refine_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "hq": {
+      "station_key": "station_borlash_hq",
+      "district": "Civil",
+      "center_m": [
+        72.0,
+        110.0,
+        0
+      ],
+      "footprint_m": [
+        60,
+        48
+      ],
+      "height_m": 45,
+      "kind": "hq",
+      "plate_mesh": "SM_Borlash_Civil_hq_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "hotel": {
+      "station_key": "station_borlash_hotel",
+      "district": "Civil",
+      "center_m": [
+        56.0,
+        45.0,
+        0
+      ],
+      "footprint_m": [
+        40,
+        26
+      ],
+      "height_m": 20,
+      "kind": "hotel",
+      "plate_mesh": "SM_Borlash_Civil_hotel_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "apartments": {
+      "station_key": "station_borlash_apartments",
+      "district": "Civil",
+      "center_m": [
+        136.0,
+        75.0,
+        0
+      ],
+      "footprint_m": [
+        44,
+        30
+      ],
+      "height_m": 24,
+      "kind": "apartments",
+      "plate_mesh": "SM_Borlash_Civil_apartments_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "pub": {
+      "station_key": "station_borlash_pub",
+      "district": "Civil",
+      "center_m": [
+        97.0,
+        45.0,
+        0
+      ],
+      "footprint_m": [
+        30,
+        22
+      ],
+      "height_m": 12,
+      "kind": "pub",
+      "plate_mesh": "SM_Borlash_Civil_pub_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "square": {
+      "station_key": "station_borlash_square",
+      "district": "Core",
+      "center_m": [
+        0.0,
+        0.0,
+        0
+      ],
+      "footprint_m": [
+        48,
+        48
+      ],
+      "height_m": 8,
+      "kind": "square",
+      "plate_mesh": "SM_Borlash_Core_square_Footprint_Stone",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "dock_nw": {
+      "station_key": "station_borlash_dock_nw",
+      "district": "Trading",
+      "center_m": [
+        -260.0,
+        260.0,
+        0
+      ],
+      "footprint_m": [
+        64,
+        40
+      ],
+      "height_m": 14,
+      "kind": "dock",
+      "plate_mesh": "SM_Borlash_Trading_dock_nw_Footprint_Ground",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "dock_ne": {
+      "station_key": "station_borlash_dock_ne",
+      "district": "Civil",
+      "center_m": [
+        260.0,
+        260.0,
+        0
+      ],
+      "footprint_m": [
+        64,
+        40
+      ],
+      "height_m": 14,
+      "kind": "dock",
+      "plate_mesh": "SM_Borlash_Civil_dock_ne_Footprint_Ground",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "dock_sw": {
+      "station_key": "station_borlash_dock_sw",
+      "district": "Crafting",
+      "center_m": [
+        -260.0,
+        -260.0,
+        0
+      ],
+      "footprint_m": [
+        64,
+        40
+      ],
+      "height_m": 14,
+      "kind": "dock",
+      "plate_mesh": "SM_Borlash_Crafting_dock_sw_Footprint_Ground",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    },
+    "dock_se": {
+      "station_key": "station_borlash_dock_se",
+      "district": "Refining",
+      "center_m": [
+        260.0,
+        -260.0,
+        0
+      ],
+      "footprint_m": [
+        64,
+        40
+      ],
+      "height_m": 14,
+      "kind": "dock",
+      "plate_mesh": "SM_Borlash_Refining_dock_se_Footprint_Ground",
+      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
+    }
+  }
+}
