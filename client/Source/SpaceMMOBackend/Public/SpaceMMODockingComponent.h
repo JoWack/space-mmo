@@ -62,6 +62,15 @@ public:
 	 */
 	void ResumeDockedAt(int32 StationId);
 
+	/**
+	 * <strong>Records where the backend says this character is docked. Moves nothing.</strong>
+	 *
+	 * It used to move the ship to the station, which was task 114's answer to a ship that did not
+	 * survive a restart. Task 147 restores a player at the exact position they left, so there is
+	 * nothing for this to correct -- and the repositioning fired on every possession rather than
+	 * once at sign-in, so boarding a ship parked outside a station teleported it inside.
+	 */
+
 protected:
 	virtual void BeginPlay() override;
 

@@ -1694,6 +1694,12 @@ suite reports `PASS: 176 tests, 0 failures` and exits 0.
 
 ## 114 — Docking survives a restart but the ship does not
 
+**Superseded in part on 7 September.** The repositioning this task added — putting the ship at the
+station on sign-in — was removed by **151**: task 147 restores a player at the exact position they
+left, so there was nothing for it to correct, and it fired on every possession rather than once,
+which teleported a newly boarded ship into the station it was parked outside. What this task
+established and keeps is the record travelling with identity, which every new pawn needs.
+
 **Built 18 August, option 1.** Found by Joe, 14 August: docked at DeepDock, closed the game,
 restarted. `G` correctly said nothing was in range — and `Tab` still opened DeepDock's overlay.
 
@@ -4588,6 +4594,97 @@ Two new ones cross the boundaries nothing was watching:
   will say which.
 - Being paid twice for one quest. `TurnInAsync` refuses the second and the endpoint answers 409, and
   there is a test for it, but it is the failure worth watching for.
+
+## 151 - Borlash City is an exterior blockout in five editable districts
+
+**Built 7 September; awaiting Unreal import and walk-through.** Belongs to M7,
+continuing 97, 127, 143 and 144. The input was the Origin Station Plans PDF,
+CapitalGrandDistrict concept image and current design bible.
+
+`tools/greybox/a07_borlash_city.py` creates all 17 A-07 sites, four gates,
+four corner posterns, external docks, avenues, ring road and fountain square.
+The assembled project and five previews are outside the repo, in
+`D:/Documents/SpaceMMOAssets/Blender/Stations/BorlashCity/`. Five district FBXs
+and a manifest of local anchors are in `client/RawContent/Stations/A07_BorlashCity/`.
+
+**The PDF controls the plan and the concept supplies silhouettes.** The 400m
+wall, 584m dock span and 72 x 44m market independently agree at one SVG unit
+per metre. The clipped-square outer wall is retained. Domes, roof bands,
+buttresses and HQ spires interpret the image; the other heights are assumptions
+except the specified 12m wall, 20m gates and 45m HQ. The hotel follows the
+schedule's 40m rather than the drawing's 38m. A-07 has no interior plans, so
+building masses remain closed; entry panels mark future doors. Old supply and
+finance labels do not introduce gameplay mechanics. No runtime data changed.
+
+**Clearance comes from generated collision, not the schedule.** A conservative
+1m grid inflated by 0.60m plus its cell diagonal caught blocked southern dock
+exits and gate towers interrupting the ring. Open dock passages and inward
+ring bypasses fix both. All 17 frontages, four gates and the ring connect with
+at least 1.20m route width for the current 0.68m pawn. A point inside the market
+is the negative control. This covers exterior ground routes, not interiors or
+Unreal's actual sweep. Grid distances are not proof of the PDF's 85-second walk.
+
+**Same material did not make overlap harmless.** Overlapping paving produced
+black Cycles patches. Convex polygon subtraction now partitions the road and
+ground surfaces without overlap, and the arrival render is clean. Workbench's
+large-scene cast-shadow bands were disabled in review drawings; Cycles retains
+physical shadows for the street-level views. Exact duplicate polygon checks
+are still limited for partial intersections; renders were inspected as well.
+
+**Verified after export:** 129 render meshes and 603 matching convex UCX hulls
+re-import from five FBXs with under 0.05mm bounds/anchor error. Built scheduled
+footprints/heights agree, overall bounds 584 x 560m and Z -2 to 45m. Run
+`--check-only` or `--verify-exports-only` to reproduce the checks. FBX roundtrip
+is Blender coverage, not an Unreal import/playtest. Import at authored scale,
+place districts from the manifest once, then walk dock/postern/gate/square routes.
+Do not fit the city to the Capital placeholder's 40m size. Terrain flattening
+and gameplay station placement remain task 97 integration work.
+
+---
+
+## 151 — Boarding your ship teleports it into the station
+
+**Done 7 September**, awaiting a playtest. Found the moment it could be: Joe finished the questline,
+crafted the first shuttle anybody has ever built, summoned it, boarded it — and was teleported inside
+the Capital Trading Hub.
+
+**Task 114's docking resume, firing on every possession instead of once at sign-in.** From the log,
+one line after the other:
+
+```
+Character 10 is aboard hull 5; its hold travels with them.
+Character 10 was left docked at station 1; waiting for it to exist to put the ship back there.
+```
+
+`ResumeAtStationId` is set when identity resolves and never cleared, and `RefreshPossessedPawn`
+hands it to whichever docking component is on the current pawn. A freshly boarded ship's component
+has `DockedStationId == 0`, so the guard against repeating did not catch it, and the resume put the
+ship at the station's own coordinate — which is the middle of the greybox.
+
+### It was also redundant, which is the better reason to remove it
+
+Task 114 moved the ship because a restart left it at a default position while the record said
+docked. **Task 147 answers that properly**: a player comes back at the exact position they left,
+docked or not. There is nothing left for the reposition to correct, so it is gone rather than merely
+made one-shot — two mechanisms answering one question, where the older one is coarser and fires more
+often, is how a ship ends up inside a building.
+
+What remains is the record, which every new pawn genuinely needs: the range check does nothing while
+`DockedStationId` is zero, and the station has to exist in the world before it is set or the first
+check undocks somebody standing next to it. That is why the wait stayed and only the move went.
+
+### A behaviour change worth knowing
+
+A character whose stored docking says one thing and whose restored position says another is now
+**undocked by the range check** rather than teleported to agree with the record. The world wins,
+which is the right way round — and with 147 recording position every fifteen seconds, the two can
+only disagree for a character who has never been anywhere since the migration landed.
+
+### How it would fail
+
+- Boarding a summoned ship and ending up inside the station: the reposition is back.
+- Signing in docked and immediately being told "Left docking range": the record is being set before
+  the station exists, which is what the wait prevents.
 
 ---
 

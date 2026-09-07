@@ -8,7 +8,6 @@
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMORenderOrigin.h"
-#include "SpaceMMOShipPawn.h"
 #include "SpaceMMOStationActor.h"
 
 USpaceMMODockingComponent::USpaceMMODockingComponent()
@@ -154,18 +153,15 @@ void USpaceMMODockingComponent::ResumeDockedAt(const int32 StationId)
 	SecondsWaitingToResume = 0.0;
 
 	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("Character %d was left docked at station %d; waiting for it to exist to put the ship "
-			"back there."),
+		TEXT("Character %d is docked at station %d; waiting for it to exist before saying so."),
 		CharacterId, StationId);
 }
 
 bool USpaceMMODockingComponent::TryResume()
 {
-	APawn* Ship = Cast<APawn>(GetOwner());
-
 	UWorld* World = GetWorld();
 
-	if (Ship == nullptr || World == nullptr)
+	if (World == nullptr)
 	{
 		return false;
 	}
@@ -179,30 +175,25 @@ bool USpaceMMODockingComponent::TryResume()
 			continue;
 		}
 
-		// At the station's own position rather than beside it. Docked means at the station, and it
-		// is the only placement guaranteed to be inside its own docking range -- an offset guessed
-		// here would be outside the range of any station whose range is smaller than the guess, and
-		// the range check below would undock them again on the next pass.
-		if (ASpaceMMOShipPawn* ShipPawn = Cast<ASpaceMMOShipPawn>(Ship))
-		{
-			ShipPawn->SetSystemPosition(Station->GetSystemPosition());
-		}
-		else
-		{
-			// Not a ship. Nothing to move, but the record is still true and the range check needs
-			// to know about it, so this is not a failure.
-			UE_LOG(LogSpaceMMOBackend, Log,
-				TEXT("Character %d resumed docked at %s while not in a ship; left where they are."),
-				CharacterId, *Station->GetStation().Name);
-		}
-
+		// <strong>Nothing is moved, and that is the fix rather than an omission.</strong> This used
+		// to put the ship at the station's own position, which was task 114's answer to a ship that
+		// did not survive a restart. Task 147 answers it better: a player comes back at the exact
+		// position they left, docked or not, so there is nothing left for this to correct.
+		//
+		// Worse than redundant, it fired on every possession. ResumeAtStationId is handed to
+		// whichever docking component is on the current pawn, and a freshly boarded ship's is zero,
+		// so boarding a ship you had just summoned teleported it into the station you were standing
+		// in -- reported from a playtest on 7 September, at the first moment anybody had a ship of
+		// their own to board.
+		//
+		// What remains is the record, which every new pawn does need: the range check below does
+		// nothing while DockedStationId is zero, and the station has to exist before it is set or
+		// the first check undocks somebody standing right next to it.
 		DockedStationId = ResumeStationId;
 		ResumeStationId = 0;
 
-		// Said out loud, because this is a thing that moves a player's ship without being asked to
-		// and the alternative to saying so is a teleport nobody can account for.
 		UE_LOG(LogSpaceMMOBackend, Log,
-			TEXT("Put character %d back at %s (station %d), where they were left docked."),
+			TEXT("Character %d is docked at %s (station %d), and stays where they are."),
 			CharacterId, *Station->GetStation().Name, DockedStationId);
 
 		return true;
