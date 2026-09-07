@@ -149,6 +149,19 @@ private:
 	UFUNCTION()
 	void HandlePawnRestarted(APawn* Pawn);
 
+	/**
+	 * Re-binds the key whenever the pawn's input component is not the one that was bound.
+	 *
+	 * <strong>Self-healing rather than event-ordered (task 156).</strong> Every route into a pawn is
+	 * supposed to deliver a binding moment, and on the dock key none of them did after a ship was
+	 * boarded, left and boarded again. Checking the live component costs a pointer compare and
+	 * cannot be lost by an ordering nobody has thought of.
+	 */
+	virtual void TickComponent(
+		float DeltaTime,
+		ELevelTick TickType,
+		FActorComponentTickFunction* ThisTickFunction) override;
+
 	UFUNCTION(Server, Reliable)
 	void ServerGather();
 

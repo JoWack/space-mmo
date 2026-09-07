@@ -4966,6 +4966,22 @@ possession, restart and component registration can lose the key again.
 - **`Dock key pressed` and nothing after it** — the server path, not input.
 - **`Nothing in docking range: nearest is …`** — range after all, with the numbers to say so.
 
+### The sibling, fixed the same day
+
+**`USpaceMMOGatheringComponent` binds input exactly the same way** — `BeginPlay` binds, hooks
+`ReceiveRestartedDelegate`, and guards on `BoundInput.Get() == InputComponent`. It has never been
+seen to fail, and that is luck rather than design: a character pawn is spawned fresh every time
+somebody steps out of a ship, so its component is new and `BeginPlay` binds. The first thing that
+re-possesses an *existing* character pawn kills the gather key silently, in exactly the way this
+task's own comment already warned about — *"Missing this was why the key did nothing at all."*
+
+It now carries the same self-healing rebind. Its tick was deliberately off and is now on, for one
+weak-pointer compare a frame, which is the price of the only check that cannot be lost by an
+ordering nobody has thought of.
+
+Two components binding input the same way are two instances of one bug, and the second one is cheap
+today and a playtest later.
+
 ### Blocked on nothing, but it is what 153's playtest is waiting behind
 
 153 is written and tested and cannot be confirmed in a playtest until the key works from the pilot's

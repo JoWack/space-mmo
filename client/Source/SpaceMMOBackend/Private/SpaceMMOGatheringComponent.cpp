@@ -59,7 +59,13 @@ namespace
 
 USpaceMMOGatheringComponent::USpaceMMOGatheringComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	// <strong>On, for one weak-pointer compare a frame.</strong> It was off, and correctly so while
+	// binding was believed to be event-driven -- but APawn::UnPossessed destroys the pawn's input
+	// component outright (Pawn.cpp:727), so every possession needs a fresh binding and no event
+	// reliably delivers one. Task 156 found that on the dock key, where a ship pawn survives being
+	// left and re-boarded; this component is spared today only because a character pawn is spawned
+	// fresh each time somebody steps out, which is luck rather than design.
+	PrimaryComponentTick.bCanEverTick = true;
 
 	// Replicated so its Server RPC has a route. An RPC on an unreplicated component is silently
 	// dropped, which looks exactly like the key not being bound.
@@ -92,6 +98,24 @@ void USpaceMMOGatheringComponent::HandlePawnRestarted(APawn* Pawn)
 	if (Pawn != nullptr)
 	{
 		BindInput(Pawn->InputComponent);
+	}
+}
+
+void USpaceMMOGatheringComponent::TickComponent(
+	const float DeltaTime,
+	const ELevelTick TickType,
+	FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// The sibling of task 156's fix, made the same day and for the same reason: possession replaces
+	// the input component, and comparing against the one actually bound is the only check that
+	// cannot mistake "bound" for "bound to something that is gone". Binding is a local concern, so
+	// there is deliberately no authority guard here -- on a dedicated server the machine that needs
+	// the key bound is the one without authority.
+	if (const APawn* OwningPawn = Cast<APawn>(GetOwner()))
+	{
+		BindInput(OwningPawn->InputComponent);
 	}
 }
 
