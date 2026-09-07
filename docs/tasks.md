@@ -4192,8 +4192,12 @@ skill, done the day before. Nothing outside this file referred to the old number
 
 ## 147 — You come back where you left off
 
-**Done 2 September**, awaiting a playtest. Decided by Joe, 1 September. Belongs to **M5 — an
-interface**, as part of what the opening feels like.
+**Done 2 September**, and **confirmed in a playtest on 6 September** once the crash below was
+fixed. Decided by Joe, 1 September. Belongs to **M5 — an interface**, as part of what the opening
+feels like.
+
+**The flying restore has not been walked through yet** — quitting airborne and coming back in the
+ship is the half nobody has watched, and it is the half with a pawn swap in it.
 
 Quit and reopen the game and your character was back at the configured starting point, falling.
 Being docked when you quit did not survive either — boarding a ship afterwards teleported you to
