@@ -5215,6 +5215,54 @@ gathering component's range checks still hold with deposits on five worlds at on
 
 ---
 
+## 159 — The project's engine pin was reverted by an unrelated commit
+
+**Pending, and it cost a build on 8 September.** Found while doing 157.
+
+`SpaceMMO.uproject` says `"EngineAssociation": "5.8"`. `docs/setup.md` has a section titled *"The
+project is pinned to the source build by GUID"* which describes it as
+`{76471CDA-4509-21F4-9199-24965F66CD1C}`, explains why a version string is wrong, and records the
+ping-pong it caused: a version resolves to whichever 5.8 engine is registered, the Epic launcher
+registers itself as one, and each engine then finds the other's binaries foreign and offers to
+rebuild them.
+
+**So the documentation describes a state the repository does not have.**
+
+### It was not a decision
+
+- `c565359` — *"Pin the project to the source engine build, not just to 5.8"* — set the GUID
+  deliberately and wrote the setup.md section explaining it.
+- `1fe6d1a` — *"Log how a deposit mesh was fitted, so a sunken rock has a cause"* — set it back to
+  `"5.8"`. That commit message is entirely about deposit placement and does not mention the engine.
+
+Almost certainly the editor rewriting `.uproject` on open and being swept in. Nothing was decided;
+something was lost.
+
+### The cost, measured rather than predicted
+
+Building 157 used `UE_5.8/Engine/Build/BatchFiles/Build.bat` — the command in setup.md **§2**, which
+is the first build command in the file and is superseded a hundred lines later without saying so. It
+reported `Result: Succeeded` and wrote binaries the source engine then would not load, so
+`scripts/tests.bat` ran, queued nothing, and reported `FAIL: no completion line` with no test output
+at all. That is a failure indistinguishable from a truncated run, which is the exact fault task 113
+exists about — reached by a different road.
+
+### What is verified
+
+The GUID still resolves: `HKCU\Software\Epic Games\Unreal Engine\Builds` has
+`{76471CDA-4509-21F4-9199-24965F66CD1C}` → `D:/Programming/UnrealEngineSource`. So restoring it is a
+one-line edit that works on this machine today.
+
+**Left for Joe rather than done**, because it changes how every tool resolves the project and the
+GUID is machine-specific — a fresh clone or a reinstalled source build needs a different one, which
+setup.md already warns about. It is his toolchain, and a wrong value means the project will not open
+at all.
+
+setup.md §2 now points forward to the section that supersedes it, which is the half of this that is
+safe to fix without asking.
+
+---
+
 ## Done
 
 Nothing yet under this file's numbering.

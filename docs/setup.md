@@ -104,6 +104,19 @@ Tools registers there, so the full Visual Studio IDE is not needed.
 "/d/Programming/UnrealEngine/UE_5.8/Engine/Build/BatchFiles/Build.bat" SpaceMMO Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject"
 ```
 
+> **This command is superseded.** It names the *launcher* engine, and once `BuildCookRun` has run
+> the project belongs to the source tree — see [After cooking, the project belongs to the source
+> engine](#after-cooking-the-project-belongs-to-the-source-engine) below. Build with:
+>
+> ```bash
+> cd /d/Programming/UnrealEngineSource && ./Engine/Build/BatchFiles/Build.bat SpaceMMOEditor Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -WaitMutex -NoUBA
+> ```
+>
+> Building with the launcher engine still reports `Result: Succeeded` and writes binaries the
+> source engine will not load. `scripts/tests.bat` then runs, queues nothing, and reports
+> `FAIL: no completion line` with no test output — which looks exactly like task 113's truncated
+> run. That cost a round on 8 September. See task 159.
+
 ### The editor target needs the .NET Framework SDK — resolved
 
 `SpaceMMOEditor` initially failed with:
