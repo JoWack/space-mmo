@@ -5189,6 +5189,16 @@ as "5 of 5".
 - **`radiusKm` still drives nothing.** Grimhold and Ares are the same size on screen. 123's leftover.
 - **Bodies do not orbit.** They are static points, which is what the authored field says and all that
   anything reads.
+- **Four more bodies now pull on everything, and the number is 1.35%.** Gravity has always been
+  summed over every planet on purpose — the ship pawn carries a comment saying that with a planet
+  and its moon it is the difference between orbital mechanics working and not — and with one planet
+  that sum had one term. Measured at a character standing on the Capital: Terra 10.8, Ares 11.9,
+  Verdance 8.6 and Grimhold 8.9 cm/s², which largely cancel because they lie in different
+  directions, for a net stray pull of **13.2 cm/s² against the Capital's 981**. On the ground that
+  is nothing, and orientation is unaffected because the surface normal comes from the terrain rather
+  than from gravity. Coasting in space it is 0.13 m/s², or about 240 m of drift in an unopposed
+  minute, against a ship that thrusts at 200 m/s². **Expected, not a defect** — written down so that
+  a slow drift noticed in a playtest is recognised rather than investigated.
 - **153's anti-stranding rule and 155's "Parked away" row are now reachable** and still untested.
   That was the whole reason this task was chosen; it removes the obstacle rather than doing the
   walking.
