@@ -4688,7 +4688,8 @@ position on the hull instance, or a rule that a ship left outside a station is r
 
 ## 153 — A docked ship should leave the world until it is summoned again
 
-**Done 7 September**, awaiting a playtest. Decided by Joe after flying the first player-built
+**Done and confirmed by playtest, 7 September.** Joe: *"Docking and undocking, summoning, and
+gathering are all working as expected now."* Decided by him after flying the first player-built
 shuttle.
 
 **Docking a ship should remove its pawn from the world.** It comes back by being summoned, which is
@@ -4846,8 +4847,13 @@ and gameplay station placement remain task 97 integration work.
 
 ## 155 — A ship left on a hillside should be there when you come back
 
-**Done 7 September**, awaiting a playtest. Decided by Joe alongside 153; **brought forward the same
-evening because task 153 made it load-bearing rather than a nice-to-have.**
+**Done and confirmed by playtest, 7 September**, on the second attempt — see the correction below.
+Decided by Joe alongside 153; **brought forward the same evening because task 153 made it
+load-bearing rather than a nice-to-have.**
+
+**Not yet exercised: a ship left away from a station across a restart.** Docking, summoning and the
+Ships tab were all walked; landing on a hillside, quitting and signing back in was not, and it is the
+half of this task with no playtest behind it.
 
 ### Three reports, one missing state
 
@@ -4954,8 +4960,13 @@ headless — but the part that was wrong never needed one.
 
 ## 156 — G does nothing in a ship that has been boarded twice
 
-**In progress, instrumented, awaiting one playtest.** Reported by Joe on 7 September, immediately
-after 153 landed: *"Nothing happens pressing G while in my ship at the capital."*
+**Done and confirmed by playtest, 7 September.** Docking and undocking work from the pilot's seat,
+and gathering — the sibling that was fixed blind — works too. Reported by Joe immediately after 153
+landed: *"Nothing happens pressing G while in my ship at the capital."*
+
+**Which of the two re-bind routes originally dropped the key is still not pinned**, and now probably
+never will be: the self-healing rebind makes the question unobservable. That is an acceptable place
+to leave it, but it is a gap rather than an answer.
 
 ### What the log ruled out, before anything was changed
 
@@ -5047,6 +5058,32 @@ today and a playtest later.
 
 153 is written and tested and cannot be confirmed in a playtest until the key works from the pilot's
 seat. Treat them as one sitting.
+
+---
+
+## 157 — Only two of the six stations exist in the world
+
+**Pending, and not a fault** — written down because two tasks have now reasoned about a station
+nobody can reach.
+
+`Placed 2 station(s), 2 drawable; skipped 4 on bodies this scene does not have.` Only
+`station_capital_hub` and `station_deepdock` become actors: the scene holds `body_capital` alone, and
+a station on a body the scene does not have is skipped. Terra, Ares, Verdance and Grimhold are
+seeded, returned by `/world/stations`, and invisible. Noticed by Joe on 7 September — *"the Terra
+station doesn't exist yet"* — and confirmed in the log rather than assumed.
+
+**Two decisions were justified against a station that is not reachable**, and both still hold:
+
+- **153's anti-stranding rule.** Docking at a trading hub parks your hull in a hangar
+  `SummonAsync` would otherwise refuse to open, which would leave a player on foot with their only
+  ship locked in the building in front of them. The capital is a `Capital` and summons ships anyway,
+  so the rule cannot bite today — **it starts mattering the first time a trading hub is reachable**,
+  which makes this a prediction to re-read rather than dead code.
+- **155's "Parked away" row and "At another station".** Both need a second station to be seen at all.
+
+So the rules are untested against the case that motivated them, and this task is where that is
+recorded. It is not obviously worth fixing on its own: whether the other bodies belong in the scene
+is a question about scale and streaming, not about stations.
 
 ---
 
