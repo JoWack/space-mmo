@@ -4911,6 +4911,31 @@ Six new tests. `A_ship_in_a_hangar_and_a_ship_standing_outside_it_are_different_
 **both** halves of the old behaviour, checked separately: inferring "deployed" from having a hangar,
 and stowing without clearing the position. The panel test now covers all five rows.
 
+### The fix was circular on its first attempt, and a playtest found it
+
+**Reported by Joe the same evening: summon says the ship is waiting outside, and no ship appears;
+the Ships tab still reads "In the hangar".** The log said it in one line, nine times —
+`Shuttle (hull 5) is in a hangar; it stays there until it is summoned.`
+
+The two rules above contradict each other. **Summoning deliberately does not record a position**,
+because the record follows the world and the position is written once a pawn exists — and
+`PlaceSummonedShip` then **refused to place anything that had no position**. Nothing could ever be
+placed, and the summon reported success the whole time, because the message is sent by the client
+before the server is even asked.
+
+So placement now takes the intent, which is the one thing the row genuinely cannot carry: a hull
+sitting in a hangar is **left alone on a sign-in and fetched out on a summon**, and the record is
+identical in both. `EnsureActiveShipInWorld(bBecauseSummoned)` carries it from the two call sites.
+
+`SummonAsync` also clears the position now. Recalling a ship left on a hillside moves which hangar
+owns it, and a stale position would have put it back on that hillside at the next sign-in — the same
+class of disagreement, one restart later.
+
+**`DecideShipPlacement` is pure, public and tested**, and that is the actual lesson. The decision is
+four branches over a struct; placement needs a world, a station actor and terrain, so it cannot run
+headless — but the part that was wrong never needed one.
+`SpaceMMO.Ships.PlacementSummonBringsItOut` fails against the circular rule, checked by restoring it.
+
 ### How it would fail
 
 - **Summon still dead after docking.** The row will say which it thinks it is; `In the hangar` with a

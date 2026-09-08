@@ -123,6 +123,17 @@ public sealed class ShipService(SpaceMmoDbContext database)
 
         hull.InventoryId = hangar.Id;
 
+        // <strong>And it is in the hangar until a pawn exists for it.</strong> Recalling a ship left
+        // on a hillside moves which hangar owns it; without clearing the position it would also
+        // still claim to be standing on that hillside, and the next sign-in would put it back there
+        // -- a ship summoned to the capital reappearing across the system (task 155).
+        //
+        // The simulation writes a fresh position the moment it stands the pawn beside the station,
+        // so this is a hand-off rather than a gap: the record follows the world both ways.
+        hull.DeployedSystemX = null;
+        hull.DeployedSystemY = null;
+        hull.DeployedSystemZ = null;
+
         character.ActiveShipItemInstanceId = hull.Id;
 
         // The hold comes with it. Created here rather than at craft time because a hull that has

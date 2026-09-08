@@ -20,6 +20,28 @@
  * its inventory. The command-line -GatherCharacterId= that this replaces was exactly that hole,
  * kept deliberately narrow while it was single-player scaffolding.
  */
+/**
+ * What to do about a character's active hull when the backend has just described it.
+ *
+ * Named states rather than a chain of ifs at the call site, so the decision can be tested without a
+ * world — see <c>ASpaceMMOPlayerController::DecideShipPlacement</c>.
+ */
+UENUM()
+enum class ESpaceMMOShipPlacement : uint8
+{
+	/** No pawn belongs in the world: the hull is put away, or there is no hull at all. */
+	Nothing,
+
+	/** The player is already flying it; the pawn exists and only needs to be told which hull it is. */
+	AdoptFlyingPawn,
+
+	/** It is standing somewhere and that somewhere is recorded. Put it back exactly there. */
+	AtRecordedPosition,
+
+	/** It has just been summoned. Bring it out of the hangar and stand it beside the station. */
+	BesideStation,
+};
+
 UCLASS()
 class SPACEMMOBACKEND_API ASpaceMMOPlayerController : public APlayerController
 {
@@ -443,10 +465,31 @@ private:
 	 * Called on summoning and on signing in, and those overlap every time somebody quits beside
 	 * their parked ship.
 	 */
-	void EnsureActiveShipInWorld();
+	void EnsureActiveShipInWorld(bool bBecauseSummoned);
 
-	/** Spawns the ship a resolved answer describes, beside the station it is parked at. */
-	void PlaceSummonedShip(const struct FBackendActiveShip& Ship);
+	/** Spawns the ship a resolved answer describes, wherever that answer says it belongs. */
+	void PlaceSummonedShip(const struct FBackendActiveShip& Ship, bool bBecauseSummoned);
+
+public:
+	/**
+	 * What should happen to the hull a backend answer describes.
+	 *
+	 * <strong>Pure, public and tested, because the impure version was wrong and nothing caught
+	 * it.</strong> Task 155 made summoning deliberately <em>not</em> record a position — the
+	 * simulation places the pawn and then says where it went — and then gated placement on the
+	 * position already existing. Nothing could ever be placed, and the only symptom was a summon
+	 * that reported success and produced no ship. It is four branches, and four branches with no
+	 * test is how that happens.
+	 *
+	 * @param bBecauseSummoned True when the player just asked for the ship, false when this is a
+	 *        sign-in putting back whatever the world already had. That distinction is the whole
+	 *        reason this is not derivable from the answer alone: a hull in a hangar is left alone on
+	 *        sign-in and fetched out on a summon, and the row is identical in both.
+	 */
+	static ESpaceMMOShipPlacement DecideShipPlacement(
+		const struct FBackendActiveShip& Ship, bool bBecauseSummoned);
+
+private:
 
 	/**
 	 * Writes down where one of this character's hulls is standing (task 155).

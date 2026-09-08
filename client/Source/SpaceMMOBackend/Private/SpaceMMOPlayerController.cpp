@@ -1610,10 +1610,12 @@ void ASpaceMMOPlayerController::AdoptIdentity(const FBackendResolvedCharacter& R
 		}
 	}
 
-	// A ship summoned in a previous session is still parked where it was left, and nothing has put
-	// a pawn there since the world restarted. Asked once identity exists, which is the first moment
-	// there is anybody to ask about.
-	EnsureActiveShipInWorld();
+	// A ship left standing somewhere is still there, and nothing has put a pawn back since the world
+	// restarted. Asked once identity exists, which is the first moment there is anybody to ask about.
+	//
+	// Not a summon: a hull sitting in a hangar stays in it. Signing in is how a player finds out
+	// where they left things, not a free trip to the shipyard.
+	EnsureActiveShipInWorld(/* bBecauseSummoned */ false);
 
 	RefreshPossessedPawn();
 
@@ -1674,7 +1676,7 @@ void ASpaceMMOPlayerController::ServerShipSummoned_Implementation()
 	// Carries nothing. Which hull was summoned, and whether it really was, are the backend's to
 	// say -- this is a nudge telling the server the answer has changed, not a claim about what it
 	// changed to.
-	EnsureActiveShipInWorld();
+	EnsureActiveShipInWorld(/* bBecauseSummoned */ true);
 }
 
 void ASpaceMMOPlayerController::HandleShipSummoned(const FString& ShipName)
@@ -1690,7 +1692,7 @@ void ASpaceMMOPlayerController::HandleShipSummoned(const FString& ShipName)
 	ServerShipSummoned();
 }
 
-void ASpaceMMOPlayerController::EnsureActiveShipInWorld()
+void ASpaceMMOPlayerController::EnsureActiveShipInWorld(const bool bBecauseSummoned)
 {
 	if (!HasAuthority() || CharacterId == 0)
 	{
@@ -1709,23 +1711,62 @@ void ASpaceMMOPlayerController::EnsureActiveShipInWorld()
 	Client->FetchActiveShipAsServer(
 		CharacterId,
 		USpaceMMOBackendClient::FOnActiveShipResolved::CreateLambda(
-			[WeakThis](const FBackendActiveShip& Ship)
+			[WeakThis, bBecauseSummoned](const FBackendActiveShip& Ship)
 			{
 				if (ASpaceMMOPlayerController* Controller = WeakThis.Get())
 				{
-					Controller->PlaceSummonedShip(Ship);
+					Controller->PlaceSummonedShip(Ship, bBecauseSummoned);
 				}
 			}));
 }
 
-void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship)
+ESpaceMMOShipPlacement ASpaceMMOPlayerController::DecideShipPlacement(
+	const FBackendActiveShip& Ship, const bool bBecauseSummoned)
+{
+	if (Ship.HullItemInstanceId <= 0)
+	{
+		return ESpaceMMOShipPlacement::Nothing;
+	}
+
+	// Being flown answers first and unconditionally. The pawn already exists -- task 147 restored
+	// the player into it -- and placing a second one is what put two ships at the dock (task 152).
+	if (Ship.bAboard)
+	{
+		return ESpaceMMOShipPlacement::AdoptFlyingPawn;
+	}
+
+	// <strong>Before the deployed test, and that ordering is the bug this function exists to stop
+	// repeating.</strong> Summoning moves a hull into the hangar of the station the player is
+	// standing at and records no position, because the position is written once a pawn actually
+	// exists. A branch that asked "is it deployed" first therefore refused to deploy anything, and
+	// the summon reported success while producing no ship.
+	if (bBecauseSummoned)
+	{
+		// Still nothing to do without somewhere to put it. A hull in a hold rather than a hangar is
+		// crated, and has no station to stand beside.
+		return Ship.StationId != 0
+			? ESpaceMMOShipPlacement::BesideStation
+			: ESpaceMMOShipPlacement::Nothing;
+	}
+
+	// Signing in. Only what the world already had comes back, and a hull with no position was not
+	// standing anywhere -- it is inside a hangar, and stays there until somebody asks for it.
+	return Ship.bDeployed
+		? ESpaceMMOShipPlacement::AtRecordedPosition
+		: ESpaceMMOShipPlacement::Nothing;
+}
+
+void ASpaceMMOPlayerController::PlaceSummonedShip(
+	const FBackendActiveShip& Ship, const bool bBecauseSummoned)
 {
 	UWorld* World = GetWorld();
 
-	if (!HasAuthority() || World == nullptr || Ship.HullItemInstanceId <= 0)
+	if (!HasAuthority() || World == nullptr)
 	{
 		return;
 	}
+
+	const ESpaceMMOShipPlacement Placement = DecideShipPlacement(Ship, bBecauseSummoned);
 
 	// Already being flown, which is the answer that matters most on a sign-in: task 147 has
 	// restored the player into a ship pawn and the hull is still recorded in the hangar it was
@@ -1735,7 +1776,7 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship
 	// It is also where the restored pawn learns which hull it is. The restore runs before anything
 	// has asked the backend anything -- it has a position and a flag and nothing else -- so the
 	// pawn is spawned without an id and this is the first moment one is known.
-	if (Ship.bAboard)
+	if (Placement == ESpaceMMOShipPlacement::AdoptFlyingPawn)
 	{
 		if (ASpaceMMOShipPawn* Flying = Cast<ASpaceMMOShipPawn>(GetPawn()))
 		{
@@ -1764,7 +1805,7 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship
 	//
 	// It also covers a hull in a hold rather than a hangar, which is the state a crated ship is in
 	// and has never had a pawn either.
-	if (!Ship.bDeployed)
+	if (Placement == ESpaceMMOShipPlacement::Nothing)
 	{
 		UE_LOG(LogSpaceMMOBackend, Log,
 			TEXT("%s (hull %lld) is in a hangar; it stays there until it is summoned."),
@@ -1793,10 +1834,9 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship
 	// available. It carries one now, and this is the half of task 147 the ship never had.
 	FSystemCoordinate Parking(Ship.PositionKilometres);
 
-	// Only when there is no recorded position to prefer. A hull is written down the moment it is
-	// placed, so this is the older-record case rather than the ordinary one -- and falling back to
-	// the station beats leaving somebody's ship undrawn.
-	if (Ship.PositionKilometres.IsNearlyZero() && Ship.StationId != 0)
+	// A summon fetches it out of the hangar and stands it beside the station, wherever it may have
+	// been standing before. Everything else puts it back exactly where it was.
+	if (Placement == ESpaceMMOShipPlacement::BesideStation)
 	{
 		const ASpaceMMOStationActor* Station = nullptr;
 
