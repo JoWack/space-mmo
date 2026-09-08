@@ -1755,7 +1755,10 @@ belongs with 115.
 
 ## 115 — A ship is a thing you earn, and its hold belongs to it
 
-**In progress**, and everything but the questline is now built — 6 September. Decided 15 August:
+**Done 7 September**, closed by `6ded52a` retiring the prop ship, and confirmed by playtest the same
+day: crafted, summoned, boarded and flown. Task 152 recorded the closure and this heading did not
+follow it for a day — noticed on 8 September while handing over, which is the drift this file's own
+rules are about. Decided 15 August:
 [ADR-0012](adr/0012-a-ship-is-earned-and-carries-its-own-hold.md). The ADR is the decision; what
 follows is the shape of the work and what it runs into.
 
