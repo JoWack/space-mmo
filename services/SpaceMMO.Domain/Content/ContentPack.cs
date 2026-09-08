@@ -129,6 +129,22 @@ public sealed record StarSystemContent(
 /// <summary>A planet or moon, as authored in <c>data/universe/</c>.</summary>
 /// <param name="RadiusKm">Already at the 1:10 universe scale (ADR-0001). The scale is applied
 /// once, here in authored content, rather than at every conversion.</param>
+/// <param name="SystemPosition">
+/// Where the body sits in its system, in kilometres, or null for a body nobody has placed yet.
+/// </param>
+/// <remarks>
+/// <para>
+/// <strong><c>SystemPosition</c> and <c>RadiusKm</c> are not in the same scale, and that is not an
+/// oversight.</strong> The client draws every body at one compiled-in radius — 20 km — whatever
+/// <c>RadiusKm</c> says, so the distances authored here are spaced for 20 km worlds and a ship that
+/// does 2 km/s. <c>RadiusKm</c> is the 1:10 figure and currently drives nothing at runtime; making
+/// it drive the drawn size is its own task, and it would move every one of these positions.
+/// </para>
+/// <para>
+/// Before 8 September a body had no position at all, which is why four of the six seeded stations
+/// were skipped by the client with nowhere to stand (task 157).
+/// </para>
+/// </remarks>
 public sealed record BodyContent(
     string Key,
     string Name,
@@ -137,7 +153,8 @@ public sealed record BodyContent(
     SecurityLevel SecurityLevel,
     double RadiusKm,
     BodyAppearanceContent? Appearance = null,
-    BodyTerrainContent? Terrain = null);
+    BodyTerrainContent? Terrain = null,
+    double[]? SystemPosition = null);
 
 /// <summary>
 /// The shape of a body's ground, as authored in <c>data/universe/</c>.

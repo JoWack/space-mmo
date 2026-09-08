@@ -478,6 +478,67 @@ public sealed class ContentValidatorTests
     }
 
     [Fact]
+    public void ABodyPositionMustHaveThreeComponents()
+    {
+        // A malformed position becomes three nulls in the seeder rather than an error, so the body
+        // would go unplaced and its stations would be skipped by the client with nothing anywhere
+        // saying why -- which is the failure task 157 exists to have stopped happening.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: [.. AllHomeworlds(), Body("body_half", systemPosition: [1.0, 2.0])]);
+
+        Assert.True(HasError(
+            ContentValidator.Validate(pack), "System position must be three components"));
+    }
+
+    [Fact]
+    public void ABodyWithNoPositionIsStillValid()
+    {
+        // Unplaced is a working state: the client draws nothing for it. Every body in the shipped
+        // pack is placed, but a world authored before somebody has decided where it goes must not
+        // fail the load.
+        Assert.Empty(ContentValidator.Validate(Pack(
+            systems: [System()],
+            bodies: AllHomeworlds())));
+    }
+
+    [Fact]
+    public void TwoBodiesCannotShareAPosition()
+    {
+        // The copy-paste mistake. Two worlds at one point is wrong at any scale, which is the only
+        // overlap claim this validator can honestly make -- it does not know the radius the client
+        // draws bodies at, and the authored 1:10 radii would reject the whole shipped pack.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies:
+            [
+                .. AllHomeworlds(),
+                Body("body_here", systemPosition: [10.0, 20.0, 30.0]),
+                Body("body_also_here", systemPosition: [10.0, 20.0, 30.0]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Shares a system position"));
+    }
+
+    [Fact]
+    public void TwoBodiesInDifferentSystemsMayShareAPosition()
+    {
+        // System positions are relative to their own system, so the same coordinates in two
+        // systems are two different places. A rule that missed this would forbid every system
+        // after the first from having a planet near its star.
+        ContentPack pack = Pack(
+            systems: [System(), System("system_far")],
+            bodies:
+            [
+                .. AllHomeworlds(),
+                Body("body_here", systemPosition: [10.0, 20.0, 30.0]),
+                Body("body_far", system: "system_far", systemPosition: [10.0, 20.0, 30.0]),
+            ]);
+
+        Assert.False(HasError(ContentValidator.Validate(pack), "Shares a system position"));
+    }
+
+    [Fact]
     public void APackWithNoUniverseAtAllIsStillValid()
     {
         // Content is split across files, so a pack holding only recipes is an ordinary thing to
@@ -750,8 +811,12 @@ public sealed class ContentValidatorTests
         new(key, "Origin", 0, 0, 0, 42, SecurityLevel.Secure);
 
     private static BodyContent Body(
-        string key, string system = "system_origin", double radiusKm = 637.1) =>
-        new(key, key, system, BodyKind.Planet, SecurityLevel.Secure, radiusKm);
+        string key,
+        string system = "system_origin",
+        double radiusKm = 637.1,
+        double[]? systemPosition = null) =>
+        new(key, key, system, BodyKind.Planet, SecurityLevel.Secure, radiusKm,
+            SystemPosition: systemPosition);
 
     private static StationContent Station(string key, string? body) =>
         new(key, key, "system_origin", body, StationKind.TradingHub);

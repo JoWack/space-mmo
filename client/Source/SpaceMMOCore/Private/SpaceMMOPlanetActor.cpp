@@ -1,8 +1,10 @@
 #include "SpaceMMOPlanetActor.h"
 
+#include "SpaceMMOBodySelection.h"
 #include "SpaceMMOPlanetMeshAttributes.h"
 
 #include "Components/DynamicMeshComponent.h"
+#include "EngineUtils.h"
 #include "DynamicMesh/DynamicMesh3.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -1339,4 +1341,32 @@ void ASpaceMMOPlanetActor::ApplyRenderTransform()
 	}
 
 	BuiltAtRevision = Origin->GetRevision();
+}
+
+ASpaceMMOPlanetActor* ASpaceMMOPlanetActor::NearestTo(
+	UWorld* const World, const FSystemCoordinate& Where)
+{
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+
+	// Gathered rather than compared in place, so the choice is made by the pure rule that has
+	// tests rather than by a second copy of it written inline -- which is exactly how ten lookups
+	// came to disagree about what "the planet" meant.
+	TArray<ASpaceMMOPlanetActor*> Planets;
+	TArray<FPlanetConfig> Configurations;
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		if (ASpaceMMOPlanetActor* const Planet = *It)
+		{
+			Planets.Add(Planet);
+			Configurations.Add(Planet->GetPlanetConfig());
+		}
+	}
+
+	const int32 Nearest = FSpaceMMOBodySelection::IndexOfNearest(Configurations, Where);
+
+	return Planets.IsValidIndex(Nearest) ? Planets[Nearest] : nullptr;
 }

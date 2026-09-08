@@ -5066,27 +5066,152 @@ seat. Treat them as one sitting.
 
 ## 157 — Only two of the six stations exist in the world
 
-**Pending, and not a fault** — written down because two tasks have now reasoned about a station
-nobody can reach.
+**Done 8 September. Not yet playtested** — the checks below are automated and headless, and what
+they cannot see is what five worlds look like from a cockpit.
 
 `Placed 2 station(s), 2 drawable; skipped 4 on bodies this scene does not have.` Only
-`station_capital_hub` and `station_deepdock` become actors: the scene holds `body_capital` alone, and
-a station on a body the scene does not have is skipped. Terra, Ares, Verdance and Grimhold are
-seeded, returned by `/world/stations`, and invisible. Noticed by Joe on 7 September — *"the Terra
-station doesn't exist yet"* — and confirmed in the log rather than assumed.
+`station_capital_hub` and `station_deepdock` became actors. Noticed by Joe on 7 September — *"the
+Terra station doesn't exist yet"* — and confirmed in the log rather than assumed.
 
-**Two decisions were justified against a station that is not reachable**, and both still hold:
+### The cause was one field that had never existed
 
-- **153's anti-stranding rule.** Docking at a trading hub parks your hull in a hangar
-  `SummonAsync` would otherwise refuse to open, which would leave a player on foot with their only
-  ship locked in the building in front of them. The capital is a `Capital` and summons ships anyway,
-  so the rule cannot bite today — **it starts mattering the first time a trading hub is reachable**,
-  which makes this a prediction to re-read rather than dead code.
-- **155's "Parked away" row and "At another station".** Both need a second station to be seen at all.
+Not station placement, and not scale or streaming, which is what this task predicted it would be.
+**A body carried no position at all.** Not in `data/universe/origin.json`, not on the `Body` entity,
+not in `BodyResponse`. Nothing anywhere could say where Terra was, so the client drew the one planet
+it had compiled in and skipped every station belonging to a world it had never heard of.
 
-So the rules are untested against the case that motivated them, and this task is where that is
-recorded. It is not obviously worth fixing on its own: whether the other bodies belong in the scene
-is a question about scale and streaming, not about stations.
+The precedent for the fix was already in the same file: `station_deepdock` carries
+`"systemPosition": [30.0, 12.0, 4.0]`, because a deep-space station has always needed one. A body
+now carries the same field, travelling the path 123 established — `data/` → seed → Postgres → API →
+client — and the client builds a planet for each body content places.
+
+**`systemPosition` is authored at the radius bodies are DRAWN at, not at `radiusKm`.** This is the
+load-bearing fact and it is written into `BodyContent`, the `Body` entity and the JSON itself. Every
+body is drawn at the 20 km the client compiles in; `radiusKm` is the 1:10 figure (637 to 780 km) and
+**drives nothing at runtime** — `USpaceMMOTerrainPaintSubsystem` applies a body's seed, relief and
+frequency and has never touched its radius. So the five positions are spaced for 20 km worlds and a
+ship that does 2 km/s, and they are 182 to 417 km apart: one to three and a half minutes of flight,
+with at least 142 km of clear space between any two surfaces. Making `radiusKm` drive the drawn size
+is 123's leftover, and it would move every one of these positions.
+
+**The Capital did not move, and must not.** It is authored at `[60, 0, 0]`, where
+`USpaceMMOWorldSubsystem::StartingPlanet()` compiles it in, because a character is given a pawn
+*before* any of this arrives over HTTP — 323 ms before, measured in task 120 — and is positioned
+against that compiled-in planet. `EnsurePlanet` therefore never moves a planet that already exists:
+it warns, names both positions, and leaves it. `SpaceMMO.Bodies.AuthoredBodiesAreAllPlaced` asserts
+the two agree, which is what stops the disagreement being authored in the first place.
+
+### The expensive half was not the field. It was what "the planet" meant
+
+**Ten lookups took the first planet the actor iterator returned and called it "the planet".** With
+one planet in the scene that is correct; with five it is a bug that reads as physics. This is the
+class-of-bug rule: found once, fixed everywhere the same day.
+
+- `SpaceMMOShipPawn::GetAltitudeKilometres` and `GetOrbitalSpeedHere` — **and the comment above them
+  claimed they shared "the same nearest-planet rule", which did not exist anywhere in the project.**
+  It was true by accident, and would have gone on reading as a design decision.
+- The ship's proximity classification, which decides landed, atmospheric or orbital, and so drives
+  drag, the readout and task 90's landed state. A ship on the ground at Ares would have reported
+  orbit.
+- `ASpaceMMOCharacterPawn::ResolveSurface` — gravity is correctly summed over every body, but the
+  surface normal was assigned once per planet and the *last* one won, and the first-ground placement
+  took the first, so a character spawning at the Capital could be stood on Grimhold.
+- `ASpaceMMOStationActor::GroundPositionBeside`, which is where a pilot is put down when they leave a
+  station: it would have stepped somebody out of Terra Outpost onto the Capital's terrain.
+- `USpaceMMODepositSubsystem::SceneBodyKey`, whose comment argued *for* asking the world rather than
+  the configuration — sound with one planet, and with five it made "which body's deposits do we
+  fetch" depend on spawn order.
+- Deposit placement, and station placement, both of which now match a planet to a body by key.
+
+Exactly **one** site already did it properly: `SpaceMMOPlayerController.cpp:857`, the authoring
+bearing, which picks the nearest and says why. The rule is now `FSpaceMMOBodySelection` — a pure
+function with tests — and `ASpaceMMOPlanetActor::NearestTo` on top of it.
+
+**Nearest is by surface, not by centre**, and the test that proves it uses bodies of different sizes,
+because every body is drawn at one radius today and a test written against equal bodies would pass
+against either rule and constrain nothing.
+
+### What was verified, and how
+
+Headless, all of it. Client 234 tests, server 750 (Domain 461, Data 199, Api 90), 0 failures, after
+a build reporting `Result: Succeeded`.
+
+**The strongest evidence is not a test, it is the log.** A `-nullrhi` run of the game says what was
+actually built rather than what the code intends:
+
+```
+Built a planet for body 'body_capital'  at (60.000, 0.000, 0.000) km, radius 20.0 km.
+Built a planet for body 'body_ares'     at (40.000, -180.000, 30.000) km, radius 20.0 km.
+Built a planet for body 'body_grimhold' at (-60.000, -100.000, 160.000) km, radius 20.0 km.
+Built a planet for body 'body_terra'    at (-120.000, 60.000, 0.000) km, radius 20.0 km.
+Built a planet for body 'body_verdance' at (200.000, 140.000, -60.000) km, radius 20.0 km.
+5 of 5 body(ies) have a planet; 0 are authored nowhere; 5 planet(s) in the world.
+Station station_ares_hub     placed on 'body_ares'     against terrain seed 20260802 ... frequency 12.0.
+Station station_capital_hub  placed on 'body_capital'  against terrain seed 20260805 ... frequency 6.0.
+Station station_grimhold_hub placed on 'body_grimhold' against terrain seed 20260804 ... frequency 16.0.
+Station station_terra_hub    placed on 'body_terra'    against terrain seed 20260801 ... frequency 9.0.
+Station station_verdance_hub placed on 'body_verdance' against terrain seed 20260803 ... frequency 7.0.
+Placed 6 station(s), 6 drawable; skipped 0 on bodies content has not placed.
+```
+
+**The discriminating line is the seed, not the count.** Six stations placed would look the same
+whether or not each was measured against its own world; five *different* seeds is what says they
+were. Under the old first-planet lookup all five would have named one.
+
+`5 planet(s) in the world` is counted off the actor iterator rather than off the loop that spawned
+them, for the reason this project keeps relearning: the loop reports what it asked for. Two
+subsystems build planets now — `USpaceMMOWorldSubsystem::BuildScenery` and the paint subsystem — and
+their `OnWorldBeginPlay` order is not guaranteed, so the starting planet goes through `EnsurePlanet`
+as well and a second Capital cannot be built. Without that count a duplicate would still have read
+as "5 of 5".
+
+- **The loader test was verified to fail against the bug**: making `SystemY` read `p2[0]` turns
+  `AuthoredBodyPositions_ReachTheDatabase` red. So does swapping Y and Z in `BodyResponse`, against
+  the API test.
+- **The parse test uses a real payload**, captured verbatim from `GET /world/bodies` on 8 September
+  rather than typed by hand — including the fact that the server sends `"systemY":60` and not
+  `60.0`. That is the rule task 116's market panel earned.
+- **Content is checked against the drawn radius on the client**, not on the server. The content
+  validator deliberately cannot make an overlap claim: it knows only `radiusKm`, and an overlap rule
+  there would reject every position in the shipped pack. It checks the thing that is wrong at any
+  scale — two bodies at one point — and the client asserts the separation.
+- `SpaceMMO.Bodies.StationsStandOnPlacedBodies` is the direct guard against this task returning: a
+  station on an unplaced body is served, real, and drawn by nothing. **Verified by reproducing the
+  fault**: deleting Terra's `systemPosition` from the shipped content turns it and
+  `AuthoredBodiesAreAllPlaced` red together, which is precisely the state that produced this task.
+- **And the wire test was inverted too.** A parser building `FVector(X, X, X)` fails
+  `PositionArrivesFromTheWire`, which is the mistake a symmetric fixture would have let through.
+
+### What is still open, stated rather than hidden
+
+- **No playtest.** Five planets have never been looked at.
+- **Deposits exist on one body only** — task 158. Flying to Ares finds a world with no ore on it.
+- **`radiusKm` still drives nothing.** Grimhold and Ares are the same size on screen. 123's leftover.
+- **Bodies do not orbit.** They are static points, which is what the authored field says and all that
+  anything reads.
+- **153's anti-stranding rule and 155's "Parked away" row are now reachable** and still untested.
+  That was the whole reason this task was chosen; it removes the obstacle rather than doing the
+  walking.
+
+---
+
+## 158 — Deposits exist on one body only
+
+**Pending.** Split out of 157 on 8 September rather than folded into it, because it is a different
+question and 157 was already about where bodies are.
+
+`USpaceMMODepositSubsystem` fetches deposits for exactly one body — `SceneBodyId`, which resolves
+from the `BodyKey` in `DefaultGame.ini` — and `/world/bodies/{id}/nodes` is per body by design. So
+now that a player can fly to Terra, Ares, Verdance or Grimhold, they arrive at a world with a station
+on it and no ore anywhere.
+
+**This was true before 157 and invisible**, because the other four bodies could not be reached. It is
+the same shape as the predictions this file keeps: a limitation that costs nothing until the thing it
+limits becomes reachable.
+
+Not merely a loop. Three things need deciding: whether every body's deposits are fetched at sign-in
+or on approach, what `SceneBodyId` means once there is no single scene body, and whether the
+gathering component's range checks still hold with deposits on five worlds at once.
 
 ---
 

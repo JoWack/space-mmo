@@ -131,7 +131,17 @@ public static class ContentValidator
                 // negative one inverts "up".
                 errors.Add(new ContentError("body", body.Key, "Radius must be positive."));
             }
+
+            // A body with no position is a working state — it simply is not drawn. A malformed one
+            // is not, and it would silently become null in the seeder rather than failing here.
+            if (body.SystemPosition is not null && body.SystemPosition is not { Length: 3 })
+            {
+                errors.Add(new ContentError(
+                    "body", body.Key, "System position must be three components."));
+            }
         }
+
+        ValidateBodiesAreNotStacked(pack, errors);
 
         foreach (StationContent station in pack.Stations)
         {
@@ -254,6 +264,50 @@ public static class ContentValidator
     /// A body-relative direction on a station that orbits nothing has no centre to be relative to,
     /// and a system position on a station attached to a body would drift the moment the body did.
     /// </remarks>
+    /// <summary>
+    /// Catches two bodies authored at the same point in the same system.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The copy-paste mistake, and the only overlap rule that can honestly be checked here. A real
+    /// "do these planets intersect" test would need the radius they are <em>drawn</em> at, which is
+    /// a compiled-in client constant and deliberately unrelated to <c>RadiusKm</c> — checking
+    /// against the authored 1:10 radii would reject every position in the shipped pack, because
+    /// Terra and the Capital are authored 637 and 700 km wide and placed 190 km apart.
+    /// </para>
+    /// <para>
+    /// So this checks the thing that is unambiguously wrong at any scale: two worlds in one place.
+    /// </para>
+    /// </remarks>
+    private static void ValidateBodiesAreNotStacked(ContentPack pack, List<ContentError> errors)
+    {
+        BodyContent[] placed = pack.Bodies
+            .Where(b => b.SystemPosition is { Length: 3 })
+            .ToArray();
+
+        for (int i = 0; i < placed.Length; i++)
+        {
+            for (int j = i + 1; j < placed.Length; j++)
+            {
+                if (placed[i].System != placed[j].System)
+                {
+                    continue;
+                }
+
+                double[] a = placed[i].SystemPosition!;
+                double[] b = placed[j].SystemPosition!;
+
+                if (a[0] == b[0] && a[1] == b[1] && a[2] == b[2])
+                {
+                    errors.Add(new ContentError(
+                        "body",
+                        placed[j].Key,
+                        $"Shares a system position with '{placed[i].Key}'."));
+                }
+            }
+        }
+    }
+
     private static void ValidateStationPosition(StationContent station, List<ContentError> errors)
     {
         bool hasDirection = station.Direction is not null;

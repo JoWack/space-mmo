@@ -276,13 +276,16 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 		FVector PlanetWorld = FVector::ZeroVector;
 		double PlanetSystemDistance = 0.0;
 
-		for (TActorIterator<ASpaceMMOPlanetActor> It(GetWorld()); It; ++It)
+		// The body being approached, which is the nearest one. A diagnostic that measured against
+		// whichever planet the iterator happened to return first would print a gap that grows while
+		// the ship closes, and read as the bug it exists to find.
+		if (const ASpaceMMOPlanetActor* const Nearest =
+			ASpaceMMOPlanetActor::NearestTo(GetWorld(), Navigation.SystemPosition))
 		{
-			PlanetWorld = It->GetActorLocation();
+			PlanetWorld = Nearest->GetActorLocation();
 			PlanetSystemDistance =
-				(It->GetPlanetConfig().Centre.Kilometres - Navigation.SystemPosition.Kilometres).Size();
-
-			break;
+				(Nearest->GetPlanetConfig().Centre.Kilometres
+					- Navigation.SystemPosition.Kilometres).Size();
 		}
 
 		// If the planet is stationary, the system distance must fall steadily while the drawn
@@ -301,11 +304,10 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 
 		FVector PlanetWorld = FVector::ZeroVector;
 
-		for (TActorIterator<ASpaceMMOPlanetActor> It(GetWorld()); It; ++It)
+		if (const ASpaceMMOPlanetActor* const Nearest =
+			ASpaceMMOPlanetActor::NearestTo(GetWorld(), Navigation.SystemPosition))
 		{
-			PlanetWorld = It->GetActorLocation();
-
-			break;
+			PlanetWorld = Nearest->GetActorLocation();
 		}
 
 		UE_LOG(LogSpaceMMO, Log,
@@ -318,17 +320,21 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 
 	// Classified after moving, and fed its own previous value so the hysteresis in
 	// ClassifyProximity has something to work against.
-	for (TActorIterator<ASpaceMMOPlanetActor> It(GetWorld()); It; ++It)
+	//
+	// Against the nearest body, not the first one the iterator returns. This is the lookup that
+	// decides landed, atmospheric or orbital -- which drives drag, the readout and the landed state
+	// task 90 exists about -- so with five planets in the scene the cheap version would have a ship
+	// on the ground at Ares reporting orbit because the Capital happened to be iterated first.
+	if (const ASpaceMMOPlanetActor* const Nearest =
+		ASpaceMMOPlanetActor::NearestTo(GetWorld(), Navigation.SystemPosition))
 	{
 		// Height above the ground, not above the nominal sphere. A ship parked on three hundred
 		// metres of terrain is landed, and measuring against the sphere called it airborne.
 		GroundAltitudeKilometres = FPlanetTerrain::AltitudeAboveGroundKilometres(
-			It->GetPlanetConfig(), It->GetTerrainConfig(), Navigation.SystemPosition);
+			Nearest->GetPlanetConfig(), Nearest->GetTerrainConfig(), Navigation.SystemPosition);
 
 		Proximity = FPlanetPhysics::ClassifyProximityAtAltitude(
-			It->GetPlanetConfig(), GroundAltitudeKilometres, Proximity);
-
-		break;
+			Nearest->GetPlanetConfig(), GroundAltitudeKilometres, Proximity);
 	}
 
 	// Drawn, never simulated. Before the axes are cleared, because the orbit reads what the mouse
@@ -356,32 +362,35 @@ double ASpaceMMOShipPawn::GetOrbitalSpeedHere() const
 {
     // The same nearest-planet rule GetAltitudeKilometres uses, so the two answers are always about
     // the same body rather than quietly about different ones.
-    if (const UWorld* World = GetWorld())
+    //
+    // That sentence was written before the rule existed. Both of these took the first planet the
+    // actor iterator returned, which was the same planet only because the scene held exactly one --
+    // so the comment was true by accident and would have gone on reading as a design decision
+    // after it stopped being true (task 157). They now share ASpaceMMOPlanetActor::NearestTo,
+    // which is the rule the comment always claimed.
+    const ASpaceMMOPlanetActor* const Nearest = ASpaceMMOPlanetActor::NearestTo(
+        const_cast<UWorld*>(GetWorld()), Navigation.SystemPosition);
+
+    if (Nearest == nullptr)
     {
-        for (TActorIterator<ASpaceMMOPlanetActor> It(const_cast<UWorld*>(World)); It; ++It)
-        {
-            return FPlanetPhysics::CircularOrbitSpeed(
-                It->GetPlanetConfig(),
-                FPlanetPhysics::AltitudeKilometres(
-                    It->GetPlanetConfig(), Navigation.SystemPosition));
-        }
+        return 0.0;
     }
 
-    return 0.0;
+    return FPlanetPhysics::CircularOrbitSpeed(
+        Nearest->GetPlanetConfig(),
+        FPlanetPhysics::AltitudeKilometres(
+            Nearest->GetPlanetConfig(), Navigation.SystemPosition));
 }
 
 double ASpaceMMOShipPawn::GetAltitudeKilometres() const
 {
-    if (const UWorld* World = GetWorld())
-    {
-        for (TActorIterator<ASpaceMMOPlanetActor> It(const_cast<UWorld*>(World)); It; ++It)
-        {
-            return FPlanetPhysics::AltitudeKilometres(
-                It->GetPlanetConfig(), Navigation.SystemPosition);
-        }
-    }
+    const ASpaceMMOPlanetActor* const Nearest = ASpaceMMOPlanetActor::NearestTo(
+        const_cast<UWorld*>(GetWorld()), Navigation.SystemPosition);
 
-    return 0.0;
+    return Nearest != nullptr
+        ? FPlanetPhysics::AltitudeKilometres(
+            Nearest->GetPlanetConfig(), Navigation.SystemPosition)
+        : 0.0;
 }
 
 FVector ASpaceMMOShipPawn::ComputeGravity() const
@@ -820,14 +829,16 @@ void ASpaceMMOShipPawn::ResolveGroundContact()
 
 		double OrbitalMetresPerSecond = 0.0;
 
-		for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+		// The body actually being touched down on. Every planet is drawn at one radius today, so
+		// this number would be the same whichever was picked -- which is exactly why it is worth
+		// fixing now rather than when a differently sized world makes the log quietly wrong.
+		if (const ASpaceMMOPlanetActor* const Nearest =
+			ASpaceMMOPlanetActor::NearestTo(World, Navigation.SystemPosition))
 		{
-			const FPlanetConfig& Planet = It->GetPlanetConfig();
+			const FPlanetConfig& Planet = Nearest->GetPlanetConfig();
 
 			OrbitalMetresPerSecond = FMath::Sqrt(
 				(Planet.SurfaceGravity / 100.0) * (Planet.RadiusKilometres * 1000.0));
-
-			break;
 		}
 
 		UE_LOG(LogSpaceMMO, Log, TEXT("%s at %s, %.0f m/s (orbital %.0f m/s)"),

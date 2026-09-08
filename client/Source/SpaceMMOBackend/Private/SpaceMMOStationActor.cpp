@@ -310,39 +310,47 @@ bool ASpaceMMOStationActor::GroundPositionBeside(
 		return false;
 	}
 
-	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	// The body this station stands on, which is the one nearest it -- not the first planet the
+	// actor iterator returns. This is where a pilot is put down when they leave a station, so the
+	// cheap version would step somebody out of Terra Outpost onto the Capital's terrain, two
+	// hundred kilometres away, on ground that is not underneath them (task 157).
+	const ASpaceMMOPlanetActor* const Standing =
+		ASpaceMMOPlanetActor::NearestTo(World, SystemPosition);
+
+	if (Standing == nullptr)
 	{
-		const FPlanetConfig& Body = It->GetPlanetConfig();
-
-		const FVector Up = (SystemPosition.Kilometres - Body.Centre.Kilometres).GetSafeNormal();
-
-		if (Up.IsNearlyZero())
-		{
-			continue;
-		}
-
-		// StepOutPosition flattens whatever direction it is given into the tangent plane, so a
-		// world axis is a perfectly good thing to hand it -- except where that axis is the up it
-		// is being flattened against, which is every station near a pole.
-		const FSystemCoordinate Beside = FBoarding::StepOutPosition(
-			SystemPosition, Up, FVector::UpVector, OffsetKilometres);
-
-		const FVector BesideDirection =
-			(Beside.Kilometres - Body.Centre.Kilometres).GetSafeNormal();
-
-		if (BesideDirection.IsNearlyZero())
-		{
-			continue;
-		}
-
-		OutPosition = FSystemCoordinate(
-			FPlanetTerrain::SurfacePosition(Body, It->GetTerrainConfig(), BesideDirection).Kilometres
-			+ (BesideDirection * LiftKilometres));
-
-		return true;
+		return false;
 	}
 
-	return false;
+	const FPlanetConfig& Body = Standing->GetPlanetConfig();
+
+	const FVector Up = (SystemPosition.Kilometres - Body.Centre.Kilometres).GetSafeNormal();
+
+	if (Up.IsNearlyZero())
+	{
+		return false;
+	}
+
+	// StepOutPosition flattens whatever direction it is given into the tangent plane, so a
+	// world axis is a perfectly good thing to hand it -- except where that axis is the up it
+	// is being flattened against, which is every station near a pole.
+	const FSystemCoordinate Beside = FBoarding::StepOutPosition(
+		SystemPosition, Up, FVector::UpVector, OffsetKilometres);
+
+	const FVector BesideDirection =
+		(Beside.Kilometres - Body.Centre.Kilometres).GetSafeNormal();
+
+	if (BesideDirection.IsNearlyZero())
+	{
+		return false;
+	}
+
+	OutPosition = FSystemCoordinate(
+		FPlanetTerrain::SurfacePosition(
+			Body, Standing->GetTerrainConfig(), BesideDirection).Kilometres
+		+ (BesideDirection * LiftKilometres));
+
+	return true;
 }
 
 void ASpaceMMOStationActor::BeginPlay()

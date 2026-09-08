@@ -68,6 +68,31 @@ public class Body
     public double RadiusKm { get; set; }
 
     /// <summary>
+    /// Where the body sits in its system, in kilometres, or null if nobody has placed it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Null is why four stations did not exist.</strong> A body had no position at all until
+    /// 8 September, so the client had one compiled-in planet and skipped every station belonging to a
+    /// body it could not draw — Terra, Ares, Verdance and Grimhold were seeded, served, and invisible
+    /// (task 157).
+    /// </para>
+    /// <para>
+    /// Nullable rather than defaulting to the origin, for the same reason a station's position is:
+    /// "nobody has said" and "at the centre of the system" are different claims, and a body silently
+    /// at the origin would be drawn inside the star.
+    /// </para>
+    /// <para>
+    /// Not in the same scale as <see cref="RadiusKm"/>. See <c>BodyContent.SystemPosition</c>.
+    /// </para>
+    /// </remarks>
+    public double? SystemX { get; set; }
+
+    public double? SystemY { get; set; }
+
+    public double? SystemZ { get; set; }
+
+    /// <summary>
     /// What this body's ground looks like, or null if nobody has painted it yet.
     /// </summary>
     /// <remarks>

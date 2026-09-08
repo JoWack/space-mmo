@@ -151,8 +151,27 @@ void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 
 FString USpaceMMODepositSubsystem::SceneBodyKey() const
 {
-	// The planet that is actually in the world, when there is one. What is drawn is what content
-	// belongs on it, and asking the built thing beats asking what configured it.
+	// The body this client starts on, which is the one DefaultGame.ini names.
+	//
+	// <strong>This used to return the first planet in the world carrying a key</strong>, and the
+	// comment defended it: what is drawn is what content belongs on, and asking the built thing
+	// beats asking what configured it. That was true while the scene held exactly one planet and
+	// became false the moment content could place five (task 157) -- "the first planet the actor
+	// iterator returns" is now an arbitrary world, and this decides which body's deposits are
+	// fetched. Ore would have appeared on whichever planet happened to spawn first.
+	//
+	// The configured value is not a guess at what the planet will be. It is what the starting
+	// planet wears: BuildScenery does not set a key, so that actor takes the class default, which
+	// is this.
+	const FString Configured = GetDefault<ASpaceMMOPlanetActor>()->BodyKey;
+
+	if (!Configured.IsEmpty())
+	{
+		return Configured;
+	}
+
+	// Nothing configured at all. Fall back to any planet that names a body, so a scene assembled
+	// some other way still has an answer rather than none.
 	if (UWorld* const World = GetWorld())
 	{
 		for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
@@ -166,9 +185,7 @@ FString USpaceMMODepositSubsystem::SceneBodyKey() const
 		}
 	}
 
-	// Otherwise the configured value the planet will take when it spawns. Subsystem ordering is
-	// not guaranteed, so arriving before the planet does is a normal state rather than a fault.
-	return GetDefault<ASpaceMMOPlanetActor>()->BodyKey;
+	return Configured;
 }
 
 void USpaceMMODepositSubsystem::HandleBodiesLoaded()
@@ -363,23 +380,40 @@ void USpaceMMODepositSubsystem::PlaceStations()
 		return;
 	}
 
-	// Read off the planet rather than copied, for the same reason the deposits do it: two
-	// hard-coded radii agree right up until one is edited, and then a station stands at the
-	// altitude of a planet that no longer exists.
-	const ASpaceMMOPlanetActor* PlanetActor = nullptr;
+	// Every station is measured against the planet standing in for its own body.
+	//
+	// <strong>It used to be measured against the first planet the iterator returned.</strong> That
+	// was correct only because the scene held exactly one, and it is why the whole of this loop's
+	// old story was about skipping: four of the six seeded stations belonged to bodies nothing
+	// drew, so they were counted and dropped. Now that content places bodies (task 157) the same
+	// question has an answer per station, and the fault it prevents is worse than the one it
+	// replaces -- an outpost measured against another world's terrain is buried or floating, and
+	// looks exactly like a station measured correctly.
+	TMap<int32, const ASpaceMMOPlanetActor*> PlanetsByBodyId;
 
-	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
 	{
-		PlanetActor = *It;
+		TMap<FString, int32> BodyIdsByKey;
 
-		break;
+		for (const FBackendBody& Body : Backend->GetBodies())
+		{
+			BodyIdsByKey.Add(Body.Key, Body.Id);
+		}
+
+		for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+		{
+			const ASpaceMMOPlanetActor* const Planet = *It;
+
+			if (Planet == nullptr || Planet->BodyKey.IsEmpty())
+			{
+				continue;
+			}
+
+			if (const int32* const BodyId = BodyIdsByKey.Find(Planet->BodyKey))
+			{
+				PlanetsByBodyId.Add(*BodyId, Planet);
+			}
+		}
 	}
-
-	const FPlanetConfig Planet =
-		PlanetActor != nullptr ? PlanetActor->GetPlanetConfig() : FPlanetConfig();
-
-	const FPlanetTerrainConfig Terrain =
-		PlanetActor != nullptr ? PlanetActor->GetTerrainConfig() : FPlanetTerrainConfig();
 
 	int32 Drawn = 0;
 
@@ -387,30 +421,34 @@ void USpaceMMODepositSubsystem::PlaceStations()
 
 	for (const FBackendStation& Station : Backend->GetStations())
 	{
-		// A station on a body needs a planet to stand on. Deep-space ones do not, which is why
-		// the missing planet is only fatal for the first kind — and why this loop continues
+		// A station on a body needs that body's planet to stand on. Deep-space ones do not, which
+		// is why a missing planet is only fatal for the first kind -- and why this loop continues
 		// rather than returning.
-		if (Station.bPlaced && Station.bOnBody && PlanetActor == nullptr)
+		const ASpaceMMOPlanetActor* const Standing =
+			Station.bPlaced && Station.bOnBody
+				? PlanetsByBodyId.FindRef(Station.BodyId)
+				: nullptr;
+
+		if (Station.bPlaced && Station.bOnBody && Standing == nullptr)
 		{
+			// Named rather than counted silently. A station whose body content has not placed is
+			// the one thing that still cannot be drawn, and the reason is now specific enough to
+			// act on: put a systemPosition on that body.
 			UE_LOG(LogSpaceMMOBackend, Warning,
-				TEXT("No planet in the world; station %s has nothing to stand on."), *Station.Key);
+				TEXT("Station %s stands on body %d, which has no planet in the world; "
+					"has that body been given a systemPosition?"),
+				*Station.Key, Station.BodyId);
 
-			continue;
-		}
-
-		// And it needs to be *this* planet's station.
-		//
-		// The scene has one planet; the system has five. Placing every body-relative station
-		// against the only planet present put all five outposts on the capital, a few hundred
-		// metres apart, which read as one enormous sprawling structure rather than as four
-		// stations that should not have been there at all. Skipping them is honest: those worlds
-		// exist in the database and have nowhere to stand yet.
-		if (Station.bPlaced && Station.bOnBody && Station.BodyId != SceneBodyId)
-		{
 			++Skipped;
 
 			continue;
 		}
+
+		const FPlanetConfig Planet =
+			Standing != nullptr ? Standing->GetPlanetConfig() : FPlanetConfig();
+
+		const FPlanetTerrainConfig Terrain =
+			Standing != nullptr ? Standing->GetTerrainConfig() : FPlanetTerrainConfig();
 
 		// Deferred, so Configure runs before BeginPlay. A plain SpawnActor begins play
 		// immediately and the station would briefly occupy the system origin — the same ordering
@@ -432,20 +470,28 @@ void USpaceMMODepositSubsystem::PlaceStations()
 
 		PlacedStations.Add(Placed);
 
+		// The shape it was placed against, named per station. A station measured against the wrong
+		// terrain looks exactly like one measured against the right terrain -- it is only wrong
+		// relative to the ground everybody else can see -- so the seed is the one value that tells
+		// the two apart, and with five worlds in the scene one line for all of them would name at
+		// most one of the five seeds actually used.
+		if (Standing != nullptr)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Station %s placed on '%s' against terrain seed %lld, relief %.2f km, "
+					"frequency %.1f."),
+				*Station.Key,
+				*Standing->BodyKey,
+				Terrain.Seed,
+				Terrain.MaxElevationKilometres,
+				Terrain.BaseFrequency);
+		}
+
 		Drawn += Station.bPlaced ? 1 : 0;
 	}
 
-	// The shape they were placed against, named. A station measured against the wrong terrain looks
-	// exactly like one measured against the right terrain -- it is only wrong relative to the ground
-	// everybody else can see -- so the seed is the one value that tells the two apart.
 	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("Stations placed against terrain seed %lld, relief %.2f km, frequency %.1f."),
-		Terrain.Seed,
-		Terrain.MaxElevationKilometres,
-		Terrain.BaseFrequency);
-
-	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("Placed %d station(s), %d drawable; skipped %d on bodies this scene does not have."),
+		TEXT("Placed %d station(s), %d drawable; skipped %d on bodies content has not placed."),
 		PlacedStations.Num(), Drawn, Skipped);
 }
 
@@ -473,19 +519,30 @@ void USpaceMMODepositSubsystem::PlaceDeposits()
 	// The planet's configuration is read off the planet itself rather than copied here. Two
 	// hard-coded copies of a radius and a terrain seed would agree right up until one was edited,
 	// and then deposits would sit at the altitude of a planet that no longer exists.
+	//
+	// The scene's own planet specifically, matched by body key rather than taken as the first the
+	// iterator returns. Deposits are fetched for exactly one body -- SceneBodyId -- so placing them
+	// against another world's terrain would bury or float every rock on the planet, and each one
+	// would look correctly placed from every direction except standing next to it.
+	const FString BodyKey = SceneBodyKey();
+
 	const ASpaceMMOPlanetActor* PlanetActor = nullptr;
 
 	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
 	{
-		PlanetActor = *It;
+		if (*It != nullptr && It->BodyKey == BodyKey)
+		{
+			PlanetActor = *It;
 
-		break;
+			break;
+		}
 	}
 
 	if (PlanetActor == nullptr)
 	{
 		UE_LOG(LogSpaceMMOBackend, Warning,
-			TEXT("No planet in the world; deposits have nothing to stand on."));
+			TEXT("No planet for body '%s' in the world; its deposits have nothing to stand on."),
+			*BodyKey);
 
 		return;
 	}

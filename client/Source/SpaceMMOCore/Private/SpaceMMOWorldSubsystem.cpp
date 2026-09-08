@@ -8,6 +8,7 @@
 #include "Engine/TextureCube.h"
 #include "Engine/World.h"
 #include "SpaceMMOLog.h"
+#include "EngineUtils.h"
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOTestScene.h"
 
@@ -194,6 +195,83 @@ void USpaceMMOWorldSubsystem::Tick(const float DeltaTime)
 	}
 }
 
+ASpaceMMOPlanetActor* USpaceMMOWorldSubsystem::EnsurePlanet(
+	const FString& BodyKey,
+	const FPlanetConfig& Config,
+	const FPlanetTerrainConfig& Terrain)
+{
+	UWorld* const World = GetWorld();
+
+	if (World == nullptr || BodyKey.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		ASpaceMMOPlanetActor* const Existing = *It;
+
+		if (Existing == nullptr || Existing->BodyKey != BodyKey)
+		{
+			continue;
+		}
+
+		// Said out loud rather than corrected. Moving a planet a character is already standing on
+		// drops them, and silently keeping the compiled-in position would leave content and code
+		// disagreeing about where a world is with nothing anywhere saying so -- which is the shape
+		// of fault that costs a playtest to notice and a second one to attribute.
+		const double DriftKilometres =
+			(Existing->GetPlanetConfig().Centre.Kilometres - Config.Centre.Kilometres).Size();
+
+		if (DriftKilometres > 0.001)
+		{
+			UE_LOG(LogSpaceMMO, Warning,
+				TEXT("Body '%s' is authored at %s but its planet already stands at %s, %.3f km "
+					"away; leaving it where it is. Make the content agree with "
+					"USpaceMMOWorldSubsystem::StartingPlanet()."),
+				*BodyKey,
+				*Config.Centre.ToString(),
+				*Existing->GetPlanetConfig().Centre.ToString(),
+				DriftKilometres);
+		}
+
+		return Existing;
+	}
+
+	// Deferred, so the configuration is in place before BeginPlay runs -- the same ordering the
+	// starting planet is spawned with, and the mistake this project has made three times.
+	ASpaceMMOPlanetActor* const Planet = World->SpawnActorDeferred<ASpaceMMOPlanetActor>(
+		ASpaceMMOPlanetActor::StaticClass(),
+		FTransform::Identity,
+		nullptr,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (Planet == nullptr)
+	{
+		UE_LOG(LogSpaceMMO, Warning, TEXT("Could not spawn a planet for body '%s'."), *BodyKey);
+
+		return nullptr;
+	}
+
+	// Before FinishSpawning. The key is what the paint pass and every station match on, and one set
+	// afterwards arrives after BeginPlay has already reported the planet as belonging to whatever
+	// DefaultGame.ini said -- which is body_capital, for every world.
+	Planet->BodyKey = BodyKey;
+
+	Planet->SetPlanetConfig(Config);
+	Planet->SetTerrainConfig(Terrain);
+	Planet->FinishSpawning(FTransform::Identity);
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Built a planet for body '%s' at %s, radius %.1f km."),
+		*BodyKey,
+		*Config.Centre.ToString(),
+		Config.RadiusKilometres);
+
+	return Planet;
+}
+
 void USpaceMMOWorldSubsystem::BuildScenery()
 {
 	UWorld* World = GetWorld();
@@ -223,30 +301,33 @@ void USpaceMMOWorldSubsystem::BuildScenery()
 	// the marker lattice streams past three kilometres apart. The planet looked stationary and
 	// everything else looked fast, which reads as the planet running away. Sixty kilometres is far
 	// enough to be a real approach and close enough to be worth making.
-	// Spawned deferred so the configuration is in place before BeginPlay runs. A plain SpawnActor
-	// begins play immediately, so anything set afterwards arrives too late — the planet would
-	// briefly exist at the system origin with default settings, and BeginPlay would report them.
-	if (ASpaceMMOPlanetActor* PlanetActor = World->SpawnActorDeferred<ASpaceMMOPlanetActor>(
-		ASpaceMMOPlanetActor::StaticClass(),
-		FTransform::Identity,
-		nullptr,
-		nullptr,
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn))
-	{
-		PlanetActor->SetPlanetConfig(StartingPlanet());
-
-		// Half a kilometre of relief on a 20 km world is 2.5% of the radius. Earth's tallest
-		// mountain is 0.14% of Earth's, so this planet is roughly eighteen times as rugged, and
-		// now that the whole globe is drawn from these numbers rather than approximated by a ball
-		// that is something you can see from orbit rather than a detail of the landing zone.
-		//
-		// Left as it is on purpose: the lighting was tuned against this terrain, and a peak
-		// several times the height of the horizon is what makes the ground read as ground on a
-		// planet this small. Lowering it toward 0.15 would make the planet rounder from space at
-		// the cost of flattening what a player walks on.
-		PlanetActor->SetTerrainConfig(StartingPlanetTerrain());
-		PlanetActor->FinishSpawning(FTransform::Identity);
-	}
+	// Through EnsurePlanet rather than spawned directly, so that whichever of the two subsystems
+	// runs first wins and the other finds this planet already standing.
+	//
+	// <strong>World subsystem OnWorldBeginPlay order is not guaranteed</strong>, and since task 157
+	// there are two things that build planets: this, and USpaceMMOTerrainPaintSubsystem, which
+	// builds one per body content has placed. On a fresh launch bodies arrive over HTTP long after
+	// this runs, so this is always first -- but a level transition keeps the backend client and its
+	// body list, and the paint subsystem calls straight into the list it already has. In that order
+	// the capital would be built twice, and two planets at one point is a fault that renders as
+	// z-fighting and reads as a terrain bug.
+	//
+	// The key is what makes them the same planet, and it is the class default -- body_capital, from
+	// DefaultGame.ini -- which is the key this actor takes either way.
+	//
+	// Half a kilometre of relief on a 20 km world is 2.5% of the radius. Earth's tallest mountain
+	// is 0.14% of Earth's, so this planet is roughly eighteen times as rugged, and now that the
+	// whole globe is drawn from these numbers rather than approximated by a ball that is something
+	// you can see from orbit rather than a detail of the landing zone.
+	//
+	// Left as it is on purpose: the lighting was tuned against this terrain, and a peak several
+	// times the height of the horizon is what makes the ground read as ground on a planet this
+	// small. Lowering it toward 0.15 would make the planet rounder from space at the cost of
+	// flattening what a player walks on.
+	EnsurePlanet(
+		GetDefault<ASpaceMMOPlanetActor>()->BodyKey,
+		StartingPlanet(),
+		StartingPlanetTerrain());
 
 
 	// ── Lighting ─────────────────────────────────────────────────────────────

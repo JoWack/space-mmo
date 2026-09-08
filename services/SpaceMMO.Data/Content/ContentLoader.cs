@@ -435,6 +435,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 body.SecurityLevel = content.SecurityLevel;
                 body.RadiusKm = content.RadiusKm;
 
+                ApplyBodyPosition(body, content);
                 ApplyAppearance(body, content.Appearance);
                 ApplyTerrain(body, content.Terrain);
 
@@ -451,6 +452,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 RadiusKm = content.RadiusKm,
             };
 
+            ApplyBodyPosition(added, content);
             ApplyAppearance(added, content.Appearance);
             ApplyTerrain(added, content.Terrain);
 
@@ -506,6 +508,21 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         }
 
         await _database.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Copies the body's system position, or clears it when content no longer authors one.
+    /// </summary>
+    /// <remarks>
+    /// Cleared on a reload rather than left behind, for the same reason a station's is: a body moved
+    /// back to "unplaced" in content would otherwise keep the position it used to have, and the
+    /// client would go on drawing a planet nobody authors any more.
+    /// </remarks>
+    private static void ApplyBodyPosition(Body body, BodyContent content)
+    {
+        body.SystemX = content.SystemPosition is { Length: 3 } p ? p[0] : null;
+        body.SystemY = content.SystemPosition is { Length: 3 } p2 ? p2[1] : null;
+        body.SystemZ = content.SystemPosition is { Length: 3 } p3 ? p3[2] : null;
     }
 
     /// <summary>

@@ -1368,6 +1368,27 @@ bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendB
 		Object->TryGetStringField(TEXT("name"), Body.Name);
 		Object->TryGetNumberField(TEXT("radiusKm"), Body.RadiusKilometres);
 
+		// All three together, and only then. A body the server has not placed sends nulls, and
+		// reading them into a zero vector would put that planet at the centre of the star system
+		// -- which is a position, not an absence, and nothing downstream could tell the difference.
+		// Two of three is a malformed row rather than an unplaced body; the content validator
+		// refuses it at load, and treating it as unplaced here is the safe reading either way.
+		{
+			double X = 0.0;
+			double Y = 0.0;
+			double Z = 0.0;
+
+			Body.bHasSystemPosition =
+				Object->TryGetNumberField(TEXT("systemX"), X)
+				&& Object->TryGetNumberField(TEXT("systemY"), Y)
+				&& Object->TryGetNumberField(TEXT("systemZ"), Z);
+
+			if (Body.bHasSystemPosition)
+			{
+				Body.SystemPositionKilometres = FVector(X, Y, Z);
+			}
+		}
+
 		// All or nothing. A half-authored palette -- two colours and no third -- would blend toward
 		// whatever the default happened to be and look deliberate, so a body counts as painted only
 		// when every colour arrived.

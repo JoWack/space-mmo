@@ -6,6 +6,7 @@
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOPlanetActor.h"
+#include "SpaceMMOWorldSubsystem.h"
 
 void USpaceMMOTerrainPaintSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
@@ -34,6 +35,84 @@ void USpaceMMOTerrainPaintSubsystem::HandleBodiesLoaded()
 	PaintPlanets();
 }
 
+void USpaceMMOTerrainPaintSubsystem::BuildPlanetsForPlacedBodies(
+	UWorld& World, const USpaceMMOBackendClient& Backend)
+{
+	USpaceMMOWorldSubsystem* const Scenery = World.GetSubsystem<USpaceMMOWorldSubsystem>();
+
+	if (Scenery == nullptr)
+	{
+		return;
+	}
+
+	// Every body is drawn at the radius the starting planet carries, whatever its authored
+	// radiusKm says.
+	//
+	// <strong>Asked of the thing that draws it, not written down again here.</strong> The same
+	// accessor the authoring preview scales its markers against, for the same reason: the radius is
+	// compiled in rather than authored (task 123), and the day it becomes content this is one of
+	// the two places that has to notice. A second copy of "20" here would agree with it right up
+	// until one was edited.
+	const FPlanetConfig Drawn = USpaceMMOWorldSubsystem::StartingPlanet();
+
+	int32 Built = 0;
+	int32 Unplaced = 0;
+
+	for (const FBackendBody& Body : Backend.GetBodies())
+	{
+		// A body nobody has placed is a working state: it exists in the database and is drawn by
+		// nobody. Counted rather than warned about, because until 8 September that was every body
+		// in the pack and a warning per world would be noise rather than news.
+		if (!Body.bHasSystemPosition || Body.Key.IsEmpty())
+		{
+			++Unplaced;
+
+			continue;
+		}
+
+		FPlanetConfig Config = Drawn;
+		Config.Centre = FSystemCoordinate(Body.SystemPositionKilometres);
+
+		FPlanetTerrainConfig Terrain = USpaceMMOWorldSubsystem::StartingPlanetTerrain();
+
+		// Shaped here as well as in the paint pass below, so a planet is never built wearing the
+		// starting world's terrain and then reshaped a frame later. The paint pass still applies
+		// it -- it is what handles a body reshaped after the planets already exist -- and it skips
+		// a planet that already has the shape content asked for, so this costs nothing twice.
+		if (Body.bHasTerrain)
+		{
+			Terrain.Seed = Body.TerrainSeed;
+			Terrain.MaxElevationKilometres = Body.MaxElevationKilometres;
+			Terrain.BaseFrequency = Body.BaseFrequency;
+		}
+
+		if (Scenery->EnsurePlanet(Body.Key, Config, Terrain) != nullptr)
+		{
+			++Built;
+		}
+	}
+
+	// Counted off the world rather than off the loop above.
+	//
+	// <strong>Built is what was asked for; this is what is standing there.</strong> They differ if a
+	// spawn fails, and -- the case worth catching -- if something else has already built a planet
+	// this pass did not account for. Two subsystems build planets now, so "5 of 5" from a loop that
+	// called EnsurePlanet five times would say exactly that while six planets stood in the world.
+	// Measuring the built thing rather than the thing that configures it is the rule this project
+	// keeps relearning.
+	int32 InTheWorld = 0;
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(&World); It; ++It)
+	{
+		InTheWorld += *It != nullptr ? 1 : 0;
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("%d of %d body(ies) have a planet; %d are authored nowhere; %d planet(s) in the "
+			"world."),
+		Built, Backend.GetBodies().Num(), Unplaced, InTheWorld);
+}
+
 void USpaceMMOTerrainPaintSubsystem::PaintPlanets()
 {
 	UWorld* const World = GetWorld();
@@ -51,6 +130,8 @@ void USpaceMMOTerrainPaintSubsystem::PaintPlanets()
 		// the race this exists to close.
 		return;
 	}
+
+	BuildPlanetsForPlacedBodies(*World, *Backend);
 
 	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
 	{

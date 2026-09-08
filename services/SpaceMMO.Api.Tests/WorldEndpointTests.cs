@@ -68,6 +68,51 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task A_bodys_system_position_is_served_when_it_has_one()
+    {
+        // The wire half of task 157. A body with no position is why the client had one planet and
+        // skipped four of the six seeded stations: it could not draw a world it did not know the
+        // location of, so those stations had nothing to stand on.
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            Body placed = context.Bodies.OrderBy(b => b.Id).First();
+
+            // Three different values, so a response that served one component three times -- or
+            // read Y where it meant Z -- fails rather than passing on symmetry.
+            placed.SystemX = -120.0;
+            placed.SystemY = 60.5;
+            placed.SystemZ = 7.25;
+
+            await context.SaveChangesAsync();
+        }
+
+        BodyResponse[] bodies =
+            (await _client.GetFromJsonAsync<BodyResponse[]>("/world/bodies"))!;
+
+        BodyResponse served = bodies.Single(b => b.SystemX == -120.0);
+
+        Assert.Equal(60.5, served.SystemY);
+        Assert.Equal(7.25, served.SystemZ);
+    }
+
+    [Fact]
+    public async Task A_body_nobody_has_placed_is_served_with_no_position()
+    {
+        // Unplaced has to arrive as null rather than as the origin. A body silently at (0,0,0)
+        // would be drawn inside the star, and the client cannot tell that from a world somebody
+        // deliberately put there.
+        BodyResponse[] bodies =
+            (await _client.GetFromJsonAsync<BodyResponse[]>("/world/bodies"))!;
+
+        Assert.All(bodies, body =>
+        {
+            Assert.Null(body.SystemX);
+            Assert.Null(body.SystemY);
+            Assert.Null(body.SystemZ);
+        });
+    }
+
+    [Fact]
     public async Task Deposits_on_a_body_are_returned_with_their_direction()
     {
         ResourceNodeResponse[] nodes = await GetNodesAsync(_bodyId);

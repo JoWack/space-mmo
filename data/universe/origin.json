@@ -14,6 +14,8 @@
     }
   ],
 
+  "$bodyPositionComment": "These are spaced for the radius bodies are DRAWN at -- 20 km, compiled into the client -- not for radiusKm, which is the 1:10 figure and drives nothing at runtime. A ship does 2 km/s, so 200 km is under two minutes. Every pair is at least 182 km apart, which is 142 km of clear space between two 20 km surfaces. Task 157.",
+
   "bodies": [
     {
       "key": "body_terra",
@@ -23,6 +25,8 @@
       "securityLevel": "Secure",
       "$comment": "Earth-analog. 6371 km at true scale becomes 637.1 at 1:10.",
       "radiusKm": 637.1,
+      "$systemPositionComment": "190 km from the Capital, about a hundred seconds of flight.",
+      "systemPosition": [-120.0, 60.0, 0.0],
       "$appearanceComment": "Oceanic and green where it is low, weathered grey stone up high, concrete-coloured rock: Terra is humanity's scarred cradle rather than a garden.",
       "appearance": {
         "lowColour": "0.10,0.14,0.09",
@@ -48,6 +52,8 @@
       "securityLevel": "Secure",
       "$comment": "Mars-analog: thin atmosphere, red desert, low gravity.",
       "radiusKm": 339.0,
+      "$systemPositionComment": "184 km from the Capital, and 183 from Grimhold: the closest pair authored.",
+      "systemPosition": [40.0, -180.0, 30.0],
       "$appearanceComment": "Red oxide basins rising to pale dust, bare basalt on anything steep. The palette the terrain material was first tuned against.",
       "appearance": {
         "lowColour": "0.35,0.12,0.07",
@@ -73,6 +79,8 @@
       "securityLevel": "Secure",
       "$comment": "Lush and luminous — a planet that reads as alive.",
       "radiusKm": 610.0,
+      "$systemPositionComment": "207 km from the Capital, the far side of the system from Ares.",
+      "systemPosition": [200.0, 140.0, -60.0],
       "$appearanceComment": "Deep forest floor to lit canopy green, damp bark-dark rock. Amber bioluminescence belongs to the structures rather than the ground.",
       "appearance": {
         "lowColour": "0.05,0.13,0.05",
@@ -98,6 +106,8 @@
       "securityLevel": "Secure",
       "$comment": "Dark and industrial, heavy gravity, perpetual overcast. Larger than the rest, which is where the heavy gravity comes from.",
       "radiusKm": 780.0,
+      "$systemPositionComment": "224 km from the Capital, and the only body well off the ecliptic.",
+      "systemPosition": [-60.0, -100.0, 160.0],
       "$appearanceComment": "Black slag to ash-grey, basalt throughout. Nearly monochrome on purpose: the colour on Grimhold comes from its forges, not its ground.",
       "appearance": {
         "lowColour": "0.03,0.03,0.03",
@@ -123,6 +133,8 @@
       "securityLevel": "Secure",
       "$comment": "The shared capital world the onboarding questline ends at. Neutral ground: both factions trade here, which is why career questlines live here rather than on a homeworld.",
       "radiusKm": 700.0,
+      "$systemPositionComment": "Unchanged, and it must stay unchanged: the client's compiled-in starting planet is at this point, and the character spawn is measured from it before any of this arrives over HTTP.",
+      "systemPosition": [60.0, 0.0, 0.0],
       "$appearanceComment": "Temperate and built-over. Between Terra and Ares in tone because the Capital is where everybody meets.",
       "appearance": {
         "lowColour": "0.16,0.19,0.15",

@@ -7,12 +7,20 @@ namespace SpaceMMO.Api.Endpoints;
 /// What this body's ground looks like, or null throughout when nobody has painted it. Sent with the
 /// body because a planet's look is content, the same as its radius — see BodyAppearanceContent.
 /// </param>
+/// <param name="SystemX">
+/// Where the body sits in its system, in kilometres, or null for one nobody has placed. The client
+/// draws a planet for each body that has a position and nothing for the rest, which is why four
+/// stations had nowhere to stand before this was sent (task 157).
+/// </param>
 public sealed record BodyResponse(
     int Id,
     string Key,
     string Name,
     int StarSystemId,
     double RadiusKm,
+    double? SystemX,
+    double? SystemY,
+    double? SystemZ,
     string? LowColour,
     string? HighColour,
     string? RockColour,
@@ -139,6 +147,9 @@ public static class WorldEndpoints
                 b.Name,
                 b.StarSystemId,
                 b.RadiusKm,
+                b.SystemX,
+                b.SystemY,
+                b.SystemZ,
                 b.LowColour,
                 b.HighColour,
                 b.RockColour,

@@ -52,6 +52,21 @@ public:
 	EPlanetProximity GetViewerProximity() const { return ViewerProximity; }
 
 	/**
+	 * The planet whose surface is nearest a system position, or null when the world holds none.
+	 *
+	 * <strong>Use this instead of taking the first actor the iterator returns.</strong> Until 8
+	 * September the scene held exactly one planet, so "the first" and "the right one" were the same
+	 * actor and about ten lookups were written the cheap way; two of them carried comments claiming
+	 * a nearest-planet rule the project did not have. Adding a second body turns every one of those
+	 * into a bug that reads as physics — gravity from the wrong world, an altitude measured against
+	 * a planet three hundred kilometres away, a landed ship that believes it is in orbit.
+	 *
+	 * The rule itself is <c>FSpaceMMOBodySelection</c>, which is a pure function and tested as one.
+	 */
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Planet")
+	static ASpaceMMOPlanetActor* NearestTo(UWorld* World, const FSystemCoordinate& Where);
+
+	/**
 	 * How wide the ground patch needs to be, in degrees of arc, for a viewer at a given altitude.
 	 *
 	 * Grows with altitude to cover the horizon, so the patch is always the only surface worth

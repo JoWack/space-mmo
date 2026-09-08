@@ -223,11 +223,24 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 
 	FGroundContact Ground;
 
+	// Which body this character is standing on, chosen once.
+	//
+	// <strong>Gravity below is summed over every planet; standing is about exactly one.</strong>
+	// Those are different questions and they were being answered by the same loop, which was
+	// invisible while the scene held a single planet and is a bug the moment it holds five: the
+	// surface normal was last-writer-wins across the iterator, and the first-ground placement took
+	// whichever planet came back first -- so a character spawning at the Capital could be stood on
+	// Grimhold, two hundred kilometres away (task 157).
+	const ASpaceMMOPlanetActor* const Underfoot =
+		ASpaceMMOPlanetActor::NearestTo(World, Navigation.SystemPosition);
+
 	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
 	{
 		bFoundAPlanet = true;
 
 		const FPlanetConfig& Planet = It->GetPlanetConfig();
+
+		const bool bIsUnderfoot = *It == Underfoot;
 
 		// The first planet this character has ever seen, and it is below them: the spawn placed
 		// them above where the ground was going to be, because at that moment nothing could say
@@ -238,7 +251,7 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 		// after fifty metres of falling. Which planet's terrain it lands on is whatever the actor is
 		// wearing now, so a body reshaped by content after the spawn is still the one answered
 		// against (task 129).
-		if (bAwaitingFirstGround)
+		if (bAwaitingFirstGround && bIsUnderfoot)
 		{
 			bAwaitingFirstGround = false;
 
@@ -272,7 +285,15 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 
 		// The normal is taken from whichever body is underfoot even when not touching it, so a
 		// jumping character stays oriented to the ground it left rather than snapping upright.
-		SurfaceNormal = Contact.SurfaceNormal;
+		//
+		// From the nearest body specifically. Unguarded, this was assigned once per planet and the
+		// last one the iterator happened to return won -- which with one planet is the right answer
+		// and with five is a character standing upright with respect to a world on the far side of
+		// the system.
+		if (bIsUnderfoot)
+		{
+			SurfaceNormal = Contact.SurfaceNormal;
+		}
 
 		if (!Contact.bOnGround)
 		{

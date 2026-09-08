@@ -210,6 +210,71 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AuthoredBodyPositions_ReachTheDatabase()
+    {
+        // Where a body is travels the same path its palette and shape do: data/ -> seed ->
+        // Postgres -> API -> client. This is the seed half, and before 8 September there was no
+        // position to carry -- which is why the client skipped four of the six seeded stations as
+        // standing on bodies it had never heard of (task 157).
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        foreach (BodyContent authored in pack.Bodies.Where(b => b.SystemPosition is not null))
+        {
+            Body stored = await verify.Bodies.SingleAsync(b => b.Key == authored.Key);
+
+            Assert.Equal(authored.SystemPosition![0], stored.SystemX);
+            Assert.Equal(authored.SystemPosition[1], stored.SystemY);
+            Assert.Equal(authored.SystemPosition[2], stored.SystemZ);
+        }
+
+        // Every shipped body is placed, not merely some. A body without a position is drawn by
+        // nobody, and one unplaced homeworld is a race whose starting world does not exist.
+        Assert.All(pack.Bodies, b => Assert.NotNull(b.SystemPosition));
+
+        // And the axes are not interchangeable. Asserting X, Y and Z against a pack whose bodies
+        // all sat on one axis would pass with the loader writing the same component three times;
+        // the shipped content is authored off-axis so that it cannot.
+        Assert.Contains(
+            await verify.Bodies.ToListAsync(),
+            b => b.SystemX != b.SystemY && b.SystemY != b.SystemZ);
+    }
+
+    [Fact]
+    public async Task RemovingABodyPosition_ClearsIt()
+    {
+        // The same reason a removed palette has to clear: seeding is how content is corrected, and
+        // a body moved back to unplaced would otherwise keep the position it used to have in every
+        // environment that had already seeded it -- with a planet still drawn where nothing is
+        // authored any more.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        await using (SpaceMmoDbContext move = _fixture.CreateContext())
+        {
+            Body body = await move.Bodies.FirstAsync();
+            body.SystemX = 12345.0;
+
+            await move.SaveChangesAsync();
+        }
+
+        await using (SpaceMmoDbContext reseed = _fixture.CreateContext())
+        {
+            await new ContentLoader(reseed).LoadAsync(ContentRoot());
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.DoesNotContain(
+            await verify.Bodies.Select(b => b.SystemX).ToListAsync(),
+            x => x == 12345.0);
+    }
+
+    [Fact]
     public async Task RemovingAPalette_ClearsIt()
     {
         // Seeding is how content is corrected, so deleting an appearance from the JSON has to

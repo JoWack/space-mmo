@@ -51,6 +51,20 @@ private:
 	void PaintPlanets();
 
 	/**
+	 * Builds a planet for every body content has placed, and leaves the rest alone.
+	 *
+	 * <strong>Here rather than in the world subsystem, for the same reason painting is.</strong>
+	 * Which bodies exist and where they are is content, arriving over HTTP; Core owns spawning a
+	 * planet and knows nothing about either. So this reads the body list and asks
+	 * <c>USpaceMMOWorldSubsystem::EnsurePlanet</c> for one per placed body.
+	 *
+	 * <strong>Before painting, in the same pass.</strong> A planet built after the paint loop had
+	 * run would wear the starting world's colours until the next bodies broadcast, and the broadcast
+	 * that built it is the one that has its palette in hand.
+	 */
+	void BuildPlanetsForPlacedBodies(UWorld& World, const class USpaceMMOBackendClient& Backend);
+
+	/**
 	 * Set once bodies have actually been available to paint from.
 	 *
 	 * Not set by the speculative call at world begin play, which runs before anything has arrived:

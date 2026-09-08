@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOPlanet.h"
+#include "SpaceMMOPlanetActor.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "SpaceMMOWorldSubsystem.generated.h"
 
@@ -64,6 +65,31 @@ public:
 	/** The planet every machine agrees on. Spawned here so both sides simulate against it. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|World")
 	void BuildScenery();
+
+	/**
+	 * Ensures a planet exists for an authored body, and returns it.
+	 *
+	 * <strong>Called from the backend module, not from here.</strong> Core knows nothing about HTTP
+	 * or content — the same boundary that has the game mode resolve its player controller by path,
+	 * and that has a body's palette arrive as four values from whoever fetched them. So this owns
+	 * spawning a planet and nothing else; which bodies exist and where they are is a question only
+	 * the thing holding the body list can answer.
+	 *
+	 * <strong>Idempotent, keyed on the body.</strong> Bodies arrive on every fetch, and a second
+	 * broadcast must not put a second Terra beside the first. A planet already carrying this key is
+	 * returned untouched — including the starting planet, which is spawned before anything has been
+	 * fetched and already wears <c>body_capital</c> from <c>DefaultGame.ini</c>.
+	 *
+	 * <strong>An existing planet is never moved.</strong> A character is given a pawn before any of
+	 * this arrives, positioned against the compiled-in starting planet, so relocating that planet
+	 * afterwards would drop them through the world. Where the authored position disagrees with a
+	 * planet that already exists, this says so in the log and leaves it where it is: the drift is
+	 * then visible rather than silently correct on one machine and not another.
+	 */
+	ASpaceMMOPlanetActor* EnsurePlanet(
+		const FString& BodyKey,
+		const FPlanetConfig& Config,
+		const FPlanetTerrainConfig& Terrain);
 
 private:
 	UPROPERTY()

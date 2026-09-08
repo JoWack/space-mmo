@@ -784,6 +784,25 @@ struct SPACEMMOBACKEND_API FBackendBody
 	double RadiusKilometres = 0.0;
 
 	/**
+	 * Where the body is in its system, and whether anybody has placed it.
+	 *
+	 * <strong>The flag is not decoration.</strong> Zero is a real place — the centre of the star
+	 * system — so a position read without knowing one was sent puts a planet inside the star and
+	 * looks exactly like an answer. The same trap a deployed ship's position carries a comment
+	 * about, and the one task 147 documented for a character who has never been anywhere.
+	 *
+	 * <strong>Not in the same scale as <c>RadiusKilometres</c>.</strong> Every body is drawn at the
+	 * compiled-in radius <c>USpaceMMOWorldSubsystem::StartingPlanet()</c> carries — 20 km — and
+	 * these distances are authored to suit that. <c>RadiusKilometres</c> is the 1:10 figure and
+	 * drives nothing here.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bHasSystemPosition = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FVector SystemPositionKilometres = FVector::ZeroVector;
+
+	/**
 	 * What this body's ground looks like, and whether anybody has said.
 	 *
 	 * A planet's look is content, the same as its radius: Ares is red oxide and Grimhold is black
