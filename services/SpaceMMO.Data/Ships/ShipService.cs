@@ -202,6 +202,14 @@ public sealed class ShipService(SpaceMmoDbContext database)
 
         hull.InventoryId = hangar.Id;
 
+        // <strong>And it is no longer standing anywhere.</strong> Null is what tells a hangar from
+        // an apron (task 155), and without clearing it the next sign-in would put a pawn back at
+        // the spot the ship was docked from -- which is the fault this whole pair of tasks is
+        // about, moved one restart later.
+        hull.DeployedSystemX = null;
+        hull.DeployedSystemY = null;
+        hull.DeployedSystemZ = null;
+
         // Out of the ship as well as into the hangar, and only if it was this one. Being aboard is
         // what opens a hold from anywhere (ADR-0012 point 4), and a character left aboard a hull
         // that is now inside a building could fly away and still reach its cargo.
@@ -216,8 +224,24 @@ public sealed class ShipService(SpaceMmoDbContext database)
     }
 
     /// <summary>Where a character's active hull is, and what it is called.</summary>
-    /// <param name="StationId">The station it is parked at, or null if it is not in a hangar.</param>
-    public sealed record ActiveShip(long HullItemInstanceId, string Name, int? StationId, bool Aboard);
+    /// <param name="StationId">The station whose hangar owns it, or null if no station does.</param>
+    /// <param name="Deployed">
+    /// Whether it is standing in the world rather than put away.
+    /// <para>
+    /// <strong>Not implied by <paramref name="StationId"/>, and that is the whole point of task
+    /// 155.</strong> A hull summoned to a station and a hull docked at one are the same row —
+    /// both sit in that station's hangar inventory — and only this says whether there is a pawn
+    /// outside. Reading the station alone is what put a stowed ship back in the world on sign-in.
+    /// </para>
+    /// </param>
+    /// <param name="Position">Where it stands, in system kilometres. Null unless deployed.</param>
+    public sealed record ActiveShip(
+        long HullItemInstanceId,
+        string Name,
+        int? StationId,
+        bool Aboard,
+        bool Deployed,
+        (double X, double Y, double Z)? Position);
 
     /// <summary>
     /// Which hull this character would fly and where it is sitting, or null if they have none.
@@ -253,7 +277,11 @@ public sealed class ShipService(SpaceMmoDbContext database)
             hull.Id,
             hull.ItemDef?.Name ?? "Ship",
             hull.Inventory?.StationId,
-            character.AboardShipItemInstanceId == hull.Id);
+            character.AboardShipItemInstanceId == hull.Id,
+            hull.IsDeployed,
+            hull.IsDeployed
+                ? (hull.DeployedSystemX!.Value, hull.DeployedSystemY ?? 0.0, hull.DeployedSystemZ ?? 0.0)
+                : null);
     }
 
     /// <summary>
@@ -298,6 +326,52 @@ public sealed class ShipService(SpaceMmoDbContext database)
 
         character.AboardShipItemInstanceId = hull.Id;
         character.ActiveShipItemInstanceId = hull.Id;
+
+        await _database.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Records where one of this character's hulls is standing in the world (task 155).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The hull's half of task 147.</strong> A character comes back where the world last saw
+    /// them; a ship did not, because nothing wrote down where it was — so landing on a hillside,
+    /// stepping out and quitting put the shuttle back at the hangar it was summoned to. This is the
+    /// same periodic write, for the thing the player was sitting in.
+    /// </para>
+    /// <para>
+    /// <strong>It also makes a ship visible at all.</strong> A hull with no position is inside a
+    /// hangar and gets no pawn, so this is what the game server calls the moment it puts one in the
+    /// world — the record following the world, exactly as <see cref="StowAsync"/> does going the
+    /// other way.
+    /// </para>
+    /// <para>
+    /// Ownership is checked, as everywhere else here: this writes a position onto an item, and an id
+    /// that arrived wrong would move somebody else's ship.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ShipSummonException">If the character or hull does not exist, or is not theirs.</exception>
+    public async Task RecordShipWhereaboutsAsync(
+        int characterId,
+        long hullInstanceId,
+        double x,
+        double y,
+        double z,
+        CancellationToken cancellationToken = default)
+    {
+        ItemInstance? hull = await _database.ItemInstances
+            .Include(i => i.Inventory)
+            .FirstOrDefaultAsync(i => i.Id == hullInstanceId, cancellationToken);
+
+        if (hull?.Inventory is null || hull.Inventory.CharacterId != characterId)
+        {
+            throw new ShipSummonException($"Hull {hullInstanceId} is not yours to place.");
+        }
+
+        hull.DeployedSystemX = x;
+        hull.DeployedSystemY = y;
+        hull.DeployedSystemZ = z;
 
         await _database.SaveChangesAsync(cancellationToken);
     }

@@ -1757,10 +1757,19 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship
 		return;
 	}
 
-	// Not parked at a station at all: the hull instance is in a hold rather than a hangar, so
-	// there is nowhere to put it and nobody in it either.
-	if (Ship.StationId == 0)
+	// <strong>Put away, so there is nothing to draw (task 155).</strong> This is the branch that
+	// was missing, and its absence is why a ship you had just docked came back standing outside the
+	// station: the hull sits in that station's hangar either way, and reading the station alone
+	// cannot tell "summoned, waiting on the apron" from "docked, inside the building".
+	//
+	// It also covers a hull in a hold rather than a hangar, which is the state a crated ship is in
+	// and has never had a pawn either.
+	if (!Ship.bDeployed)
 	{
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("%s (hull %lld) is in a hangar; it stays there until it is summoned."),
+			*Ship.Name, Ship.HullItemInstanceId);
+
 		return;
 	}
 
@@ -1778,45 +1787,55 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship
 		}
 	}
 
-	const ASpaceMMOStationActor* Station = nullptr;
+	// <strong>Where it was standing, which is not necessarily beside a station.</strong> A ship
+	// landed on a hillside, stepped out of and logged off beside used to come back at the hangar it
+	// was summoned to, because a hull carried no position and the station was the only answer
+	// available. It carries one now, and this is the half of task 147 the ship never had.
+	FSystemCoordinate Parking(Ship.PositionKilometres);
 
-	for (TActorIterator<ASpaceMMOStationActor> It(World); It; ++It)
+	// Only when there is no recorded position to prefer. A hull is written down the moment it is
+	// placed, so this is the older-record case rather than the ordinary one -- and falling back to
+	// the station beats leaving somebody's ship undrawn.
+	if (Ship.PositionKilometres.IsNearlyZero() && Ship.StationId != 0)
 	{
-		if (It->GetStation().Id == Ship.StationId)
+		const ASpaceMMOStationActor* Station = nullptr;
+
+		for (TActorIterator<ASpaceMMOStationActor> It(World); It; ++It)
 		{
-			Station = *It;
+			if (It->GetStation().Id == Ship.StationId)
+			{
+				Station = *It;
 
-			break;
+				break;
+			}
 		}
-	}
 
-	// The station has not been built in the world yet. Stations arrive from the backend a moment
-	// after a connection does, so this is an ordinary race rather than a fault -- signing in asks
-	// again, and so does the next summon.
-	if (Station == nullptr)
-	{
-		UE_LOG(LogSpaceMMOBackend, Log,
-			TEXT("Station %d is not in the world yet; %s stays in its hangar for now."),
-			Ship.StationId, *Ship.Name);
+		// The station has not been built in the world yet. Stations arrive from the backend a
+		// moment after a connection does, so this is an ordinary race rather than a fault --
+		// signing in asks again, and so does the next summon.
+		if (Station == nullptr)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Station %d is not in the world yet; %s stays in its hangar for now."),
+				Ship.StationId, *Ship.Name);
 
-		return;
-	}
+			return;
+		}
 
-	FSystemCoordinate Parking;
+		// Moved onto the station itself, because docking needs the same patch of ground to stand a
+		// pilot on and two copies of "beside a station, on the terrain" would be two chances to be
+		// beside it differently (task 153).
+		if (!Station->GroundPositionBeside(
+			SummonedShipOffsetKilometres,
+			SummonedShipLiftKilometres,
+			Parking))
+		{
+			UE_LOG(LogSpaceMMOBackend, Warning,
+				TEXT("No planet under station %d, so %s has no ground to sit on."),
+				Ship.StationId, *Ship.Name);
 
-	// Moved onto the station itself, because docking needs the same patch of ground to stand a
-	// pilot on and two copies of "beside a station, on the terrain" would be two chances to be
-	// beside it differently (task 153).
-	if (!Station->GroundPositionBeside(
-		SummonedShipOffsetKilometres,
-		SummonedShipLiftKilometres,
-		Parking))
-	{
-		UE_LOG(LogSpaceMMOBackend, Warning,
-			TEXT("No planet under station %d, so %s has no ground to sit on."),
-			Ship.StationId, *Ship.Name);
-
-		return;
+			return;
+		}
 	}
 
 	ASpaceMMOShipPawn* Waiting = World->SpawnActorDeferred<ASpaceMMOShipPawn>(
@@ -1837,13 +1856,31 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(const FBackendActiveShip& Ship
 	Waiting->HullItemInstanceId = Ship.HullItemInstanceId;
 	Waiting->FinishSpawning(FTransform::Identity);
 
+	// The record follows the world, exactly as stowing does going the other way: a pawn now exists
+	// at this position, so the hull is written down as standing there. Without it a ship summoned
+	// in this session would still be "in a hangar" to the next one, and vanish over a restart.
+	RecordShipWhereabouts(Ship.HullItemInstanceId, Parking);
+
 	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("%s (hull %lld) is waiting %.0f m from station %d, at %s."),
+		TEXT("%s (hull %lld) is in the world at %s."),
 		*Ship.Name,
 		Ship.HullItemInstanceId,
-		SummonedShipOffsetKilometres * 1000.0,
-		Ship.StationId,
 		*Parking.ToString());
+}
+
+void ASpaceMMOPlayerController::RecordShipWhereabouts(
+	const int64 HullItemInstanceId, const FSystemCoordinate& Where)
+{
+	if (!HasAuthority() || CharacterId == 0 || HullItemInstanceId <= 0)
+	{
+		return;
+	}
+
+	if (USpaceMMOBackendClient* Client = Backend())
+	{
+		Client->RecordShipWhereaboutsAsServer(
+			CharacterId, HullItemInstanceId, Where.Kilometres);
+	}
 }
 
 void ASpaceMMOPlayerController::RestoreWhereabouts()
@@ -1965,6 +2002,12 @@ void ASpaceMMOPlayerController::RecordWhereabouts()
 	{
 		Client->RecordWhereaboutsAsServer(
 			CharacterId, Ship->GetSystemPosition().Kilometres, true);
+
+		// And the hull's own position, which is the same fact about a different thing (task 155).
+		// A character comes back where the world last saw them; without this the ship they were
+		// sitting in comes back where it was last *placed*, which is the hangar it was summoned to
+		// however far they have since flown it.
+		RecordShipWhereabouts(Ship->HullItemInstanceId, Ship->GetSystemPosition());
 
 		return;
 	}

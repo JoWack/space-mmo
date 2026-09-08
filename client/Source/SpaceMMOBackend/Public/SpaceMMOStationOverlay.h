@@ -406,7 +406,8 @@ public:
 		const TArray<FBackendItemInstance>& Owned,
 		int32 DockedStationId,
 		bool bStationHandlesShips,
-		int64 ActiveHullId);
+		int64 ActiveHullId,
+		bool bAboard);
 
 	/**
 	 * Whether ships are summoned at a station of this kind (ADR-0012).

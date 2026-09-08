@@ -746,6 +746,19 @@ struct SPACEMMOBACKEND_API FBackendActiveShip
 	/** Whether the character is currently sitting in it. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	bool bAboard = false;
+
+	/**
+	 * Whether a pawn belongs in the world for it (task 155).
+	 *
+	 * The flag that decides whether signing in puts a ship outside. A hull in a hangar has none, and
+	 * reading the station instead is what spawned a ship somebody had deliberately docked.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bDeployed = false;
+
+	/** Where it stands, in system kilometres. Meaningful only when <c>bDeployed</c>. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FVector PositionKilometres = FVector::ZeroVector;
 };
 
 /** A planet or moon, as the server describes it. */
@@ -885,6 +898,18 @@ struct SPACEMMOBACKEND_API FBackendItemInstance
 	/** Set for a station hangar; zero for anything that travels with its owner. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 StationId = 0;
+
+	/**
+	 * For a hull, whether it is standing in the world rather than put away (task 155).
+	 *
+	 * <strong>Not implied by <see cref="StationId"/>, which is the whole reason it exists.</strong>
+	 * A ship summoned to a station and a ship docked at one are the same row — both sit in that
+	 * station's hangar — and until docking removed pawns the two were the same world as well. The
+	 * Ships tab read the station alone and so refused to summon a ship that had been put away,
+	 * saying it was "already here"; it was, in a building, invisible.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bDeployed = false;
 
 	/**
 	 * What kind of thing this is, so a hull can be told from a tool.

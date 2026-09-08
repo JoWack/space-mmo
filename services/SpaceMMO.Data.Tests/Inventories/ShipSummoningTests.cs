@@ -446,6 +446,143 @@ public sealed class ShipSummoningTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     /// <summary>
+    /// A stowed hull and a summoned one are told apart, which one row could not do (task 155).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is the test the three reports of 7 September needed.</strong> Docking parks a
+    /// hull in a station's hangar and takes its pawn out of the world; summoning puts one back. Both
+    /// leave the hull in exactly the same inventory, so until a hull carried a position there was
+    /// nothing to say which had happened — and the game server, asking only which station held it,
+    /// spawned a ship that had been deliberately docked, while the Ships tab refused to summon it
+    /// because it was "already here".
+    /// </para>
+    /// <para>
+    /// The station is asserted to be unchanged across both, deliberately: it is the field that
+    /// stayed the same while the meaning moved, and a test that only checked the position would
+    /// pass against a fix that quietly stopped parking ships at all.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task A_ship_in_a_hangar_and_a_ship_standing_outside_it_are_different_states()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, hull);
+        }
+
+        // Summoning alone does not put a ship anywhere: the simulation places the pawn and then says
+        // where it went, so the record follows the world rather than leading it.
+        await using (SpaceMmoDbContext justSummoned = _fixture.CreateContext())
+        {
+            ShipService.ActiveShip? active = await Ships(justSummoned).ActiveShipAsync(_pilotId);
+
+            Assert.NotNull(active);
+            Assert.False(active!.Deployed);
+        }
+
+        await using (SpaceMmoDbContext placed = _fixture.CreateContext())
+        {
+            await Ships(placed).RecordShipWhereaboutsAsync(_pilotId, hull, 60.5, 0.25, 20.125);
+        }
+
+        await using (SpaceMmoDbContext outside = _fixture.CreateContext())
+        {
+            ShipService.ActiveShip? active = await Ships(outside).ActiveShipAsync(_pilotId);
+
+            Assert.True(active!.Deployed);
+            Assert.Equal(_spaceportId, active.StationId);
+
+            // To the millimetre, in kilometres. A position rounded to six significant figures moves
+            // a ship a hundred metres, which is the whole docking ring since task 153.
+            Assert.Equal(60.5, active.Position!.Value.X, 9);
+            Assert.Equal(0.25, active.Position!.Value.Y, 9);
+            Assert.Equal(20.125, active.Position!.Value.Z, 9);
+        }
+
+        // Docking puts it away again, and that is what clears the position.
+        await using (SpaceMmoDbContext stow = _fixture.CreateContext())
+        {
+            await Ships(stow).StowAsync(_pilotId, hull, _spaceportId);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ShipService.ActiveShip? stowed = await Ships(verify).ActiveShipAsync(_pilotId);
+
+        Assert.False(stowed!.Deployed);
+        Assert.Null(stowed.Position);
+
+        // Still in the hangar it was docked at. The station never changed; only whether there is a
+        // ship standing outside it did.
+        Assert.Equal(_spaceportId, stowed.StationId);
+    }
+
+    /// <summary>
+    /// A ship left on a hillside is remembered there, not at the hangar it came from.
+    /// </summary>
+    /// <remarks>
+    /// Joe's decision of 7 September, and the half of task 147 a ship never had: a character comes
+    /// back where the world last saw them, and now so does the thing they were sitting in. Before
+    /// this, landing on a planet, stepping out and quitting put the shuttle back at the station it
+    /// was summoned to, because the station was the only answer a hull could give.
+    /// </remarks>
+    [Fact]
+    public async Task A_ship_parked_away_from_a_station_keeps_the_position_it_was_left_at()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, hull);
+        }
+
+        // Flown to a hillside a long way from anything and left there.
+        await using (SpaceMmoDbContext flown = _fixture.CreateContext())
+        {
+            await Ships(flown).RecordShipWhereaboutsAsync(_pilotId, hull, -18.25, 4.5, -3.75);
+        }
+
+        // Walked away and docked somewhere else entirely, which must not move the ship.
+        await DockAsync(_pilotId, _marketId);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ShipService.ActiveShip? active = await Ships(verify).ActiveShipAsync(_pilotId);
+
+        Assert.True(active!.Deployed);
+        Assert.Equal(-18.25, active.Position!.Value.X, 9);
+        Assert.Equal(4.5, active.Position!.Value.Y, 9);
+        Assert.Equal(-3.75, active.Position!.Value.Z, 9);
+
+        // And its hangar is still the spaceport's, which is what summoning will move.
+        Assert.Equal(_spaceportId, active.StationId);
+    }
+
+    [Fact]
+    public async Task Somebody_elses_hull_is_not_yours_to_place()
+    {
+        // A position is a write onto an item, so the same check summoning, boarding and parking all
+        // make: an id that arrived wrong would move another player's ship across the system.
+        long theirs = await OwnAsync(_strangerId, _spaceportId, _shuttleId);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await Assert.ThrowsAsync<ShipSummonException>(
+            () => Ships(context).RecordShipWhereaboutsAsync(_pilotId, theirs, 1.0, 2.0, 3.0));
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemInstance untouched = await verify.ItemInstances.SingleAsync(i => i.Id == theirs);
+
+        Assert.Null(untouched.DeployedSystemX);
+    }
+
+    /// <summary>
     /// The second half of ADR-0012 point 4: sitting in the ship opens its hold.
     /// </summary>
     /// <remarks>

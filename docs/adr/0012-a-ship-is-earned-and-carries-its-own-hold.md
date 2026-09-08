@@ -1,7 +1,7 @@
 # ADR-0012 — A ship is earned, summoned, and carries its own hold
 
-**Status:** Accepted · 2026-08-15 · makes [ADR-0006](0006-death-and-insurance.md)'s ship-hold rule
-reachable · hosted by **M4** in the roadmap
+**Status:** Accepted · 2026-08-15 · amended 2026-09-07 (point 6, a hull carries a position) · makes
+[ADR-0006](0006-death-and-insurance.md)'s ship-hold rule reachable · hosted by **M4** in the roadmap
 
 ## Context
 
@@ -57,6 +57,31 @@ station hangar and no ship can be lost.
    character creation. It travels with them, and unlike a hangar it is not somewhere they have to
    be.
 
+6. **A hull carries a position, and null means it is inside a hangar.**
+
+   > **Amended 7 September 2026, on implementing docking.** This point replaces the reasoning that
+   > *where a ship is needs no column* — an owned hull is an `ItemInstance` in an inventory, and for
+   > a parked ship that inventory is the station hangar it was left in. That was true for as long as
+   > a parked ship and a ship standing on the apron were the same thing, and task 153 ended it: a
+   > docked ship now leaves the world, and summoning is how it comes back.
+   >
+   > One row then meant two worlds. A hull sitting in a station's hangar is either a ship you can
+   > walk up to or one that has been put away, and nothing distinguished them — so signing in
+   > spawned a ship somebody had deliberately docked, and the Ships tab refused to summon it back
+   > because it was "already here". It was, invisibly.
+   >
+   > So the states a hull can be in are **in a hangar**, **being flown**, and **standing somewhere
+   > that is neither**, and all three are now modelled: the inventory says which hangar owns it,
+   > `Character.AboardShipItemInstanceId` says who is sitting in it, and
+   > `ItemInstance.DeployedSystemX/Y/Z` says where it stands, null when it stands nowhere.
+   >
+   > **Ships are not recovered to a station automatically** (Joe, 7 September). A ship left on a
+   > hillside is there when its owner comes back, exactly as its owner is. Summoning is how a
+   > forgotten one is recovered, which is the verb that already exists for it — and it now works on
+   > a hull already in the hangar you are standing in, whatever kind of station that is, because
+   > refusing would strand somebody at a trading hub with their only ship inside the building in
+   > front of them.
+
 ## Consequences
 
 Positive:
@@ -91,7 +116,9 @@ say more than was decided:
 
 - Where a shipless character starts, and what the first minutes are.
 - Whether summoning costs credits, time, or nothing.
-- What happens to a summoned ship when its owner logs out, or summons elsewhere.
+- ~~What happens to a summoned ship when its owner logs out, or summons elsewhere.~~ **Answered
+  7 September 2026 by point 6 above:** it stays exactly where it was left, because a hull records
+  its own position; summoning elsewhere moves it, as it always did.
 - Whether a hull must be repaired or fuelled before it can be summoned.
 
 ## Alternatives considered

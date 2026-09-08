@@ -449,6 +449,14 @@ private:
 	void PlaceSummonedShip(const struct FBackendActiveShip& Ship);
 
 	/**
+	 * Writes down where one of this character's hulls is standing (task 155).
+	 *
+	 * Called when a pawn is put in the world and while one is flown. A hull with no position is in
+	 * a hangar and gets no pawn, so this is what makes a ship exist across a restart.
+	 */
+	void RecordShipWhereabouts(int64 HullItemInstanceId, const FSystemCoordinate& Where);
+
+	/**
 	 * Tells the backend what this character is sitting in, when it changes.
 	 *
 	 * Read off the possessed pawn rather than hooked into boarding, because every route into and

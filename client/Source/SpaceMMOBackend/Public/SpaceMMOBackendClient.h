@@ -239,6 +239,10 @@ public:
 	 */
 	void StowAsServer(int32 CharacterId, int64 HullItemInstanceId, int32 StationId);
 
+	/** Writes down where a hull is standing in the world, in system kilometres (task 155). */
+	void RecordShipWhereaboutsAsServer(
+		int32 CharacterId, int64 HullItemInstanceId, const FVector& Kilometres);
+
 	/** Loads every body in the starting system. Unauthenticated, like the deposits. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
 	void FetchBodies();

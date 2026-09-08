@@ -8,6 +8,7 @@
 #include "SpaceMMOBackendProtocol.h"
 #include "SpaceMMOInventoryScreen.h"
 #include "SpaceMMOPlayerController.h"
+#include "SpaceMMOShipPawn.h"
 
 namespace
 {
@@ -865,7 +866,12 @@ void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float 
 				Client->GetItemInstances(),
 				Here,
 				StationHandlesShips(KindOfStation(*Client, Here)),
-				ActiveHullOf(*Client));
+				ActiveHullOf(*Client),
+
+				// Read off the pawn the player is in rather than asked of the backend. Whether
+				// somebody is sitting in a ship is a fact about this machine, and the copy the
+				// server keeps is one round trip behind every time they climb in or out.
+				Cast<ASpaceMMOShipPawn>(Owner != nullptr ? Owner->GetPawn() : nullptr) != nullptr);
 
 			FString Signature;
 
@@ -1031,7 +1037,8 @@ TArray<FSpaceMMOShipRowText> USpaceMMOStationOverlay::BuildShipRows(
 	const TArray<FBackendItemInstance>& Owned,
 	const int32 DockedStationId,
 	const bool bStationHandlesShips,
-	const int64 ActiveHullId)
+	const int64 ActiveHullId,
+	const bool bAboard)
 {
 	TArray<FSpaceMMOShipRowText> Rows;
 
@@ -1051,16 +1058,53 @@ TArray<FSpaceMMOShipRowText> USpaceMMOStationOverlay::BuildShipRows(
 		Row.Condition = FString::Printf(TEXT("%d%%"), Instance.Condition);
 		Row.bIsActive = ActiveHullId != 0 && Instance.Id == ActiveHullId;
 
-		const bool bHere = DockedStationId != 0 && Instance.StationId == DockedStationId;
+		// <strong>Whether it is inside a building is a separate question from which building.</strong>
+		// A hull summoned to this station and a hull docked at it are the same row -- both sit in
+		// this station's hangar -- and until docking removed pawns they were the same world too.
+		// Reading the station alone is what made the Ships tab refuse to summon a ship that had been
+		// put away, saying it was "already here": it was, invisibly, and the button was the only way
+		// to get it back (task 155).
+		const bool bHangaredHere = DockedStationId != 0 && Instance.StationId == DockedStationId;
 
-		Row.Where = bHere ? TEXT("Here") : TEXT("At another station");
+		if (Row.bIsActive && bAboard)
+		{
+			Row.Where = TEXT("You are flying it");
+		}
+		else if (Instance.bDeployed)
+		{
+			// Standing in the world. Beside this station if its hangar is the one holding it,
+			// somewhere else entirely if not -- which is a ship left on a hillside, and the case
+			// summoning exists to recover.
+			Row.Where = bHangaredHere ? TEXT("Outside") : TEXT("Parked away");
+		}
+		else if (bHangaredHere)
+		{
+			Row.Where = TEXT("In the hangar");
+		}
+		else
+		{
+			Row.Where = TEXT("At another station");
+		}
 
 		// The reasons, in the order a player can act on them. Standing somewhere ships are not
 		// handled is worth saying before "it is already yours to fly", because one of them sends
 		// somebody walking and the other is not a problem.
-		if (Row.bIsActive && bHere)
+		if (Row.bIsActive && bAboard)
 		{
-			Row.Refusal = TEXT("Already here");
+			Row.Refusal = TEXT("Already yours");
+		}
+		else if (Instance.bDeployed && bHangaredHere)
+		{
+			// Already standing outside, so the button would do nothing anybody could see.
+			Row.Refusal = TEXT("Already out");
+		}
+		else if (bHangaredHere)
+		{
+			// <strong>Always summonable, whatever kind of station this is.</strong> Fetching back
+			// what you parked here is not the same act as having one brought, and a gate that
+			// refused would leave somebody on foot at a trading hub with their only ship locked in
+			// the building in front of them. The server enforces the same distinction.
+			Row.bCanSummon = true;
 		}
 		else if (!bStationHandlesShips)
 		{

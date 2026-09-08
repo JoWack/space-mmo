@@ -8,7 +8,11 @@
 namespace
 {
 	FBackendItemInstance Hull(
-		const int64 Id, const TCHAR* Name, const int32 StationId, const int32 Condition = 100)
+		const int64 Id,
+		const TCHAR* Name,
+		const int32 StationId,
+		const bool bDeployed = false,
+		const int32 Condition = 100)
 	{
 		FBackendItemInstance Instance;
 
@@ -18,6 +22,11 @@ namespace
 		Instance.Condition = Condition;
 		Instance.Category = EBackendItemCategory::Hull;
 		Instance.Kind = EBackendInventoryKind::StationHangar;
+
+		// <strong>Defaulting to false is deliberate.</strong> A hull sitting in a hangar row is put
+		// away, and the pre-155 tests all assumed the opposite without ever saying so -- which is
+		// exactly the assumption that broke when docking started removing pawns.
+		Instance.bDeployed = bDeployed;
 
 		return Instance;
 	}
@@ -50,7 +59,7 @@ bool FSpaceMMOShipsPanelListsHullsTest::RunTest(const FString& Parameters)
 	const TArray<FBackendItemInstance> Owned = { Section, Hull(1, TEXT("Shuttle"), 5), Laser };
 
 	const TArray<FSpaceMMOShipRowText> Rows =
-		USpaceMMOStationOverlay::BuildShipRows(Owned, 5, true, 0);
+		USpaceMMOStationOverlay::BuildShipRows(Owned, 5, true, 0, false);
 
 	TestEqual(TEXT("Only the hull is a ship"), Rows.Num(), 1);
 	TestEqual(TEXT("...and it is the shuttle"), Rows[0].Name, FString(TEXT("Shuttle")));
@@ -74,22 +83,60 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOShipsPanelSaysWhyNotTest::RunTest(const FString& Parameters)
 {
-	const TArray<FBackendItemInstance> Owned = { Hull(1, TEXT("Shuttle"), 5) };
+	// Docked at station 5, where the hull's hangar is, and it has been put away.
+	const TArray<FBackendItemInstance> Stowed = { Hull(1, TEXT("Shuttle"), 5) };
 
-	// Standing at the shipyard where it already is, and flying it.
+	// <strong>The case task 155 exists for, and the one that was wrong.</strong> A ship you have
+	// just docked is in this station's hangar with no pawn outside, and the panel used to read the
+	// station alone and answer "Already here" -- refusing the only control that could bring it back.
+	const TArray<FSpaceMMOShipRowText> InHangar =
+		USpaceMMOStationOverlay::BuildShipRows(Stowed, 5, true, 1, false);
+
+	TestTrue(TEXT("The active ship is marked"), InHangar[0].bIsActive);
+	TestTrue(TEXT("A ship in the hangar can be summoned out of it"), InHangar[0].bCanSummon);
+	TestTrue(TEXT("...with no reason to show"), InHangar[0].Refusal.IsEmpty());
+	TestEqual(TEXT("...and it says where it is"), InHangar[0].Where, FString(TEXT("In the hangar")));
+
+	// <strong>Even at a market.</strong> Fetching back what you parked here is not the same act as
+	// having one brought, and a gate that refused would leave a player on foot at a trading hub with
+	// their only ship locked in the building in front of them.
+	const TArray<FSpaceMMOShipRowText> HangarAtMarket =
+		USpaceMMOStationOverlay::BuildShipRows(Stowed, 5, false, 1, false);
+
+	TestTrue(
+		TEXT("A ship parked at a market comes back out of that market"),
+		HangarAtMarket[0].bCanSummon);
+
+	// The same hull, standing outside this station.
+	const TArray<FBackendItemInstance> Outside = { Hull(1, TEXT("Shuttle"), 5, true) };
+
+	const TArray<FSpaceMMOShipRowText> OnTheApron =
+		USpaceMMOStationOverlay::BuildShipRows(Outside, 5, true, 1, false);
+
+	TestFalse(TEXT("A ship already outside summons nothing"), OnTheApron[0].bCanSummon);
+	TestEqual(TEXT("...and says why"), OnTheApron[0].Refusal, FString(TEXT("Already out")));
+	TestEqual(TEXT("...and where"), OnTheApron[0].Where, FString(TEXT("Outside")));
+
+	// Sitting in it.
 	const TArray<FSpaceMMOShipRowText> Flying =
-		USpaceMMOStationOverlay::BuildShipRows(Owned, 5, true, 1);
+		USpaceMMOStationOverlay::BuildShipRows(Outside, 5, true, 1, true);
 
-	TestTrue(TEXT("The active ship is marked"), Flying[0].bIsActive);
-	TestFalse(TEXT("...and there is nothing to summon"), Flying[0].bCanSummon);
-	TestEqual(TEXT("...because it is already here"), Flying[0].Refusal, FString(TEXT("Already here")));
-	TestEqual(TEXT("Where it is reads plainly"), Flying[0].Where, FString(TEXT("Here")));
+	TestFalse(TEXT("There is nothing to summon while flying it"), Flying[0].bCanSummon);
+	TestEqual(TEXT("...because it is already yours"), Flying[0].Refusal, FString(TEXT("Already yours")));
+	TestEqual(TEXT("...and the row says so"), Flying[0].Where, FString(TEXT("You are flying it")));
 
-	// Same hull, but the player is at a market.
+	// Left on a hillside: deployed, but nowhere near the station being stood at.
+	const TArray<FSpaceMMOShipRowText> Adrift =
+		USpaceMMOStationOverlay::BuildShipRows(Outside, 7, true, 1, false);
+
+	TestTrue(TEXT("A ship left out there can be recovered"), Adrift[0].bCanSummon);
+	TestEqual(TEXT("...and says it is away"), Adrift[0].Where, FString(TEXT("Parked away")));
+
+	// Stowed at another station, standing at a market: the one that sends somebody walking.
 	const TArray<FSpaceMMOShipRowText> AtMarket =
-		USpaceMMOStationOverlay::BuildShipRows(Owned, 7, false, 1);
+		USpaceMMOStationOverlay::BuildShipRows(Stowed, 7, false, 1, false);
 
-	TestFalse(TEXT("A market summons nothing"), AtMarket[0].bCanSummon);
+	TestFalse(TEXT("A market brings nothing in"), AtMarket[0].bCanSummon);
 
 	TestEqual(
 		TEXT("...and says so, because that one is worth walking to fix"),
@@ -101,16 +148,16 @@ bool FSpaceMMOShipsPanelSaysWhyNotTest::RunTest(const FString& Parameters)
 		AtMarket[0].Where,
 		FString(TEXT("At another station")));
 
-	// At a shipyard, with the ship parked somewhere else. The one case that can act.
+	// At a shipyard, with the ship stowed somewhere else. The one case that can act.
 	const TArray<FSpaceMMOShipRowText> Summonable =
-		USpaceMMOStationOverlay::BuildShipRows(Owned, 7, true, 1);
+		USpaceMMOStationOverlay::BuildShipRows(Stowed, 7, true, 1, false);
 
 	TestTrue(TEXT("A ship elsewhere can be brought to a shipyard"), Summonable[0].bCanSummon);
 	TestTrue(TEXT("...with no reason to show"), Summonable[0].Refusal.IsEmpty());
 
 	// Owned, never flown, standing at a shipyard: the questline's payoff.
 	const TArray<FSpaceMMOShipRowText> Fresh =
-		USpaceMMOStationOverlay::BuildShipRows(Owned, 5, true, 0);
+		USpaceMMOStationOverlay::BuildShipRows(Stowed, 5, true, 0, false);
 
 	TestTrue(TEXT("A hull nobody has flown can be summoned"), Fresh[0].bCanSummon);
 	TestFalse(TEXT("...and is not marked active"), Fresh[0].bIsActive);

@@ -628,6 +628,8 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 				Instance.Category = ToEnum(Number, EBackendItemCategory::Raw, 8);
 			}
 
+			Object->TryGetBoolField(TEXT("deployed"), Instance.bDeployed);
+
 			OutInstances.Add(Instance);
 		}
 	}
@@ -1171,6 +1173,24 @@ bool FSpaceMMOBackendProtocol::ParseActiveShip(
 
 	Object->TryGetStringField(TEXT("name"), OutShip.Name);
 	Object->TryGetBoolField(TEXT("aboard"), OutShip.bAboard);
+	Object->TryGetBoolField(TEXT("deployed"), OutShip.bDeployed);
+
+	// Read only when the flag says there is one. Absent and null both leave these at zero, and zero
+	// is a real place -- the centre of the star system -- so a position read without the flag would
+	// put a ship there and look exactly like an answer (the same trap task 147 documented for a
+	// character who has never been anywhere).
+	if (OutShip.bDeployed)
+	{
+		double X = 0.0;
+		double Y = 0.0;
+		double Z = 0.0;
+
+		Object->TryGetNumberField(TEXT("systemX"), X);
+		Object->TryGetNumberField(TEXT("systemY"), Y);
+		Object->TryGetNumberField(TEXT("systemZ"), Z);
+
+		OutShip.PositionKilometres = FVector(X, Y, Z);
+	}
 
 	return true;
 }

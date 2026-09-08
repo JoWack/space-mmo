@@ -1332,6 +1332,33 @@ void USpaceMMOBackendClient::StowAsServer(
 		ServiceSecret);
 }
 
+void USpaceMMOBackendClient::RecordShipWhereaboutsAsServer(
+	const int32 CharacterId, const int64 HullItemInstanceId, const FVector& Kilometres)
+{
+	if (ServiceSecret.IsEmpty() || CharacterId == 0 || HullItemInstanceId <= 0)
+	{
+		return;
+	}
+
+	// Seventeen significant figures, the same as the character's whereabouts and for the same
+	// reason: a position rounded to what %f prints moves a ship by a hundred metres, which is the
+	// whole docking ring.
+	Send(
+		TEXT("POST"),
+		TEXT("/ships/whereabouts"),
+		FString::Printf(
+			TEXT("{\"characterId\":%d,\"hullItemInstanceId\":%lld,")
+			TEXT("\"systemX\":%.17g,\"systemY\":%.17g,\"systemZ\":%.17g}"),
+			CharacterId,
+			HullItemInstanceId,
+			Kilometres.X,
+			Kilometres.Y,
+			Kilometres.Z),
+		false,
+		nullptr,
+		ServiceSecret);
+}
+
 void USpaceMMOBackendClient::FetchBodies()
 {
 	Bodies.Reset();

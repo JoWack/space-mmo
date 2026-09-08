@@ -17,10 +17,25 @@ public sealed record DisembarkRequest(int CharacterId);
 
 public sealed record StowShipRequest(int CharacterId, long HullItemInstanceId, int StationId);
 
-/// <summary>Which hull a character would fly, where it is parked, and whether they are in it.</summary>
-/// <param name="StationId">The station it is parked at, or null if it is not in a hangar.</param>
+/// <summary>Which hull a character would fly, where it is, and whether they are in it.</summary>
+/// <param name="StationId">The station whose hangar owns it, or null if no station does.</param>
+/// <param name="Deployed">
+/// Whether it is standing in the world rather than put away. Deliberately not implied by
+/// <paramref name="StationId"/>: a hull summoned to a station and one docked at it are the same
+/// row, and only this says whether a pawn belongs outside (task 155).
+/// </param>
 public sealed record ActiveShipResponse(
-    long? HullItemInstanceId, string? Name, int? StationId, bool Aboard);
+    long? HullItemInstanceId,
+    string? Name,
+    int? StationId,
+    bool Aboard,
+    bool Deployed,
+    double? SystemX,
+    double? SystemY,
+    double? SystemZ);
+
+public sealed record ShipWhereaboutsRequest(
+    int CharacterId, long HullItemInstanceId, double SystemX, double SystemY, double SystemZ);
 
 /// <summary>
 /// Summoning a hull you own, and finding the hold of the ship you have with you (ADR-0012).
@@ -49,6 +64,7 @@ public static class ShipEndpoints
         group.MapPost("/board", BoardAsync);
         group.MapPost("/disembark", DisembarkAsync);
         group.MapPost("/stow", StowAsync);
+        group.MapPost("/whereabouts", WhereaboutsAsync);
     }
 
     /// <summary>
@@ -80,9 +96,16 @@ public static class ShipEndpoints
         // ordinary state for most of the opening, and a missing-resource error would have callers
         // treating it as a fault.
         return Results.Ok(active is null
-            ? new ActiveShipResponse(null, null, null, false)
+            ? new ActiveShipResponse(null, null, null, false, false, null, null, null)
             : new ActiveShipResponse(
-                active.HullItemInstanceId, active.Name, active.StationId, active.Aboard));
+                active.HullItemInstanceId,
+                active.Name,
+                active.StationId,
+                active.Aboard,
+                active.Deployed,
+                active.Position?.X,
+                active.Position?.Y,
+                active.Position?.Z));
     }
 
     /// <summary>
@@ -115,7 +138,7 @@ public static class ShipEndpoints
             await ships.BoardAsync(request.CharacterId, request.HullItemInstanceId, cancellation);
 
             return Results.Ok(new ActiveShipResponse(
-                request.HullItemInstanceId, null, null, true));
+                request.HullItemInstanceId, null, null, true, false, null, null, null));
         }
         catch (ShipSummonException refusal)
         {
@@ -147,7 +170,7 @@ public static class ShipEndpoints
         {
             await ships.DisembarkAsync(request.CharacterId, cancellation);
 
-            return Results.Ok(new ActiveShipResponse(null, null, null, false));
+            return Results.Ok(new ActiveShipResponse(null, null, null, false, false, null, null, null));
         }
         catch (ShipSummonException refusal)
         {
@@ -184,7 +207,50 @@ public static class ShipEndpoints
             await ships.StowAsync(
                 request.CharacterId, request.HullItemInstanceId, request.StationId, cancellation);
 
-            return Results.Ok(new ActiveShipResponse(null, null, request.StationId, false));
+            // Deployed false and no position: stowing is exactly the act of taking a ship out of
+            // the world, so the answer says so rather than leaving the caller to infer it.
+            return Results.Ok(
+                new ActiveShipResponse(null, null, request.StationId, false, false, null, null, null));
+        }
+        catch (ShipSummonException refusal)
+        {
+            return Results.Problem(
+                title: refusal.Message, statusCode: StatusCodes.Status404NotFound);
+        }
+    }
+
+    /// <summary>
+    /// Records where a hull is standing in the world (task 155).
+    /// </summary>
+    /// <remarks>
+    /// Service credential, like docking and stowing and for the same reason: this is a position, and
+    /// the only party that knows where a ship is is the one that moved it (ADR-0003).
+    /// </remarks>
+    private static async Task<IResult> WhereaboutsAsync(
+        ShipWhereaboutsRequest request,
+        HttpContext context,
+        ServiceCredential service,
+        ShipService ships,
+        CancellationToken cancellation)
+    {
+        if (!service.IsServiceCaller(context))
+        {
+            return Results.Problem(
+                title: "Where a ship is standing is decided by the game server.",
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        try
+        {
+            await ships.RecordShipWhereaboutsAsync(
+                request.CharacterId,
+                request.HullItemInstanceId,
+                request.SystemX,
+                request.SystemY,
+                request.SystemZ,
+                cancellation);
+
+            return Results.Ok();
         }
         catch (ShipSummonException refusal)
         {

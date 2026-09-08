@@ -4846,48 +4846,84 @@ and gameplay station placement remain task 97 integration work.
 
 ## 155 — A ship left on a hillside should be there when you come back
 
-**Pending, and decided.** Joe, 7 September, alongside 153. This is 152's open half, and 153 settled
-only the station case.
+**Done 7 September**, awaiting a playtest. Decided by Joe alongside 153; **brought forward the same
+evening because task 153 made it load-bearing rather than a nice-to-have.**
 
-**A hull should carry a position, the same way a character does.** Joe's words: *"If you disembark
-your ship and log off, your character disappears from the world, and so should your ship. But when
-you log back in, your ship should appear where it was, the same as your character. If a ship gets
-'lost' — a player parks it somewhere and forgets where they left it — they can recover/summon it at
-a hangar/station the same way they can summon ships today."*
+### Three reports, one missing state
 
-So a ship parked outside a station is not recovered to one automatically. Summoning stays the
-recovery, and it is a thing the player chooses to do rather than something that happens to them.
+Joe, after playtesting 153: the ship disappears on docking as it should, but
 
-### What is actually missing
+1. **Summon does nothing and the row says "Already here".**
+2. **`bCanSummon` is false** after docking, so a button bound to it is dead exactly when it is needed.
+3. **Quitting and signing back in puts the ship outside the station** rather than leaving it in the
+   hangar.
 
-The three states a hull can be in are **in a hangar**, **being flown**, and **parked somewhere that
-is neither**, and only the first two are modelled. Being aboard became real on 7 September
-(`AboardShipItemInstanceId`); being in a hangar is the inventory the instance sits in, which 153
-made true on both sides. The third is still nothing, so:
+All three are one fault, and it is the one 153 opened. `SummonAsync` moves a hull into a station's
+hangar and `StowAsync` moves it into the same place — so **"in this station's hangar" became true of
+a ship you can walk up to and of one that has been put away**, and nothing told them apart.
+`BuildShipRows` read the station alone and refused the only control that could bring the ship back;
+`PlaceSummonedShip` read the station alone and spawned a pawn for a ship somebody had deliberately
+docked.
 
-- Landing on a planet, stepping out and quitting puts the ship back at the hangar it was summoned
-  to, because `PlaceSummonedShip` places it at the station its instance is recorded in.
-- Nothing removes an unattended ship's pawn when its owner disconnects, and nothing puts one back.
+**No client-side fix could reach report 3.** After a restart the database is all there is, and the
+two states were the same row.
 
-### It amends ADR-0012
+### A hull carries a position, and null means "in a hangar"
 
-ADR-0012 says *"where a ship is needs no column"*, and that was true exactly while ships lived in
-hangars. It is now false in two directions — being aboard is a second answer, and this is a third —
-so the ADR wants amending rather than quietly contradicting. **That is the first piece of work here,
-before the migration**, because an accepted decision the code disagrees with is worse than either.
+`ItemInstance.DeployedSystemX/Y/Z`, nullable, mirroring `Character.LastSystemX` and for the same
+reason: a hull that is nowhere is not a hull at the origin, and a struct of three doubles would have
+to invent a sentinel to say so. On every item instance rather than a hulls-only table, which is the
+trade ADR-0006 already settled — "adding a column to a table full of live player items is far worse
+than carrying an unused one".
 
-### Blocked on nothing, and it wants doing before somebody loses a freighter
+So the three states a hull can be in are all modelled at last: the inventory says **which hangar owns
+it**, `AboardShipItemInstanceId` says **who is sitting in it**, and the position says **where it
+stands**, null when it stands nowhere.
 
-The shape is a nullable position on the hull instance, set when a pawn is removed from the world at
-a place that is not a hangar, and read when one is put back. Task 147 is the pattern to copy: a
-position and a flag, written periodically and on disconnect, restored at sign-in — except the owner
-of the position is a hull rather than a character, and a hull with no pilot has nobody whose
-disconnect to hang the write on.
+**The record follows the world, both ways.** `PlaceSummonedShip` writes the position when it puts a
+pawn down; `RecordWhereabouts` keeps it current every fifteen seconds and on disconnect while the
+ship is flown, which is the half of task 147 a ship never had; `StowAsync` clears it. Summoning
+deliberately does **not** set it — the simulation places the pawn and then says where it went, so a
+crash between the two leaves a ship stowed, which is the safe way to be wrong.
 
-Which is the one genuinely open question: **what writes an unattended ship's position, and when.**
-The honest options are the owner's own whereabouts timer while they are aboard (which covers every
-way a ship stops being flown except the server dying), or a periodic sweep of ship pawns. The first
-is cheaper and has a known hole; say which was taken and why, in the task, when it is.
+**ADR-0012 is amended, not quietly contradicted** — point 6, and its open question "what happens to a
+summoned ship when its owner logs out" is struck through and answered. That was this task's own
+instruction and it is the part that would have been easiest to skip.
+
+### What the Ships tab says now
+
+Wording approved by Joe before it was built.
+
+| Where | Action |
+|---|---|
+| `In the hangar` | **Summon** — at any station, including a market |
+| `Outside` | `Already out` |
+| `At another station` | **Summon**, at a shipyard or the capital only |
+| `Parked away` | **Summon** — this is how a forgotten ship is recovered |
+| `You are flying it` | `Already yours` |
+
+"In the hangar" is summonable even at a trading hub, which is the anti-stranding rule 153 settled:
+fetching back what you parked here is not the same act as having one brought.
+
+### Verification
+
+Six new tests. `A_ship_in_a_hangar_and_a_ship_standing_outside_it_are_different_states` fails against
+**both** halves of the old behaviour, checked separately: inferring "deployed" from having a hangar,
+and stowing without clearing the position. The panel test now covers all five rows.
+
+### How it would fail
+
+- **Summon still dead after docking.** The row will say which it thinks it is; `In the hangar` with a
+  dead button means `bCanSummon`, `Outside` means the stow did not clear the position.
+- **The ship reappearing outside after a restart.** `PlaceSummonedShip` logs `is in a hangar; it
+  stays there until it is summoned` when it correctly declines — if that line is absent, the hull
+  still has a position.
+- **A ship left on a hillside coming back at the station.** The periodic write is not reaching the
+  hull; the log line naming the position on placement is the first thing to check.
+- **A ship appearing at the centre of the system.** A position read without the flag. The parser only
+  reads coordinates when `deployed` is true, precisely because (0,0,0) is a real place.
+- **Two ships after summoning.** The duplicate guard still compares `HullItemInstanceId`, and 152's
+  fix is what stops the restored pawn racing it.
 
 ---
 

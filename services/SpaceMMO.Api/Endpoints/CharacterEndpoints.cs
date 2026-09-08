@@ -106,7 +106,19 @@ public sealed record ItemInstanceResponse(
     int Condition,
     InventoryKind Kind,
     int? StationId,
-    ItemCategory Category);
+    ItemCategory Category,
+
+    /// <summary>
+    /// For a hull, whether it is standing in the world rather than put away (task 155).
+    /// </summary>
+    /// <remarks>
+    /// False for everything that is not a ship, and for a ship inside a hangar. The Ships tab needs
+    /// it because a hull's inventory alone stopped answering "is there one outside" the day docking
+    /// began removing pawns: "in this station's hangar" is true of a ship you can walk up to and of
+    /// one that has been put away, and the panel refused to summon the second because it read the
+    /// first.
+    /// </remarks>
+    bool Deployed = false);
 
 /// <summary>
 /// Everything a character owns, in the two shapes owning something can take.
@@ -399,7 +411,11 @@ public static class CharacterEndpoints
                 // What kind of thing it is, so a client can tell a hull from a tool without
                 // reading its key. Key prefixes look like they would do -- and `hull_shuttle`
                 // against `shuttle_hull_section` is one Component away from proving they do not.
-                i.ItemDef.Category))
+                i.ItemDef.Category,
+
+                // Projected rather than read off IsDeployed, because this runs in the database and
+                // an expression-bodied property on the entity has no SQL translation.
+                i.DeployedSystemX != null))
             .ToListAsync(cancellation);
 
         // Every container, not only the ones holding something. Transfer is addressed by inventory

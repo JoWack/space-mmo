@@ -232,6 +232,50 @@ public class ItemInstance
 
     public DateTimeOffset CreatedAt { get; set; }
 
+    /// <summary>
+    /// Where this hull is standing in the world, in system kilometres, or null if it is put away.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Null is the load-bearing value: it means "inside a hangar".</strong> ADR-0012 said
+    /// where a ship is needs no column, and that was true exactly while a parked ship and a ship
+    /// standing on the apron were the same thing. Task 153 made docking remove the pawn, so one row
+    /// — a hull sitting in a station's hangar inventory — came to mean two different worlds: one
+    /// where a ship is visible outside and one where it is not. Nothing could tell them apart, so
+    /// signing in spawned a ship that had been put away, and the Ships tab refused to summon one
+    /// because it was "already here".
+    /// </para>
+    /// <para>
+    /// <strong>Three nullable columns rather than a type</strong>, exactly as
+    /// <c>Character.LastSystemX</c> is and for the same reason: a hull that is nowhere is not a hull
+    /// at the origin, and a struct of three doubles would have to invent a sentinel to say so.
+    /// </para>
+    /// <para>
+    /// <strong>On every item instance, not on a hulls-only table.</strong> ADR-0006 settled that
+    /// trade already — "adding a column to a table full of live player items is far worse than
+    /// carrying an unused one" — and this is three nullable doubles that are null for every ore and
+    /// every laser.
+    /// </para>
+    /// <para>
+    /// Written by the game server and nobody else, because it is a position (ADR-0003). It is set
+    /// when a pawn is put in the world and while it is flown, and cleared when the ship is stowed.
+    /// </para>
+    /// </remarks>
+    public double? DeployedSystemX { get; set; }
+
+    public double? DeployedSystemY { get; set; }
+
+    public double? DeployedSystemZ { get; set; }
+
+    /// <summary>
+    /// Whether this hull is standing in the world rather than inside a hangar.
+    /// </summary>
+    /// <remarks>
+    /// The X column alone decides it. All three are written together and cleared together, and a
+    /// reader that tested each separately would invent a fourth state that cannot occur.
+    /// </remarks>
+    public bool IsDeployed => DeployedSystemX is not null;
+
     /// <summary>Set when death resolution or salvage destroys the instance.</summary>
     public DateTimeOffset? DestroyedAt { get; set; }
 }
