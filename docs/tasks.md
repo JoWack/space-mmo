@@ -5066,8 +5066,8 @@ seat. Treat them as one sitting.
 
 ## 157 — Only two of the six stations exist in the world
 
-**Done 8 September. Not yet playtested** — the checks below are automated and headless, and what
-they cannot see is what five worlds look like from a cockpit.
+**Done 8 September. Confirmed by playtest 9 September** — see below. The automated checks are
+headless and cannot see what five worlds look like from a cockpit; Joe flew to one.
 
 `Placed 2 station(s), 2 drawable; skipped 4 on bodies this scene does not have.` Only
 `station_capital_hub` and `station_deepdock` became actors. Noticed by Joe on 7 September — *"the
@@ -5182,9 +5182,31 @@ as "5 of 5".
 - **And the wire test was inverted too.** A parser building `FVector(X, X, X)` fails
   `PositionArrivesFromTheWire`, which is the mistake a symmetric fixture would have let through.
 
+### Confirmed by playtest, 9 September
+
+Joe flew from the Capital to Terra and landed on it. Log `2026.09.09-01.15` to `01.25`.
+
+**A body other than the Capital exists, is drawn, and is where content puts it.** That is the whole
+claim of this task and it had never been seen. Three things corroborate rather than one:
+
+- **It was the right planet, established from the track rather than from the picture.** Rebases 4 to
+  6 give a heading of `(-0.896, +0.303, -0.325)`; the direction to Terra is `(-0.891, +0.291,
+  -0.349)`, a dot product of 0.999. Every other body was behind him. Terra is the only body he could
+  have been pointed at.
+- **It was the right size at the right range.** A 20 km body at ~110 km subtends about 20°, which
+  matches the disc in the screenshot to within a few percent — so it was a 20 km world at that
+  distance, not the Capital seen from further off.
+- **It wore its own palette.** Dark green lows blending to pale grey highs, which is Terra's
+  authored *"green where it is low, weathered grey stone up high"* and visibly not Verdance's
+  saturated canopy green. The paint pass reached a planet it had never painted before.
+
+Landing worked, the patch built on Terra's terrain, and `station_terra_hub` was there — 423 m from
+where he touched down, which is the whole of task 160.
+
 ### What is still open, stated rather than hidden
 
-- **No playtest.** Five planets have never been looked at.
+- **Three of the five worlds are still unseen.** Terra was flown to and landed on; Ares, Verdance
+  and Grimhold have only ever been built, not looked at.
 - **Deposits exist on one body only** — task 158. Flying to Ares finds a world with no ore on it.
 - **`radiusKm` still drives nothing.** Grimhold and Ares are the same size on screen. 123's leftover.
 - **Bodies do not orbit.** They are static points, which is what the authored field says and all that
@@ -5270,6 +5292,79 @@ at all.
 
 setup.md §2 now points forward to the section that supersedes it, which is the half of this that is
 safe to fix without asking.
+
+---
+
+## 160 — Nothing on screen says where a station is
+
+**Pending. Approach agreed with Joe; layout not yet drawn.** Found by Joe in the first playtest of a
+second body, log `2026.09.09-01.24`.
+
+He flew to Terra, landed beside what he took to be the outpost, pressed G, and got *"Nothing in
+docking range"*. The refusal was correct in every particular:
+
+```
+Station station_terra_hub (TradingHub) at (-140.242, 60.607, 0.202) km,
+  docking range 0.1 km, drawn as Cube at 25 m.
+Touched down at (-140.241, 60.972, 0.388) km
+Nothing in docking range: nearest is Terra Outpost at 266 m, and it docks within 100 m.
+```
+
+**Everything worked. He simply could not find a 25 metre cube on a planet.** The thing filling his
+screen was terrain; the station was 423 m away at touchdown, 266 m at his closest, and behind a
+ridge — Terra authors 0.5 km of relief at frequency 9.0.
+
+### The geometry, because it is why this is not a small problem
+
+- A ship's eye height at rest is about 2 m. On a 20.27 km world the horizon is `sqrt(2Rh)` ≈
+  **285 m**, so from the ship itself a station at docking range plus a little is already over the
+  edge of the world. This is the fact [[tiny-planet-horizon-is-283m]] records, met from a new angle.
+- Curvature is not the obstacle: over 423 m the surface drops `d²/2R` ≈ 4.4 m, so 25 m of cube still
+  clears it. Terrain is the obstacle, and on a rugged body it always will be.
+
+### It is a consequence of 153, and 153 was right
+
+Task 153 cut docking range from 5 km to 100 m, because range stopped being a tolerance and became
+how far a ship may be teleported. That is correct and should stay. But **5 km was also, accidentally,
+the discovery mechanism**: a pilot approaching a planet blundered into range. At 100 m nothing
+blunders into anything, and the only body anybody had flown to was the Capital, where you spawn — so
+the gap could not show until 157 made a second station reachable. A prediction re-read, in the shape
+this file keeps describing.
+
+### What exists, checked rather than assumed
+
+- `USpaceMMOStationOverlay` is the **docked** UI — market, order book, ships tabs. It appears after
+  docking and so cannot help anybody get there.
+- `FCrosshairMarker` / `USpaceMMOCrosshair` is the **velocity** marker: "where will I end up". Not a
+  station.
+- Nothing else draws a station bearing. The only place the game states a station's distance is the
+  refusal message, which means **the failure text is currently the game's only rangefinder**.
+
+### Decided: both a readout line and an off-screen bearing marker
+
+Joe, asked which: *"Both"*. The layout still needs drawing and agreeing before anything is built.
+
+**The cost order is the opposite of what it looks like**, and it is worth knowing before choosing a
+shape:
+
+- **The bearing marker is the cheap half.** `USpaceMMOCrosshair` is drawn in `NativePaint` rather
+  than assembled from Blueprint widgets, and already carries `MarkerOffset`, `bMarkerVisible` and
+  `MarkerMaxRadiusFraction` for pinning to the screen edge. `FCrosshairMarker::ScreenOffset` already
+  handles the sign trap where a direction behind the camera projects to the wrong side. So a second
+  marker is C++ only — no editor work.
+- **The readout line is the expensive half**, because the flight readout's layout lives in a Widget
+  Blueprint and its text blocks are bound by name. A new line needs a `StationText` block added in
+  the editor. It is `BindWidgetOptional`, so **a missing block means the feature silently does
+  nothing** — no error, no line, and C++ that looks correct. That is exactly the failure this
+  project's rule about diagnostics is about: it has to be obvious when it did not run.
+
+`FSpaceMMOFlightReadoutText::Build` is already a pure function from inputs to finished strings, so
+the wording is testable headless. The inputs struct has no station in it yet.
+
+**Not decided:** whether the marker tracks the nearest station only or every station in the system,
+whether it persists on foot as well as in a ship, and what it does when the nearest station is on
+another body two hundred kilometres away — which is now the common case, and pointing at it would be
+noise rather than help.
 
 ---
 
