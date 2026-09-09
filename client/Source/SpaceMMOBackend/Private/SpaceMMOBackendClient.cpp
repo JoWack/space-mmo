@@ -399,8 +399,16 @@ void USpaceMMOBackendClient::Send(
 	// strong capture would keep a dead subsystem alive to be called into.
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
 
+	// Captured so a failure can say which request failed.
+	//
+	// <strong>"Request failed (500)" on its own names nothing.</strong> Docking fires three
+	// requests in the same frame, and working out which of them had thrown took reading the client
+	// source, the endpoint source and a database index before anything could even be guessed at
+	// (task 161). The verb and path are two values already in hand at the call site.
+	const FString What = FString::Printf(TEXT("%s %s"), *Verb, *Path);
+
 	Request->OnProcessRequestComplete().BindLambda(
-		[WeakThis, OnSuccess, OnFailure](FHttpRequestPtr, FHttpResponsePtr Response, const bool bConnected)
+		[WeakThis, OnSuccess, OnFailure, What](FHttpRequestPtr, FHttpResponsePtr Response, const bool bConnected)
 		{
 			USpaceMMOBackendClient* Client = WeakThis.Get();
 
@@ -418,7 +426,7 @@ void USpaceMMOBackendClient::Send(
 			if (Failure.Error != EBackendError::None)
 			{
 				UE_LOG(LogSpaceMMOBackend, Warning,
-					TEXT("Request failed (%d): %s"), Failure.HttpStatus, *Failure.Message);
+					TEXT("%s failed (%d): %s"), *What, Failure.HttpStatus, *Failure.Message);
 
 				// A rejected token is stale by definition, so drop it rather than letting every
 				// later request fail the same way with no explanation.

@@ -277,10 +277,15 @@ bool USpaceMMODockingComponent::StowShipAt(
 		Controller->NoteDockedStation(StationId);
 	}
 
+	// The hull, named by the id the stow is about to send.
+	//
+	// It printed the station's name here, so the line read "Terra Outpost is in station 2's
+	// hangar" -- which is a true sentence about the wrong subject, and cost a few minutes of
+	// reading it as evidence about the ship (task 161).
 	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("%s is in station %d's hangar; its pawn has left the world, and its pilot is "
-			"standing at %s."),
-		*Station.GetStation().Name, StationId, *Ashore.ToString());
+		TEXT("Hull %lld is in station %d's hangar at %s; its pawn has left the world, and its "
+			"pilot is standing at %s."),
+		Ship->HullItemInstanceId, StationId, *Station.GetStation().Name, *Ashore.ToString());
 
 	// Last, and nothing touches this component afterwards: destroying the owner destroys this.
 	Ship->Destroy();

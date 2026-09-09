@@ -369,7 +369,44 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         };
 
         _database.Inventories.Add(hangar);
-        await _database.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _database.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // <strong>Lost the race, which is an ordinary thing to do (task 161).</strong>
+            //
+            // Docking sends two requests in the same frame -- DockingService.DockAsync and
+            // ShipService.StowAsync -- and both come through here. At a station the character has
+            // never had a hangar at, both read nothing, both insert, and the unique index above
+            // rejects the loser. Unhandled, that left the endpoint as a 500: Joe docked at Terra
+            // Outpost, the client had already taken the ship's pawn out of the world, and the hull
+            // stayed recorded in the Capital's hangar with the Ships tab reading "Parked away" and
+            // no way to summon it.
+            //
+            // The index is right and stays. It is what stops two hangars existing with the
+            // character's goods split across them, one of which nothing would ever look in. This
+            // is the other half of that decision: the loser reads back what the winner made.
+            _database.Entry(hangar).State = EntityState.Detached;
+
+            Inventory? theirs = await _database.Inventories.FirstOrDefaultAsync(
+                i => i.CharacterId == characterId
+                    && i.StationId == stationId
+                    && i.Kind == InventoryKind.StationHangar,
+                cancellationToken);
+
+            // Only a lost race is recovered. If there is still no hangar then the save failed for
+            // some other reason entirely, and swallowing that would turn a real fault into a
+            // caller holding an inventory nobody wrote down.
+            if (theirs is null)
+            {
+                throw;
+            }
+
+            return theirs;
+        }
 
         return hangar;
     }

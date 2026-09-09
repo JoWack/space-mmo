@@ -4908,11 +4908,18 @@ Wording approved by Joe before it was built.
 | `In the hangar` | **Summon** — at any station, including a market |
 | `Outside` | `Already out` |
 | `At another station` | **Summon**, at a shipyard or the capital only |
-| `Parked away` | **Summon** — this is how a forgotten ship is recovered |
+| `Parked away` | **Summon**, at a shipyard or the capital only — this is how a forgotten ship is recovered |
 | `You are flying it` | `Already yours` |
 
 "In the hangar" is summonable even at a trading hub, which is the anti-stranding rule 153 settled:
 fetching back what you parked here is not the same act as having one brought.
+
+**The `Parked away` row's qualifier was missing until 9 September**, and the table read as though a
+ship left on a hillside could be recalled from anywhere. The code has always gated it, and the
+gate is what 153 reasoned for — a hull that would have to *travel* needs a shipyard, and only one
+already in this station's hangar comes out regardless. The table now says so. Whether that is the
+rule Joe wants is a separate question, and task 161 records it as open: a ship forgotten on a world
+with no spaceport cannot be recalled at all, only walked back to.
 
 ### Verification
 
@@ -5449,6 +5456,86 @@ line it would have drawn.
 
 ---
 
+
+## 161 — Docking at a station for the first time returned 500 and left the ship nowhere
+
+**Fixed 9 September. Found by Joe playtesting, log `2026.09.09-03.01.06`.** The fix is server-side
+and needs the API restarted; no re-seed, no migration.
+
+Joe docked his shuttle at Terra Outpost, was put ashore, opened the Ships tab and found **`Parked
+away`** with **Summon** disabled and `Not a shipyard`. His ship's pawn was gone from the world and
+he could not call it back.
+
+### It was not the anti-stranding rule failing. It never got the chance
+
+153's rule is exactly right for this: a hull **in the hangar of the station you are standing at** is
+summonable whatever kind that station is. Had the dock completed, the row would have read `In the
+hangar` and the button would have worked at a trading hub.
+
+The stow never happened:
+
+```
+Hull ... is in station 2's hangar; its pawn has left the world ...   <- client, optimistically
+Character 10 docked at station 2.
+Warning: Request failed (500): An error occurred while processing your request.
+```
+
+`GET /ships/10/active` afterwards said it plainly — **`"stationId":1, "deployed":true`**, the
+Capital's hangar, with a position on Terra. The client had taken the pawn out of the world and the
+server had not recorded any of it.
+
+### The cause: two requests reaching for the same new hangar at once
+
+Docking sends `DockingService.DockAsync` and `ShipService.StowAsync` in the same frame, and **both
+call `GetOrCreateStationHangarAsync`**. Where the character has never had a hangar at that station,
+both read nothing, both insert, and the unique index on `(character, station, kind)` rejects the
+loser with `23505 duplicate key`. Nothing caught it, so it left the endpoint as a 500.
+
+**The index comment predicted this exact race** — *"two concurrent get-or-create calls would each
+create a hangar"* — and the index is right and stays. It is what stops a character's goods being
+split across two containers, one of which nothing would ever look in. What was missing is the other
+half: the loser reads back what the winner made.
+
+**It can only ever happen once per station**, which is why a month of docking at the Capital never
+showed it and Terra Outpost did on the first visit. Task 157 made the second station reachable; this
+is the first fault that arrival exposed.
+
+### Why every existing test was blind to it
+
+Three reproductions were written before the right one:
+
+1. Stowing a hull at a trading hub — already covered, passes.
+2. Stowing a hull that has been **flown**, so `DeployedSystemX/Y/Z` are set rather than null as they
+   are after a summon. Passes. Kept, because it is a real gap in what the suite covered.
+3. The same with the disembark landing first, matching the live `"aboard":false`. Passes.
+
+None of them fail, because **all three are sequential and the fault is a race**.
+`Two_things_reaching_for_the_same_new_hangar_at_once_both_get_it` runs the two calls together and
+fails against the old code with the Npgsql duplicate-key exception, which is the only version that
+proves anything.
+
+### Two diagnostics that made this slower than it needed to be, both fixed
+
+- **`Request failed (500)` named nothing.** Docking fires three requests in one frame and the log
+  said only that one of them had failed. Working out which took reading the client, the endpoints
+  and a database index. It now logs the verb and path, which were both already in hand at the call
+  site.
+- **The stow log line printed the station's name where the ship's belonged**, so it read *"Terra
+  Outpost is in station 2's hangar"* — a true sentence about the wrong subject, read for a while as
+  evidence about the ship. It names the hull now.
+
+### Still open, and it is Joe's call
+
+**A ship left on a world with no spaceport cannot be recalled at all.** `Parked away` is gated by
+station kind, so a shuttle forgotten on a hillside on Terra can only be walked back to. That is what
+153 reasoned for — a hull that would have to travel needs a shipyard — and 155's summary table had
+lost the qualifier, which is corrected there now.
+
+Joe asked whether every station one can dock at should have a shipyard, or whether a ship should be
+summonable wherever it was docked. The second is already true. The first is a design change and
+undecided.
+
+---
 
 ## Done
 

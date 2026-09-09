@@ -83,6 +83,134 @@ public sealed class ShipSummoningTests(DatabaseFixture fixture) : IAsyncLifetime
         await context.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Docking and stowing at the same instant, at a station with no hangar yet (task 161).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The fault a playtest found, and the one every other test here is blind to.</strong>
+    /// Docking a ship sends two requests in the same frame — <c>DockingService.DockAsync</c> and
+    /// <c>ShipService.StowAsync</c> — and <em>both</em> call
+    /// <c>GetOrCreateStationHangarAsync</c>. Where the character has never had a hangar at that
+    /// station, both read nothing, both insert, and the unique index on
+    /// (character, station, kind) rejects the loser. Nothing catches it, so it leaves the endpoint
+    /// as a 500.
+    /// </para>
+    /// <para>
+    /// The index comment predicted exactly this — "two concurrent get-or-create calls would each
+    /// create a hangar" — and the index is what stops the data being wrong. It converts a silent
+    /// split into a loud crash, which is the right trade and still needs handling.
+    /// </para>
+    /// <para>
+    /// <strong>It cannot happen twice at the same station</strong>, which is why the Capital never
+    /// showed it in a month of docking and Terra Outpost did on the first visit. Joe was left on
+    /// foot at Terra with the hull still recorded in the Capital's hangar, deployed, and the Ships
+    /// tab reading "Parked away".
+    /// </para>
+    /// <para>
+    /// Sequential tests cannot see this. This one runs the two calls together on purpose.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task Two_things_reaching_for_the_same_new_hangar_at_once_both_get_it()
+    {
+        await using SpaceMmoDbContext first = _fixture.CreateContext();
+        await using SpaceMmoDbContext second = _fixture.CreateContext();
+
+        // _marketId is a station this character has never had a hangar at, which is the whole
+        // condition: once the row exists both callers read it and there is no race left.
+        Task<Inventory> a = Inventories(first).GetOrCreateStationHangarAsync(_pilotId, _marketId);
+        Task<Inventory> b = Inventories(second).GetOrCreateStationHangarAsync(_pilotId, _marketId);
+
+        Inventory[] both = await Task.WhenAll(a, b);
+
+        // The same hangar, not two. Whichever call lost the insert has to come back with the row
+        // the winner made rather than throwing -- a player docking is not doing anything unusual.
+        Assert.Equal(both[0].Id, both[1].Id);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        int hangars = await verify.Inventories.CountAsync(
+            i => i.CharacterId == _pilotId
+                && i.StationId == _marketId
+                && i.Kind == InventoryKind.StationHangar);
+
+        Assert.Equal(1, hangars);
+    }
+
+    /// <summary>
+    /// Docking a ship that has been flown somewhere and had its position written down.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The case a playtest found and every existing stow test missed (task 161).</strong>
+    /// The tests above stow a hull that was summoned and never went anywhere, so
+    /// <c>DeployedSystemX/Y/Z</c> are null throughout — summoning deliberately records no position.
+    /// A hull that has actually been flown has one, written by
+    /// <see cref="ShipService.RecordShipWhereaboutsAsync"/> the moment a pawn exists.
+    /// </para>
+    /// <para>
+    /// Joe docked at Terra Outpost, the client removed the ship's pawn, and the stow came back 500.
+    /// The hull stayed where it was, the Ships tab read "Parked away", and the kind gate then
+    /// refused to hand it back — which is the stranding 153's anti-stranding rule exists to
+    /// prevent, arriving by a route that rule cannot see.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task Stowing_a_hull_that_has_been_flown_somewhere_clears_where_it_was()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, hull);
+        }
+
+        await using (SpaceMmoDbContext board = _fixture.CreateContext())
+        {
+            await Ships(board).BoardAsync(_pilotId, hull);
+        }
+
+        // Flown, and the world said so. This is the only line that differs from the stow tests
+        // above, and it is the whole of the difference between them and a real flight.
+        await using (SpaceMmoDbContext flown = _fixture.CreateContext())
+        {
+            await Ships(flown).RecordShipWhereaboutsAsync(
+                _pilotId, hull, -140.243, 60.616, 0.212);
+        }
+
+        // And the disembark landed first, which is what the live state showed: the same keypress
+        // sends both, and by the time the stow ran the character was already out of the ship.
+        await using (SpaceMmoDbContext ashore = _fixture.CreateContext())
+        {
+            await Ships(ashore).DisembarkAsync(_pilotId);
+        }
+
+        await DockAsync(_pilotId, _marketId);
+
+        await using (SpaceMmoDbContext stow = _fixture.CreateContext())
+        {
+            await Ships(stow).StowAsync(_pilotId, hull, _marketId);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemInstance parked = await verify.ItemInstances
+            .Include(i => i.Inventory)
+            .SingleAsync(i => i.Id == hull);
+
+        // In this station's hangar, which is what makes it summonable here whatever kind it is.
+        Assert.Equal(_marketId, parked.Inventory!.StationId);
+        Assert.Equal(InventoryKind.StationHangar, parked.Inventory.Kind);
+
+        // And nowhere in the world any more. Null is what tells a hangar from an apron; a position
+        // left behind is a hull the Ships tab calls "Parked away" and the kind gate then refuses.
+        Assert.Null(parked.DeployedSystemX);
+        Assert.Null(parked.DeployedSystemY);
+        Assert.Null(parked.DeployedSystemZ);
+    }
+
     [Fact]
     public async Task Summoning_a_hull_you_own_makes_it_yours_to_fly_and_gives_it_a_hold()
     {
