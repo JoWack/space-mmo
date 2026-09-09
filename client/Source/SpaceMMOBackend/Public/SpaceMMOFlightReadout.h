@@ -46,6 +46,15 @@ struct SPACEMMOBACKEND_API FSpaceMMOFlightReadoutText
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	FString Proximity;
 
+	/**
+	 * The station being pointed at, or empty when there is none to name (task 160).
+	 *
+	 * Empty rather than "none", so a pilot flying between worlds is not reading a dead row on every
+	 * frame. Wording comes from <c>FSpaceMMOStationLine</c>, which the on-foot readout shares.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Station;
+
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	FString SystemPosition;
 
@@ -85,6 +94,24 @@ struct SPACEMMOBACKEND_API FSpaceMMOFlightReadoutInputs
 	FVector WorldLocationCentimetres = FVector::ZeroVector;
 
 	int32 RebaseCount = 0;
+
+	/**
+	 * The station the marker has settled on, already chosen by <c>FSpaceMMOStationMarkers</c>.
+	 *
+	 * <strong>Resolved by the caller rather than selected here.</strong> Which station to name is a
+	 * geometric question involving the body underfoot, the limb, and whether the viewer is docked;
+	 * doing it in here would need a world and would stop Build being a pure function over values,
+	 * which is the whole reason the wording is testable.
+	 */
+	FString StationName;
+
+	FString StationBodyName;
+
+	double StationDistanceKilometres = 0.0;
+
+	double StationDockingRangeKilometres = 0.0;
+
+	bool bStationOnBody = false;
 };
 
 /**
@@ -147,6 +174,21 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> ProximityText;
+
+	/**
+	 * The station line's block, added to the Widget Blueprint by name.
+	 *
+	 * <strong>Optional, and its absence is announced.</strong> BindWidgetOptional means a missing
+	 * block compiles and runs and simply shows nothing — which for a feature whose entire purpose
+	 * is to be visible is indistinguishable from it not working. So the widget says once, in the
+	 * log, that it had a station to name and nowhere to put it. A measurement that can silently not
+	 * happen is worse than none.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StationText;
+
+	/** So the warning above is said once rather than every frame. */
+	bool bReportedMissingStationBlock = false;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> SystemPositionText;

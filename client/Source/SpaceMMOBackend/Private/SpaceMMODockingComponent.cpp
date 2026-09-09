@@ -1,4 +1,5 @@
 #include "SpaceMMODockingComponent.h"
+#include "SpaceMMOPlanetActor.h"
 
 #include "Components/InputComponent.h"
 #include "Engine/Engine.h"
@@ -495,6 +496,42 @@ bool USpaceMMODockingComponent::TryGetSystemPosition(FSystemCoordinate& OutPosit
 	return true;
 }
 
+namespace
+{
+	/**
+	 * Every placed station in the world, as values, with the actors alongside.
+	 *
+	 * An unplaced station is nowhere rather than at the origin, and measuring to it would report a
+	 * distance to a place that does not exist -- so it never enters either list, and the two stay
+	 * index-for-index.
+	 */
+	void GatherPlacedStations(
+		UWorld& World,
+		TArray<FSpaceMMOMarkerStation>& OutValues,
+		TArray<ASpaceMMOStationActor*>& OutActors)
+	{
+		for (TActorIterator<ASpaceMMOStationActor> It(&World); It; ++It)
+		{
+			ASpaceMMOStationActor* const Actor = *It;
+
+			if (Actor == nullptr || !Actor->GetStation().bPlaced)
+			{
+				continue;
+			}
+
+			FSpaceMMOMarkerStation Value;
+			Value.Id = Actor->GetStation().Id;
+			Value.BodyId = Actor->GetStation().BodyId;
+			Value.bOnBody = Actor->GetStation().bOnBody;
+			Value.Position = Actor->GetSystemPosition();
+			Value.DockingRangeKilometres = Actor->GetStation().DockingRangeKilometres;
+
+			OutValues.Add(Value);
+			OutActors.Add(Actor);
+		}
+	}
+}
+
 ASpaceMMOStationActor* USpaceMMODockingComponent::NearestStation(
 	double& OutKilometres) const
 {
@@ -509,36 +546,118 @@ ASpaceMMOStationActor* USpaceMMODockingComponent::NearestStation(
 		return nullptr;
 	}
 
-	ASpaceMMOStationActor* Nearest = nullptr;
-	double NearestDistance = TNumericLimits<double>::Max();
+	// Through the same rule the HUD marker uses, so "nearest is Terra Outpost at 266 m" and the
+	// chevron on screen can never name different stations. They used to be one loop here and would
+	// have become two the moment the marker was written (task 160).
+	TArray<FSpaceMMOMarkerStation> Values;
+	TArray<ASpaceMMOStationActor*> Actors;
 
-	for (TActorIterator<ASpaceMMOStationActor> It(World); It; ++It)
+	GatherPlacedStations(*World, Values, Actors);
+
+	const int32 Nearest =
+		FSpaceMMOStationMarkers::NearestPlaced(Values, Position, OutKilometres);
+
+	return Actors.IsValidIndex(Nearest) ? Actors[Nearest] : nullptr;
+}
+
+bool USpaceMMODockingComponent::BuildStationMarkers(
+	TArray<FSpaceMMOStationMarkerView>& OutMarkers, int32& OutNamedIndex) const
+{
+	OutMarkers.Reset();
+	OutNamedIndex = INDEX_NONE;
+
+	UWorld* const World = GetWorld();
+
+	FSystemCoordinate Position;
+
+	if (World == nullptr || !TryGetSystemPosition(Position))
 	{
-		ASpaceMMOStationActor* Station = *It;
+		return false;
+	}
 
-		// An unplaced station is nowhere rather than at the origin, and measuring to it would
-		// report a distance to a place that does not exist.
-		if (Station == nullptr || !Station->GetStation().bPlaced)
+	TArray<FSpaceMMOMarkerStation> Values;
+	TArray<ASpaceMMOStationActor*> Actors;
+
+	GatherPlacedStations(*World, Values, Actors);
+
+	if (Values.Num() == 0)
+	{
+		return false;
+	}
+
+	// On foot there is no proximity to ask for, and Surface is the honest answer: a character is
+	// standing on a planet. It also gives the behaviour Joe asked for without a special case --
+	// closest station on this body only.
+	const ASpaceMMOShipPawn* const Ship = Cast<ASpaceMMOShipPawn>(GetOwner());
+
+	const EPlanetProximity Proximity =
+		Ship != nullptr ? Ship->GetProximity() : EPlanetProximity::Surface;
+
+	// Which world is underfoot, by the same nearest-body rule everything else uses (task 157).
+	FSpaceMMOMarkerBody Body;
+
+	const UGameInstance* const GameInstance = World->GetGameInstance();
+
+	const USpaceMMOBackendClient* const Backend = GameInstance != nullptr
+		? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
+		: nullptr;
+
+	const ASpaceMMOPlanetActor* const Planet =
+		ASpaceMMOPlanetActor::NearestTo(World, Position);
+
+	if (Planet != nullptr && Backend != nullptr)
+	{
+		FBackendBody Found;
+
+		if (Backend->FindBodyByKey(Planet->BodyKey, Found))
 		{
-			continue;
-		}
-
-		const double Distance =
-			(Position.Kilometres - Station->GetSystemPosition().Kilometres).Size();
-
-		if (Distance < NearestDistance)
-		{
-			NearestDistance = Distance;
-			Nearest = Station;
+			Body.Id = Found.Id;
+			Body.Centre = Planet->GetPlanetConfig().Centre;
+			Body.RadiusKilometres = Planet->GetPlanetConfig().RadiusKilometres;
+			Body.bValid = true;
 		}
 	}
 
-	if (Nearest != nullptr)
+	TArray<int32> Marked;
+	int32 Named = INDEX_NONE;
+
+	FSpaceMMOStationMarkers::Select(
+		Values, Position, Proximity, Body, DockedStationId != 0, Marked, Named);
+
+	for (const int32 Index : Marked)
 	{
-		OutKilometres = NearestDistance;
+		FSpaceMMOStationMarkerView View;
+		View.Name = Actors[Index]->GetStation().Name;
+		View.Position = Values[Index].Position;
+		View.DistanceKilometres =
+			(Position.Kilometres - Values[Index].Position.Kilometres).Size();
+		View.DockingRangeKilometres = Values[Index].DockingRangeKilometres;
+		View.bOnBody = Values[Index].bOnBody;
+
+		// Named for the readout's far form, which is the one case where "Terra Outpost" alone does
+		// not say which world to fly to.
+		if (View.bOnBody && Backend != nullptr)
+		{
+			for (const FBackendBody& Candidate : Backend->GetBodies())
+			{
+				if (Candidate.Id == Values[Index].BodyId)
+				{
+					View.BodyName = Candidate.Name;
+
+					break;
+				}
+			}
+		}
+
+		if (Index == Named)
+		{
+			OutNamedIndex = OutMarkers.Num();
+		}
+
+		OutMarkers.Add(View);
 	}
 
-	return Nearest;
+	return OutMarkers.Num() > 0;
 }
 
 ASpaceMMOStationActor* USpaceMMODockingComponent::FindStationInRange() const

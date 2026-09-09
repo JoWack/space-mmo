@@ -34,6 +34,15 @@ struct SPACEMMOBACKEND_API FSpaceMMOOnFootReadoutText
 	/** Whether Credits means anything, so a row can be hidden rather than left blank. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bHasCredits = false;
+
+	/**
+	 * The station being pointed at, or empty when there is none (task 160).
+	 *
+	 * The same words the flight readout uses, from <c>FSpaceMMOStationLine</c>: stepping out of a
+	 * ship must not change what the line says about the station you were flying to.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	FString Station;
 };
 
 /**
@@ -56,7 +65,8 @@ public:
 	 * @param CharacterName As the backend gave it, or empty before the character list has arrived.
 	 * @param Balance       Already formatted by FBackendCharacter::FormatBalance, without a unit.
 	 */
-	static FSpaceMMOOnFootReadoutText Build(const FString& CharacterName, const FString& Balance);
+	static FSpaceMMOOnFootReadoutText Build(
+		const FString& CharacterName, const FString& Balance, const FString& StationLine = FString());
 
 	/** Whether there is a balance to show. Bind a row's visibility to this. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
@@ -76,4 +86,18 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> CreditsText;
+
+	/**
+	 * The station line's block, added to the Widget Blueprint by name.
+	 *
+	 * <strong>A second block, in a second widget.</strong> This readout and the flight one are
+	 * separate Blueprints, so "the marker persists on foot" costs an edit in each. Its absence is
+	 * announced once in the log for the same reason the flight readout's is: a missing block and a
+	 * broken feature look identical on screen.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StationText;
+
+	/** So the warning above is said once rather than every frame. */
+	bool bReportedMissingStationBlock = false;
 };

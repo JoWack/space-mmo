@@ -1,6 +1,10 @@
 #include "SpaceMMOFlightReadout.h"
 
+#include "SpaceMMOStationMarkers.h"
+
 #include "Components/TextBlock.h"
+#include "SpaceMMOBackendLog.h"
+#include "SpaceMMODockingComponent.h"
 #include "SpaceMMOShipPawn.h"
 
 namespace
@@ -47,6 +51,13 @@ FSpaceMMOFlightReadoutText USpaceMMOFlightReadout::Build(
 		Inputs.Proximity == EPlanetProximity::Surface ? TEXT("SURFACE")
 		: Inputs.Proximity == EPlanetProximity::Atmospheric ? TEXT("ATMOSPHERE")
 		: TEXT("ORBIT");
+
+	Text.Station = FSpaceMMOStationLine::Format(
+		Inputs.StationName,
+		Inputs.StationDistanceKilometres,
+		Inputs.StationDockingRangeKilometres,
+		Inputs.bStationOnBody,
+		Inputs.StationBodyName);
 
 	Text.SystemPosition = Inputs.SystemPosition.ToString();
 
@@ -111,6 +122,25 @@ void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float D
 	// restarting, and one switch governs the whole debugging session.
 	bShowDebug = Ship->ShowsFlightDebug();
 
+	// The station the chevrons have settled on, read from the one place that decides it rather than
+	// selected again here -- the line and the marker naming different stations would be a fault
+	// nobody could diagnose from a screenshot (task 160).
+	if (const USpaceMMODockingComponent* const Docking =
+		Ship->FindComponentByClass<USpaceMMODockingComponent>())
+	{
+		TArray<FSpaceMMOStationMarkerView> Markers;
+		int32 Named = INDEX_NONE;
+
+		if (Docking->BuildStationMarkers(Markers, Named) && Markers.IsValidIndex(Named))
+		{
+			Inputs.StationName = Markers[Named].Name;
+			Inputs.StationBodyName = Markers[Named].BodyName;
+			Inputs.StationDistanceKilometres = Markers[Named].DistanceKilometres;
+			Inputs.StationDockingRangeKilometres = Markers[Named].DockingRangeKilometres;
+			Inputs.bStationOnBody = Markers[Named].bOnBody;
+		}
+	}
+
 	const FSpaceMMOFlightReadoutText Text = Build(Inputs);
 
 	auto Set = [](UTextBlock* Block, const FString& Value)
@@ -125,7 +155,22 @@ void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float D
 	Set(SpeedText, Text.Speed);
 	Set(OrbitalText, Text.Orbital);
 	Set(ProximityText, Text.Proximity);
+	Set(StationText, Text.Station);
 	Set(SystemPositionText, Text.SystemPosition);
+
+	// Said once, and only when there was something to say. A missing block is a Widget Blueprint
+	// that has not had StationText added to it yet -- which looks exactly like a marker that does
+	// not work, and would otherwise be diagnosed in the wrong file entirely.
+	if (StationText == nullptr && !Text.Station.IsEmpty() && !bReportedMissingStationBlock)
+	{
+		bReportedMissingStationBlock = true;
+
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("The flight readout has a station to name (\"%s\") and no StationText block to "
+				"put it in. Add a text block called StationText to the flight readout's Widget "
+				"Blueprint (task 160)."),
+			*Text.Station);
+	}
 	Set(DebugText, bShowDebug ? Text.Debug : FString());
 
 	bHasOrbitalSpeed = Text.bHasOrbital;

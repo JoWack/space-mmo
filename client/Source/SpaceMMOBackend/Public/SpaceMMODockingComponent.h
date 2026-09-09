@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Components/ActorComponent.h"
+#include "SpaceMMOStationMarkers.h"
 #include "CoreMinimal.h"
 #include "SpaceMMOCoordinates.h"
 #include "SpaceMMODockingComponent.generated.h"
@@ -22,6 +23,25 @@ class SPACEMMOBACKEND_API USpaceMMODockingComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	/**
+	 * The stations the HUD should point at, and which of them the readout names.
+	 *
+	 * <strong>Here rather than in either widget.</strong> The chevrons and the readout line have to
+	 * agree about which station is which, and there are two readouts — the ship's and the on-foot
+	 * one — so a rule run separately in each of three places is three chances to drift. This
+	 * component is the one thing that exists on both pawns and already knows where the stations
+	 * are.
+	 *
+	 * The rule itself is <c>FSpaceMMOStationMarkers::Select</c>, which is pure and tested; this
+	 * gathers the actors and hands it values.
+	 *
+	 * @param OutNamedIndex  Index into OutMarkers that the readout should name, or INDEX_NONE.
+	 * @return False when there is nothing to draw, which is an ordinary state — docked, or nowhere
+	 *         near anything.
+	 */
+	bool BuildStationMarkers(
+		TArray<FSpaceMMOStationMarkerView>& OutMarkers, int32& OutNamedIndex) const;
+
 	USpaceMMODockingComponent();
 
 	virtual void TickComponent(

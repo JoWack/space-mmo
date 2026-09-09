@@ -5297,7 +5297,7 @@ safe to fix without asking.
 
 ## 160 — Nothing on screen says where a station is
 
-**Pending. Approach agreed with Joe; layout not yet drawn.** Found by Joe in the first playtest of a
+**Built 9 September; two Widget Blueprint blocks outstanding, and not yet playtested.** Found by Joe in the first playtest of a
 second body, log `2026.09.09-01.24`.
 
 He flew to Terra, landed beside what he took to be the outpost, pressed G, and got *"Nothing in
@@ -5359,14 +5359,96 @@ shape:
   project's rule about diagnostics is about: it has to be obvious when it did not run.
 
 `FSpaceMMOFlightReadoutText::Build` is already a pure function from inputs to finished strings, so
-the wording is testable headless. The inputs struct has no station in it yet.
+the wording is testable headless.
 
-**Not decided:** whether the marker tracks the nearest station only or every station in the system,
-whether it persists on foot as well as in a ship, and what it does when the nearest station is on
-another body two hundred kilometres away — which is now the common case, and pointing at it would be
-noise rather than help.
+**Decided by Joe, 9 September**, and these were the open questions:
+
+- **It persists on foot.** The crosshair widget was already shown for both pawns, and the docking
+  component already exists on both, so this cost nothing.
+- **How many stations depends on how close you are.** In orbit, every station on the near side of
+  the body below — you are choosing where to go. In atmosphere, on the surface and on foot, the
+  closest station *on the body you are on* and nothing else: a chevron pointing 190 km at Terra
+  while somebody stands on the Capital is noise, because they cannot walk to it.
+- **It hides while docked.** The overlay has the screen and the answer to "where is the station" is
+  "you are in it".
+
+**One thing that mode does not do yet, stated because it looks like a bug and is not.** Every body
+has exactly one station, so in orbit the near-side rule has at most one thing to show and looks
+identical to the close-in rule. Including deep-space docks is what makes it show two — Deepdock and
+the capital hub, from Capital orbit — and it will not really earn its keep until task 97 puts
+clusters of stations in one place.
 
 ---
+
+### Built 9 September. Two Widget Blueprint blocks outstanding, and no playtest
+
+Both halves, to the spec agreed above: persists on foot, proximity-dependent selection, hidden while
+docked.
+
+- `FSpaceMMOStationMarkers` — pure, in `SpaceMMOStationMarkers.h`. `FacesViewer` is the exact limb
+  test; `IsHiddenBehind` is a clamped segment-versus-sphere for deep-space docks; `Select` is the
+  two modes.
+- `FSpaceMMOStationLine` — the wording, in the same header because it is the same feature. Both
+  readouts call it, so stepping out of a ship cannot change what the line says.
+- `USpaceMMODockingComponent::BuildStationMarkers` — gathers the actors and hands the rule values.
+  One selection, read by the crosshair and by both readouts.
+- `USpaceMMOCrosshair` draws the chevrons; `USpaceMMOFlightReadout` and `USpaceMMOOnFootReadout`
+  each gained a `Station` line.
+
+**`NearestStation` was rerouted through the same rule.** It was a loop of its own, and writing the
+marker beside it would have made two definitions of "the nearest station" — one answering the HUD
+and one answering *"nearest is Terra Outpost at 266 m"*. A pair like that is only ever found by
+somebody standing in the wrong place wondering why two numbers disagree.
+
+**Two judgements made while building, either of which Joe may reverse:**
+
+- **Chevrons do not fade when the camera is swung; the reticle still does.** The fade exists because
+  mid-orbit the velocity marker is lying about where the ship will end up. A station is where it is
+  whatever the camera does, and swinging the camera to look for one is exactly when the mark must
+  not vanish.
+- **The far form names the world, not the body key.** `Terra Outpost 118 km · at Terra`, and
+  `Deepdock 33 km · deep space`. The sketch said `on body_terra`; a key is a content identifier and
+  a player is choosing which planet to fly to. A deep-space dock is worth calling out, because the
+  answer to "which planet do I land on" is "none".
+
+### Verified, and one check that turned out not to be one
+
+Client 241 tests, 0 failures, after a build reporting `Result: Succeeded`.
+
+**The near-side rule was verified to fail against the bug it exists to prevent.** Replacing
+`FacesViewer` with the obvious hemisphere test — `dot(Out, Viewer - Centre)` rather than
+`dot(Out, Viewer - Station)` — turns `NearSideIsTheLimbNotTheHemisphere` red and nothing else.
+
+**Two of the seven tests exist because a test caught the author's arithmetic rather than the code's.**
+The planet-and-moon case had its geometry backwards and both rules agreed on it; the occlusion case
+asserted a dock at `(-60, 40, 0)` was visible when its sight line passes **18.97 km** from the centre
+of a 20 km world. Both times the implementation was right. That case is now asserted the other way,
+because "looks clear of the limb and is not" is exactly what a sloppier rule gets wrong.
+
+**The headless end-to-end check does not work, and the reason is worth keeping.** The intention was
+to run `-nullrhi` and look for the missing-`StationText` warning: if the widget said it had a
+station to name, the whole chain from docking component through selection to wording had
+demonstrably run. It never appears — **Slate drives `NativeTick` from `Paint` (SWidget.cpp:1505),
+and a run with no renderer never paints**, so no widget ticks and the absence of the warning means
+nothing at all. The run is otherwise healthy: it signs in, claims character 10, and resumes flying
+at `(-140.222, 60.748, 0.483)` km, which is 315 m from Terra Outpost — the exact case the feature
+is for, sitting there untested.
+
+So **the wiring is unverified by anything except playing it.** The rule is tested, the wording is
+tested, the selection is tested; that a widget tick reaches them is not, and cannot be here.
+
+### What Joe has to do before the line appears
+
+Add a text block named **`StationText`** to **two** Widget Blueprints: `WBP_FlightReadout` and
+`WBP_OnFootReadout`. The chevrons need no editor work.
+
+Both bindings are `BindWidgetOptional`, so a missing block shows nothing and errors nothing — which
+is indistinguishable from a broken feature and would be looked for in the wrong file. Each widget
+therefore says once, in the log, that it had a station to name and nowhere to put it, quoting the
+line it would have drawn.
+
+---
+
 
 ## Done
 

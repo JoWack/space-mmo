@@ -28,6 +28,8 @@ class SPACEMMOBACKEND_API USpaceMMOCrosshair : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	USpaceMMOCrosshair(const FObjectInitializer& ObjectInitializer);
+
 	/** Half the length of each tick, in pixels. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Crosshair")
 	float TickLength = 7.0f;
@@ -79,6 +81,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Crosshair")
 	float FadeSeconds = 0.15f;
 
+	/**
+	 * The colour station chevrons are drawn in (task 160).
+	 *
+	 * <strong>A different colour from the reticle on purpose.</strong> The ring already on screen
+	 * says where the ship is going and these say where a place is; two marks in the same white would
+	 * read as two of the same kind of thing, and a pilot would spend the first minute working out
+	 * which was which.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Crosshair")
+	FLinearColor StationColour = FLinearColor(0.45f, 0.85f, 1.0f, 0.9f);
+
+	/** Size of a station chevron, in pixels from apex to wingtip. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Crosshair")
+	float StationChevronSize = 10.0f;
+
+	/** The font station labels are drawn in. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Crosshair")
+	FSlateFontInfo StationFont;
+
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
 
@@ -97,6 +118,25 @@ private:
 
 	/** Whether there is a marker to draw at all. */
 	bool bMarkerVisible = false;
+
+	/** One station chevron, already projected to the screen. */
+	struct FStationMark
+	{
+		FVector2D Offset = FVector2D::ZeroVector;
+
+		FString Name;
+
+		FString Distance;
+	};
+
+	/**
+	 * The chevrons to draw this frame.
+	 *
+	 * Rebuilt each tick rather than kept, because a station's screen position changes with every
+	 * movement of the ship and every turn of the camera; there is nothing here worth remembering
+	 * between frames.
+	 */
+	TArray<FStationMark> StationMarks;
 
 	/** 0 while the camera is swung, 1 otherwise, eased between. */
 	float Opacity = 1.0f;
