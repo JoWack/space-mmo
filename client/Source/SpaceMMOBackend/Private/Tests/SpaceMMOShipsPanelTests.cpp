@@ -132,6 +132,30 @@ bool FSpaceMMOShipsPanelSaysWhyNotTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("A ship left out there can be recovered"), Adrift[0].bCanSummon);
 	TestEqual(TEXT("...and says it is away"), Adrift[0].Where, FString(TEXT("Parked away")));
 
+	// <strong>And recovered from a market too (task 161).</strong> A hull standing in the world is
+	// not inside a building, so nothing about this station's kind is being asked to handle it.
+	// Refusing stranded people for real: Terra has no spaceport, so a shuttle left anywhere on Terra
+	// could only be walked back to, and one left behind by a player who flew home in another ship
+	// could never be recovered at all.
+	//
+	// Paired with the market refusal below, and the pair is the point: they differ only in whether
+	// the hull is standing outside, and a rule that had simply dropped the gate would pass this and
+	// fail that.
+	const TArray<FSpaceMMOShipRowText> AdriftFromMarket =
+		USpaceMMOStationOverlay::BuildShipRows(Outside, 7, false, 1, false);
+
+	TestTrue(
+		TEXT("A ship left out there is recovered even standing at a market"),
+		AdriftFromMarket[0].bCanSummon);
+
+	TestTrue(
+		TEXT("...with no reason to show"), AdriftFromMarket[0].Refusal.IsEmpty());
+
+	TestEqual(
+		TEXT("...and still says it is away"),
+		AdriftFromMarket[0].Where,
+		FString(TEXT("Parked away")));
+
 	// Stowed at another station, standing at a market: the one that sends somebody walking.
 	const TArray<FSpaceMMOShipRowText> AtMarket =
 		USpaceMMOStationOverlay::BuildShipRows(Stowed, 7, false, 1, false);

@@ -1106,6 +1106,18 @@ TArray<FSpaceMMOShipRowText> USpaceMMOStationOverlay::BuildShipRows(
 			// the building in front of them. The server enforces the same distinction.
 			Row.bCanSummon = true;
 		}
+		else if (Instance.bDeployed)
+		{
+			// <strong>Parked away, and therefore always recoverable (task 161).</strong>
+			//
+			// It is standing in the world rather than inside a building, so nothing about this
+			// station's kind is being asked to handle it. Refusing stranded people: Terra has no
+			// spaceport, so a shuttle left anywhere on Terra could only be walked back to.
+			//
+			// The server applies the same exemption. A button that offers what the server refuses
+			// is worse than one that is greyed out.
+			Row.bCanSummon = true;
+		}
 		else if (!bStationHandlesShips)
 		{
 			Row.Refusal = TEXT("Not a shipyard");

@@ -110,7 +110,20 @@ public sealed class ShipService(SpaceMmoDbContext database)
         // front of them and no way to reach a spaceport to ask for it.
         bool alreadyHere = hull.Inventory.StationId == stationId;
 
-        if (!alreadyHere && !station.Kind.AllowsShipSummoning())
+        // <strong>And a ship lying about in the world is always recoverable (task 161).</strong>
+        //
+        // The gate is about a hull being <em>brought out of a building</em> somewhere that has no
+        // business handling ships. A hull with a position is not in a building at all: it is
+        // standing on a hillside where its pilot left it. Refusing that stranded people for real --
+        // Terra has no spaceport, so a shuttle parked anywhere on Terra could only be walked back
+        // to, and a player who left one and flew home in another would never get it back.
+        //
+        // The two exemptions say the same thing from different sides: you may always fetch what is
+        // already here, and you may always recover what you left outside. Having one *brought* from
+        // another station's hangar is the act that still needs a shipyard.
+        bool standingInTheWorld = hull.DeployedSystemX is not null;
+
+        if (!alreadyHere && !standingInTheWorld && !station.Kind.AllowsShipSummoning())
         {
             throw new ShipSummonException(
                 $"{station.Name} is a {station.Kind} and ships are not summoned there.");

@@ -4908,18 +4908,22 @@ Wording approved by Joe before it was built.
 | `In the hangar` | **Summon** — at any station, including a market |
 | `Outside` | `Already out` |
 | `At another station` | **Summon**, at a shipyard or the capital only |
-| `Parked away` | **Summon**, at a shipyard or the capital only — this is how a forgotten ship is recovered |
+| `Parked away` | **Summon** — at any station, and this is how a forgotten ship is recovered |
 | `You are flying it` | `Already yours` |
 
 "In the hangar" is summonable even at a trading hub, which is the anti-stranding rule 153 settled:
 fetching back what you parked here is not the same act as having one brought.
 
-**The `Parked away` row's qualifier was missing until 9 September**, and the table read as though a
-ship left on a hillside could be recalled from anywhere. The code has always gated it, and the
-gate is what 153 reasoned for — a hull that would have to *travel* needs a shipyard, and only one
-already in this station's hangar comes out regardless. The table now says so. Whether that is the
-rule Joe wants is a separate question, and task 161 records it as open: a ship forgotten on a world
-with no spaceport cannot be recalled at all, only walked back to.
+**The `Parked away` row and the code disagreed until 9 September, and the table was the one that was
+right.** The code gated it by station kind, so a shuttle left on a hillside on Terra — which has no
+spaceport — could only be walked back to, and one left behind by a player who flew home in another
+ship could never be recovered at all. Joe settled it when task 161 surfaced it: **a ship standing in
+the world is recoverable from anywhere.**
+
+The rule now has two exemptions saying the same thing from different sides: you may always fetch
+what is already in the hangar you are standing in, and you may always recover what you left
+outside. Having a hull *brought* out of another station's hangar is the act that still needs a
+shipyard, which is what `At another station` keeps.
 
 ### Verification
 
@@ -5524,16 +5528,27 @@ proves anything.
   Outpost is in station 2's hangar"* — a true sentence about the wrong subject, read for a while as
   evidence about the ship. It names the hull now.
 
-### Still open, and it is Joe's call
+### And a rule Joe settled while it was open
 
-**A ship left on a world with no spaceport cannot be recalled at all.** `Parked away` is gated by
-station kind, so a shuttle forgotten on a hillside on Terra can only be walked back to. That is what
-153 reasoned for — a hull that would have to travel needs a shipyard — and 155's summary table had
-lost the qualifier, which is corrected there now.
+Finding this exposed a second question: **a ship left on a world with no spaceport could not be
+recalled at all.** `Parked away` was gated by station kind, so a shuttle forgotten on a hillside on
+Terra could only be walked back to — and one left behind by a player who flew home in another ship
+was gone for good.
 
-Joe asked whether every station one can dock at should have a shipyard, or whether a ship should be
-summonable wherever it was docked. The second is already true. The first is a design change and
-undecided.
+Joe asked whether every dockable station should have a shipyard instead. Rejected in favour of the
+narrower change, because it would make `Spaceport` a meaningless station kind and remove a reason to
+travel. **Decided: a hull standing in the world is recoverable from any station**; one sitting in
+another station's hangar still needs a shipyard.
+
+The discriminator is a position, which is the same fact task 155 made load-bearing: a hull with one
+is outside, a hull without one is in a building. Both sides changed together —
+`ShipService.SummonAsync` and `USpaceMMOStationOverlay::BuildShipRows` — because a button that
+offers what the server refuses is worse than one greyed out.
+
+**Tested as a pair, deliberately.** `A_ship_left_standing_in_the_world_is_recovered_at_a_market` and
+`A_ship_is_not_brought_to_a_market` differ in exactly one thing — whether the hull has a position —
+and must disagree. Removing the exemption turns the first red and leaves the second green, which is
+what says the gate was narrowed rather than deleted.
 
 ---
 

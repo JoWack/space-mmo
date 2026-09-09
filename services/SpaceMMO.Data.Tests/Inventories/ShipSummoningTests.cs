@@ -250,6 +250,63 @@ public sealed class ShipSummoningTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     /// <summary>
+    /// A ship left standing in the world is recoverable from anywhere (task 161).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The pair with <see cref="A_ship_is_not_brought_to_a_market"/>, and it is the pair
+    /// that matters.</strong> That test and this one differ in exactly one thing — whether the hull
+    /// has a position — and they must disagree. A test that only showed this one working would pass
+    /// just as well against the gate being deleted outright, which is not the rule.
+    /// </para>
+    /// <para>
+    /// Joe's case: Terra has no spaceport, so a shuttle left anywhere on Terra could only be walked
+    /// back to. A player who left one and flew home in another ship would never get it back.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task A_ship_left_standing_in_the_world_is_recovered_at_a_market()
+    {
+        long hull = await OwnAsync(_pilotId, _spaceportId, _shuttleId);
+        await DockAsync(_pilotId, _spaceportId);
+
+        await using (SpaceMmoDbContext summon = _fixture.CreateContext())
+        {
+            await Ships(summon).SummonAsync(_pilotId, hull);
+        }
+
+        // Flown off and left on a hillside. This position is the whole difference between this test
+        // and the refusal above: a hull with one is standing outside, not sitting in a building.
+        await using (SpaceMmoDbContext flown = _fixture.CreateContext())
+        {
+            await Ships(flown).RecordShipWhereaboutsAsync(_pilotId, hull, -140.4, 60.7, 0.9);
+        }
+
+        // Walked to the market, which handles no ships at all.
+        await DockAsync(_pilotId, _marketId);
+
+        await using (SpaceMmoDbContext recall = _fixture.CreateContext())
+        {
+            await Ships(recall).SummonAsync(_pilotId, hull);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemInstance recovered = await verify.ItemInstances
+            .Include(i => i.Inventory)
+            .SingleAsync(i => i.Id == hull);
+
+        // Brought to where the player is standing, like any other summon.
+        Assert.Equal(_marketId, recovered.Inventory!.StationId);
+
+        // And no longer claiming to be on that hillside, or the next sign-in would put it back
+        // there -- a ship recalled to the market reappearing across the system (task 155).
+        Assert.Null(recovered.DeployedSystemX);
+        Assert.Null(recovered.DeployedSystemY);
+        Assert.Null(recovered.DeployedSystemZ);
+    }
+
+    /// <summary>
     /// A ship parked in the hangar you are standing in comes back out, whatever kind of station it is.
     /// </summary>
     /// <remarks>
