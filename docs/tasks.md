@@ -5603,12 +5603,9 @@ Standing "43 m" from it with the chevron pointing at it, nothing was on screen. 
 from inside a closed box there is nothing to see, and the first "stuck" screenshot's dark panels
 with straight seams were its interior faces, not terrain.
 
-**One number does not add up, and the diagnostic below will settle it.** The readout said 43 m and
-the cube is drawn at 25 m, whose faces are 12.5 m from its centre; you cannot be inside it from 43
-m. Either the distance is measured to something other than the cube's centre, or the cube is not
-25 m in the world. The `draw state` line reports the actual scale and bounds extent — `1250,1250,
-1250` is 25 m — and whichever it says is the answer. Not chased further, because it is a placeholder
-cube on a station that works.
+**One number did not add up, and it was the cube.** The readout said 43 m and a 25 m cube's faces
+are 12.5 m from its centre, so you cannot be inside it from 43 m. Joe then said the cube was
+*"muuuuuuch larger than 25m"*, and task 163 measured it: **625 m**. At 43 m you are deep inside.
 
 Everything below was written before Joe looked, and is kept because the diagnostic it produced is
 what will answer the size question.
@@ -5627,6 +5624,78 @@ That is the point CLAUDE.md says to stop theorising, so two things instead of a 
 - **Each station now logs its draw state once the renderer has it** — visible, hidden, registered,
   proxy, building, mesh, material, scale, world position, bounds — the same measurement the patch
   has carried since task 84. The next run answers this from the log, whatever Joe sees.
+
+---
+
+## 163 — Every placeholder station was twenty-five times too big, and the log said "25 m"
+
+**Fixed 13 September, measured before and after; not yet looked at.** Found by Joe, who had to
+walk *"200-300 meters out of the center"* of Terra Outpost to see it from outside — a station whose
+every log line said it was drawn at 25 m.
+
+### Measured, not reasoned
+
+`Station %s finished spawning at actor scale %s`, read off the actor after `FinishSpawning`:
+
+| Station | Before | After | Intended |
+|---|---|---|---|
+| `station_terra_hub`, Ares, Verdance, Grimhold | **625** | 25 | 25 m — 625 is 25² |
+| `station_deepdock` | **1225** | 35 | 35 m — 1225 is 35². A 1.2 km cube in space |
+| `station_capital_hub` | 1 | 1 | Blueprint, absolute scale — unaffected |
+
+**The Capital escaped, and that is why nobody saw it.** Its Hull is hidden under
+`BP_Station_A02_CapitalHub_C` since task 127, and the Blueprint has absolute scale. The one station
+anybody looked at for months was the one that could not show the fault.
+
+### The cause is in the engine, and it is documented there
+
+`AActor::FinishSpawning` compares the transform it is handed with the one `SpawnActorDeferred` was
+given. When they differ it assumes the caller wants both — *"caller passed a different
+transform!"* — and composes them (Actor.cpp:4394–4403):
+
+```cpp
+FTransform const TemplateTransform = RootComponent->GetComponentTransform() * OriginalSpawnTransform.Inverse();
+FinalRootComponentTransform = TemplateTransform * UserTransform;
+```
+
+Stations were deferred-spawned at Identity, `Configure` set the root to scale 25, and the spawn
+then called `FinishSpawning(Placed->GetActorTransform())` — handing back a transform that already
+carried the 25. Different from Identity, so composed: 25 × 25.
+
+Position was mangled by the same composition and **self-corrected on the first rebase**, because
+`ApplyRenderTransform` resets location and rotation and nothing ever resets scale. So docking
+ranges were exactly right around a building twenty-five times too large — two things that should
+have disagreed loudly agreed by accident, for as long as stations have existed.
+
+**The fix is one word**: `FinishSpawning(FTransform::Identity)`, the transform the actor was spawned
+at, so the engine sees no difference and keeps what `Configure` set. It is what the planet actor and
+the ship pawn already did.
+
+### A sibling that turned out not to be one — kept because the measurement is the point
+
+Deposits looked identical: same deferred spawn, same scaled root, same transform handed back.
+**They read 2.04 before the fix and 2.04 after it.** A deposit scales itself in
+`ApplyRenderTransform` from `BeginPlay` — *after* `FinishSpawning` — so its root was still at
+Identity when the engine compared, and nothing was composed. The station scales in `Configure`,
+before. One line of timing was the whole difference.
+
+The deposit spawn was changed to Identity anyway, because it would have become the same 625 m fault
+the day somebody moved that scale into `Configure` for a good reason. But the first draft of its
+comment said every rock had been forty per cent too big, reasoned from the pattern — and the
+measurement said no. **That comment was false for about six minutes and is the reason this task
+has a before-and-after table rather than a paragraph of reasoning.**
+
+### What this changes about earlier conclusions
+
+- **Task 162's "inside it at 43 m" now adds up.** A 625 m cube has faces 312 m from its centre; at
+  43 m you are deep inside it, seeing terrain through culled back-faces and nothing else. The first
+  "stuck" screenshot's dark panels with straight seams were its interior.
+- **Task 160's 266 m refusal was from inside the building it refused.** The docking range was
+  measured to the station's centre, correctly, while the player stood inside a cube that was
+  supposed to be 25 m across.
+
+The per-station `finished spawning at actor scale` line stays, so this is a grep next time rather
+than a walk.
 
 ---
 

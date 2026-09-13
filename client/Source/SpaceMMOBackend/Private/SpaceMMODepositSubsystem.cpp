@@ -466,7 +466,26 @@ void USpaceMMODepositSubsystem::PlaceStations()
 		}
 
 		Placed->Configure(Station, Planet, Terrain);
-		Placed->FinishSpawning(Placed->GetActorTransform());
+
+		// <strong>Identity, which is what it was spawned at -- not the transform Configure just
+		// set (task 163).</strong> AActor::FinishSpawning compares the transform it is handed with
+		// the one SpawnActorDeferred was given, and when they differ it assumes the caller wants
+		// both and composes them: "TemplateTransform * UserTransform" (Actor.cpp:4403). Handing it
+		// the actor's own transform, scale 25 already on it, made a 625 m cube of every placeholder
+		// station and a 1.2 km one of Deepdock, while the log said "25 m" on every line. The
+		// Capital escaped because its Hull is hidden under a Blueprint with absolute scale, so the
+		// one station anybody looked at was the one that could not show it. Joe had to walk three
+		// hundred metres out of Terra Outpost to see it from the outside.
+		//
+		// The same word the planet actor and the ship pawn already use, for the same reason.
+		Placed->FinishSpawning(FTransform::Identity);
+
+		// The scale the actor actually ended up with, read after FinishSpawning rather than
+		// assumed from what Configure asked for (task 163). The two disagreed by a factor of
+		// twenty-five for as long as stations have existed, and the log said "25 m" throughout.
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Station %s finished spawning at actor scale %s."),
+			*Station.Key, *Placed->GetActorScale3D().ToCompactString());
 
 		PlacedStations.Add(Placed);
 
@@ -568,7 +587,22 @@ void USpaceMMODepositSubsystem::PlaceDeposits()
 		}
 
 		Deposit->Configure(Node, Planet, Terrain);
-		Deposit->FinishSpawning(Deposit->GetActorTransform());
+
+		// Identity, for the reason the station spawn above gives at length -- and here it is
+		// closing a trap rather than fixing a fault, which was measured rather than assumed.
+		//
+		// Deposits looked like the same bug: the same deferred spawn, the same scaled root, the
+		// same transform handed back to FinishSpawning. They read 2.04 before this change and 2.04
+		// after it, because a deposit scales itself in ApplyRenderTransform from BeginPlay -- after
+		// FinishSpawning -- so its root was still at Identity when the engine compared, and nothing
+		// was composed. The station scales in Configure, before, and was. One line of timing was
+		// the whole difference, and it would have become the same 625 m fault the day somebody
+		// moved that scale into Configure for a good reason.
+		Deposit->FinishSpawning(FTransform::Identity);
+
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Deposit %s finished spawning at actor scale %s."),
+			*Node.Key, *Deposit->GetActorScale3D().ToCompactString());
 
 		PlacedDeposits.Add(Deposit);
 	}
