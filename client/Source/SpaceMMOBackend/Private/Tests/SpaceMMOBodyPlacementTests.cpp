@@ -6,7 +6,9 @@
 #include "Serialization/JsonSerializer.h"
 #include "SpaceMMOBackendProtocol.h"
 #include "SpaceMMOBackendTypes.h"
+#include "SpaceMMOGatheringComponent.h"
 #include "SpaceMMOPlanetActor.h"
+#include "SpaceMMOStationSettings.h"
 #include "SpaceMMOWorldSubsystem.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -64,6 +66,26 @@ namespace
 			(*Components)[2]->AsNumber());
 
 		return true;
+	}
+
+	/** A station's or deposit's authored direction, normalised, or false when it has none. */
+	bool AuthoredDirection(const TSharedPtr<FJsonObject>& Placed, FVector& OutDirection)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Components = nullptr;
+
+		if (!Placed->TryGetArrayField(TEXT("direction"), Components)
+			|| Components == nullptr
+			|| Components->Num() != 3)
+		{
+			return false;
+		}
+
+		OutDirection = FVector(
+			(*Components)[0]->AsNumber(),
+			(*Components)[1]->AsNumber(),
+			(*Components)[2]->AsNumber()).GetSafeNormal();
+
+		return !OutDirection.IsNearlyZero();
 	}
 
 	/**
@@ -278,6 +300,228 @@ bool FSpaceMMOAuthoredStationsStandOnPlacedBodiesTest::RunTest(const FString& Pa
 
 	// And that any station is on a body at all, since the loop above passes against none.
 	TestTrue(TEXT("Some stations stand on bodies"), OnBodies > 0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOAuthoredDepositsStandOnPlacedBodiesTest,
+	"SpaceMMO.Bodies.DepositsStandOnPlacedBodies",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOAuthoredDepositsStandOnPlacedBodiesTest::RunTest(const FString& Parameters)
+{
+	// The sibling of the station check above, for task 158. A deposit on an unplaced body is
+	// served, real, and stands on nothing -- and the client now warns and skips it exactly as it
+	// does a station, so this is what turns that warning into a failure somebody sees before a
+	// playtest does.
+	TSharedPtr<FJsonObject> Root;
+	FString Where;
+
+	if (!TestTrue(TEXT("Read the authored universe"), ReadAuthoredUniverse(Root, Where)))
+	{
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* Bodies = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Deposits = nullptr;
+
+	if (!Root->TryGetArrayField(TEXT("bodies"), Bodies)
+		|| !Root->TryGetArrayField(TEXT("resourceNodes"), Deposits)
+		|| Bodies == nullptr
+		|| Deposits == nullptr)
+	{
+		AddError(TEXT("The authored universe has no bodies or no resource nodes."));
+
+		return false;
+	}
+
+	TSet<FString> PlacedBodies;
+
+	for (const TSharedPtr<FJsonValue>& Value : *Bodies)
+	{
+		const TSharedPtr<FJsonObject> Body = Value->AsObject();
+
+		FVector Position = FVector::ZeroVector;
+
+		FString Key;
+
+		if (Body->TryGetStringField(TEXT("key"), Key) && AuthoredPosition(Body, Position))
+		{
+			PlacedBodies.Add(Key);
+		}
+	}
+
+	TSet<FString> BodiesWithOre;
+
+	for (const TSharedPtr<FJsonValue>& Value : *Deposits)
+	{
+		const TSharedPtr<FJsonObject> Deposit = Value->AsObject();
+
+		FString Body;
+		FString Key;
+
+		Deposit->TryGetStringField(TEXT("key"), Key);
+
+		// Unlike a station, a deposit has no deep-space form: a direction is from a body's centre
+		// or it is from nothing.
+		if (!TestTrue(
+			FString::Printf(TEXT("Deposit '%s' names a body"), *Key),
+			Deposit->TryGetStringField(TEXT("body"), Body) && !Body.IsEmpty()))
+		{
+			continue;
+		}
+
+		TestTrue(
+			FString::Printf(
+				TEXT("Deposit '%s' stands on body '%s', which content places"), *Key, *Body),
+			PlacedBodies.Contains(Body));
+
+		BodiesWithOre.Add(Body);
+	}
+
+	// The claim of task 158 itself, made against the pack rather than as a literal count: a
+	// player can land on every placed body, and every one of them has something to mine. One
+	// body with ore and four without is the state this task was opened on, and it was authored
+	// content that had it, not only code.
+	for (const FString& Body : PlacedBodies)
+	{
+		TestTrue(
+			FString::Printf(TEXT("Body '%s' is placed and has at least one deposit"), *Body),
+			BodiesWithOre.Contains(Body));
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOAuthoredDepositsStandClearOfTheirStationsTest,
+	"SpaceMMO.Bodies.DepositsStandClearOfTheirStations",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOAuthoredDepositsStandClearOfTheirStationsTest::RunTest(const FString& Parameters)
+{
+	// Found by measuring the content the day deposits reached the other four worlds (task 158):
+	// Terra's, Verdance's and Grimhold's one deposit each was authored at the same direction as
+	// that world's station, to the digit -- 0.0 m apart at the drawn radius. The rock would have
+	// spawned at the centre of a twenty-five metre building, with an eight metre gather range, and
+	// the playtest would have read "there is no ore on Terra" for the second time.
+	//
+	// Measured at the radius bodies are DRAWN at, like the separation check above, because that is
+	// the distance a player walks. The station comment said "near that world's own locked
+	// deposit", and near was authored as identical.
+	TSharedPtr<FJsonObject> Root;
+	FString Where;
+
+	if (!TestTrue(TEXT("Read the authored universe"), ReadAuthoredUniverse(Root, Where)))
+	{
+		return false;
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* Stations = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Deposits = nullptr;
+
+	if (!Root->TryGetArrayField(TEXT("stations"), Stations)
+		|| !Root->TryGetArrayField(TEXT("resourceNodes"), Deposits)
+		|| Stations == nullptr
+		|| Deposits == nullptr)
+	{
+		AddError(TEXT("The authored universe has no stations or no resource nodes."));
+
+		return false;
+	}
+
+	const double DrawnRadiusMetres =
+		USpaceMMOWorldSubsystem::StartingPlanet().RadiusKilometres * 1000.0;
+
+	// How far out a rock has to stand to be worked: outside the building's footprint by at least
+	// the reach of the gather key, so a player can stand between the two and still be in range.
+	// Both read from where the game reads them rather than written down again here.
+	const USpaceMMOStationSettings* const Settings = GetDefault<USpaceMMOStationSettings>();
+
+	const double ReachMetres = GetDefault<USpaceMMOGatheringComponent>()->RangeMetres;
+
+	struct FAuthoredStation
+	{
+		FString Key;
+		FVector Direction;
+		double ClearanceMetres = 0.0;
+	};
+
+	TMultiMap<FString, FAuthoredStation> StationsByBody;
+
+	for (const TSharedPtr<FJsonValue>& Value : *Stations)
+	{
+		const TSharedPtr<FJsonObject> Station = Value->AsObject();
+
+		FAuthoredStation Authored;
+
+		FString Body;
+		FString Kind;
+
+		if (!Station->TryGetStringField(TEXT("body"), Body)
+			|| Body.IsEmpty()
+			|| !AuthoredDirection(Station, Authored.Direction))
+		{
+			continue;
+		}
+
+		Station->TryGetStringField(TEXT("key"), Authored.Key);
+		Station->TryGetStringField(TEXT("kind"), Kind);
+
+		const double SizeMetres = Settings != nullptr
+			? FStationAppearance::SizeMetresFor(*Settings, Kind)
+			: 25.0;
+
+		Authored.ClearanceMetres = SizeMetres / 2.0 + ReachMetres;
+
+		StationsByBody.Add(Body, Authored);
+	}
+
+	TestTrue(TEXT("Some stations stand on bodies"), StationsByBody.Num() > 0);
+
+	int32 Compared = 0;
+
+	for (const TSharedPtr<FJsonValue>& Value : *Deposits)
+	{
+		const TSharedPtr<FJsonObject> Deposit = Value->AsObject();
+
+		FString Body;
+		FString Key;
+		FVector Direction;
+
+		Deposit->TryGetStringField(TEXT("key"), Key);
+
+		if (!Deposit->TryGetStringField(TEXT("body"), Body)
+			|| !AuthoredDirection(Deposit, Direction))
+		{
+			continue;
+		}
+
+		TArray<FAuthoredStation> OnSameBody;
+		StationsByBody.MultiFind(Body, OnSameBody);
+
+		for (const FAuthoredStation& Station : OnSameBody)
+		{
+			// Along the ground, which at these separations is the arc and not the chord.
+			const double Apart =
+				FMath::Acos(FMath::Clamp(
+					FVector::DotProduct(Direction, Station.Direction), -1.0, 1.0))
+				* DrawnRadiusMetres;
+
+			TestTrue(
+				FString::Printf(
+					TEXT("Deposit '%s' stands %.1f m from station '%s', clearing its %.1f m"),
+					*Key, Apart, *Station.Key, Station.ClearanceMetres),
+				Apart > Station.ClearanceMetres);
+
+			++Compared;
+		}
+	}
+
+	// And that the loop compared anything, since it passes against a pack with no deposit on
+	// any body that has a station.
+	TestTrue(TEXT("Some deposits share a body with a station"), Compared > 0);
 
 	return true;
 }

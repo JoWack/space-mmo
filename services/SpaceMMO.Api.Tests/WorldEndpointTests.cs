@@ -113,13 +113,12 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
-    public async Task Deposits_on_a_body_are_returned_with_their_direction()
+    public async Task Deposits_are_returned_with_their_direction()
     {
-        ResourceNodeResponse[] nodes = await GetNodesAsync(_bodyId);
+        ResourceNodeResponse node =
+            Assert.Single(await GetNodesAsync(), n => n.Key == "node_test_a");
 
-        ResourceNodeResponse node = Assert.Single(nodes);
-
-        Assert.Equal("node_test_a", node.Key);
+        Assert.Equal(_bodyId, node.BodyId);
         Assert.Equal("ferrite_ore", node.ItemKey);
         Assert.Equal("mining", node.SkillKey);
         Assert.Equal(200, node.QuantityMax);
@@ -136,7 +135,8 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
     [Fact]
     public async Task A_served_direction_is_normalised()
     {
-        ResourceNodeResponse node = Assert.Single(await GetNodesAsync(_bodyId));
+        ResourceNodeResponse node =
+            Assert.Single(await GetNodesAsync(), n => n.Key == "node_test_a");
 
         double length = Math.Sqrt(
             (node.DirectionX * node.DirectionX)
@@ -147,13 +147,24 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
-    public async Task Deposits_on_another_body_are_not_returned()
+    public async Task Deposits_on_every_body_are_returned_together_each_naming_its_own()
     {
-        // The client asks per body because it only ever renders one at a time. A query that
-        // leaked every deposit in the system would work in testing and fall over at scale.
-        ResourceNodeResponse[] nodes = await GetNodesAsync(_otherBodyId);
+        // The wire half of task 158. This route was per body, and the test standing here said the
+        // client "only ever renders one at a time" -- true until content placed five bodies (task
+        // 157), after which four of them were reachable worlds with no ore on them, because the
+        // client asked for one body's deposits and the route could answer for no more.
+        //
+        // Two bodies with one deposit each, so a response filtered to either -- or one serving
+        // every node under the first body's id -- fails rather than passing on the single-body
+        // fixture the old test used.
+        ResourceNodeResponse[] nodes = await GetNodesAsync();
 
-        Assert.Empty(nodes);
+        ResourceNodeResponse first = Assert.Single(nodes, n => n.Key == "node_test_a");
+        ResourceNodeResponse second = Assert.Single(nodes, n => n.Key == "node_test_b");
+
+        Assert.Equal(_bodyId, first.BodyId);
+        Assert.Equal(_otherBodyId, second.BodyId);
+        Assert.NotEqual(first.BodyId, second.BodyId);
     }
 
     [Fact]
@@ -188,21 +199,11 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
         Assert.All(stations, s => Assert.True(s.DockingRangeKm > 0.0));
     }
 
-    [Fact]
-    public async Task A_body_that_does_not_exist_has_no_deposits_rather_than_failing()
+    private async Task<ResourceNodeResponse[]> GetNodesAsync()
     {
-        HttpResponseMessage response = await _client.GetAsync("/world/bodies/999999/nodes");
-
-        // An empty list, not a 404. "That body has nothing on it" and "there is no such body"
-        // are the same answer to a client deciding what to draw, and distinguishing them would
-        // make the endpoint an oracle for which body ids are real.
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Empty((await response.Content.ReadFromJsonAsync<ResourceNodeResponse[]>())!);
-    }
-
-    private async Task<ResourceNodeResponse[]> GetNodesAsync(int bodyId)
-    {
-        HttpResponseMessage response = await _client.GetAsync($"/world/bodies/{bodyId}/nodes");
+        // Deliberately no token, like the bodies: the dedicated server places the world's ore
+        // without holding any player's session.
+        HttpResponseMessage response = await _client.GetAsync("/world/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -256,6 +257,24 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
             DirectionX = direction[0] / length,
             DirectionY = direction[1] / length,
             DirectionZ = direction[2] / length,
+            SharingModel = NodeSharingModel.Shared,
+        });
+
+        // A second deposit on a second body, so the route is read against a system with ore in
+        // more than one place -- the state task 158 was about, and one the fixture never had.
+        context.ResourceNodes.Add(new ResourceNode
+        {
+            Key = "node_test_b",
+            StarSystemId = other.StarSystemId,
+            BodyId = other.Id,
+            ItemDefId = item.Id,
+            SkillId = skill.Id,
+            RequiredLevel = 15,
+            QuantityMax = 150,
+            RespawnSeconds = 1800,
+            DirectionX = 0.0,
+            DirectionY = 0.0,
+            DirectionZ = 1.0,
             SharingModel = NodeSharingModel.Shared,
         });
 

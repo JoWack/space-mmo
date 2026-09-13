@@ -9,7 +9,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendSessionChanged, bool, bIsS
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendFailed, const FBackendFailure&, Failure);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharactersLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharacterStateLoaded);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendDepositsLoaded, int32, BodyId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendDepositsLoaded);
 
 /**
  * A summon the server accepted, and the name of the ship that arrived.
@@ -263,7 +263,14 @@ public:
 	bool FindBodyByKey(const FString& Key, FBackendBody& OutBody) const;
 
 	/**
-	 * Loads the deposits on a body.
+	 * Loads every deposit in the system, each naming the body it is on.
+	 *
+	 * All of them at once rather than per body, the way stations are. It took a body id until
+	 * 13 September, and the world had ore on exactly one world because of it: this was called
+	 * once, for the configured starting body, and the other four -- reachable since task 157 --
+	 * arrived with a station and nothing to mine (task 158). The dedicated server hosts every
+	 * player on every body at once, so the natural unit is the system, and one response cannot
+	 * race itself the way five filling one list would.
 	 *
 	 * Unauthenticated, and deliberately so — the endpoint is public, which means the dedicated
 	 * server can call it without holding any player's token. The server is not a player and has no
@@ -271,7 +278,7 @@ public:
 	 * its own purely to ask where the ore is.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
-	void FetchDeposits(int32 BodyId);
+	void FetchDeposits();
 
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	const TArray<FBackendResourceNode>& GetDeposits() const { return Deposits; }

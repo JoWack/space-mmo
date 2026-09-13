@@ -1432,7 +1432,7 @@ void USpaceMMOBackendClient::FetchStations()
 		});
 }
 
-void USpaceMMOBackendClient::FetchDeposits(const int32 BodyId)
+void USpaceMMOBackendClient::FetchDeposits()
 {
 	Deposits.Reset();
 
@@ -1440,16 +1440,26 @@ void USpaceMMOBackendClient::FetchDeposits(const int32 BodyId)
 	// logged in and works on a dedicated server, which holds no session at all.
 	Send(
 		TEXT("GET"),
-		FString::Printf(TEXT("/world/bodies/%d/nodes"), BodyId),
+		TEXT("/world/nodes"),
 		FString(),
 		false,
-		[this, BodyId](const FString& Body)
+		[this](const FString& Body)
 		{
 			FSpaceMMOBackendProtocol::ParseResourceNodes(Body, Deposits);
 
-			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Loaded %d deposit(s) for body %d."),
-				Deposits.Num(), BodyId);
+			// How many bodies they span, because the count alone cannot tell "every world has
+			// ore" from "the old one-body fetch is back": ten deposits on one body and ten across
+			// five read the same until somebody flies to Ares.
+			TSet<int32> BodiesWithOre;
 
-			OnDepositsLoaded.Broadcast(BodyId);
+			for (const FBackendResourceNode& Deposit : Deposits)
+			{
+				BodiesWithOre.Add(Deposit.BodyId);
+			}
+
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Loaded %d deposit(s) across %d body/bodies."),
+				Deposits.Num(), BodiesWithOre.Num());
+
+			OnDepositsLoaded.Broadcast();
 		});
 }

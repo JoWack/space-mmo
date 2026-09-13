@@ -5219,7 +5219,8 @@ where he touched down, which is the whole of task 160.
 - ~~Three of the five worlds are still unseen.~~ **All five flown to, landed on, docked at and
   summoned from, 13 September.** Joe: *"I've flown to every planet and docked/summoned my ship,
   everything there is working as expected now."* Deepdock too.
-- **Deposits exist on one body only** — task 158. Flying to Ares finds a world with no ore on it.
+- ~~**Deposits exist on one body only** — task 158.~~ **Done 13 September, headless**; every
+  world places its own ore, and three of them had it authored inside the outpost.
 - **`radiusKm` still drives nothing.** Grimhold and Ares are the same size on screen. 123's leftover.
 - **Bodies do not orbit.** They are static points, which is what the authored field says and all that
   anything reads.
@@ -5241,22 +5242,128 @@ where he touched down, which is the whole of task 160.
 
 ## 158 — Deposits exist on one body only
 
-**Pending.** Split out of 157 on 8 September rather than folded into it, because it is a different
-question and 157 was already about where bodies are.
+**Done 13 September, headless. Not yet confirmed by playtest** — the log below says every world
+has its ore, and only a walk from Terra Outpost says the rock is where a player can reach it.
 
-`USpaceMMODepositSubsystem` fetches deposits for exactly one body — `SceneBodyId`, which resolves
-from the `BodyKey` in `DefaultGame.ini` — and `/world/bodies/{id}/nodes` is per body by design. So
-now that a player can fly to Terra, Ares, Verdance or Grimhold, they arrive at a world with a station
-on it and no ore anywhere.
+Split out of 157 on 8 September rather than folded into it, because it is a different question and
+157 was already about where bodies are.
+
+`USpaceMMODepositSubsystem` fetched deposits for exactly one body — `SceneBodyId`, resolved from the
+`BodyKey` in `DefaultGame.ini` — and `/world/bodies/{id}/nodes` was per body by design. So once a
+player could fly to Terra, Ares, Verdance or Grimhold, they arrived at a world with a station on it
+and no ore anywhere.
 
 **This was true before 157 and invisible**, because the other four bodies could not be reached. It is
 the same shape as the predictions this file keeps: a limitation that costs nothing until the thing it
 limits becomes reachable.
 
-Not merely a loop. Three things need deciding: whether every body's deposits are fetched at sign-in
-or on approach, what `SceneBodyId` means once there is no single scene body, and whether the
-gathering component's range checks still hold with deposits on five worlds at once.
+### The three decisions, settled
 
+- **Every deposit is fetched at world start, in one request.** `GET /world/nodes` replaces
+  `/world/bodies/{id}/nodes`, exactly as `/world/stations` already serves "all of them at once
+  rather than per body". The dedicated server hosts every player on every body, so it needs all of
+  them regardless; the pack has ten; and one response cannot race itself the way five filling one
+  `TArray` would — `FetchDeposits` does `Deposits.Reset()` before each send, so per-body calls would
+  have kept only whichever answered last. "On approach" was streaming machinery for a problem the
+  server could never have, and was not built. The old route's only caller was this one, so it went
+  rather than staying as a route nobody asks.
+- **There is no scene body.** `SceneBodyKey()` and `SceneBodyId` are gone from the subsystem. After
+  157 they gated nothing but "bodies have loaded" — and gated it badly: a world seeded without the
+  configured body never placed a station and said nothing. Every deposit names its body on the wire
+  (`bodyId`, already parsed, already tested), and `PlaceDeposits` looks its planet up through the
+  same `PlanetsByBody` map stations use, now one shared helper rather than the two answers to "which
+  planet" it was.
+- **The gather range needs no change.** `FindDepositInRange` is an 8 m nearest-deposit test in system
+  kilometres, and the deposit prompt reuses it. The closest two bodies are Ares and Grimhold at
+  183 km centre to centre, so ~143 km of empty space between their drawn surfaces. Verified by
+  reading the component, not assumed — the task asked because 111 found gathering ignoring where you
+  are, but that was the storage station, not the rock.
+
+### What the building turned up
+
+**Deposits now need the gate stations got in 157.** Fetched behind the bodies they could not arrive
+first: a second round trip lands after the first, and the planets are shaped inside the first's
+broadcast. Asked for up front they can, and did — the headless run below logged
+`Loaded 10 deposit(s)` one line *before* `Loaded 5 body/bodies`. Placing on arrival would have found
+no planet for any of them and warned ten times about content that was fine. `PlaceDepositsWhenReady`
+waits on the same three things `PlaceStationsWhenReady` does, through one `IsGroundReady()`.
+
+**Three of the five worlds had their ore authored inside the building.** The task's handover said the
+other four bodies needed deposits authored; they did not — `node_terra_ferrite`, `node_ares_regolith`,
+`node_verdance_amber`, `node_grimhold_slag` and `node_ares_regolith_b` were all in the pack. Measured
+at the drawn radius, though, Terra's, Verdance's and Grimhold's one deposit each was **0.0 m** from
+that world's station: the same direction to the digit, under a comment reading *"near that world's
+own locked deposit"*. A rock at the centre of a 25 m cube with an 8 m gather range is one the playtest
+would have reported as "no ore on Terra" a second time. Ares' two were already ~148 m out, evidently
+nudged by hand. The three are moved to 150 m to match, each with a `$directionComment` saying why.
+
+`SpaceMMO.Bodies.DepositsStandClearOfTheirStations` measures this against the pack: arc distance at
+`StartingPlanet().RadiusKilometres`, cleared by half the station's configured `SizeMetresByKind` plus
+the gathering component's `RangeMetres`, both read from where the game reads them. **It was run red
+first**: against the unmoved content it named all three at `0.0 m ... clearing its 20.5 m`, and
+nothing else.
+
+### What was verified, and how
+
+Headless. Client 244 (`scripts/tests.bat`, `PASS`), server 752 — Domain 461, Data 202, Api 89 — after
+a build reporting `Result: Succeeded` from the source engine. Api is one fewer than 90 because the
+four per-body route tests became three; Data was run in place, since a relocated build cannot find
+`data/` and fails 26 content tests for that reason alone, which was checked before being believed.
+
+- **The API test was verified to fail against the bug.** A one-body `.Where` on the query turns
+  `Deposits_on_every_body_are_returned_together_each_naming_its_own` red, 1 of 7. And the scratch
+  binary still carrying that filter was what first answered `GET /world/nodes` with one node — caught
+  because the payload was read rather than the build trusted, and rebuilt.
+- **The wire test is a real payload**, captured from `GET /world/nodes` on 13 September: one deposit
+  per body of the ten served, asserting five distinct `bodyId`s and none of them zero.
+- **`SpaceMMO.Bodies.DepositsStandOnPlacedBodies`** is 157's station guard for deposits, plus the claim
+  of this task made against the pack rather than as a count: every placed body has at least one.
+
+**The discriminating evidence is the log**, from a `-nullrhi` run against the new API. The seed is
+what says each world got its own ore; ten deposits on one seed would be this task back again:
+
+```
+Loaded 10 deposit(s) across 5 body/bodies.
+Loaded 5 body/bodies.
+5 of 5 body(ies) have a planet; 0 are authored nowhere; 5 planet(s) in the world.
+Planets have the shape they will keep; anything placed on the ground may go down now.
+Deposit node_ares_regolith      placed on 'body_ares'     against terrain seed 20260802 ... frequency 12.0.
+Deposit node_capital_ferrite_a  placed on 'body_capital'  against terrain seed 20260805 ... frequency 6.0.
+Deposit node_grimhold_slag      placed on 'body_grimhold' against terrain seed 20260804 ... frequency 16.0.
+Deposit node_terra_ferrite      placed on 'body_terra'    against terrain seed 20260801 ... frequency 9.0.
+Deposit node_verdance_amber     placed on 'body_verdance' against terrain seed 20260803 ... frequency 7.0.
+Placed 10 deposit(s) across 5 body/bodies; skipped 0 on bodies content has not placed.
+```
+
+And the positions, read off the actors rather than the labels: `node_terra_ferrite` at
+`(-140.220, 60.607, 0.354) km`, twenty kilometres from Terra's centre at `(-120, 60, 0)`; Ares',
+Grimhold's and Verdance's likewise, each on the `-X` face of its own world. The first run read
+`0.202` there — the old direction, because the database had not been re-seeded — which is the
+sort of thing a label cannot show and a coordinate does.
+
+### How it would fail
+
+- **`GET /world/nodes failed (404)` in the log, and `Placed 0 deposit(s)`.** The API serving the
+  game is older than this change. Restart it; the route did not exist before 13 September.
+- **`Placed 10 deposit(s) across 1 body/bodies`.** The one-body fetch is back, or every node's
+  `bodyId` parsed as the same value. The wire test should have caught the second.
+- **A deposit on Terra that is buried or floating while the station beside it is not.** It was
+  measured against the wrong planet. The `placed on '...' against terrain seed` line for that deposit
+  names the world it was measured against; it should be Terra's seed, `20260801`.
+- **`Deposit ... is on body N, which has no planet in the world`** — a body content stopped placing,
+  and `DepositsStandOnPlacedBodies` should already be red.
+- **Ten warnings about missing planets on a run where the planets are fine.** Deposits were placed
+  before the ground settled: the gate is not being waited on.
+- **A rock inside Terra Outpost.** The database still holds the old directions; re-seed.
+
+### What a playtest has to say
+
+Standalone (`-game`) is what the last week's playtests used, and the client has authority there, so no
+server re-cook is needed for this. Land at Terra, Ares, Verdance or Grimhold and walk out of the
+outpost: there should be one rock about 150 m from it (two on Ares), with the deposit prompt naming
+the world's locked material — Terran Ferrite, Ferric Regolith, Luminous Amber, Grimhold Slag. All of
+them are **level 15** and, bar the amber, want the laser; the prompt will say so in the blocker
+colour for a character below that, and that is content doing what ADR-0008 asked, not a fault.
 ---
 
 ## 159 — The project's engine pin was reverted by an unrelated commit

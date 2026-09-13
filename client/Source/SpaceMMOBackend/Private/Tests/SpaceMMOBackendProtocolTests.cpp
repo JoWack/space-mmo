@@ -459,6 +459,66 @@ bool FSpaceMMOParseResourceNodesTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMODepositsArriveForEveryBodyTest,
+	"SpaceMMO.Backend.DepositsArriveForEveryBody",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMODepositsArriveForEveryBodyTest::RunTest(const FString& Parameters)
+{
+	// The wire half of task 158, from the client's side. Captured verbatim from GET /world/nodes
+	// on 13 September, the day the route stopped taking a body: one deposit per body out of the
+	// ten served, so the fixture is the state the task was about -- ore on five worlds arriving
+	// in one response -- and not the one-body list every earlier fixture was.
+	const FString Json = TEXT(R"([
+		{"id":5,"key":"node_terra_ferrite","bodyId":1,"itemKey":"terran_ferrite",
+		 "itemName":"Terran Ferrite","skillKey":"mining","requiredLevel":15,"quantityMax":150,
+		 "directionX":-0.9995003746877732,"directionY":0.029985011240633196,
+		 "directionZ":0.009995003746877732,
+		 "requiredToolKey":"crude_mining_laser","requiredToolName":"Crude Mining Laser"},
+		{"id":6,"key":"node_ares_regolith","bodyId":2,"itemKey":"ares_regolith",
+		 "itemName":"Ferric Regolith","skillKey":"mining","requiredLevel":15,"quantityMax":150,
+		 "directionX":-0.9993506330642176,"directionY":-0.019987012661284352,
+		 "directionZ":0.029980518991926525,
+		 "requiredToolKey":"crude_mining_laser","requiredToolName":"Crude Mining Laser"},
+		{"id":7,"key":"node_verdance_amber","bodyId":3,"itemKey":"verdant_amber",
+		 "itemName":"Luminous Amber","skillKey":"gathering","requiredLevel":15,"quantityMax":150,
+		 "directionX":-0.9994379741648663,"directionY":0.014991569612472996,
+		 "directionZ":-0.02998313922494599,
+		 "requiredToolKey":null,"requiredToolName":null},
+		{"id":8,"key":"node_grimhold_slag","bodyId":4,"itemKey":"grimhold_slag",
+		 "itemName":"Grimhold Slag","skillKey":"mining","requiredLevel":15,"quantityMax":150,
+		 "directionX":-0.9994878936481483,"directionY":-0.02498719734120371,
+		 "directionZ":-0.019989757872962966,
+		 "requiredToolKey":"crude_mining_laser","requiredToolName":"Crude Mining Laser"},
+		{"id":1,"key":"node_capital_ferrite_a","bodyId":5,"itemKey":"ferrite_ore",
+		 "itemName":"Ferrite Ore","skillKey":"mining","requiredLevel":1,"quantityMax":200,
+		 "directionX":0.025986023278203662,"directionY":0.01998924867554128,
+		 "directionZ":0.9994624337770639,
+		 "requiredToolKey":"crude_mining_laser","requiredToolName":"Crude Mining Laser"}
+	])");
+
+	TArray<FBackendResourceNode> Nodes;
+
+	TestTrue(TEXT("Parsed"), FSpaceMMOBackendProtocol::ParseResourceNodes(Json, Nodes));
+	TestEqual(TEXT("Every deposit survives"), Nodes.Num(), 5);
+
+	// Each deposit keeps the body it was served under. The placement code looks its planet up by
+	// this, so a parser that dropped or defaulted the field would stand every rock on body zero,
+	// which has no planet, and warn five times about content that is fine.
+	TSet<int32> Bodies;
+
+	for (const FBackendResourceNode& Node : Nodes)
+	{
+		Bodies.Add(Node.BodyId);
+	}
+
+	TestEqual(TEXT("Five deposits on five different bodies"), Bodies.Num(), 5);
+	TestFalse(TEXT("None of them defaulted to body zero"), Bodies.Contains(0));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOResourceNodeWithoutDirectionIsDroppedTest,
 	"SpaceMMO.Backend.ResourceNodeWithoutDirectionIsDropped",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

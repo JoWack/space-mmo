@@ -32,20 +32,6 @@ public:
 
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 
-	/**
-	 * Which body's deposits and stations belong in this scene: whichever one the planet draws.
-	 *
-	 * <strong>Asked of the planet rather than configured again here.</strong> This was a second
-	 * <c>BodyKey</c>, hard-coded to <c>body_capital</c> while the planet actor drew
-	 * <c>body_ares</c> from <c>DefaultGame.ini</c> — so the world had Ares' terrain with the
-	 * Capital's deposits standing on it, and neither setting looked wrong from where it was
-	 * written. It surfaced when the authoring tool (task 96) made somebody ask which body to
-	 * author against, and the honest answer needed both files and a playtest log.
-	 *
-	 * Two settings for one question is the bug. There is now one, and this reads it.
-	 */
-	FString SceneBodyKey() const;
-
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Deposit")
 	int32 GetPlacedCount() const { return PlacedDeposits.Num(); }
 
@@ -65,10 +51,37 @@ private:
 	void HandleBodiesLoaded();
 
 	UFUNCTION()
-	void HandleDepositsLoaded(int32 BodyId);
+	void HandleDepositsLoaded();
 
-	/** Spawns an actor per loaded deposit, on the planet the scenery subsystem built. */
+	/**
+	 * Places deposits once they, the bodies, and the ground they stand on are all known.
+	 *
+	 * The same three-way gate stations wait behind, for the same reason. Deposits used to be
+	 * fetched only after the bodies had resolved a single scene body, which made the wait implicit:
+	 * a second round trip cannot land before the first. Now they are asked for up front like
+	 * stations, so they can arrive first, and placing them then would measure every rock against a
+	 * planet that does not exist yet.
+	 */
+	void PlaceDepositsWhenReady();
+
+	/**
+	 * Spawns an actor per loaded deposit, each on the planet standing in for its own body.
+	 *
+	 * <strong>There is no scene body any more.</strong> Until 13 September this subsystem resolved
+	 * one -- the <c>BodyKey</c> in <c>DefaultGame.ini</c> -- fetched that body's deposits, and
+	 * placed them on that body's planet. With one planet in the scene that was the whole world;
+	 * with five (task 157) it was the Capital's ore and four worlds you could land on and find
+	 * nothing (task 158). Every deposit now names its body, and the planet it stands on is looked
+	 * up the way a station's is.
+	 */
 	void PlaceDeposits();
+
+	/**
+	 * Dev affordance: -GatherSelfTest fires one gather against the first placed deposit, skipping
+	 * the pawn, the key and the range check. Runs after placement, which is no longer the same
+	 * moment as the deposits arriving.
+	 */
+	void RunGatherSelfTest() const;
 
 	UFUNCTION()
 	void HandleStationsLoaded();
@@ -85,24 +98,38 @@ private:
 	void HandlePlanetsPainted();
 
 	/**
+	 * Places stations once they, the bodies, and the ground they stand on are all known.
+	 *
+	 * All three arrive in any order, and acting on whichever lands first goes wrong two different
+	 * ways: on the ordering where stations beat bodies, every body-relative station is compared
+	 * against no planet at all and silently dropped; on the ordering where they beat the terrain,
+	 * they are placed against the compiled-in default and left floating when the real ground
+	 * arrives.
+	 */
+	void PlaceStationsWhenReady();
+
+	/**
 	 * Puts every placed station in the world.
 	 *
 	 * Here rather than in a subsystem of its own because this one already resolves the planet a
 	 * body-relative position needs, and a second copy of that lookup would be a second chance to
 	 * read a different planet's radius.
 	 */
-	/**
-	 * Places stations once they, the scene's body, and the ground they stand on are all known.
-	 *
-	 * All three arrive in any order, and acting on whichever lands first goes wrong two different
-	 * ways: on the ordering where stations beat bodies, every body-relative station is compared
-	 * against a scene body of zero and silently dropped; on the ordering where they beat the
-	 * terrain, they are placed against the compiled-in default and left floating when the real
-	 * ground arrives.
-	 */
-	void PlaceStationsWhenReady();
-
 	void PlaceStations();
+
+	/**
+	 * The planet standing in for each loaded body, by body id.
+	 *
+	 * One lookup shared by stations and deposits, because the two used to answer "which planet"
+	 * differently -- stations by this map, deposits by a configured scene body -- and a second
+	 * copy of the lookup is a second chance to read a different planet's radius. A body content has
+	 * not placed has no planet and no entry, which is what a caller checks for.
+	 */
+	TMap<int32, const class ASpaceMMOPlanetActor*> PlanetsByBody(
+		const class USpaceMMOBackendClient& Backend) const;
+
+	/** Whether the three things placement waits for have all arrived. */
+	bool IsGroundReady() const;
 
 	UPROPERTY()
 	TArray<TObjectPtr<class ASpaceMMODepositActor>> PlacedDeposits;
@@ -110,14 +137,26 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<class ASpaceMMOStationActor>> PlacedStations;
 
-	/** The body this scene actually has a planet for. Zero until bodies have loaded. */
-	int32 SceneBodyId = 0;
+	/**
+	 * Whether the body list has arrived.
+	 *
+	 * This was a scene body id, zero until bodies had loaded -- and until the configured body had
+	 * been found among them, so a world seeded without it never placed a station and said nothing.
+	 * Nothing needs a scene body now; what the gate needs is this.
+	 */
+	bool bBodiesLoaded = false;
 
 	/** Whether the station list has arrived. */
 	bool bStationsLoaded = false;
 
 	/** Whether stations have already been placed, so a second trigger does not duplicate them. */
 	bool bStationsPlaced = false;
+
+	/** Whether the deposit list has arrived. */
+	bool bDepositsLoaded = false;
+
+	/** Whether deposits have already been placed, so a second trigger does not duplicate them. */
+	bool bDepositsPlaced = false;
 
 	/** Handle for the spawn callback, so it can be released when the world goes away. */
 	FDelegateHandle ActorSpawnedHandle;

@@ -232,7 +232,8 @@
       "requiredLevel": 15,
       "quantityMax": 150,
       "respawnSeconds": 1800,
-      "direction": [-1.0, 0.03, 0.01]
+      "$directionComment": "A hundred and fifty metres from the outpost, the same offset Ares' deposits already had. Authored identical to the station's direction until 13 September, so the rock would have stood at the centre of the building, twelve metres inside a wall, with an eight metre gather range (task 158). SpaceMMO.Bodies.DepositsStandClearOfTheirStations measures this at the drawn radius.",
+      "direction": [-1.0, 0.03, 0.0175]
     },
     {
       "key": "node_ares_regolith",
@@ -255,7 +256,8 @@
       "requiredLevel": 15,
       "quantityMax": 150,
       "respawnSeconds": 1800,
-      "direction": [-1.0, 0.015, -0.03]
+      "$directionComment": "A hundred and fifty metres from the outpost, the same offset Ares' deposits already had. Authored identical to the station's direction until 13 September, so the rock would have stood at the centre of the building, twelve metres inside a wall, with an eight metre gather range (task 158). SpaceMMO.Bodies.DepositsStandClearOfTheirStations measures this at the drawn radius.",
+      "direction": [-1.0, 0.015, -0.0225]
     },
     {
       "key": "node_grimhold_slag",
@@ -267,7 +269,8 @@
       "requiredLevel": 15,
       "quantityMax": 150,
       "respawnSeconds": 1800,
-      "direction": [-1.0, -0.025, -0.02]
+      "$directionComment": "A hundred and fifty metres from the outpost, the same offset Ares' deposits already had. Authored identical to the station's direction until 13 September, so the rock would have stood at the centre of the building, twelve metres inside a wall, with an eight metre gather range (task 158). SpaceMMO.Bodies.DepositsStandClearOfTheirStations measures this at the drawn radius.",
+      "direction": [-1.0, -0.025, -0.0125]
     },
     {
       "key": "node_ares_regolith_b",

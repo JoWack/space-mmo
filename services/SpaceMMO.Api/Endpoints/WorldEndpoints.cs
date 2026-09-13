@@ -99,7 +99,7 @@ public static class WorldEndpoints
         RouteGroupBuilder group = routes.MapGroup("/world").WithTags("World");
 
         group.MapGet("/bodies", BodiesAsync);
-        group.MapGet("/bodies/{bodyId:int}/nodes", NodesAsync);
+        group.MapGet("/nodes", NodesAsync);
         group.MapGet("/stations", StationsAsync);
     }
 
@@ -166,19 +166,29 @@ public static class WorldEndpoints
     }
 
     /// <summary>
-    /// Every deposit on a body, with the direction from its centre that locates it.
+    /// Every deposit in the system, each naming the body it is on and the direction from that
+    /// body's centre that locates it.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// All of them at once rather than per body, the way stations are served. This was
+    /// <c>/bodies/{id}/nodes</c> until 13 September, and the test on it said why: "the client asks
+    /// per body because it only ever renders one at a time". That stopped being true when content
+    /// placed five bodies (task 157) — the client draws all of them, a player can land on any of
+    /// them, and the dedicated server hosts every player on every body at once, so the natural unit
+    /// is the system. Asking five times would have been five responses racing to fill one list.
+    /// </para>
+    /// <para>
     /// Direction only, never a position. How high the ground is at that direction is a question the
     /// terrain function already answers on both sides, and sending an altitude would be a second
     /// answer free to disagree with it — the same mistake as letting a mesh diverge from the height
     /// field.
+    /// </para>
     /// </remarks>
     private static async Task<IResult> NodesAsync(
-        int bodyId, SpaceMmoDbContext database, CancellationToken cancellation)
+        SpaceMmoDbContext database, CancellationToken cancellation)
     {
         List<ResourceNodeResponse> nodes = await database.ResourceNodes
-            .Where(n => n.BodyId == bodyId)
             .Include(n => n.ItemDef)
             .Include(n => n.Skill)
             .Include(n => n.RequiredToolItemDef)
