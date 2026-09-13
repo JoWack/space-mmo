@@ -119,4 +119,13 @@ private:
 
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;
+
+	/**
+	 * Whether the draw-state line has been said yet.
+	 *
+	 * Said once, from Tick, after the render proxy exists -- on frame one it does not, and a
+	 * report taken then reads "has proxy 0" for every station in the world. The same measurement
+	 * the terrain patch keeps (task 84): what is actually on the component, not what configured it.
+	 */
+	bool bReportedDrawState = false;
 };

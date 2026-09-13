@@ -5552,6 +5552,70 @@ what says the gate was narrowed rather than deleted.
 
 ---
 
+## 162 — Summoning a ship that is already standing somewhere else does nothing
+
+**Fixed 13 September, not yet playtested.** Found by Joe on the first playtest after 161, log
+`2026.09.13-12.48`.
+
+He signed in on Terra. The resume stood his shuttle where it was last recorded — `(-140.387,
+60.734, 0.852)`, 665 m from Terra Outpost, which is where the whereabouts writer had last caught it
+before 161's failed stow. He walked to the outpost, docked on foot, and pressed **Summon**. The row
+changed to `In the hangar`, the transient said *"Shuttle summoned. It is waiting outside."*, and no
+ship appeared. Four presses, four times.
+
+```
+12:45:54  Shuttle (hull 5) is in the world at (-140.387, 60.734, 0.852) km.     <- the resume
+12:48:43  Shuttle (hull 5) is already in the world; not spawning another.      <- every Summon
+```
+
+### The server did its half. The client mistook a summon for a sign-in
+
+`SummonAsync` moved the hull into Terra's hangar and cleared its position, which is why the row read
+`In the hangar` — correct, and the exact state 153's anti-stranding rule makes summonable at a
+trading hub. `PlaceSummonedShip` then found a pawn for that hull already in the world and returned.
+
+That check exists for task 152: signing in beside a ship you summoned earlier must not make a second
+copy. It was applied before the placement branched, so a **summon** with the pawn standing elsewhere
+was treated identically — and a summon means the opposite. The record said "in the hangar" while the
+world showed a ship on a hillside 665 m away, which is the disagreement task 155 exists to remove,
+reached from the other side.
+
+**Fixed by recalling the pawn on a summon.** When placement is `BesideStation` and a pawn for the
+hull already exists, it is removed and a fresh one is stood beside the station by the placement code
+every other summon uses. Removed rather than teleported: the pawn is unpossessed — a possessed one
+answers `AdoptFlyingPawn` first and never reaches this branch — and a fresh spawn reuses the ground
+resolution, lift and offset that already work rather than adding a teleport with physics state to get
+wrong. Nothing writes the old pawn's position afterwards, because `RecordWhereabouts` reads only the
+possessed pawn. Signing in beside an existing pawn keeps the early return.
+
+**Not covered by a test**, and stated: `PlaceSummonedShip` needs a world and actors. The decision
+that could be made pure — "does this placement replace an existing pawn" — is one comparison, and
+extracting it would be testing that `==` works. The playtest is the test: summon with the ship
+visibly elsewhere, watch it vanish there and appear here.
+
+### Also seen, and not yet diagnosed: Terra Outpost does not draw
+
+Standing 43 m from it with the chevron pointing at it, nothing is on screen. The chevron projects
+*above* the ridge line, so the station's position is in plain view rather than behind terrain, and
+a 25 m cube at 43 m would fill a third of the frame.
+
+Every line that could hide it has been read and does not: the fallback keeps the constructor's Cube
+with `BasicShapeMaterial`, nothing calls `SetVisibility(false)` on that path, the hull is scaled
+×25, and the actor repositions on every rebase. **The Capital is drawn as
+`BP_Station_A02_CapitalHub_C`, and has been since task 127** — so the placeholder-cube path has not
+been looked at in the world since, and Terra, Ares and Deepdock are all on it.
+
+That is the point CLAUDE.md says to stop theorising, so two things instead of a seventh guess:
+
+- **`ShowFlag.Lighting 0` in the running game** separates unlit from not drawn. Terra's sky is
+  black and the ground is authored near-black, so a dark grey cube whose near face is unlit has no
+  silhouette at all — "black on black" is a live candidate, not a defect in the cube.
+- **Each station now logs its draw state once the renderer has it** — visible, hidden, registered,
+  proxy, building, mesh, material, scale, world position, bounds — the same measurement the patch
+  has carried since task 84. The next run answers this from the log, whatever Joe sees.
+
+---
+
 ## Done
 
 Nothing yet under this file's numbering.

@@ -369,6 +369,41 @@ void ASpaceMMOStationActor::Tick(const float DeltaSeconds)
 	const USpaceMMORenderOriginSubsystem* Origin =
 		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
 
+	// What is actually on the component, said once the renderer has it (task 162).
+	//
+	// Terra Outpost was placed, positioned, scaled and unhidden by every line of code that could
+	// be read, and drew nothing from 43 m away. The terrain patch has carried this measurement since
+	// task 84 for exactly that situation: a station that is correct in every input and invisible in
+	// the world is distinguished from one that is genuinely not drawn by reading the proxy, the
+	// bounds and the material off the built thing.
+	if (!bReportedDrawState && Hull != nullptr && Hull->SceneProxy != nullptr)
+	{
+		bReportedDrawState = true;
+
+		const bool bBuilding =
+			Structure != nullptr && Structure->GetChildActorClass() != nullptr;
+
+		const UStaticMesh* const Mesh = Hull->GetStaticMesh();
+		const UMaterialInterface* const Material = Hull->GetMaterial(0);
+
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Station %s draw state: hull visible %d, actor hidden %d, registered %d, has proxy "
+				"%d, building %s, mesh %s, material %s, scale %s, world %s, bounds origin %s extent "
+				"%s."),
+			*Station.Key,
+			Hull->IsVisible() ? 1 : 0,
+			IsHidden() ? 1 : 0,
+			Hull->IsRegistered() ? 1 : 0,
+			Hull->SceneProxy != nullptr ? 1 : 0,
+			bBuilding ? *GetNameSafe(Structure->GetChildActor()) : TEXT("none"),
+			*GetNameSafe(Mesh),
+			*GetNameSafe(Material),
+			*Hull->GetComponentScale().ToCompactString(),
+			*GetActorLocation().ToCompactString(),
+			*Hull->Bounds.Origin.ToCompactString(),
+			*Hull->Bounds.BoxExtent.ToCompactString());
+	}
+
 	// Only when the origin actually moves. A station does not travel, so between rebases its
 	// Unreal transform is already correct.
 	if (Origin == nullptr || Origin->GetRevision() == BuiltAtRevision)

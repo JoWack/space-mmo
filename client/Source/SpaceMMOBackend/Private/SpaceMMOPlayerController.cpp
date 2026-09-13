@@ -1814,11 +1814,31 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(
 		return;
 	}
 
-	// Already there. Summoning twice, or summoning and then signing in beside it, both arrive here
-	// and neither should make a second copy of one ship.
+	// Already there. Signing in beside it must not make a second copy of one ship (task 152) --
+	// but a summon means something different, and the two used to be treated the same.
+	//
+	// <strong>A summon brings the ship here. A pawn standing somewhere else is where it *was*
+	// (task 162).</strong> Joe signed in and the resume stood his shuttle where it was last
+	// recorded, 665 m from Terra Outpost. He walked to the station and pressed Summon; the server
+	// moved the hull into Terra's hangar and cleared its position, and this branch then found the
+	// old pawn 665 m away, said "already in the world", and did nothing -- leaving the record saying
+	// "in the hangar" while the world showed a ship on a hillside, which is the disagreement task
+	// 155 exists to remove. Four presses, four identical log lines, no ship.
+	//
+	// So a summon recalls the pawn: the old one is removed and a fresh one stood beside the station
+	// by the same placement code every other summon uses. Removed rather than moved, because the
+	// pawn is unpossessed -- a possessed one answered AdoptFlyingPawn above and never reaches here
+	// -- and a fresh spawn reuses the ground resolution, lift and offset that already work instead
+	// of adding a teleport with physics state to get wrong. Nothing writes the old pawn's position
+	// afterwards: RecordWhereabouts reads only the possessed pawn.
 	for (TActorIterator<ASpaceMMOShipPawn> It(World); It; ++It)
 	{
-		if (It->HullItemInstanceId == Ship.HullItemInstanceId)
+		if (It->HullItemInstanceId != Ship.HullItemInstanceId)
+		{
+			continue;
+		}
+
+		if (Placement != ESpaceMMOShipPlacement::BesideStation)
 		{
 			UE_LOG(LogSpaceMMOBackend, Log,
 				TEXT("%s (hull %lld) is already in the world; not spawning another."),
@@ -1826,6 +1846,17 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(
 
 			return;
 		}
+
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("%s (hull %lld) was standing at %s; recalling it to station %d."),
+			*Ship.Name,
+			Ship.HullItemInstanceId,
+			*It->GetSystemPosition().ToString(),
+			Ship.StationId);
+
+		It->Destroy();
+
+		break;
 	}
 
 	// <strong>Where it was standing, which is not necessarily beside a station.</strong> A ship
