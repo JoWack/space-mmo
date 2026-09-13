@@ -5216,8 +5216,9 @@ where he touched down, which is the whole of task 160.
 
 ### What is still open, stated rather than hidden
 
-- **Three of the five worlds are still unseen.** Terra was flown to and landed on; Ares, Verdance
-  and Grimhold have only ever been built, not looked at.
+- ~~Three of the five worlds are still unseen.~~ **All five flown to, landed on, docked at and
+  summoned from, 13 September.** Joe: *"I've flown to every planet and docked/summoned my ship,
+  everything there is working as expected now."* Deepdock too.
 - **Deposits exist on one body only** — task 158. Flying to Ares finds a world with no ore on it.
 - **`radiusKm` still drives nothing.** Grimhold and Ares are the same size on screen. 123's leftover.
 - **Bodies do not orbit.** They are static points, which is what the authored field says and all that
@@ -5463,8 +5464,9 @@ line it would have drawn.
 
 ## 161 — Docking at a station for the first time returned 500 and left the ship nowhere
 
-**Fixed 9 September; confirmed by playtest 13 September** — Joe docked at Terra Outpost, the stow
-stuck, and the ship came back out. Found by Joe playtesting, log `2026.09.09-03.01.06`. The fix is
+**Fixed 9 September; confirmed by playtest 13 September at every station it could have bitten** —
+Terra first, then Ares, Verdance, Grimhold and Deepdock, each a first-time hangar creation and each
+a latent instance of the same race. All stuck. Found by Joe playtesting, log `2026.09.09-03.01.06`. The fix is
 server-side and needs the API restarted; no re-seed, no migration.
 
 Joe docked his shuttle at Terra Outpost, was put ashore, opened the Ships tab and found **`Parked
@@ -5629,7 +5631,8 @@ That is the point CLAUDE.md says to stop theorising, so two things instead of a 
 
 ## 163 — Every placeholder station was twenty-five times too big, and the log said "25 m"
 
-**Fixed 13 September, measured before and after; not yet looked at.** Found by Joe, who had to
+**Fixed 13 September, measured before and after, and confirmed by playtest the same day** — *"the
+station is 25m now, deepdock is all good too."*** Found by Joe, who had to
 walk *"200-300 meters out of the center"* of Terra Outpost to see it from outside — a station whose
 every log line said it was drawn at 25 m.
 
