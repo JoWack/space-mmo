@@ -5463,8 +5463,9 @@ line it would have drawn.
 
 ## 161 — Docking at a station for the first time returned 500 and left the ship nowhere
 
-**Fixed 9 September. Found by Joe playtesting, log `2026.09.09-03.01.06`.** The fix is server-side
-and needs the API restarted; no re-seed, no migration.
+**Fixed 9 September; confirmed by playtest 13 September** — Joe docked at Terra Outpost, the stow
+stuck, and the ship came back out. Found by Joe playtesting, log `2026.09.09-03.01.06`. The fix is
+server-side and needs the API restarted; no re-seed, no migration.
 
 Joe docked his shuttle at Terra Outpost, was put ashore, opened the Ships tab and found **`Parked
 away`** with **Summon** disabled and `Not a shipyard`. His ship's pawn was gone from the world and
@@ -5554,8 +5555,10 @@ what says the gate was narrowed rather than deleted.
 
 ## 162 — Summoning a ship that is already standing somewhere else does nothing
 
-**Fixed 13 September, not yet playtested.** Found by Joe on the first playtest after 161, log
-`2026.09.13-12.48`.
+**Fixed and confirmed by playtest, 13 September** — *"docking + summon is working as expected
+now."* That one summon exercised three changes at once: the hangar race from 161, the rule that a
+ship standing in the world is recallable from a trading hub, and the recall of a pawn standing
+elsewhere. Found by Joe on the first playtest after 161, log `2026.09.13-12.48`.
 
 He signed in on Terra. The resume stood his shuttle where it was last recorded — `(-140.387,
 60.734, 0.852)`, 665 m from Terra Outpost, which is where the whereabouts writer had last caught it
@@ -5593,11 +5596,22 @@ that could be made pure — "does this placement replace an existing pawn" — i
 extracting it would be testing that `==` works. The playtest is the test: summon with the ship
 visibly elsewhere, watch it vanish there and appear here.
 
-### Also seen, and not yet diagnosed: Terra Outpost does not draw
+### Also seen, and resolved by looking: Terra Outpost was drawn all along
 
-Standing 43 m from it with the chevron pointing at it, nothing is on screen. The chevron projects
-*above* the ridge line, so the station's position is in plain view rather than behind terrain, and
-a 25 m cube at 43 m would fill a third of the frame.
+Standing "43 m" from it with the chevron pointing at it, nothing was on screen. Joe, 13 September:
+*"the station actually appears, I was just 'inside' it so it wasn't showing."* Back-face culling —
+from inside a closed box there is nothing to see, and the first "stuck" screenshot's dark panels
+with straight seams were its interior faces, not terrain.
+
+**One number does not add up, and the diagnostic below will settle it.** The readout said 43 m and
+the cube is drawn at 25 m, whose faces are 12.5 m from its centre; you cannot be inside it from 43
+m. Either the distance is measured to something other than the cube's centre, or the cube is not
+25 m in the world. The `draw state` line reports the actual scale and bounds extent — `1250,1250,
+1250` is 25 m — and whichever it says is the answer. Not chased further, because it is a placeholder
+cube on a station that works.
+
+Everything below was written before Joe looked, and is kept because the diagnostic it produced is
+what will answer the size question.
 
 Every line that could hide it has been read and does not: the fallback keeps the constructor's Cube
 with `BasicShapeMaterial`, nothing calls `SetVisibility(false)` on that path, the hull is scaled
