@@ -571,6 +571,11 @@ scripts/tests.bat SpaceMMO 176        # everything, and assert the count
 exits non-zero on a failure, on a short run, and on a wrong count. Nothing else here does — see
 task 113, and `scripts/tests.ps1`, which explains why at length.
 
+**It writes `client/Saved/Logs/Tests.log`, and never touches `SpaceMMO.log`**, which is where a
+standalone playtest writes. It used to share that name and delete the file before each run, and on
+30 September it destroyed the log of the very playtest being diagnosed (task 164). Test output is
+in `Tests.log`; what the game did is in `SpaceMMO.log`.
+
 The short version is that neither way of ending an automation run works properly:
 
 - **`-testexit` force-exits.** It is a log watcher (`FOutputDeviceTestExit`,

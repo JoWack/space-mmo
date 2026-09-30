@@ -49,13 +49,17 @@ if ([string]::IsNullOrWhiteSpace($Filter)) { $Filter = 'SpaceMMO' }
 
 $editor = 'D:\Programming\UnrealEngineSource\Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
 $project = 'D:\Programming\SpaceMMO\client\SpaceMMO.uproject'
-$log = 'D:\Programming\SpaceMMO\client\Saved\Logs\SpaceMMO.log'
+# The runner's own log, never SpaceMMO.log. A standalone playtest writes SpaceMMO.log, and this used
+# to delete it before every run: on 30 September a test run destroyed the log of the playtest being
+# diagnosed, backup and all, a quarter of an hour after it was written (task 164). Evidence of what
+# the game did is worth more than anything a test run prints.
+$log = 'D:\Programming\SpaceMMO\client\Saved\Logs\Tests.log'
 
 if (-not (Test-Path $editor)) { throw "No editor at $editor" }
 if (-not (Test-Path $project)) { throw "No project at $project" }
 
 # Removed first, so a run that dies before writing anything cannot be read as the previous run's
-# result. Reading a stale log is the failure this script exists to prevent.
+# result. Reading a stale log is the failure this script exists to prevent. Only ever its own.
 if (Test-Path $log) { Remove-Item $log -Force }
 
 # Quoted here, inside the string, rather than left to Start-Process. Its own quoting drops these
@@ -68,7 +72,7 @@ if (Test-Path $log) { Remove-Item $log -Force }
 $command = '-ExecCmds="Automation RunTests {0}; Automation SoftQuit"' -f $Filter
 
 $process = Start-Process -FilePath $editor -PassThru -WindowStyle Hidden -ArgumentList @(
-    "`"$project`"", $command, '-unattended', '-nopause', '-nosplash', '-log')
+    "`"$project`"", $command, '-unattended', '-nopause', '-nosplash', '-log=Tests.log')
 
 $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
 $finished = $false
