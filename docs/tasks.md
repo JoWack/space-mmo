@@ -6071,6 +6071,12 @@ a different mesh. Not investigated, and not caused by this change, which touches
 **The staged dedicated server is from 13 August** and does not have this. The height function is
 shared C++, so a server not re-cooked would stand every player on the old nine-octave ground while
 every client drew the new — this task again, in multiplayer. Re-cook before the next two-client run.
+**Re-cooked 30 September**, and the first attempt failed on this task's own code: the server build
+compiles the backend tests as one unity file, where `SpaceMMODrawnGroundTests.cpp`'s anonymous
+`ReadAuthoredUniverse` collided with `SpaceMMOBodyPlacementTests.cpp`'s. The editor build compiled
+the new file on its own and never saw it, so main was pushed with a server build that could not
+compile. The helpers are in a named namespace now; `BUILD SUCCESSFUL`, `check-staged-server.ps1`
+passes, client 248 still green. A second editor-only green is not evidence a server build works.
 
 **The test runner deleted this playtest's log.** `scripts/tests.ps1` removed `SpaceMMO.log` before
 every run so that it could never read a stale result — and a standalone playtest writes that same

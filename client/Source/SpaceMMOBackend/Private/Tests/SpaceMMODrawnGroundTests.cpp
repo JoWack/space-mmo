@@ -27,7 +27,13 @@
  * which is the lesson BodyPalettesSuitTheirTerrain already carries.
  */
 
-namespace
+/**
+ * Named, not anonymous. A unity build puts this file in one translation unit with the other backend
+ * tests, and anonymous namespaces from different files merge there: BodyPlacementTests already has
+ * a ReadAuthoredUniverse, and the dedicated server's BuildCookRun failed on the collision while the
+ * editor build, compiling this file alone, never saw it.
+ */
+namespace SpaceMMODrawnGround
 {
 	bool ReadAuthoredUniverse(TSharedPtr<FJsonObject>& OutRoot, FString& OutWhere)
 	{
@@ -173,7 +179,7 @@ bool FSpaceMMODrawnGroundMeetsTheFeetTest::RunTest(const FString& Parameters)
 	TSharedPtr<FJsonObject> Root;
 	FString Where;
 
-	if (!ReadAuthoredUniverse(Root, Where))
+	if (!SpaceMMODrawnGround::ReadAuthoredUniverse(Root, Where))
 	{
 		AddError(FString::Printf(TEXT("Could not read the authored universe from %s"), *Where));
 
@@ -243,7 +249,7 @@ bool FSpaceMMODrawnGroundMeetsTheFeetTest::RunTest(const FString& Parameters)
 
 				if (Object->TryGetStringField(TEXT("body"), OnBody)
 					&& OnBody == Key
-					&& ReadDirection(Object, Direction))
+					&& SpaceMMODrawnGround::ReadDirection(Object, Direction))
 				{
 					Centres.Add(Direction);
 				}
@@ -252,18 +258,18 @@ bool FSpaceMMODrawnGroundMeetsTheFeetTest::RunTest(const FString& Parameters)
 
 		FRandomStream Random(164);
 
-		FGaps Walked;
-		FGaps Seen;
+		SpaceMMODrawnGround::FGaps Walked;
+		SpaceMMODrawnGround::FGaps Seen;
 
 		for (const FVector& Centre : Centres)
 		{
-			const double Walk = WalkedMetres(Planet, Centre);
+			const double Walk = SpaceMMODrawnGround::WalkedMetres(Planet, Centre);
 
 			// Everywhere a walker can stand before the patch is rebuilt around them.
-			SampleAround(Planet, Terrain, Centre, 0.0, Walk, Random, Walked);
+			SpaceMMODrawnGround::SampleAround(Planet, Terrain, Centre, 0.0, Walk, Random, Walked);
 
 			// And the ground they look at from there: an outpost's rocks are 150 m from it.
-			SampleAround(Planet, Terrain, Centre, Walk, 150.0, Random, Seen);
+			SpaceMMODrawnGround::SampleAround(Planet, Terrain, Centre, Walk, 150.0, Random, Seen);
 		}
 
 		const double WalkedP95 = Walked.Percentile95();
@@ -276,26 +282,26 @@ bool FSpaceMMODrawnGroundMeetsTheFeetTest::RunTest(const FString& Parameters)
 
 		TestTrue(
 			FString::Printf(TEXT("%s: drawn ground within %.0f cm of the feet 95%% of the time "
-				"(%.3f m)"), *Key, UnderfootP95 * 100.0, WalkedP95),
-			WalkedP95 <= UnderfootP95);
+				"(%.3f m)"), *Key, SpaceMMODrawnGround::UnderfootP95 * 100.0, WalkedP95),
+			WalkedP95 <= SpaceMMODrawnGround::UnderfootP95);
 
 		TestTrue(
 			FString::Printf(TEXT("%s: drawn ground never more than %.0f cm from the feet (%+.3f m, "
-				"at %s)"), *Key, UnderfootWorst * 100.0, Walked.Worst,
+				"at %s)"), *Key, SpaceMMODrawnGround::UnderfootWorst * 100.0, Walked.Worst,
 				*Walked.WorstWhere.ToCompactString()),
-			FMath::Abs(Walked.Worst) <= UnderfootWorst);
+			FMath::Abs(Walked.Worst) <= SpaceMMODrawnGround::UnderfootWorst);
 
 		// Out to the rocks. A three-metre deposit thirty centimetres deep is a tenth of it gone.
 		TestTrue(
 			FString::Printf(TEXT("%s: drawn ground within %.0f cm of the true ground 95%% of the "
-				"time out to 150 m (%.3f m)"), *Key, SeenP95 * 100.0, SeenP95Measured),
-			SeenP95Measured <= SeenP95);
+				"time out to 150 m (%.3f m)"), *Key, SpaceMMODrawnGround::SeenP95 * 100.0, SeenP95Measured),
+			SeenP95Measured <= SpaceMMODrawnGround::SeenP95);
 
 		TestTrue(
 			FString::Printf(TEXT("%s: drawn ground never more than %.0f cm from the true ground out "
-				"to 150 m (%+.3f m, at %s)"), *Key, SeenWorst * 100.0, Seen.Worst,
+				"to 150 m (%+.3f m, at %s)"), *Key, SpaceMMODrawnGround::SeenWorst * 100.0, Seen.Worst,
 				*Seen.WorstWhere.ToCompactString()),
-			FMath::Abs(Seen.Worst) <= SeenWorst);
+			FMath::Abs(Seen.Worst) <= SpaceMMODrawnGround::SeenWorst);
 
 		++Checked;
 	}
