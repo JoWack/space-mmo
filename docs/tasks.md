@@ -5819,8 +5819,8 @@ than a walk.
 
 ## 164 — The ground a player sees was a metre from the ground everything stands on
 
-**Done 30 September, headless. Not yet confirmed by playtest** — the `FEET:` line below is what a
-walk will say.
+**Done 30 September. Confirmed by playtest the same evening** — Joe: *"working as expected"*, and the
+`FEET:` lines from his walk on Ares say the same in centimetres; see below.
 
 Found by Joe on Ares, 30 September: *"my player doesn't always stand perfectly on the surface. At
 times, he sinks into it, and same with some of the ore deposits … Sometimes he walks perfectly fine
@@ -6002,6 +6002,26 @@ ones Joe left. Worth knowing before the next headless run against the real API:
 **Client 248 tests, 0 failures** (`scripts/tests.bat`, `PASS`), after a source-engine build reporting
 `Result: Succeeded`, on the tree as committed. No server code changed and the server suite was not
 re-run.
+
+### Confirmed by playtest, 30 September
+
+Joe flew to Ares, skimmed the ground in the Shuttle, stepped out and walked. Log `2026.09.30-21.50` to
+`21.51`, with no other game running this time.
+
+**Every grounded second, the drawn ground was within 3 cm of his feet** — 26 `FEET:` lines at about 210
+frames a second, the worst of each second between −0.03 and +0.03 m, and `feet 0.00 m above the height
+function` throughout. Where the frame at the top of this task had 1.11 m. The two exceptions are not
+the mesh: one second reads `0.94 m below the feet … AIRBORNE` with the feet 0.96 m above the function,
+which is a jump; and the first second's worst of −2.31 m is the frame he was stepped out of the ship,
+before his feet first met the ground.
+
+**The rebuilds cost what they were predicted to, and were not remarked on.** 17.6 to 22.0 ms each on an
+idle machine, 22 in the session. Seven of them came in five seconds while he skimmed the ground at 70
+to 90 m/s: a ship that low has the walker's patch, so it is rebuilt every 76 m, which at that speed is
+about once a second (0.4 to 1.4 s apart in the log). At 210 frames a second each one is a frame four
+times the usual length. Nobody said
+it was felt; if it is, the remedy is building the patch off the game thread, or relaxing the drift
+rule for anything moving faster than a person runs.
 
 ### The far field, which is worse past 900 m
 
