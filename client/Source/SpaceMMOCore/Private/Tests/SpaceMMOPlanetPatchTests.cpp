@@ -1,8 +1,11 @@
 #include "DynamicMesh/DynamicMesh3.h"
 #include "DynamicMesh/DynamicMeshAttributeSet.h"
 #include "Misc/AutomationTest.h"
+#include "SpaceMMOCoordinates.h"
+#include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOPlanetGlobe.h"
 #include "SpaceMMOPlanetPatch.h"
+#include "SpaceMMOWorldSubsystem.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -1037,6 +1040,202 @@ bool FSpaceMMOPatchRebuildThresholdTest::RunTest(const FString& Parameters)
 	TestFalse(
 		TEXT("Exactly parallel does not produce NaN"),
 		FPlanetPatch::ShouldRebuild(Same, Same, Radius));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchEvenGridIsTheOldGridTest,
+	"SpaceMMO.Patch.EvenGridIsTheOldGrid",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchEvenGridIsTheOldGridTest::RunTest(const FString& Parameters)
+{
+	// Grading is an addition, not a replacement (task 164). A patch that asks for even spacing has
+	// to get exactly the grid every patch had before -- the same arithmetic, not a close match --
+	// or every test that builds an even patch is quietly measuring something new.
+	for (const int32 Resolution : {2, 17, 129})
+	{
+		FPlanetPatchConfig Patch;
+		Patch.Resolution = Resolution;
+		Patch.CentreSpacing = 1.0;
+
+		for (int32 Index = 0; Index < Resolution; ++Index)
+		{
+			const double Old = -1.0 + ((2.0 * Index) / (Resolution - 1));
+
+			if (!TestEqual(
+				FString::Printf(TEXT("Resolution %d, line %d"), Resolution, Index),
+				FPlanetPatch::GridCoordinate(Patch, Index),
+				Old,
+				0.0))
+			{
+				return false;
+			}
+		}
+
+		// And an even patch is fine everywhere, so a walker keeps the 0.4 drift every patch used.
+		TestEqual(TEXT("An even patch is fine to its rim"),
+			FPlanetPatch::FineRadiusDegrees(Patch), Patch.AngularRadiusDegrees, 1e-9);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchGradedGridIsFineAtItsCentreTest,
+	"SpaceMMO.Patch.GradedGridIsFineAtItsCentre",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchGradedGridIsFineAtItsCentreTest::RunTest(const FString& Parameters)
+{
+	// The patch a walker is given, from the function the planet actor uses to decide it -- not a
+	// config written out here, which would pass while the game built something else.
+	const FPlanetConfig Planet = USpaceMMOWorldSubsystem::StartingPlanet();
+
+	const FPlanetPatchConfig Patch =
+		ASpaceMMOPlanetActor::PatchFor(Planet, FVector(0.0, 0.0, 1.0), 0.002);
+
+	const int32 Resolution = Patch.Resolution;
+	const int32 Middle = Resolution / 2;
+
+	TestTrue(
+		FString::Printf(TEXT("A walker's patch is graded (centre spacing %.3f)"),
+			Patch.CentreSpacing),
+		Patch.CentreSpacing < 1.0);
+
+	// It still covers exactly the ground an even patch would: the rim is where it always was.
+	TestEqual(TEXT("First line on the near rim"),
+		FPlanetPatch::GridCoordinate(Patch, 0), -1.0, 1e-12);
+	TestEqual(TEXT("Last line on the far rim"),
+		FPlanetPatch::GridCoordinate(Patch, Resolution - 1), 1.0, 1e-12);
+	TestEqual(TEXT("Middle line on the centre"),
+		FPlanetPatch::GridCoordinate(Patch, Middle), 0.0, 1e-12);
+
+	const double Even = 2.0 / (Resolution - 1);
+
+	double Previous = FPlanetPatch::GridCoordinate(Patch, Middle + 1)
+		- FPlanetPatch::GridCoordinate(Patch, Middle);
+
+	// Finer at the centre by the factor asked for, which is the whole point.
+	TestEqual(TEXT("Centre step is the asked-for fraction of an even one"),
+		Previous / Even, Patch.CentreSpacing, 1e-9);
+
+	for (int32 Index = Middle + 1; Index + 1 < Resolution; ++Index)
+	{
+		const double Step = FPlanetPatch::GridCoordinate(Patch, Index + 1)
+			- FPlanetPatch::GridCoordinate(Patch, Index);
+
+		// Never narrower further out, and symmetric: a grid that folded back on itself would
+		// make triangles that face into the planet, and a lopsided one would put the fine ground
+		// somewhere other than under the viewer.
+		if (!TestTrue(FString::Printf(TEXT("Step %d does not shrink"), Index),
+				Step >= Previous - 1e-12)
+			|| !TestEqual(FString::Printf(TEXT("Line %d mirrors its partner"), Index),
+				FPlanetPatch::GridCoordinate(Patch, Index),
+				-FPlanetPatch::GridCoordinate(Patch, Resolution - 1 - Index),
+				1e-12))
+		{
+			return false;
+		}
+
+		Previous = Step;
+	}
+
+	// And the rim pays for the centre. If it did not, the grading would be free, and a free
+	// grading means the arithmetic is not doing what it says.
+	TestTrue(
+		FString::Printf(TEXT("Rim step %.4f is coarser than an even %.4f"), Previous, Even),
+		Previous > Even);
+
+	// The fine ground is a real fraction of the patch, and not the whole of it.
+	const double Fine = FPlanetPatch::FineRadiusDegrees(Patch);
+
+	TestTrue(
+		FString::Printf(TEXT("Fine radius %.3f deg lies inside the patch's %.3f"),
+			Fine, Patch.AngularRadiusDegrees),
+		Fine > 0.0 && Fine < Patch.AngularRadiusDegrees);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOPatchDrawnGroundIsTheBuiltMeshTest,
+	"SpaceMMO.Patch.DrawnGroundIsTheBuiltMesh",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOPatchDrawnGroundIsTheBuiltMeshTest::RunTest(const FString& Parameters)
+{
+	// DrawnRadiusKilometres is what every other measurement of task 164 stands on, so it is held
+	// to the mesh Build actually emits -- from the triangles' side, so nothing about how it finds
+	// its cell is assumed. A point inside a built triangle, seen from the planet's centre, must be
+	// answered with exactly that point's distance.
+	const FPlanetConfig Planet = PatchTestPlanet();
+	const FPlanetTerrainConfig Terrain = PatchTestTerrain();
+
+	for (const double CentreSpacing : {1.0, 0.25})
+	{
+		FPlanetPatchConfig Patch;
+		Patch.CentreDirection = FVector(0.3, -0.5, 0.8);
+		Patch.AngularRadiusDegrees = 4.0;
+		Patch.Resolution = 33;
+		Patch.CentreSpacing = CentreSpacing;
+
+		const FPlanetPatchMesh Mesh = FPlanetPatch::Build(Planet, Terrain, Patch);
+
+		const FVector Anchor = Mesh.Origin.Kilometres - Planet.Centre.Kilometres;
+
+		FRandomStream Random(164);
+
+		double Worst = 0.0;
+		int32 Checked = 0;
+
+		for (int32 Index = 0; Index + 2 < Mesh.Triangles.Num(); Index += 3)
+		{
+			const FVector A = Anchor
+				+ Mesh.Positions[Mesh.Triangles[Index]] / SpaceMMO::Coordinates::CentimetresPerKilometre;
+			const FVector B = Anchor
+				+ Mesh.Positions[Mesh.Triangles[Index + 1]] / SpaceMMO::Coordinates::CentimetresPerKilometre;
+			const FVector C = Anchor
+				+ Mesh.Positions[Mesh.Triangles[Index + 2]] / SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+			// Strictly inside, so the point belongs to this triangle and not its neighbour.
+			double First = Random.FRandRange(0.05, 0.9);
+			double Second = Random.FRandRange(0.05, 0.9);
+
+			if (First + Second > 0.95)
+			{
+				First = 0.95 - First;
+				Second = 0.95 - Second;
+			}
+
+			const FVector Point = A + (B - A) * First + (C - A) * Second;
+
+			double Drawn = 0.0;
+
+			if (!TestTrue(TEXT("A point on the patch is on the patch"),
+				FPlanetPatch::DrawnRadiusKilometres(Planet, Terrain, Patch, Point, Drawn)))
+			{
+				return false;
+			}
+
+			Worst = FMath::Max(Worst, FMath::Abs(Drawn - Point.Size()) * 1000.0);
+			++Checked;
+		}
+
+		TestTrue(
+			FString::Printf(TEXT("Centre spacing %.2f: the drawn ground is the built mesh to within "
+				"%.4f m across %d triangles"), CentreSpacing, Worst, Checked),
+			Worst < 0.001);
+
+		// Beyond the rim there is no drawn ground to report, and saying so matters more than a
+		// plausible number: the caller falls back to something else rather than measuring nothing.
+		double Outside = 0.0;
+
+		TestFalse(TEXT("Nothing is drawn beyond the rim"),
+			FPlanetPatch::DrawnRadiusKilometres(
+				Planet, Terrain, Patch, -Patch.CentreDirection, Outside));
+	}
 
 	return true;
 }

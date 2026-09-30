@@ -45,6 +45,34 @@ struct SPACEMMOCORE_API FPlanetTerrainConfig
 	/** Amplitude multiplier per octave. Below 1, or the fine detail drowns the coarse shape. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
 	double Gain = 0.5;
+
+	/**
+	 * The finest detail the terrain carries, in features per planet radius. Octaves stop before
+	 * passing it, however many are asked for.
+	 *
+	 * <strong>Because detail nothing can draw is detail everything stands on anyway (task
+	 * 164).</strong> Nine octaves at the base frequencies content authors put features four to
+	 * thirteen metres across on every world, while the walking patch had a vertex every twenty to
+	 * twenty-seven metres. The character, every deposit and every station stood on those features
+	 * and the player saw triangles drawn straight across them: on Ares the drawn ground was more than
+	 * a quarter of a metre above the feet a third of the time and more than a quarter below them
+	 * another third. Joe's screenshot was 1.11 m, and Grimhold reached seven.
+	 *
+	 * In features per radius rather than as an octave count, because the bodies do not share a base
+	 * frequency: nine octaves is 13 m detail on the Capital and 4.9 m on Grimhold, and a count tuned
+	 * against one would leave another disagreeing with its own mesh.
+	 *
+	 * 400 is a finest feature of 50 m on a 20 km world, nine times the 5.5 m a walker's patch
+	 * draws. Chosen by sweeping it against every authored body under the patch the game builds: at
+	 * 400 the drawn ground is within 4.6 cm of the feet 95% of the time on the worst of them,
+	 * Grimhold, and 10 cm at worst; at 512 that was 7.8 and 18. It leaves the Capital seven octaves,
+	 * Verdance, Terra and Ares six, and Grimhold five.
+	 *
+	 * Raising this claims the mesh can draw finer ground. SpaceMMO.Terrain.DrawnGroundMeetsTheFeet
+	 * measures that claim on every authored body, and is what fails when it stops being true.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	double MaxFrequency = 400.0;
 };
 
 /**

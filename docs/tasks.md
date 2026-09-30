@@ -2300,6 +2300,12 @@ meadow, the server knows about four plants in it.
 
 ## 122 — One patch is not a planet
 
+**Its conclusion was wrong where it mattered, 30 September — see 164.** The table below measured the
+right thing and read it the wrong way: half a metre "where a player stands" is a buried pair of
+boots, because the character's own body is the ruler. And the first reopen condition below was met
+by content the day Grimhold was authored at a base frequency of 16. 164 grades the patch toward the
+viewer and caps terrain detail at what it can draw; full LOD is still this task, and still deferred.
+
 **Premise corrected and deferred, 19 August, on measurement.** Raised 18 August from prose in 84, 86
 and `setup.md`; most of what that prose said had stopped being true.
 
@@ -5242,8 +5248,10 @@ where he touched down, which is the whole of task 160.
 
 ## 158 — Deposits exist on one body only
 
-**Done 13 September, headless. Not yet confirmed by playtest** — the log below says every world
-has its ore, and only a walk from Terra Outpost says the rock is where a player can reach it.
+**Done 13 September, headless. Confirmed on Ares by playtest, 30 September** — Joe: *"I see Ferric
+Regolith outside the station"*, and the log shows him working `node_ares_regolith` for three units.
+The other three worlds are still unwalked. The same playtest found 164, which is why some of these
+rocks sat sunk into the ground.
 
 Split out of 157 on 8 September rather than folded into it, because it is a different question and
 157 was already about where bodies are.
@@ -5806,6 +5814,265 @@ has a before-and-after table rather than a paragraph of reasoning.**
 
 The per-station `finished spawning at actor scale` line stays, so this is a grep next time rather
 than a walk.
+
+---
+
+## 164 — The ground a player sees was a metre from the ground everything stands on
+
+**Done 30 September, headless. Not yet confirmed by playtest** — the `FEET:` line below is what a
+walk will say.
+
+Found by Joe on Ares, 30 September: *"my player doesn't always stand perfectly on the surface. At
+times, he sinks into it, and same with some of the ore deposits … Sometimes he walks perfectly fine
+… but as the terrain changes, he sinks in at times. This happens on all planets, but is most notable
+on planets with more hills."* The screenshot has him chest-deep, the HUD reading `On foot (19.911,
+-180.340, 30.613) km … GROUNDED` and `Up V(X=-0.98, Y=0.21, Z=0.05)`.
+
+### The frame, rebuilt from the log rather than reasoned about
+
+The log recorded the patch he walked on — `Terrain patch at (19.904, -180.278, 30.744) km: 32768
+triangles across 5.0 degrees`, built during the descent and never rebuilt after — and the HUD
+recorded where he stood. Rebuilding that patch in a test and reading the drawn triangle along his
+direction put **the drawn ground 1.11 m above his feet** (0.87 to 1.30 m allowing for both numbers
+being rounded to a metre).
+
+**The check that it was the right place on the right function**, rather than a plausible number
+from somewhere nearby: the height function's normal at the rebuilt position came out `(-0.98, 0.21,
+0.06)`. The HUD printed `(-0.98, 0.21, 0.05)`. The character's up is that normal, so the
+reconstruction and the running game agree about where he was standing.
+
+### The cause
+
+Everything that stands — the character, every deposit, every station, a landed ship — is placed on
+`FPlanetTerrain`'s height function; that is ADR-0002 and task 88, and it is right. What a player
+sees is `FPlanetPatch`'s triangles, whose vertices are on the function and whose faces are flat
+between them. Nine octaves at the base frequencies content authors (6 to 16) put features 4.9 to 13
+m across on every world, while the walking patch had a vertex every 21.8 m (4°) to 27 m (5°). So the
+character walked over bumps a metre high that the mesh drew straight lines across.
+
+Measured on every world, everywhere a walker can stand while one patch is up:
+
+| body | base frequency | mean gap | p95 | worst (5° patch) |
+|------|---------------|----------|-----|------------------|
+| Capital | 6 | 0.18 m | 0.46 m | 1.38 m |
+| Verdance | 7 | 0.24 m | 0.63 m | 1.48 m |
+| Terra | 9 | 0.39 m | 1.02 m | 2.54 m |
+| Ares | 12 | 0.53 m | 1.38 m | 4.02 m |
+| Grimhold | 16 | 1.00 m | 2.61 m | 7.07 m |
+
+**It was never only sinking.** On Ares a third of the ground had the drawn surface more than 25 cm
+above the feet and another third more than 25 cm below them; sinking is simply the one that reads.
+The ordering is exactly Joe's "more hills".
+
+**"As the terrain changes" is the same fault whichever way it was meant.** Walking onto different
+ground changes the gap, which the table measures. And the ground itself changes shape when the patch
+is rebuilt around the viewer: the new grid samples the fine detail at different places, and two
+independent samplings differ by about 1.4 times the gap, so drawn hills would move by up to a metre
+where the function never moved. That second part is inferred from the measured spread, not observed.
+
+### Why nothing caught it, which is the part worth keeping
+
+- **`SpaceMMO.Patch.SitsOnTheTerrain` checks the vertices**, and the vertices are on the function by
+  construction. It could not fail. The faces are what a character stands beside.
+- **The patch report's `camera is 6.31 m ABOVE the patch surface beneath it (height function says
+  6.31 m)` read the patch's centre vertex** — the same sample twice — under a comment calling it
+  "the one thing the terrain model may never violate". It now reads the triangle.
+- **Task 122 measured this on 19 August** — 0.5 m mean, 2.7 m worst at the walking patch — and
+  concluded *"Half a metre where a player stands … the mesh is faithful where fidelity is
+  perceivable."* Half a metre where a player stands is a buried pair of boots: the character's own
+  body is the ruler, so the error is perceivable exactly there. And 122's first reopen condition,
+  *"Raising `BaseFrequency` past 12"*, was met by content the day Grimhold was authored at 16.
+
+### What each remedy buys, measured before anything was built
+
+On Grimhold, the worst world, 4° patch:
+
+- **Fewer octaves alone** needed four to get the mean under 15 cm, which flattens the planet.
+- **More vertices alone**: 513 squared still left a 1 m worst case, and rebuilding costs 240 to 280
+  ms on the game thread against 15 to 17 ms for today's 129 (257 is 58 to 69).
+- **Both, spent where the player is**: a graded grid at today's 129 squared with the octaves nothing
+  can draw removed. p95 within 80 m of the viewer went from 2.25 m to 6 cm.
+
+The cap was then chosen the same way, by sweeping it under the patch the game builds, everywhere a
+walker can stand (p95 / worst of the gap, underfoot):
+
+| cap | Capital | Verdance | Terra | Ares | Grimhold |
+|-----|---------|----------|-------|------|----------|
+| none (graded grid alone) | 4.3 / 12 cm | 6.4 / 15 | 13 / 32 | 21 / 50 | 43 / 98 |
+| 512 | 1.2 / 2.7 | 1.6 / 3.9 | 1.6 / 4.1 | 3.3 / 8.0 | 7.8 / 18 |
+| **400** | 1.2 / 2.7 | 0.9 / 1.9 | 1.6 / 4.1 | 3.3 / 8.0 | **4.6 / 10** |
+| 256 | 0.6 / 1.3 | 0.9 / 1.9 | 0.7 / 1.5 | 1.4 / 3.1 | 4.6 / 10 |
+
+The grading alone is worth a factor of ten and is not enough on its own; 256 would buy two
+centimetres on Ares at the cost of an octave on three worlds.
+
+### What was done
+
+- **`FPlanetTerrainConfig::MaxFrequency`, default 400.** Octaves stop before passing that many
+  features per radius, which leaves no detail finer than 50 m on any world — nine times the 5.5 m a
+  walker's patch draws. In features per radius rather than an octave count because the bodies do not
+  share a base frequency: nine octaves was 13 m on the Capital and 4.9 m on Grimhold. Octaves per
+  world now: the Capital seven, Verdance, Terra and Ares six, Grimhold five.
+- **A graded patch grid** (`FPlanetPatchConfig::CentreSpacing`, `FineExtent`,
+  `FPlanetPatch::GridCoordinate`). Even steps of a quarter out to 40% of the grid, then widening to
+  the rim: a vertex every 5.5 m under a walker, 2.75× the even spacing a kilometre and a half away.
+  `ASpaceMMOPlanetActor::PatchFor` grades by the square root of altitude over rim distance, bottoming
+  out at a quarter underfoot and nearly even at the top of the atmosphere, where the patch hands over
+  to the globe's even sampling.
+- **Rebuilt before a walker leaves the fine ground.** Near the ground the drift allowance is half
+  the fine radius — 76 m on foot, where the fine ground reaches 153 m — instead of 0.4 of the patch
+  (560 m). Higher up it is still 0.4, or a pilot at 200 m/s would rebuild every second.
+- **`FPlanetPatch::DrawnRadiusKilometres`** — where the drawn ground is along a direction, read
+  through the triangle from the same four corners `Build` places. Everything below measures with it.
+
+### What the game says about it now
+
+Two new lines, both as a headless run printed them on 30 September:
+
+- `FEET: drawn ground 0.04 m above the feet now, worst +0.04 m over 363 frame(s); feet 0.00 m above
+  the height function, GROUNDED.` — once a second while `SpaceMMO.LogCharacterDraw` is on, which is
+  the default. Silent with no patch underfoot rather than printing zeros.
+- `  patch grading: centre spacing 0.250 of even, fine for 153 m; rebuilt in 22.5 ms on the game
+  thread, before the render proxy.` — on every rebuild, so what one costs in the game is read rather
+  than assumed. **22 to 33 ms** in those runs, with another game using four cores; 15 to 17 ms for
+  the build and assembly alone on an idle machine.
+
+### Verified, and how
+
+Headless. **The fix is not yet seen by anybody** — every number here is the mesh read back through
+`DrawnRadiusKilometres`, which is itself held to the built triangles, and nothing about how the
+smoother ground looks has been judged.
+
+**`SpaceMMO.Terrain.DrawnGroundMeetsTheFeet`**, on every authored world, sampled around its outpost,
+its rocks and five spread-out places, everywhere a walker can stand before a rebuild (p95 / worst):
+
+| body | underfoot | out to 150 m |
+|------|-----------|--------------|
+| Capital | 1.6 / 3.3 cm | 1.3 / 3.5 cm |
+| Verdance | 1.7 / 3.8 cm | 1.1 / 2.7 cm |
+| Terra | 2.2 / 4.8 cm | 2.4 / 5.9 cm |
+| Ares | 4.4 / 12 cm | 3.7 / 10 cm |
+| Grimhold | 5.0 / 15 cm | 5.2 / 13 cm |
+
+against a bar of 6 / 20 cm underfoot and 10 / 30 cm out to 150 m, where it was 0.5 to 2.6 m before.
+
+**Each new test was run against the fault it exists for, and went red for that reason**:
+
+- The detail cap removed from the guard's terrain: Terra p95 13 cm, Ares 22 cm with a 52 cm worst.
+- The grid made even again, cap kept: Terra p95 32 cm, Ares 60 cm with a 1.4 m worst. So the guard
+  needs both halves of the fix, which is the claim.
+- `DrawnRadiusKilometres` given the other diagonal: `DrawnGroundIsTheBuiltMesh` off by 2.2 m on an
+  even patch and 4.0 m on a graded one.
+
+All three restored, the full suite passed, and no injected line was left in the tree. The rest:
+
+- **`SpaceMMO.Patch.DrawnGroundIsTheBuiltMesh`** reads a point inside every triangle of a built
+  patch, graded and even, back through the query: identical to within a millimetre.
+- **`SpaceMMO.Patch.EvenGridIsTheOldGrid`** — an even patch is the old grid exactly, compared with a
+  tolerance of zero, so every existing patch test still measures what it measured.
+- **`SpaceMMO.Patch.GradedGridIsFineAtItsCentre`** — the walker's patch, from `PatchFor`, lands on its
+  rims, is symmetric, never narrows outward, and pays for its centre at the rim.
+- **The palette and slope tests pass unchanged**, now judged on the patch the game builds:
+  `BodyPalettesSuitTheirTerrain`'s `MeasureBody` used an even 4° patch and uses `PatchFor` now. The
+  steepest ground per world still reaches its authored rock threshold — Capital 0.186 against 0.19,
+  Verdance 0.256 against 0.26, both close to the edge — and `HasSlopesToShade` still finds 30.9°.
+
+**The running game says the same.** A `-nullrhi` run with the backend pointed at a dead port — so
+nobody is signed in and nothing is written anywhere — dropped a character onto the compiled-in
+starting world and logged it all the way down:
+
+```
+Terrain patch at (59.996, 0.000, 20.384) km: 32768 triangles across 8.9 degrees ...
+  patch grading: centre spacing 0.250 of even, fine for 341 m; rebuilt in 33.4 ms ...
+FEET: drawn ground 160.36 m below the feet now, ... feet 160.47 m above the height function, AIRBORNE.
+...
+FEET: drawn ground 0.04 m above the feet now, worst +0.04 m over 363 frame(s); feet 0.00 m above the height function, GROUNDED.
+```
+
+`feet 0.00 m above the height function` is contact placing the feet exactly on the function, which it
+was always designed to (`ResolveContact` has no hover bias); so the 4 cm is the mesh and nothing else.
+
+**The first headless run was signed in as Joe's character**, because the dev sign-in file is picked
+up by any standalone run: it claimed character 10, resumed him flying on Ares and settled his ship
+two metres onto the new ground. Whereabouts are written only when the controller is destroyed or the
+game shuts down cleanly, and the run was stopped by force, so the positions on file are still the
+ones Joe left. Worth knowing before the next headless run against the real API:
+`-BackendUrl=http://localhost:9` signs nobody in.
+
+**Client 248 tests, 0 failures** (`scripts/tests.bat`, `PASS`), after a source-engine build reporting
+`Result: Succeeded`, on the tree as committed. No server code changed and the server suite was not
+re-run.
+
+### The far field, which is worse past 900 m
+
+The patch pays for the fine centre at its rim, and beyond about 900 m it pays in visible terms (p95
+of the gap, before → after):
+
+| body | 150–400 m | 400–900 m | 900–1350 m |
+|------|-----------|-----------|------------|
+| Capital | 0.34 → 0.10 | 0.35 → 0.31 | 0.36 → 0.54 |
+| Terra | 0.80 → 0.17 | 0.80 → 0.55 | 0.80 → 0.97 |
+| Ares | 1.05 → 0.28 | 1.11 → 0.92 | 1.09 → 1.58 |
+| Grimhold | 2.10 → 0.39 | 2.07 → 1.29 | 2.07 → 2.31 |
+
+At a kilometre a metre subtends under a tenth of a degree, so ground is not the concern — a station
+seen from that far off standing a metre and a half wrong at its base might be. Cube-sphere LOD (122)
+is what fixes the far field; this does not claim to.
+
+### What it changes that is visible
+
+- **The ground is smoother up close.** Detail finer than 50 to 90 m, depending on the world, is gone
+  from the function. It was never drawn, only aliased, so the mesh loses noise rather than shape —
+  and the ground near the player is now drawn at a tenth of the size of the finest detail left.
+- **Everything placed on the ground moved with it.** Stations and deposits are placed on the
+  function, so they stayed on it: `node_ares_regolith` is 3.0 m lower than it was (118.2 m above the
+  nominal radius on 13 September, 115.2 m now).
+- **Rebuilds are more frequent on foot**, every 76 m walked rather than every 560 m. Each is logged
+  with its cost.
+- **The far rim is coarser**: 2.75× the old spacing at 1.4 km.
+
+### Ruled out
+
+- **Standing things on the drawn mesh instead.** The dedicated server has no mesh (task 88); the two
+  machines would stand on different surfaces.
+- **Nudging visuals onto the drawn ground.** Hides the gap while the camera, the body's tilt and the
+  walking speed still follow bumps nobody can see.
+- **Full cube-sphere LOD** (122) is still the long-term answer and would let the lost octaves back. It
+  is a large build; this is the proportionate one.
+
+### Also found, and not this task's
+
+**A parked ship was "blocked" by a rock 42 m away**, 444 times in one headless minute, with the
+reported normal swinging steadily from sideways to straight up — logged by
+`ASpaceMMOShipPawn::ReportBlocking`, the ship at rest, the rock `node_ares_regolith_b`. Task 139 fixed
+the starter ship's collision being a hundred times its drawn size; this ship is the Shuttle, hull 5,
+a different mesh. Not investigated, and not caused by this change, which touches no collision.
+
+**The staged dedicated server is from 13 August** and does not have this. The height function is
+shared C++, so a server not re-cooked would stand every player on the old nine-octave ground while
+every client drew the new — this task again, in multiplayer. Re-cook before the next two-client run.
+
+**The test runner deleted this playtest's log.** `scripts/tests.ps1` removed `SpaceMMO.log` before
+every run so that it could never read a stale result — and a standalone playtest writes that same
+file. The first probe run erased Joe's log a quarter of an hour after he wrote it, with no backup.
+Everything this task quotes from it had already been read, which is luck rather than process. The
+runner writes `Tests.log` now, and `docs/setup.md` says so.
+
+### How it would fail
+
+- **A `FEET:` line reading more than a few centimetres while walking.** The number is the drawn
+  ground minus the feet, so its sign says sunk or floating; `feet … above the height function`
+  separates a mesh fault from a contact fault.
+- **No `FEET:` lines at all while on foot.** No patch under the character, or the cvar is off.
+- **A hitch every ten seconds or so while walking.** Rebuilds; the `rebuilt in` figure on the patch
+  lines says how long each took, and asynchronous building is the remedy.
+- **Rocks or outposts sunk or floating by more than a boot sole within ~150 m.** Guarded by
+  `SpaceMMO.Terrain.DrawnGroundMeetsTheFeet` on every authored world.
+- **Distant hills shifting slightly every ten seconds or so of walking.** Each rebuild resamples the
+  coarse rim, and rebuilds are seven times as frequent on foot. Small at that distance, but motion is
+  what an eye catches.
+- **A pop or a lumpy horizon when climbing out of the atmosphere.** The rim is coarser and the grading
+  fades with altitude; the handover to the globe is where to look.
 
 ---
 

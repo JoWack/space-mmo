@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "SpaceMMOPlanet.h"
 #include "SpaceMMOPlanetGlobe.h"
+#include "SpaceMMOPlanetPatch.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOPlanetActor.generated.h"
 
@@ -83,6 +84,44 @@ public:
 		double MaximumDegrees = 60.0);
 
 	/**
+	 * The patch this actor builds for a viewer at an altitude above the ground: where, how wide,
+	 * and how its vertices are spread.
+	 *
+	 * <strong>Graded more strongly the closer the viewer is to the ground (task 164).</strong> The
+	 * nearest ground is as far away as the viewer is high, and the patch's rim is as far as its
+	 * width, so the square root of one over the other is the spacing ratio that keeps the drawn
+	 * ground's error the same size wherever the viewer looks. That is strongly graded underfoot,
+	 * where it bottoms out at a quarter, and nearly even at the top of the atmosphere, where the
+	 * patch hands over to the globe's even sampling and a graded rim would pop.
+	 *
+	 * Static and public so SpaceMMO.Terrain.DrawnGroundMeetsTheFeet measures the patch the game
+	 * builds rather than one assembled beside it.
+	 */
+	static FPlanetPatchConfig PatchFor(
+		const FPlanetConfig& Planet, const FVector& Direction, double AltitudeKilometres);
+
+	/**
+	 * How far a viewer may move from the patch's centre, as a fraction of its angular radius,
+	 * before it is rebuilt around them.
+	 *
+	 * Near the ground that is half of the patch's fine radius, because standing on the coarse part
+	 * of a graded patch is the fault it was graded to remove. Higher up it is the 0.4 every patch
+	 * used: the nearest ground is far enough that the coarse part is not visible, and a pilot at
+	 * two hundred metres a second would otherwise rebuild the patch every second.
+	 */
+	static double DriftFractionFor(const FPlanetPatchConfig& Built, bool bNearTheGround);
+
+	/**
+	 * Where the drawn ground is along a direction from this planet's centre, in kilometres from the
+	 * centre: the patch's triangle, not the height function everything stands on.
+	 *
+	 * The difference between the two is task 164, and this is what measures it in a running game.
+	 *
+	 * @return False when no patch is drawn there.
+	 */
+	bool DrawnGroundRadiusKilometres(const FVector& Direction, double& OutRadiusKilometres) const;
+
+	/**
 	 * The material both terrain meshes draw with, or unset for the engine's grey placeholder.
 	 *
 	 * <strong>Config, so a material can be swapped without a rebuild.</strong> The planet is spawned
@@ -150,8 +189,8 @@ private:
 	/** Tessellates the whole planet. Once, unless the planet or its terrain is reconfigured. */
 	void BuildGlobe();
 
-	/** Tessellates the ground around a direction into <see cref="GroundPatch"/>. */
-	void BuildPatch(const FVector& Direction);
+	/** Tessellates the ground a patch config describes into <see cref="GroundPatch"/>. */
+	void BuildPatch(const FPlanetPatchConfig& Wanted);
 
 	/**
 	 * Streams the landing zone in and out as the viewer approaches and leaves.
@@ -170,6 +209,18 @@ private:
 
 	/** Arc the current patch spans, so a change in altitude can be noticed. */
 	double PatchAngularRadiusDegrees = 0.0;
+
+	/**
+	 * The patch as it was built, and the terrain it was built from.
+	 *
+	 * Kept whole so the drawn ground can be read back without keeping sixteen thousand vertices:
+	 * the triangle under any direction comes from four samples of the same function Build used, at
+	 * the same grid positions. The terrain is the one it was built from rather than the current
+	 * one, because a diagnostic variant builds from a flattened copy.
+	 */
+	FPlanetPatchConfig BuiltPatch;
+
+	FPlanetTerrainConfig BuiltTerrain;
 
 	EPlanetProximity ViewerProximity = EPlanetProximity::Orbital;
 

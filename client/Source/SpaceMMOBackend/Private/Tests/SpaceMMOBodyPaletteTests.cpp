@@ -4,6 +4,7 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOPlanetPatch.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOWorldSubsystem.h"
@@ -69,10 +70,12 @@ namespace
 
 		for (const FVector& Where : Wheres)
 		{
-			FPlanetPatchConfig Patch;
-			Patch.CentreDirection = Where.GetSafeNormal();
-			Patch.AngularRadiusDegrees = 4.0;
-			Patch.Resolution = 129;
+			// The patch a walker is actually given there, graded toward the viewer (task 164). The
+			// palette is painted on that mesh, so its thresholds are judged against that mesh --
+			// not against an even 4 degree patch written out here, which is what this measured
+			// until the game stopped building one.
+			const FPlanetPatchConfig Patch =
+				ASpaceMMOPlanetActor::PatchFor(Planet, Where.GetSafeNormal(), 0.003);
 
 			const FPlanetPatchMesh Mesh = FPlanetPatch::Build(Planet, Terrain, Patch);
 

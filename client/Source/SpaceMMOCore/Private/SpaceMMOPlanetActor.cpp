@@ -11,6 +11,7 @@
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOLog.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/PlatformTime.h"
 #include "SpaceMMOPlanetGlobe.h"
 #include "SpaceMMOPlanetPatch.h"
 #include "SpaceMMORenderOrigin.h"
@@ -803,6 +804,62 @@ double ASpaceMMOPlanetActor::PatchDegreesForAltitude(
 	return FMath::Clamp(Cap, MinimumDegrees, FMath::Max(MinimumDegrees, MaximumDegrees));
 }
 
+FPlanetPatchConfig ASpaceMMOPlanetActor::PatchFor(
+	const FPlanetConfig& Planet, const FVector& Direction, const double AltitudeKilometres)
+{
+	FPlanetPatchConfig Patch;
+	Patch.CentreDirection = Direction.GetSafeNormal();
+	Patch.AngularRadiusDegrees = PatchDegreesForAltitude(Planet, AltitudeKilometres);
+
+	// The floor, and where a walker always is. A quarter of the even spacing puts a vertex every
+	// 5.5 m under a character on a 4 degree patch; the rim pays for it at 2.75 times the even
+	// spacing, a kilometre and a half away. Measured against every authored body by
+	// SpaceMMO.Terrain.DrawnGroundMeetsTheFeet rather than chosen by eye.
+	constexpr double FinestCentreSpacing = 0.25;
+
+	const double RimKilometres =
+		Planet.RadiusKilometres * FMath::DegreesToRadians(Patch.AngularRadiusDegrees);
+
+	const double Ratio = RimKilometres > 0.0
+		? FMath::Sqrt(FMath::Max(AltitudeKilometres, 0.0) / RimKilometres)
+		: 1.0;
+
+	Patch.CentreSpacing = FMath::Clamp(Ratio, FinestCentreSpacing, 1.0);
+
+	return Patch;
+}
+
+double ASpaceMMOPlanetActor::DriftFractionFor(
+	const FPlanetPatchConfig& Built, const bool bNearTheGround)
+{
+	// The fraction every patch used before task 164, and still the right one away from the
+	// ground: rebuilt while there is still patch ahead, not once the viewer has reached its edge.
+	constexpr double AwayFromTheGround = 0.4;
+
+	if (!bNearTheGround || Built.AngularRadiusDegrees <= 0.0)
+	{
+		return AwayFromTheGround;
+	}
+
+	// Half the fine radius, so a walker is rebuilt around while the fine ground still reaches as
+	// far ahead of them as it does behind. An even patch is fine everywhere, and keeps the 0.4.
+	return FMath::Min(
+		AwayFromTheGround,
+		0.5 * FPlanetPatch::FineRadiusDegrees(Built) / Built.AngularRadiusDegrees);
+}
+
+bool ASpaceMMOPlanetActor::DrawnGroundRadiusKilometres(
+	const FVector& Direction, double& OutRadiusKilometres) const
+{
+	if (!bHasPatch)
+	{
+		return false;
+	}
+
+	return FPlanetPatch::DrawnRadiusKilometres(
+		Planet, BuiltTerrain, BuiltPatch, Direction, OutRadiusKilometres);
+}
+
 bool ASpaceMMOPlanetActor::TryGetViewerPosition(FSystemCoordinate& OutPosition) const
 {
 	const UWorld* World = GetWorld();
@@ -942,12 +999,25 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	// The same height above the ground the classification used. Standing on a half-kilometre
 	// mountain is still standing: the horizon is a few hundred metres away and the patch should be
 	// narrow and detailed.
-	const double DesiredDegrees = PatchDegreesForAltitude(Planet, ViewerAltitude);
+	const FPlanetPatchConfig Wanted = PatchFor(Planet, ViewerDirection, ViewerAltitude);
+
+	const double DesiredDegrees = Wanted.AngularRadiusDegrees;
+
+	// Low enough that the patch has stopped shrinking: on foot, landed, or hovering. That is where
+	// the ground under the viewer is close enough for a metre of disagreement to show, so it is
+	// where the viewer has to be kept on the patch's fine ground (task 164). Compared against what
+	// a viewer on the ground would be given rather than against a copy of the floor's value.
+	const bool bNearTheGround =
+		DesiredDegrees <= PatchDegreesForAltitude(Planet, 0.0) + UE_KINDA_SMALL_NUMBER;
 
 	// Two reasons to rebuild: the viewer has walked far enough across the patch, or climbed far
 	// enough that the patch no longer reaches their horizon.
 	const bool bDrifted = bHasPatch
-		&& FPlanetPatch::ShouldRebuild(PatchDirection, ViewerDirection, PatchAngularRadiusDegrees);
+		&& FPlanetPatch::ShouldRebuild(
+			PatchDirection,
+			ViewerDirection,
+			PatchAngularRadiusDegrees,
+			DriftFractionFor(BuiltPatch, bNearTheGround));
 
 	const bool bWrongWidth = bHasPatch
 		&& PatchAngularRadiusDegrees > 0.0
@@ -977,10 +1047,10 @@ void ASpaceMMOPlanetActor::UpdateTerrainPatch()
 	PatchDirection = ViewerDirection;
 	PatchAngularRadiusDegrees = DesiredDegrees;
 
-	BuildPatch(ViewerDirection);
+	BuildPatch(Wanted);
 }
 
-void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
+void ASpaceMMOPlanetActor::BuildPatch(const FPlanetPatchConfig& Wanted)
 {
 	if (GroundPatch == nullptr)
 	{
@@ -989,9 +1059,12 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 
 	const int32 Variant = FMath::RoundToInt(GPatchVariant);
 
-	FPlanetPatchConfig Config;
-	Config.CentreDirection = Direction;
-	Config.AngularRadiusDegrees = PatchAngularRadiusDegrees;
+	// Timed, because a graded patch is rebuilt every seventy metres a walker covers where an even
+	// one waited for five hundred (task 164). The cost was measured at 15 ms headless; this is what
+	// says what it is in the game, where the frame it lands in is the one a player feels.
+	const double BuildStarted = FPlatformTime::Seconds();
+
+	FPlanetPatchConfig Config = Wanted;
 
 	// Two thousand triangles rather than thirty-two, in case the fault scales with the mesh.
 	if (Variant == 2)
@@ -1149,6 +1222,12 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 
 	Target->SetVisibility(true);
 
+	// What is now drawn, kept so the drawn ground can be read back anywhere on it. Here rather than
+	// beside the build, so a build that produced nothing cannot leave the record describing a patch
+	// that never replaced the one on screen.
+	BuiltPatch = Config;
+	BuiltTerrain = Terrain;
+
 	bHasPatch = true;
 
 	ApplyRenderTransform();
@@ -1160,6 +1239,16 @@ void ASpaceMMOPlanetActor::BuildPatch(const FVector& Direction)
 		PatchAngularRadiusDegrees,
 		bPatchInGlobeComponent ? TEXT("the globe's component") : TEXT("its own component"),
 		*Target->GetComponentLocation().ToCompactString());
+
+	// How the vertices were spread and what the rebuild cost, on the frame it cost it. The fine
+	// radius is how far the viewer can walk before the next one.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("  patch grading: centre spacing %.3f of even, fine for %.0f m; rebuilt in %.1f ms "
+			"on the game thread, before the render proxy."),
+		BuiltPatch.CentreSpacing,
+		FMath::DegreesToRadians(FPlanetPatch::FineRadiusDegrees(BuiltPatch))
+			* Planet.RadiusKilometres * 1000.0,
+		(FPlatformTime::Seconds() - BuildStarted) * 1000.0);
 
 	// Read next frame rather than here. MarkRenderStateDirty() destroys the scene proxy and queues
 	// a new one for the end of the frame, so asking now reports whatever was true before the mesh
@@ -1243,21 +1332,34 @@ void ASpaceMMOPlanetActor::ReportPatchIfPending()
 	// surface faces away from the *viewer* as well, which means the viewer is beneath it. Nothing
 	// has ever recorded that.
 	//
-	// The anchor is exact rather than approximate: the patch's centre vertex sits on it by
-	// construction, at zero offset, and the anchor is the height function's surface along the
-	// viewer's own direction. So this is the mesh's height directly beneath the camera, not a
-	// nearby sample -- and comparing it against the height function separately says whether the
-	// mesh and the function agree, which is the one thing the terrain model may never violate.
+	// The drawn surface under the camera, read through the triangle it passes through.
+	//
+	// <strong>This used to read the patch's centre vertex</strong>, and its comment said that made
+	// it the mesh's height directly beneath the camera and a check of whether mesh and function
+	// agree. It could never disagree: a vertex is on the height function by construction, so both
+	// numbers were the same sample, and the log printed "6.31 m (height function says 6.31 m)"
+	// while the ground between the vertices was a metre from the function (task 164). The faces
+	// are what can be wrong, so the faces are what this reads now.
 	FSystemCoordinate ViewerPosition;
 
 	if (TryGetViewerPosition(ViewerPosition))
 	{
-		const double CameraRadius =
-			(ViewerPosition.Kilometres - Planet.Centre.Kilometres).Size();
+		const FVector Outward = ViewerPosition.Kilometres - Planet.Centre.Kilometres;
 
-		const double AnchorRadius = (PatchOrigin.Kilometres - Planet.Centre.Kilometres).Size();
+		const double CameraRadius = Outward.Size();
 
-		const double AboveMesh = (CameraRadius - AnchorRadius) * 1000.0;
+		double DrawnRadius = 0.0;
+
+		if (!DrawnGroundRadiusKilometres(Outward, DrawnRadius))
+		{
+			// Off the patch entirely, which a viewer should never be on the frame after it was
+			// built around them. Said, rather than measured against nothing.
+			UE_LOG(LogSpaceMMO, Warning, TEXT("  camera is not over the patch it was built for."));
+
+			DrawnRadius = CameraRadius;
+		}
+
+		const double AboveMesh = (CameraRadius - DrawnRadius) * 1000.0;
 
 		const double AboveGround = FPlanetTerrain::AltitudeAboveGroundKilometres(
 			Planet, TerrainConfig, ViewerPosition) * 1000.0;

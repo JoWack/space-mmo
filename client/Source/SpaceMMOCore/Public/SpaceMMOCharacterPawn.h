@@ -265,6 +265,18 @@ private:
 	void TrackHowFarOffCentre();
 
 	/**
+	 * Samples where the drawn ground is relative to the feet, every frame, keeping the worst.
+	 *
+	 * Task 164: the character stood on the height function while the player saw the patch's
+	 * triangles, and the two were a metre apart in Joe's screenshot. That was found by rebuilding
+	 * the patch from the log in a test, because nothing in the game measured it. This does.
+	 */
+	void TrackGroundUnderfoot();
+
+	/** Prints the drawn ground against the feet since the last report. Behind LogCharacterDraw. */
+	void ReportGroundUnderfoot();
+
+	/**
 	 * Applies which camera is live and what the body does about it.
 	 *
 	 * One function rather than two, because the two decisions are the same decision: in first
@@ -636,4 +648,17 @@ protected:
 	double WorstDrawnFromActorCentimetres = 0.0;
 
 	double LastDrawnFromActorCentimetres = 0.0;
+
+	/**
+	 * Drawn ground minus feet since the last report, in metres: positive is ground drawn above the
+	 * feet, which is a character sunk into it. The worst by magnitude, and how many frames had any.
+	 */
+	double WorstGroundGapMetres = 0.0;
+
+	double LastGroundGapMetres = 0.0;
+
+	/** The feet against the height function itself, which contact keeps within its tolerance. */
+	double LastFeetAboveFunctionMetres = 0.0;
+
+	int32 GroundGapSamples = 0;
 };

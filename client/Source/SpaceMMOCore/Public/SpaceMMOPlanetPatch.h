@@ -36,6 +36,28 @@ struct SPACEMMOCORE_API FPlanetPatchConfig
 	/** Vertices along each edge. The patch is this squared, so raising it is expensive. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
 	int32 Resolution = 129;
+
+	/**
+	 * Vertex spacing at the centre, as a fraction of what an evenly spaced grid of the same
+	 * resolution would have there. 1 is the even grid.
+	 *
+	 * <strong>Fine where a player stands, coarse where they only look (task 164).</strong> An even
+	 * grid spends as many vertices on a hillside a kilometre away as on the ground under the
+	 * character, and a player judges the two very differently: half a metre of disagreement is a
+	 * buried pair of boots at your feet and nothing at all on the horizon. A quarter puts a vertex
+	 * every 5.5 m under a walker for the same 129 squared the even grid used, where more vertices
+	 * would have cost more than the frame -- 58 ms to rebuild at 257, 240 ms at 513, measured.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	double CentreSpacing = 1.0;
+
+	/**
+	 * How far out the centre's spacing holds before it starts to widen, as a fraction of the
+	 * vertices from the centre to the edge. Past it the spacing grows steadily to the rim, which is
+	 * where the vertices saved at the centre are paid back.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	double FineExtent = 0.4;
 };
 
 /**
@@ -110,6 +132,43 @@ public:
 	static FVector DirectionAt(
 		const FVector& CentreDirection, double AngularRadiusDegrees, double U, double V);
 
+	/**
+	 * Where the grid's Index-th row or column falls, in patch coordinates -1..1.
+	 *
+	 * Even steps when the patch's CentreSpacing is 1, which is exactly the grid every patch used
+	 * before task 164. Otherwise even steps of CentreSpacing out to FineExtent, then steps growing
+	 * linearly so the last one still lands on the rim: the patch covers the same ground either way,
+	 * and only where its vertices fall changes.
+	 */
+	static double GridCoordinate(const FPlanetPatchConfig& Patch, int32 Index);
+
+	/**
+	 * The drawn ground's distance from the planet's centre along a direction, in kilometres.
+	 *
+	 * <strong>The mesh between its vertices, which nothing measured before task 164.</strong> Every
+	 * vertex is on the height function by construction, so a check of the vertices passes whatever
+	 * the faces do -- and the faces are what a character stands beside. This reads the triangle the
+	 * direction passes through, from the same four corners Build places, so it is the drawn surface
+	 * rather than an estimate of it; SpaceMMO.Patch.DrawnGroundIsTheBuiltMesh holds the two
+	 * together.
+	 *
+	 * @return False when the direction falls outside the patch.
+	 */
+	static bool DrawnRadiusKilometres(
+		const FPlanetConfig& Planet,
+		const FPlanetTerrainConfig& Terrain,
+		const FPlanetPatchConfig& Patch,
+		const FVector& Direction,
+		double& OutRadiusKilometres);
+
+	/**
+	 * How far out from its centre a patch keeps its finest spacing, in degrees of arc.
+	 *
+	 * Taken as where the spacing has grown half again past the centre's. The whole patch for an
+	 * even grid, which never grows.
+	 */
+	static double FineRadiusDegrees(const FPlanetPatchConfig& Patch);
+
 	/** Tessellates the patch against the planet's terrain. */
 	static FPlanetPatchMesh Build(
 		const FPlanetConfig& Planet,
@@ -128,6 +187,8 @@ public:
 	 * happens while there is still ground ahead, not once the player has reached the edge.
 	 *
 	 * @param DriftFraction How far, as a fraction of the angular radius, a viewer may move first.
+	 *                      Down to a hundredth: a graded patch keeps its fine ground within a tenth
+	 *                      of its radius, and a walker has to be rebuilt around before leaving it.
 	 */
 	static bool ShouldRebuild(
 		const FVector& PatchDirection,

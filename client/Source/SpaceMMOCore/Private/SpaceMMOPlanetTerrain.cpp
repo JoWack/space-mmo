@@ -86,6 +86,13 @@ double FPlanetTerrain::FractalNoise(
 
 	for (int32 Octave = 0; Octave < Octaves; ++Octave)
 	{
+		// Never finer than the ground can be drawn (task 164). The first octave always counts, so a
+		// base frequency above the cap makes a coarse planet rather than a perfectly smooth one.
+		if (Octave > 0 && Frequency > Terrain.MaxFrequency)
+		{
+			break;
+		}
+
 		// Each octave gets its own seed offset, so octaves are independent rather than the same
 		// field at different scales — otherwise features line up and the terrain looks tiled.
 		const uint64 OctaveSeed =

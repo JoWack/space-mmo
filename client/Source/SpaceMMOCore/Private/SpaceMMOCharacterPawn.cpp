@@ -850,11 +850,15 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 		// moment, so the diagnostic has to watch every frame and keep the worst one.
 		TrackHowFarOffCentre();
 
+		TrackGroundUnderfoot();
+
 		if (DrawDiagnosticSeconds >= 1.0)
 		{
 			DrawDiagnosticSeconds = 0.0;
 
 			ReportHowItIsDrawn();
+
+			ReportGroundUnderfoot();
 
 			WorstHorizontalDegrees = 0.0;
 			WorstVerticalDegrees = 0.0;
@@ -1242,6 +1246,70 @@ void ASpaceMMOCharacterPawn::ReportHowItIsDrawn() const
 		*PelvisBone.ToCompactString(),
 		*AnimReport,
 		*ViewReport);
+}
+
+void ASpaceMMOCharacterPawn::TrackGroundUnderfoot()
+{
+	UWorld* const World = GetWorld();
+
+	const ASpaceMMOPlanetActor* const Underfoot = World != nullptr
+		? ASpaceMMOPlanetActor::NearestTo(World, Navigation.SystemPosition)
+		: nullptr;
+
+	if (Underfoot == nullptr)
+	{
+		return;
+	}
+
+	const FPlanetConfig Planet = Underfoot->GetPlanetConfig();
+
+	const FVector Outward = Navigation.SystemPosition.Kilometres - Planet.Centre.Kilometres;
+
+	double DrawnRadius = 0.0;
+
+	// No patch under the feet means the globe is drawn, or nothing is. Not sampled rather than
+	// guessed at: the globe is a sampling every 331 m and the question is about standing on it.
+	if (!Underfoot->DrawnGroundRadiusKilometres(Outward, DrawnRadius))
+	{
+		return;
+	}
+
+	// The feet are the root: the character stands at zero height above it, which the standing-gap
+	// line prints once at spawn.
+	const double Gap = (DrawnRadius - Outward.Size()) * 1000.0;
+
+	LastGroundGapMetres = Gap;
+
+	LastFeetAboveFunctionMetres = FPlanetTerrain::AltitudeAboveGroundKilometres(
+		Planet, Underfoot->GetTerrainConfig(), Navigation.SystemPosition) * 1000.0;
+
+	if (GroundGapSamples == 0 || FMath::Abs(Gap) > FMath::Abs(WorstGroundGapMetres))
+	{
+		WorstGroundGapMetres = Gap;
+	}
+
+	++GroundGapSamples;
+}
+
+void ASpaceMMOCharacterPawn::ReportGroundUnderfoot()
+{
+	// Silent with no patch under the feet rather than printing zeros: a line that reads "0.00 m"
+	// when nothing was measured is the diagnostic that answers anyway.
+	if (GroundGapSamples > 0)
+	{
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("FEET: drawn ground %.2f m %s the feet now, worst %+.2f m over %d frame(s); "
+				"feet %.2f m above the height function, %s."),
+			FMath::Abs(LastGroundGapMetres),
+			LastGroundGapMetres >= 0.0 ? TEXT("above") : TEXT("below"),
+			WorstGroundGapMetres,
+			GroundGapSamples,
+			LastFeetAboveFunctionMetres,
+			bOnGround ? TEXT("GROUNDED") : TEXT("AIRBORNE"));
+	}
+
+	WorstGroundGapMetres = 0.0;
+	GroundGapSamples = 0;
 }
 
 double ASpaceMMOCharacterPawn::TurnTowards(
