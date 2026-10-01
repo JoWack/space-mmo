@@ -657,8 +657,9 @@ And the content pays: all six shipped recipes carry a positive `xpPerRun`, cover
 
 ## 98 — Slow ships down in atmosphere
 
-**Implemented 11 August; the number wants flying before it is settled.** Atmospheric drag, option A
-below.
+**Done 11 August, flown and confirmed by Joe the same day** — *"200 m/s feels right"*, and the number
+stayed; see below. (This line read "the number wants flying" until 30 September, a month after it had
+been flown.) Atmospheric drag, option A below.
 
 `FPlanetPhysics::AtmosphericDensity` is 1 at the ground and **exactly** 0 at the top of the
 atmosphere and above — exactly, because an exponential tail would leave a whisper of drag acting in
@@ -5424,7 +5425,10 @@ safe to fix without asking.
 
 ## 160 — Nothing on screen says where a station is
 
-**Built 9 September; two Widget Blueprint blocks outstanding, and not yet playtested.** Found by Joe in the first playtest of a
+**Done. Joe added both `StationText` blocks and confirmed the line on the playtest that found 161
+(`ae5c55f`), and the chevrons on every body on the 13 September flight to all five worlds
+(`d3a428d`).** This line read "two Widget Blueprint blocks outstanding, and not yet playtested" until
+30 September; the sections below are the record of building it. Found by Joe in the first playtest of a
 second body, log `2026.09.09-01.24`.
 
 He flew to Terra, landed beside what he took to be the outpost, pressed G, and got *"Nothing in
