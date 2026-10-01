@@ -397,6 +397,67 @@ bool FSpaceMMOBackendProtocol::ParseCharacter(
 	// never crafted a hull is the ordinary case for the whole of the opening.
 	ReadInt64(Object, TEXT("activeShipItemInstanceId"), OutCharacter.ActiveShipItemInstanceId);
 
+	// For the character select screen's grey line (task 110). Null for a character who has never
+	// played, and TryGetStringField leaves a null as empty, which is the same answer.
+	Object->TryGetStringField(TEXT("lastSeenWorld"), OutCharacter.LastSeenWorld);
+	Object->TryGetBoolField(TEXT("lastSeenFlying"), OutCharacter.bLastSeenFlying);
+	Object->TryGetStringField(TEXT("lastSeenShip"), OutCharacter.LastSeenShip);
+
+	return true;
+}
+
+bool FSpaceMMOBackendProtocol::ParseCreatedCharacter(const FString& Json, FBackendCharacter& OutCharacter)
+{
+	return ParseCharacter(ParseObject(Json), OutCharacter);
+}
+
+bool FSpaceMMOBackendProtocol::ParseRaces(const FString& Json, TArray<FBackendRace>& OutRaces)
+{
+	TArray<TSharedPtr<FJsonValue>> Values;
+
+	if (!ParseArray(Json, Values))
+	{
+		return false;
+	}
+
+	OutRaces.Reset();
+
+	for (const TSharedPtr<FJsonValue>& Value : Values)
+	{
+		const TSharedPtr<FJsonObject> Object = Value.IsValid() ? Value->AsObject() : nullptr;
+
+		int64 Race = -1;
+
+		if (!Object.IsValid() || !ReadInt64(Object, TEXT("race"), Race))
+		{
+			continue;
+		}
+
+		// Dropped rather than clamped. A race the server added and this build does not know would
+		// otherwise arrive as a second Humanoid row, and creating from it would make the wrong thing.
+		if (Race < 0 || Race > static_cast<int64>(EBackendRace::SpaceOrc))
+		{
+			continue;
+		}
+
+		FBackendRace Parsed;
+		Parsed.Race = static_cast<EBackendRace>(Race);
+
+		int64 Faction = 0;
+
+		if (ReadInt64(Object, TEXT("faction"), Faction))
+		{
+			Parsed.Faction = ToEnum(Faction, EBackendFaction::A, 1);
+		}
+
+		Object->TryGetStringField(TEXT("name"), Parsed.Name);
+		Object->TryGetStringField(TEXT("factionName"), Parsed.FactionName);
+		Object->TryGetStringField(TEXT("homeBodyKey"), Parsed.HomeBodyKey);
+		Object->TryGetStringField(TEXT("homeBodyName"), Parsed.HomeBodyName);
+
+		OutRaces.Add(Parsed);
+	}
+
 	return true;
 }
 
@@ -1673,6 +1734,30 @@ FString FSpaceMMOBackendProtocol::ExtractErrorMessage(const FString& Body)
 	if (Object->TryGetStringField(TEXT("error"), Message))
 	{
 		return Message;
+	}
+
+	// A validation problem keeps its useful words under "errors", field by field, and its title is
+	// "One or more validation errors occurred." -- true, and no help to somebody choosing a name.
+	// The first message of the first field, since every one of these the server writes has one.
+	const TSharedPtr<FJsonObject>* Errors = nullptr;
+
+	if (Object->TryGetObjectField(TEXT("errors"), Errors) && Errors != nullptr && Errors->IsValid())
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Field : (*Errors)->Values)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Messages = nullptr;
+
+			if (Field.Value.IsValid() && Field.Value->TryGetArray(Messages) && Messages != nullptr)
+			{
+				for (const TSharedPtr<FJsonValue>& Entry : *Messages)
+				{
+					if (Entry.IsValid() && Entry->TryGetString(Message) && !Message.IsEmpty())
+					{
+						return Message;
+					}
+				}
+			}
+		}
 	}
 
 	// RFC 7807 problem details, which is what AddProblemDetails produces. Detail is the specific

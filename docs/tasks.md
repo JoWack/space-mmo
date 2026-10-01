@@ -1378,12 +1378,14 @@ Follow-on: 116 (drag a stack onto the market to sell it) is still open.
 
 ## 110 — Menus
 
-**Designed and agreed with Joe, 30 September; not built.** Everything below was shown as ASCII sketches
-and then as Higgsfield renders, and each decision was Joe's.
+**Code built 1 October; Widget Blueprints and a playtest outstanding.** Designed and agreed with Joe
+on 30 September: everything below was shown as ASCII sketches and then as Higgsfield renders, and each
+decision was Joe's. Until the four Widget Blueprints exist and are named in `DefaultGame.ini` the game
+behaves exactly as before — that is deliberate, and it is what the automated runs see.
 
-No main menu, no character select, no settings. A character is chosen today with `-CharacterId=10`
-on a command line, or by taking the first one on the account — and an account with none logs
-"nothing to play as" and stops there, which account 8 did on 30 September.
+Before 110: no main menu, no character select, no settings. A character was chosen with `-CharacterId=10`
+on a command line, or by taking the first one on the account — and an account with none logged
+"nothing to play as" and stopped there, which account 8 did on 30 September.
 
 ### Agreed shape
 
@@ -1449,6 +1451,45 @@ folder when 110 is done.
   client keeps no copy, so a renamed faction cannot go stale on one side.
 - **Widget Blueprints are Joe's**, as with 107's sign-in screen and 160's `StationText`: each screen is a
   C++ class with named parts, and the layout is authored in the editor against that list.
+
+### Decided by Joe, 1 October (asked while building)
+
+- **Create plays the new character straight away**, rather than returning to select.
+- **A character who has never played reads "Not played yet"** on its grey line.
+- **Esc closes an open screen first** (inventory, station, skills), and opens the menu when none is.
+- **Sign out reloads**: the session is forgotten and the map reopened (standalone) or the server
+  reconnected (dedicated), which records where the character was on the way out, exactly as quitting
+  does. Chosen over an in-place swap, which stays deferred.
+
+### What was built, and the parts each Blueprint needs
+
+Every part is optional and found by name; buttons are bound in C++, so no graph wiring is needed. Name
+each Blueprint in `DefaultGame.ini` under `[/Script/SpaceMMOBackend.SpaceMMOHudSettings]` as
+`CharacterSelectScreen=`, `NewCharacterScreen=`, `EscapeMenu=`, `SettingsScreen=`. Each screen logs
+`Menus: showing <menu>` when shown, and the HUD log line says whether each widget was created.
+
+| Screen (parent class) | Parts |
+|---|---|
+| Character select (`SpaceMMOCharacterSelectScreen`) | `CharacterRows` (panel), `PlayButton`, `NewCharacterButton`, `SignOutButton`; set `RowClass` in Class Defaults |
+| Its row (`SpaceMMOCharacterRow`) | `NameText`, `LineageText`, `CreditsText`, `LastSeenText`, `SelectButton` (covers the row), `SelectionFrame` (the ice-blue outline; shown only when selected) |
+| New character (`SpaceMMONewCharacterScreen`) | `NameBox` (editable text box), `RaceRows` (panel), `FailureText` (the red line), `BackButton`, `CreateButton`; set `RaceRowClass` |
+| Its row (`SpaceMMORaceRow`) | `SummaryText` (the whole agreed line) or `RaceText` + `FactionText` + `HomeWorldText`; `LowSwatch`, `HighSwatch`, `RockSwatch` (images, tinted); `SelectButton`, `SelectionFrame` |
+| Esc menu (`SpaceMMOEscapeMenu`) | `ResumeButton`, `SettingsButton`, `SignOutButton`, `QuitButton` |
+| Settings (`SpaceMMOSettingsScreen`) | `SensitivitySlider`, `SensitivityText`, `InvertLookCheck`, `WindowModeCombo`, `ResolutionCombo`, `QualityCombo` (string combo boxes, filled in C++), `BackButton`, `ApplyButton` |
+
+- **Settings live in Unreal's own `GameUserSettings.ini`**, through `USpaceMMOUserSettings`, a subclass
+  named by `GameUserSettingsClassName` in `DefaultEngine.ini`. Sensitivity is a log slider, 0.25x–4x
+  with 1x in the middle; invert is vertical only. Both apply in the four mouse handlers (walk turn and
+  look, ship pitch and yaw), including the orbit camera. Apply logs `Settings applied: ...` with what
+  was actually set; "Custom" quality is left alone rather than flattened.
+- **Validation refusals now read as their message.** The client showed a 400's title, "One or more
+  validation errors occurred.", for anything refused by a validation problem; it now reads the first
+  field message, so a short name says "Name must be between 3 and 20 characters." That fix is
+  everywhere, not only on this screen.
+- **Esc in the editor's Play-in-Editor stops PIE** before the game hears it. Test the Esc menu in
+  standalone, or rebind PIE's stop key.
+- **Not done:** character deletion and in-place switching (deferred, above); audio settings (no sound).
+- **Delete `docs/wip/110-menus/` when 110 is closed.**
 
 ## 105 — You can only see the book for something you already own
 

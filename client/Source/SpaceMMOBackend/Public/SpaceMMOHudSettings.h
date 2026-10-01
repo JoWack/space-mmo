@@ -102,5 +102,30 @@ public:
 		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOLoginScreen"))
 	FSoftClassPath LoginScreen;
 
+	/**
+	 * Character select, after sign-in (task 110). Must derive from
+	 * <c>USpaceMMOCharacterSelectScreen</c>.
+	 *
+	 * Unset keeps the behaviour from before task 110: the first character on the account is played.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "Menus",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOCharacterSelectScreen"))
+	FSoftClassPath CharacterSelectScreen;
+
+	/** New character. Must derive from <c>USpaceMMONewCharacterScreen</c>. */
+	UPROPERTY(EditAnywhere, Config, Category = "Menus",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMONewCharacterScreen"))
+	FSoftClassPath NewCharacterScreen;
+
+	/** The Esc menu. Must derive from <c>USpaceMMOEscapeMenu</c>. Unset means Esc does nothing. */
+	UPROPERTY(EditAnywhere, Config, Category = "Menus",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOEscapeMenu"))
+	FSoftClassPath EscapeMenu;
+
+	/** Settings, from the Esc menu. Must derive from <c>USpaceMMOSettingsScreen</c>. */
+	UPROPERTY(EditAnywhere, Config, Category = "Menus",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOSettingsScreen"))
+	FSoftClassPath SettingsScreen;
+
 	virtual FName GetCategoryName() const override { return TEXT("Game"); }
 };

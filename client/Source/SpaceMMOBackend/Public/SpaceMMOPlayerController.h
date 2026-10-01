@@ -42,6 +42,22 @@ enum class ESpaceMMOShipPlacement : uint8
 	BesideStation,
 };
 
+/**
+ * Which menu is up, if any (task 110). One at a time: each of these replaces the last rather than
+ * stacking, so there is never a question of which one Esc or a click belongs to.
+ *
+ * Sign-in is not here. It has its own flag, bAwaitingSignIn, from 107, and comes before any of these.
+ */
+UENUM()
+enum class ESpaceMMOMenu : uint8
+{
+	None,
+	CharacterSelect,
+	NewCharacter,
+	Escape,
+	Settings,
+};
+
 UCLASS()
 class SPACEMMOBACKEND_API ASpaceMMOPlayerController : public APlayerController
 {
@@ -129,6 +145,39 @@ public:
 
 	/** Opens and closes the skills screen. Bound to K. */
 	void ToggleSkillsScreen();
+
+	/**
+	 * Plays a character: closes the menus and presents the claim to the server (task 110).
+	 *
+	 * The only way a menu enters the game, so the claim is made in one place whichever screen asked.
+	 */
+	void PlayCharacter(int32 ClaimedCharacterId);
+
+	/** Shows a menu, or none. Each screen's Open runs here, so it reads fresh state every time. */
+	void ShowMenu(ESpaceMMOMenu Menu);
+
+	void ShowCharacterSelect() { ShowMenu(ESpaceMMOMenu::CharacterSelect); }
+
+	void ShowNewCharacter() { ShowMenu(ESpaceMMOMenu::NewCharacter); }
+
+	void ShowEscapeMenu() { ShowMenu(ESpaceMMOMenu::Escape); }
+
+	void ShowSettings() { ShowMenu(ESpaceMMOMenu::Settings); }
+
+	void CloseMenu() { ShowMenu(ESpaceMMOMenu::None); }
+
+	/**
+	 * Forgets the session and reloads the world, arriving at a clean sign-in (Joe, 1 October).
+	 *
+	 * <strong>A reload rather than an in-place swap</strong>, which was deferred deliberately: changing
+	 * character in place means tearing down and re-claiming a pawn on a dedicated server. Reloading
+	 * destroys this controller, which records where the character was on the way out, exactly as
+	 * quitting does. On a dedicated server it reconnects; standalone, it reopens the map.
+	 */
+	void SignOutAndReload();
+
+	/** Quits to the desktop, cleanly, so whereabouts are recorded. */
+	void QuitGame();
 
 	/**
 	 * Opens and closes the inventory screen. Bound to I.
@@ -266,6 +315,31 @@ public:
 
 	/** Whether the inventory screen is open. Same reasoning as bSkillsScreenOpen. */
 	bool bInventoryScreenOpen = false;
+
+	/** Task 110's screens, each null when not configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOCharacterSelectScreen> CharacterSelectScreen;
+
+	UPROPERTY()
+	TObjectPtr<class USpaceMMONewCharacterScreen> NewCharacterScreen;
+
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOEscapeMenu> EscapeMenu;
+
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOSettingsScreen> SettingsScreen;
+
+	ESpaceMMOMenu ActiveMenu = ESpaceMMOMenu::None;
+
+	/** The widget for a menu, or null for None or one that is not configured. */
+	class UUserWidget* MenuWidget(ESpaceMMOMenu Menu) const;
+
+	/**
+	 * Esc, in game. Closes whichever screen is open first, and opens the menu when none is (Joe,
+	 * 1 October). Never reached while a menu is up: the input mode is UI only then, and the menus
+	 * answer Esc themselves.
+	 */
+	void HandleEscape();
 
 	/**
 	 * Where the backend says this character was left docked, or 0.
@@ -686,4 +760,10 @@ private:
 
 	/** Guards against presenting twice when both delegates fire. */
 	bool bPresented = false;
+
+	/**
+	 * Whether this session came from the credentials file or the command line, which keeps the
+	 * pre-menu behaviour of playing the first character (task 110, as agreed).
+	 */
+	bool bSignedInFromCredentialsFile = false;
 };

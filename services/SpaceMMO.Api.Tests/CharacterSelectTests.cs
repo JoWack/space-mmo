@@ -208,6 +208,34 @@ public sealed class CharacterSelectTests(ApiDatabaseFixture fixture) : IAsyncLif
         Assert.Contains("\"homeBodyName\":", json);
     }
 
+    /// <summary>
+    /// The new character screen shows the server's refusal verbatim, so its words are on the wire.
+    /// </summary>
+    /// <remarks>
+    /// A validation problem's title is "One or more validation errors occurred.", and the sentence a
+    /// player needs is under <c>errors.name</c>. The client reads that path; this pins it, and the
+    /// client's protocol test parses this exact body.
+    /// </remarks>
+    [Fact]
+    public async Task A_refused_name_says_why_where_the_client_reads_it()
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/characters/")
+        {
+            Content = JsonContent.Create(new { name = "Al", race = Race.Martian }),
+        };
+
+        request.Headers.Add("Authorization", $"Bearer {_token}");
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        string json = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains(
+            "\"errors\":{\"name\":[\"Name must be between 3 and 20 characters.\"]}", json);
+    }
+
     private async Task<CharacterResponse> ListOneAsync()
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/characters/");

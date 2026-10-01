@@ -1,5 +1,6 @@
 #include "SpaceMMOCharacterPawn.h"
 
+#include "SpaceMMOUserSettings.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
@@ -1604,8 +1605,12 @@ void ASpaceMMOCharacterPawn::MoveRight(const float Value)
 	PendingInput.Move.Y = Value;
 }
 
-void ASpaceMMOCharacterPawn::TurnRight(const float Value)
+void ASpaceMMOCharacterPawn::TurnRight(const float RawValue)
 {
+	// The player's sensitivity (task 110). Before the orbit branch, so the swung camera and the
+	// turning body move at the same rate for the same hand movement.
+	const float Value = USpaceMMOUserSettings::ScaleLook(RawValue, /* bVertical */ false);
+
 	// While the orbit key is held the mouse swings the camera and the character stands its ground.
 	// Turn is simulated by the server, so this has to stop the input reaching PendingInput rather
 	// than be undone afterwards -- a turn sent and then cancelled is a turn the server performed.
@@ -1621,8 +1626,10 @@ void ASpaceMMOCharacterPawn::TurnRight(const float Value)
 	PendingInput.Turn = Value;
 }
 
-void ASpaceMMOCharacterPawn::LookUp(const float Value)
+void ASpaceMMOCharacterPawn::LookUp(const float RawValue)
 {
+	const float Value = USpaceMMOUserSettings::ScaleLook(RawValue, /* bVertical */ true);
+
 	if (FMath::IsNearlyZero(Value))
 	{
 		return;

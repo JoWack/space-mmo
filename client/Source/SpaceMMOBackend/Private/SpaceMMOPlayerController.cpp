@@ -5,10 +5,14 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Net/UnrealNetwork.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOBackendProtocol.h"
+#include "SpaceMMOCharacterScreens.h"
+#include "SpaceMMOGameMenus.h"
 #include "SpaceMMODepositActor.h"
 #include "SpaceMMOFlightReadout.h"
 #include "SpaceMMOHudSettings.h"
@@ -159,6 +163,20 @@ void ASpaceMMOPlayerController::CreateHud()
 	LoginScreen = CreateHudWidget<USpaceMMOLoginScreen>(
 		this, Settings->LoginScreen, TEXT("login screen"));
 
+	// Task 110's menus. Created last so they draw over everything above: each one is the only thing
+	// meant to be reachable while it is up.
+	CharacterSelectScreen = CreateHudWidget<USpaceMMOCharacterSelectScreen>(
+		this, Settings->CharacterSelectScreen, TEXT("character select screen"));
+
+	NewCharacterScreen = CreateHudWidget<USpaceMMONewCharacterScreen>(
+		this, Settings->NewCharacterScreen, TEXT("new character screen"));
+
+	EscapeMenu = CreateHudWidget<USpaceMMOEscapeMenu>(
+		this, Settings->EscapeMenu, TEXT("Esc menu"));
+
+	SettingsScreen = CreateHudWidget<USpaceMMOSettingsScreen>(
+		this, Settings->SettingsScreen, TEXT("settings screen"));
+
 	// Decide what belongs on screen now, rather than on the first tick.
 	//
 	// AddToViewport leaves a widget visible, and until something says otherwise every screen here is
@@ -197,8 +215,10 @@ void ASpaceMMOPlayerController::ApplyMouseCapture()
 	// inventory would snatch the cursor back while the station overlay was still waiting for a click.
 	// The login screen counts too, and outranks everything: a captured cursor cannot reach a text
 	// box, so a sign-in screen without this is one nobody can type into.
+	UUserWidget* const Menu = MenuWidget(ActiveMenu);
+
 	const bool bScreenWantsCursor =
-		bAwaitingSignIn || bInventoryScreenOpen || bStationOverlayOpen;
+		bAwaitingSignIn || Menu != nullptr || bInventoryScreenOpen || bStationOverlayOpen;
 
 	if (bMouseCaptured && !bScreenWantsCursor)
 	{
@@ -223,6 +243,22 @@ void ASpaceMMOPlayerController::ApplyMouseCapture()
 		SignInInput.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 
 		SetInputMode(SignInInput);
+
+		bShowMouseCursor = true;
+
+		return;
+	}
+
+	// The menus likewise, and for the same reason: typing a name is not walking, and a click on
+	// Resume must not also be a click in the world. Focus goes to the menu so it hears Esc, which is
+	// how a second Esc closes it -- the controller's own bindings hear nothing in UI-only mode.
+	if (Menu != nullptr)
+	{
+		FInputModeUIOnly MenuInput;
+		MenuInput.SetWidgetToFocus(Menu->TakeWidget());
+		MenuInput.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+
+		SetInputMode(MenuInput);
 
 		bShowMouseCursor = true;
 
@@ -328,6 +364,9 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			IE_Pressed,
 			this,
 			&ASpaceMMOPlayerController::ToggleMouseCapture);
+
+		InputComponent->BindAction(
+			TEXT("GameMenu"), IE_Pressed, this, &ASpaceMMOPlayerController::HandleEscape);
 	}
 }
 
@@ -667,7 +706,18 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// swallow clicks, because it is the only thing on screen that should be reachable.
 	Show(LoginScreen, bAwaitingSignIn, ESlateVisibility::Visible);
 
-	if (bAwaitingSignIn)
+	// Visible for the same reason: each menu is the one thing meant to take clicks while it is up.
+	Show(CharacterSelectScreen, ActiveMenu == ESpaceMMOMenu::CharacterSelect, ESlateVisibility::Visible);
+	Show(NewCharacterScreen, ActiveMenu == ESpaceMMOMenu::NewCharacter, ESlateVisibility::Visible);
+	Show(EscapeMenu, ActiveMenu == ESpaceMMOMenu::Escape, ESlateVisibility::Visible);
+	Show(SettingsScreen, ActiveMenu == ESpaceMMOMenu::Settings, ESlateVisibility::Visible);
+
+	// Choosing a character is the same moment as signing in: no character yet, so no HUD about one.
+	const bool bBeforePlaying = bAwaitingSignIn
+		|| ActiveMenu == ESpaceMMOMenu::CharacterSelect
+		|| ActiveMenu == ESpaceMMOMenu::NewCharacter;
+
+	if (bBeforePlaying)
 	{
 		Show(FlightReadout, false);
 		Show(OnFootReadout, false);
@@ -689,7 +739,9 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// list. The widget fades itself while the camera is swung, which is a different question -- that
 	// one is about whether the view still means anything, and this one is about whether the player
 	// is looking at the world at all.
-	Show(Crosshair, !bSkillsScreenOpen && !bInventoryScreenOpen && !bStationOverlayOpen);
+	Show(Crosshair,
+		!bSkillsScreenOpen && !bInventoryScreenOpen && !bStationOverlayOpen
+			&& ActiveMenu == ESpaceMMOMenu::None);
 
 	// Gathering happens on foot — the component lives on the character pawn, and a ship has nothing
 	// to pick up with — so the prompt has nothing to say in flight whatever is beneath the ship.
@@ -1330,6 +1382,8 @@ void ASpaceMMOPlayerController::BeginIdentifying()
 	// make both of them whoever signed in last -- which is the one thing that arrangement is for.
 	const bool bHaveCredentials = FindCredentials(Email, Password);
 
+	bSignedInFromCredentialsFile = bHaveCredentials;
+
 	if (!bHaveCredentials && Backend->RestoreRememberedSession())
 	{
 		PresentCredentials();
@@ -1493,28 +1547,190 @@ void ASpaceMMOPlayerController::PresentCredentials()
 		return;
 	}
 
-	int32 Claimed = DesiredCharacterId;
-
-	if (Claimed == 0)
+	// Already choosing. The list can arrive more than once, and a second arrival must not throw
+	// somebody off the screen they are typing a name into.
+	if (ActiveMenu == ESpaceMMOMenu::CharacterSelect || ActiveMenu == ESpaceMMOMenu::NewCharacter)
 	{
-		const TArray<FBackendCharacter>& Characters = Backend->GetCharacters();
+		return;
+	}
 
-		if (Characters.Num() == 0)
-		{
-			UE_LOG(LogSpaceMMOBackend, Warning,
-				TEXT("Signed in but this account has no characters; nothing to play as."));
+	const FSpaceMMOOpening Opening = FSpaceMMOOpening::Decide(
+		DesiredCharacterId,
+		bSignedInFromCredentialsFile,
+		Backend->GetCharacters(),
+		CharacterSelectScreen != nullptr,
+		NewCharacterScreen != nullptr);
 
-			return;
-		}
+	switch (Opening.Kind)
+	{
+	case ESpaceMMOOpening::Claim:
+		PlayCharacter(Opening.CharacterId);
+		return;
 
-		Claimed = Characters[0].Id;
+	case ESpaceMMOOpening::ChooseCharacter:
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Signed in with %d character(s); showing character select."),
+			Backend->GetCharacters().Num());
+		ShowMenu(ESpaceMMOMenu::CharacterSelect);
+		return;
+
+	case ESpaceMMOOpening::CreateCharacter:
+		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Signed in with no characters; showing new character."));
+		ShowMenu(ESpaceMMOMenu::NewCharacter);
+		return;
+
+	default:
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Signed in but this account has no characters; nothing to play as."));
+		return;
+	}
+}
+
+void ASpaceMMOPlayerController::PlayCharacter(const int32 ClaimedCharacterId)
+{
+	if (bPresented || ClaimedCharacterId == 0)
+	{
+		return;
+	}
+
+	const USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || !Client->IsSignedIn())
+	{
+		return;
 	}
 
 	bPresented = true;
 
-	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Claiming character %d."), Claimed);
+	ShowMenu(ESpaceMMOMenu::None);
 
-	ServerIdentify(Backend->GetSessionToken(), Claimed);
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Claiming character %d."), ClaimedCharacterId);
+
+	ServerIdentify(Client->GetSessionToken(), ClaimedCharacterId);
+}
+
+UUserWidget* ASpaceMMOPlayerController::MenuWidget(const ESpaceMMOMenu Menu) const
+{
+	switch (Menu)
+	{
+	case ESpaceMMOMenu::CharacterSelect:
+		return CharacterSelectScreen;
+
+	case ESpaceMMOMenu::NewCharacter:
+		return NewCharacterScreen;
+
+	case ESpaceMMOMenu::Escape:
+		return EscapeMenu;
+
+	case ESpaceMMOMenu::Settings:
+		return SettingsScreen;
+
+	default:
+		return nullptr;
+	}
+}
+
+void ASpaceMMOPlayerController::ShowMenu(const ESpaceMMOMenu Menu)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+
+	// An unconfigured menu is no menu, rather than a state that hides the HUD with nothing to show.
+	ActiveMenu = Menu != ESpaceMMOMenu::None && MenuWidget(Menu) == nullptr ? ESpaceMMOMenu::None : Menu;
+
+	// Each screen reads its state fresh on every opening: a settings screen showing what was set
+	// last time it was open, rather than now, would Apply a stale value over a newer one.
+	switch (ActiveMenu)
+	{
+	case ESpaceMMOMenu::CharacterSelect:
+		CharacterSelectScreen->Open();
+		break;
+
+	case ESpaceMMOMenu::NewCharacter:
+		NewCharacterScreen->Open();
+		break;
+
+	case ESpaceMMOMenu::Settings:
+		SettingsScreen->Open();
+		break;
+
+	default:
+		break;
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Menus: showing %s."), *UEnum::GetValueAsString(ActiveMenu));
+
+	// Visibility before input, so the widget being focused is one that is on screen.
+	UpdateHudContext();
+	ApplyMouseCapture();
+}
+
+void ASpaceMMOPlayerController::HandleEscape()
+{
+	// An open screen first, then the menu (Joe, 1 October).
+	if (bInventoryScreenOpen)
+	{
+		ToggleInventoryScreen();
+
+		return;
+	}
+
+	if (bStationOverlayOpen)
+	{
+		ToggleStationOverlay();
+
+		return;
+	}
+
+	if (bSkillsScreenOpen)
+	{
+		ToggleSkillsScreen();
+
+		return;
+	}
+
+	// Only once playing. Before that the screens up are sign-in and select, which have their own way
+	// out, and an Esc menu offering Resume over them would resume nothing.
+	if (bPresented)
+	{
+		ShowMenu(ESpaceMMOMenu::Escape);
+	}
+}
+
+void ASpaceMMOPlayerController::SignOutAndReload()
+{
+	if (USpaceMMOBackendClient* Client = Backend())
+	{
+		Client->SignOut();
+	}
+
+	ShowMenu(ESpaceMMOMenu::None);
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Menus: signed out; %s."),
+		GetNetMode() == NM_Client ? TEXT("reconnecting") : TEXT("reopening the map"));
+
+	// A client of a dedicated server reconnects: the server destroys this connection's controller,
+	// which records where the character was (see Destroyed), and the new connection starts at
+	// sign-in. Standalone, the map reopens and the same thing happens locally.
+	if (GetNetMode() == NM_Client)
+	{
+		ConsoleCommand(TEXT("reconnect"));
+
+		return;
+	}
+
+	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)));
+}
+
+void ASpaceMMOPlayerController::QuitGame()
+{
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Menus: quitting."));
+
+	// A clean quit, which is what records whereabouts on the way out.
+	UKismetSystemLibrary::QuitGame(this, this, EQuitPreference::Quit, false);
 }
 
 void ASpaceMMOPlayerController::ServerIdentify_Implementation(

@@ -42,12 +42,51 @@ enum class EBackendRace : uint8
 	SpaceOrc = 3,
 };
 
-/** The two factions. TODO(name), matching the server. */
+/**
+ * The two factions, matching the server's stored values.
+ *
+ * A is Humanity United and B is Tusk and Thorn (design bible section 1). Those display names come from
+ * <c>GET /world/races</c> rather than living here, so a rename on the server cannot leave a stale
+ * copy on this side.
+ */
 UENUM(BlueprintType)
 enum class EBackendFaction : uint8
 {
 	A = 0,
 	B = 1,
+};
+
+/**
+ * A playable race, with the names the creation screen shows for it (task 110).
+ *
+ * Served by <c>GET /world/races</c>. The race-to-faction rule and the home worlds belong to the
+ * server's <c>Races</c>; this is a read of them, never a second copy.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendRace
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendRace Race = EBackendRace::Humanoid;
+
+	/** "Space Elf", not "SpaceElf". */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Name;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendFaction Faction = EBackendFaction::A;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString FactionName;
+
+	/** By key, to join against the bodies list for the world's palette. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString HomeBodyKey;
+
+	/** Empty when the server has no such body seeded. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString HomeBodyName;
 };
 
 /**
@@ -98,6 +137,27 @@ struct SPACEMMOBACKEND_API FBackendCharacter
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int64 ActiveShipItemInstanceId = 0;
+
+	/**
+	 * The world nearest where this character was last seen, or empty for one who has never played.
+	 *
+	 * Worked out by the server from the position it records (task 110). Nearest by surface, so a pilot
+	 * skimming a moon is reported at the moon.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString LastSeenWorld;
+
+	/** Whether they were flying when last seen. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bLastSeenFlying = false;
+
+	/**
+	 * The owned hull they were sitting in, e.g. "Shuttle", or empty.
+	 *
+	 * Empty while flying is a real answer, not a missing one: the unowned prop ship has no name to give.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString LastSeenShip;
 };
 
 /** Skill categories, mirroring the server. */

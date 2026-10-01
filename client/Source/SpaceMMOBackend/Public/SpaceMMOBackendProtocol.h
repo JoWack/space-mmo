@@ -40,6 +40,12 @@ public:
 	/** Parses a JSON array of characters. */
 	static bool ParseCharacterList(const FString& Json, TArray<FBackendCharacter>& OutCharacters);
 
+	/** Parses <c>GET /world/races</c>. A race the client has no enum value for is dropped. */
+	static bool ParseRaces(const FString& Json, TArray<FBackendRace>& OutRaces);
+
+	/** Parses the single character a successful creation returns, for its id. */
+	static bool ParseCreatedCharacter(const FString& Json, FBackendCharacter& OutCharacter);
+
 	/** Parses a JSON array of skills. */
 	static bool ParseSkills(const FString& Json, TArray<FBackendSkill>& OutSkills);
 

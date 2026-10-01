@@ -628,12 +628,57 @@ void USpaceMMOBackendClient::CreateCharacter(const FString& Name, const EBackend
 		TEXT("/characters/"),
 		FSpaceMMOBackendProtocol::MakeCreateCharacterBody(Name, Race),
 		true,
-		[this](const FString&)
+		[this](const FString& Body)
 		{
+			FBackendCharacter Created;
+
+			FSpaceMMOBackendProtocol::ParseCreatedCharacter(Body, Created);
+
+			const int32 CreatedId = Created.Id;
+
 			// Refetched rather than appending the response. The server decides faction and
 			// starting body, and re-reading the list is how the client stays a mirror of the
 			// server's view rather than a second opinion about it.
-			FetchCharacters();
+			//
+			// And announced only once that list has arrived, so whoever plays the new character
+			// next finds it there. A one-off request rather than FetchCharacters, because that
+			// broadcasts OnCharactersLoaded, which the controller reads as "signed in, now choose".
+			Send(
+				TEXT("GET"),
+				TEXT("/characters/"),
+				FString(),
+				true,
+				[this, CreatedId](const FString& ListBody)
+				{
+					FSpaceMMOBackendProtocol::ParseCharacterList(ListBody, Characters);
+
+					OnCharacterCreated.Broadcast(CreatedId);
+				});
+		},
+		FString(),
+		[this](const FBackendFailure& Failure)
+		{
+			OnCharacterRefused.Broadcast(Failure.Message);
+		});
+}
+
+void USpaceMMOBackendClient::FetchRaces()
+{
+	Send(
+		TEXT("GET"),
+		TEXT("/world/races"),
+		FString(),
+		false,
+		[this](const FString& Body)
+		{
+			TArray<FBackendRace> Parsed;
+
+			if (FSpaceMMOBackendProtocol::ParseRaces(Body, Parsed))
+			{
+				Races = MoveTemp(Parsed);
+
+				OnRacesLoaded.Broadcast();
+			}
 		});
 }
 

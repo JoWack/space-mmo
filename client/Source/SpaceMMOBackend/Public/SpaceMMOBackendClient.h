@@ -8,6 +8,9 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendSessionChanged, bool, bIsSignedIn);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendFailed, const FBackendFailure&, Failure);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharactersLoaded);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendRacesLoaded);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendCharacterCreated, int32, CharacterId);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBackendCharacterRefused, const FString&, Message);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendCharacterStateLoaded);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBackendDepositsLoaded);
 
@@ -100,8 +103,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
 	void FetchCharacters();
 
+	/**
+	 * Asks the server for a new character, and answers on OnCharacterCreated or OnCharacterRefused.
+	 *
+	 * <strong>Its own two delegates, not OnFailed.</strong> A refused name belongs to the screen the
+	 * name was typed on, which shows it verbatim under the list (task 110); OnFailed after sign-in is
+	 * the transient notice line, which is the wrong place and disappears.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
 	void CreateCharacter(const FString& Name, EBackendRace Race);
+
+	/** Loads every playable race, named. Unauthenticated: an account with no character needs them. */
+	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
+	void FetchRaces();
+
+	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
+	const TArray<FBackendRace>& GetRaces() const { return Races; }
 
 	/** Loads skills and inventory for a character. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
@@ -503,6 +520,17 @@ public:
 	FOnBackendCharactersLoaded OnCharactersLoaded;
 
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
+	FOnBackendRacesLoaded OnRacesLoaded;
+
+	/** Broadcast once the list has been refetched, so the new character is in it. */
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
+	FOnBackendCharacterCreated OnCharacterCreated;
+
+	/** The server's own words, e.g. "That character name is taken." */
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
+	FOnBackendCharacterRefused OnCharacterRefused;
+
+	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
 	FOnBackendCharacterStateLoaded OnCharacterStateLoaded;
 
 	UPROPERTY(BlueprintAssignable, Category = "SpaceMMO|Backend")
@@ -601,6 +629,8 @@ private:
 
 	UPROPERTY()
 	TArray<FBackendCharacter> Characters;
+
+	TArray<FBackendRace> Races;
 
 	UPROPERTY()
 	TArray<FBackendSkill> Skills;

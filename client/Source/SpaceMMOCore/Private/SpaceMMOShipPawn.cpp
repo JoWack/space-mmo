@@ -1,5 +1,6 @@
 #include "SpaceMMOShipPawn.h"
 
+#include "SpaceMMOUserSettings.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -1211,8 +1212,12 @@ void ASpaceMMOShipPawn::ThrustUp(const float Value) { PendingInput.Thrust.Z = Va
 
 void ASpaceMMOShipPawn::Roll(const float Value) { PendingInput.Torque.X = Value; }
 
-void ASpaceMMOShipPawn::Pitch(const float Value)
+void ASpaceMMOShipPawn::Pitch(const float RawValue)
 {
+	// The player's sensitivity and invert (task 110), applied before anything reads it, so the
+	// orbiting camera and the ship itself agree about which way is up.
+	const float Value = USpaceMMOUserSettings::ScaleLook(RawValue, /* bVertical */ true);
+
 	// While the orbit key is held the mouse swings the camera and the ship holds its attitude.
 	// Torque is simulated by the server, so the input has to be stopped here rather than undone
 	// afterwards -- a pitch sent and then cancelled is a pitch the server flew.
@@ -1228,8 +1233,10 @@ void ASpaceMMOShipPawn::Pitch(const float Value)
 	PendingInput.Torque.Y = Value;
 }
 
-void ASpaceMMOShipPawn::Yaw(const float Value)
+void ASpaceMMOShipPawn::Yaw(const float RawValue)
 {
+	const float Value = USpaceMMOUserSettings::ScaleLook(RawValue, /* bVertical */ false);
+
 	if (View.bOrbiting)
 	{
 		View.Swing(Value * OrbitSensitivityDegrees, 0.0, OrbitMaxPitchDegrees);
