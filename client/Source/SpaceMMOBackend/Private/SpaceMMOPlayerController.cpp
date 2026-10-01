@@ -1725,6 +1725,36 @@ void ASpaceMMOPlayerController::SignOutAndReload()
 	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)));
 }
 
+void ASpaceMMOPlayerController::SpaceMMOShowMenu(const FString& Which)
+{
+	ESpaceMMOMenu Menu = ESpaceMMOMenu::None;
+
+	if (Which.Equals(TEXT("Select"), ESearchCase::IgnoreCase))
+	{
+		Menu = ESpaceMMOMenu::CharacterSelect;
+	}
+	else if (Which.Equals(TEXT("New"), ESearchCase::IgnoreCase))
+	{
+		Menu = ESpaceMMOMenu::NewCharacter;
+	}
+	else if (Which.Equals(TEXT("Esc"), ESearchCase::IgnoreCase))
+	{
+		Menu = ESpaceMMOMenu::Escape;
+	}
+	else if (Which.Equals(TEXT("Settings"), ESearchCase::IgnoreCase))
+	{
+		Menu = ESpaceMMOMenu::Settings;
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Menus: SpaceMMOShowMenu '%s' asked for %s; it is %s."),
+		*Which,
+		*UEnum::GetValueAsString(Menu),
+		Menu == ESpaceMMOMenu::None || MenuWidget(Menu) != nullptr ? TEXT("configured") : TEXT("NOT configured"));
+
+	ShowMenu(Menu);
+}
+
 void ASpaceMMOPlayerController::QuitGame()
 {
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Menus: quitting."));

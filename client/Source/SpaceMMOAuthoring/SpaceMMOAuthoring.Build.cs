@@ -60,6 +60,13 @@ public class SpaceMMOAuthoring : ModuleRules
 			// Reading data/universe/origin.json. Writing it back is deliberately not done through
 			// a JSON writer -- see FSpaceMMOWorldDocument for why.
 			"Json",
+
+			// The menu Widget Blueprint builder (task 110, USpaceMMOBuildMenusCommandlet). The
+			// screens' C++ parent classes are found by path at run time rather than linked, so this
+			// module still depends on nothing that talks to the backend.
+			"UMG",
+			"UMGEditor",
+			"AssetRegistry",
 		});
 	}
 }

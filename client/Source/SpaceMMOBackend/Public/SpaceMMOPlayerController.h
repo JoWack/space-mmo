@@ -180,6 +180,17 @@ public:
 	void QuitGame();
 
 	/**
+	 * Console: <c>SpaceMMOShowMenu Select|New|Esc|Settings|None</c>. Opens a menu whatever state the
+	 * session is in, to look at it -- without signing in, and in a run with the backend switched off.
+	 *
+	 * A look, not a way in: Play still needs a session and the server still checks the claim. Logs
+	 * what it did, including when the screen asked for is not configured, so a screenshot of nothing
+	 * cannot be mistaken for a screen drawn wrong.
+	 */
+	UFUNCTION(Exec)
+	void SpaceMMOShowMenu(const FString& Which);
+
+	/**
 	 * Opens and closes the inventory screen. Bound to I.
 	 *
 	 * Refreshes on opening rather than polling, because what a player owns changes on the server and

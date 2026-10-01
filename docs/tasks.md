@@ -1378,10 +1378,10 @@ Follow-on: 116 (drag a stack onto the market to sell it) is still open.
 
 ## 110 — Menus
 
-**Code built 1 October; Widget Blueprints and a playtest outstanding.** Designed and agreed with Joe
+**Built 1 October, Widget Blueprints included; a playtest outstanding.** Designed and agreed with Joe
 on 30 September: everything below was shown as ASCII sketches and then as Higgsfield renders, and each
-decision was Joe's. Until the four Widget Blueprints exist and are named in `DefaultGame.ini` the game
-behaves exactly as before — that is deliberate, and it is what the automated runs see.
+decision was Joe's. The menus are named in `DefaultGame.ini`; commenting those four lines out gives the
+pre-110 behaviour back, which is also what any run without them sees.
 
 Before 110: no main menu, no character select, no settings. A character was chosen with `-CharacterId=10`
 on a command line, or by taking the first one on the account — and an account with none logged
@@ -1490,6 +1490,32 @@ each Blueprint in `DefaultGame.ini` under `[/Script/SpaceMMOBackend.SpaceMMOHudS
   standalone, or rebind PIE's stop key.
 - **Not done:** character deletion and in-place switching (deferred, above); audio settings (no sound).
 - **Delete `docs/wip/110-menus/` when 110 is closed.**
+
+### The Blueprints are built by code (Joe, 1 October)
+
+Joe asked for the Blueprints to be made rather than authored by hand. The editor's MCP server exposed
+only a skills toolset; the engine's `UMGToolSet` plugin can create and name widgets but cannot set a
+single property (its own docs defer that to an `ObjectTools` toolset this engine does not have), so it
+would have produced unstyled skeletons. Instead `USpaceMMOBuildMenusCommandlet`, in SpaceMMOAuthoring,
+builds all six into `/Game/UI/Menus/` from the style guide above:
+
+    UnrealEditor-Cmd.exe client\SpaceMMO.uproject -run=SpaceMMOAuthoring.SpaceMMOBuildMenus [-Force]
+
+- **It never overwrites without `-Force`**, so edits Joe makes in the designer are safe from a rerun.
+  The module prefix and running from PowerShell are both required; its header says why.
+- **It checks what it built**: every `BindWidgetOptional` part the C++ declares must be in the tree with
+  a compatible class (the race row leaves `SummaryText` out on purpose, for the two-colour line), and the
+  row classes must be set. Its first run caught exactly that omission before it was listed.
+- **Looked at, rendered, not just compiled.** `SpaceMMOShowMenu Select|New|Esc|Settings|None` is a console
+  command that opens a menu without signing in. All four screens were captured in a rendered run, and New
+  character again against the real API (races, faction names, home worlds and palette swatches all from
+  the server). That pass found and fixed the engine-grey combo boxes and checkbox on Settings, and
+  "home world Grimhold" running into its swatches.
+- **Not yet seen: a populated character row.** Joe's remembered session had expired, and signing in
+  through the credentials file claims a character — a write the look check was agreed not to make.
+- **Approximations of the render:** the cut corner on buttons is a rounded corner (Slate's rounded box
+  rounds rather than chamfers), the font is the engine's Roboto until a rounded sans is chosen, and the
+  selection glow is two outlines rather than a true blur.
 
 ## 105 — You can only see the book for something you already own
 
