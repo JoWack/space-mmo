@@ -322,3 +322,28 @@ bool FCharacterWalkModel::StandsOn(
 
 	return GapCentimetres <= Tolerance;
 }
+
+FWalkInput FCharacterWalkModel::ForServer(
+	const FWalkInput& Input, const FWalkState& State, const bool bFacingIsOurs)
+{
+	FWalkInput Sent = Input;
+
+	Sent.Turn = 0.0;
+	Sent.Facing = State.Rotation;
+	Sent.bHasFacing = bFacingIsOurs;
+
+	return Sent;
+}
+
+void FCharacterWalkModel::AdoptClientFacing(FWalkState& State, FWalkInput& Input)
+{
+	if (!Input.bHasFacing)
+	{
+		return;
+	}
+
+	// Taken whole; Step aligns it to the ground the server is standing the character on, which is
+	// the same function the client aligned it to.
+	State.Rotation = Input.Facing;
+	Input.Turn = 0.0;
+}

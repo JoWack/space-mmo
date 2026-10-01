@@ -505,6 +505,9 @@ private:
 	/** Server time carried by the last state actually applied, so repeats are ignored. */
 	double LastAppliedServerTime = -1.0;
 
+	/** Whether this client has taken the server's attitude yet; until then it sends none of its own. */
+	bool bTookServerAttitude = false;
+
 	double LastCorrectionKilometres = 0.0;
 
 	bool bFirstPerson = false;

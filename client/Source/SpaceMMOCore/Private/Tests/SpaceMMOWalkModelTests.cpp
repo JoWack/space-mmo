@@ -1124,4 +1124,112 @@ bool FSpaceMMOWalkSprintRaisesTheCeilingTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+namespace
+{
+	/**
+	 * A client at two hundred frames a second and a dedicated server at thirty, each stepping the
+	 * same walk model; the server takes whichever input the client sent last before each of its
+	 * ticks, which is what an unreliable message a frame amounts to. Returns how far apart the two
+	 * end up facing, in degrees, and where, in metres.
+	 */
+	void WalkClientAgainstServer(
+		const bool bSendFacing, double& OutFacingApartDegrees, double& OutMetresApart)
+	{
+		const FWalkConfig Config;
+		const FVector Up = FVector::UpVector;
+
+		FWalkState Client;
+		FWalkState Server;
+
+		FVector ClientMetres = FVector::ZeroVector;
+		FVector ServerMetres = FVector::ZeroVector;
+
+		constexpr double ClientStep = 1.0 / 200.0;
+		constexpr double ServerStep = 1.0 / 30.0;
+
+		FWalkInput LastSent;
+		double ServerClock = 0.0;
+
+		int32 Frame = 0;
+
+		for (double Clock = 0.0; Clock < 60.0; Clock += ClientStep, ++Frame)
+		{
+			// Walking forward while the mouse sweeps one way, then the other -- as a mouse reports
+			// it. A 125 Hz mouse lands in some 200 Hz frames and not others, so the per-frame axis
+			// is a burst or a zero. Sampling one frame in seven of that is what turned the server
+			// a different way: smooth input would have averaged out, and the first version of this
+			// test, which used it, could not tell the two arrangements apart.
+			const bool bReported =
+				FMath::FloorToInt32((Frame + 1) * 125.0 / 200.0) > FMath::FloorToInt32(Frame * 125.0 / 200.0);
+
+			FWalkInput Input;
+			Input.Move = FVector2D(1.0, 0.0);
+			Input.Turn = bReported
+				? (FMath::Fmod(Clock, 20.0) < 10.0 ? 0.6 : -0.4) * (0.5 + 0.5 * FMath::Sin(Clock * 3.7)) * (200.0 / 125.0)
+				: 0.0;
+
+			Client = FCharacterWalkModel::Step(Client, Input, Config, Up, FVector::ZeroVector, true, ClientStep);
+			ClientMetres += FCharacterWalkModel::PositionDeltaKilometres(Client, ClientStep) * 1000.0;
+
+			LastSent = bSendFacing ? FCharacterWalkModel::ForServer(Input, Client, true) : Input;
+
+			while (ServerClock + ServerStep <= Clock + ClientStep)
+			{
+				FWalkInput Received = LastSent.Sanitised();
+
+				if (bSendFacing)
+				{
+					FCharacterWalkModel::AdoptClientFacing(Server, Received);
+				}
+
+				Server = FCharacterWalkModel::Step(Server, Received, Config, Up, FVector::ZeroVector, true, ServerStep);
+				ServerMetres += FCharacterWalkModel::PositionDeltaKilometres(Server, ServerStep) * 1000.0;
+
+				ServerClock += ServerStep;
+			}
+		}
+
+		OutFacingApartDegrees = FMath::RadiansToDegrees(Client.Rotation.AngularDistance(Server.Rotation));
+		OutMetresApart = FVector::Dist(ClientMetres, ServerMetres);
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkServerFacesWhereTheClientFacesTest,
+	"SpaceMMO.Walk.ServerFacesWhereTheClientFaces",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkServerFacesWhereTheClientFacesTest::RunTest(const FString& Parameters)
+{
+	// Task 165. On a dedicated server Joe's character stuttered and walked somewhere other than
+	// where it pointed, and the two logs said why: the server's move direction was always a clean
+	// multiple of 45 degrees from its own facing, while the client's, measured against its own,
+	// was 40 to 170 degrees off in the same seconds. The two faced different ways.
+	double OldDegrees = 0.0;
+	double OldMetres = 0.0;
+	WalkClientAgainstServer(false, OldDegrees, OldMetres);
+
+	double NewDegrees = 0.0;
+	double NewMetres = 0.0;
+	WalkClientAgainstServer(true, NewDegrees, NewMetres);
+
+	AddInfo(FString::Printf(
+		TEXT("Turn re-simulated by the server: %.1f deg and %.2f m apart after a minute. "
+			"Facing sent: %.2f deg and %.2f m."),
+		OldDegrees, OldMetres, NewDegrees, NewMetres));
+
+	// The control: the arrangement this replaced really does come apart, or the assertion below
+	// would pass against it too and constrain nothing.
+	// A minute is about what Joe walked, and the logs had the two facings 40 to 170 degrees apart.
+	TestTrue(TEXT("Re-simulating the turn diverges"), OldDegrees > 20.0);
+
+	// A server tick behind at most: a thirtieth of a second of turning, and of walking.
+	TestTrue(FString::Printf(TEXT("Server faces where the client faces (%.2f deg)"), NewDegrees),
+		NewDegrees < 3.0);
+	TestTrue(FString::Printf(TEXT("And walks where the client walks (%.2f m)"), NewMetres),
+		NewMetres < 0.5);
+
+	return true;
+}
+
 #endif

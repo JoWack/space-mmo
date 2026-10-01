@@ -768,6 +768,16 @@ void ASpaceMMOCharacterPawn::ReconcileWithServer(const double DeltaSeconds)
 
 	LastAppliedServerTime = NetState.ServerTimeSeconds;
 
+	// The server's facing once, at the start, and the client's from then on (task 165). Once, so a
+	// facing the server chose -- stepping out of a ship towards its nose -- is the one the client
+	// starts turning from; and only once, because after that every facing the server has came from
+	// this client a moment ago, and taking it back would undo the turn made since.
+	if (!bTookServerFacing)
+	{
+		WalkState.Rotation = NetState.Rotation;
+		bTookServerFacing = true;
+	}
+
 	Navigation.SystemPosition = FShipFlightModel::ReconcilePosition(
 		Navigation.SystemPosition, NetState.SystemPosition, Reconciliation, DeltaSeconds);
 
@@ -804,13 +814,23 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 
 	if (HasAuthority())
 	{
+		// A remote player's facing is theirs (task 165): their client turned with every frame of
+		// mouse movement, and re-simulating that from whichever frame's value arrived last left the
+		// server walking the character a different way. A listen server's own character has no
+		// client but itself, and turns from its input as before.
+		if (!IsLocallyControlled())
+		{
+			FCharacterWalkModel::AdoptClientFacing(WalkState, PendingInput);
+		}
+
 		SimulateStep(DeltaSeconds);
 		PublishNetState();
 	}
 	else if (IsLocallyControlled())
 	{
 		SimulateStep(DeltaSeconds);
-		ServerSendWalkInput(PendingInput);
+		ServerSendWalkInput(
+			FCharacterWalkModel::ForServer(PendingInput, WalkState, bTookServerFacing));
 		ReconcileWithServer(DeltaSeconds);
 	}
 	else
@@ -830,8 +850,15 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 	ApplyWorldTransform();
 
 	// Cleared each frame because the legacy input path only calls the handlers while a key is held.
-	PendingInput.Move = FVector2D::ZeroVector;
-	PendingInput.Turn = 0.0;
+	//
+	// Only where that path runs. On a dedicated server the input comes from the owning client's
+	// messages, and clearing it each tick meant a character stood still on any tick no message
+	// happened to land in. Held there until the next one replaces it (task 165).
+	if (IsLocallyControlled())
+	{
+		PendingInput.Move = FVector2D::ZeroVector;
+		PendingInput.Turn = 0.0;
+	}
 
 	// Drawn, not simulated: this turns the model and touches nothing the server has an opinion on.
 	UpdateMeshFacing(DeltaSeconds);

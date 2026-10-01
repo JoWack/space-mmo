@@ -27,6 +27,25 @@ struct SPACEMMOCORE_API FShipFlightInput
 	bool bBoost = false;
 
 	/**
+	 * The client's attitude after its own step, for the server to adopt (task 165).
+	 *
+	 * The sibling of FWalkInput::Facing, and the same fault: mouse torque is one frame's movement,
+	 * integrated two hundred times a second by the client and sampled thirty times a second by the
+	 * server, so a ship flown on a dedicated server pointed somewhere the server did not think it
+	 * was. Angular velocity travels with it so the server does not spin on stale momentum between
+	 * messages.
+	 */
+	UPROPERTY()
+	FQuat Rotation = FQuat::Identity;
+
+	UPROPERTY()
+	FVector AngularVelocity = FVector::ZeroVector;
+
+	/** False until the client has taken the server's attitude once. */
+	UPROPERTY()
+	bool bHasAttitude = false;
+
+	/**
 	 * Clamps every axis into range.
 	 *
 	 * Applied before integration because input arrives from a client, and a client that sends 100
@@ -38,6 +57,13 @@ struct SPACEMMOCORE_API FShipFlightInput
 		Result.Thrust = Thrust.BoundToBox(FVector(-1.0), FVector(1.0));
 		Result.Torque = Torque.BoundToBox(FVector(-1.0), FVector(1.0));
 		Result.bBoost = bBoost;
+
+		Result.bHasAttitude = bHasAttitude
+			&& !Rotation.ContainsNaN()
+			&& Rotation.SizeSquared() > UE_KINDA_SMALL_NUMBER
+			&& !AngularVelocity.ContainsNaN();
+		Result.Rotation = Result.bHasAttitude ? Rotation.GetNormalized() : FQuat::Identity;
+		Result.AngularVelocity = Result.bHasAttitude ? AngularVelocity : FVector::ZeroVector;
 
 		return Result;
 	}
@@ -289,6 +315,13 @@ public:
 	 * moves something.
 	 */
 	static FVector PositionDeltaKilometres(const FShipFlightState& State, double DeltaSeconds);
+
+	/** The input a client sends: its attitude after the step it took, and no torque (task 165). */
+	static FShipFlightInput ForServer(
+		const FShipFlightInput& Input, const FShipFlightState& State, bool bAttitudeIsOurs);
+
+	/** The server's half: the client's attitude becomes the ship's, and no torque is re-applied. */
+	static void AdoptClientAttitude(FShipFlightState& State, FShipFlightInput& Input);
 
 	/**
 	 * Thrust direction in system-frame axes, for a given rotation and input.

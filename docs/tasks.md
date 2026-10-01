@@ -6102,6 +6102,89 @@ runner writes `Tests.log` now, and `docs/setup.md` says so.
 
 ---
 
+## 165 — On a dedicated server the character walked where the server faced, not where you did
+
+**Done 30 September, headless. Not yet confirmed by playtest** — the first two-player-style run on
+the server re-cooked for 164 is what found it, and the next one is what confirms it.
+
+Found by Joe joining the re-cooked dedicated server: *"the character isn't moving as expected, the
+animations are stuttery and the character doesn't move where it's supposed to move."* Nothing to do
+with 164 — the feet were 2 cm from the drawn ground throughout — and almost certainly never seen
+before: the last dedicated-server session was 13 August, before characters walked.
+
+### What the two logs said, read side by side
+
+The server's `DRAW:` lines for the walk had a speed of exactly 6.00 or 0.00 m/s and a move direction
+in clean 45-degree steps — 0, −45, −90, −135 — which is WASD measured against the server's own idea of
+the character's facing. The client's, in the same seconds, measured against *its* facing, read 81,
+49, 88, −5, 69, 165: at 59.33 the server had −90 where the client had +83. Both sides were measuring
+the same velocity against two different facings.
+
+### The cause
+
+`FWalkInput::Turn` is the mouse's movement in one frame. The client applied it every frame, about
+two hundred a second; the server applied whichever frame's value had arrived last, thirty times a
+second, and cleared it between messages. A mouse reports at its own rate — a 125 Hz mouse lands in
+some 200 Hz frames and not others — so the per-frame axis is a burst or a zero, and sampling one frame
+in seven of that is a random walk. Nothing ever corrected it: `ReconcileWithServer` takes the
+server's position and velocity, never its facing. So the two copies faced further apart the longer
+anyone played, the server walked the character along its own facing, and every update dragged the
+client towards it. That is both symptoms: the stutter, and going somewhere other than where it was
+pointed.
+
+**The ship had exactly the same shape**: mouse torque per frame, sampled by the server, attitude
+never reconciled. Not reported, because nobody has flown on the dedicated server since August; fixed
+the same day as its sibling.
+
+### What was done
+
+- **The client's facing travels with its input, and the server adopts it** —
+  `FWalkInput::Facing`, `FCharacterWalkModel::ForServer` / `AdoptClientFacing`, and for the ship
+  `FShipFlightInput::Rotation` and `AngularVelocity` with `FShipFlightModel::ForServer` /
+  `AdoptClientAttitude`. The turn is no longer re-simulated anywhere. This is what Unreal's own
+  character movement does with the control rotation, and it costs the server nothing it relied on:
+  position is still the server's and still reconciled.
+- **The client takes the server's facing once, first**, so one the server chose — stepping out of a
+  ship towards its nose — is where the client starts turning from. Until then it sends none.
+- **The server holds a remote player's input until the next message** instead of clearing it every
+  tick. Clearing is for the local key-handler path, which only reports a held key; on the server it
+  made the character stand still on any tick no message landed in.
+
+### Verified, and how
+
+Headless. `SpaceMMO.Walk.ServerFacesWhereTheClientFaces` and
+`SpaceMMO.Flight.ServerPointsWhereThePilotPoints` run the real arrangement: a client stepping the
+model two hundred times a second with a 125 Hz mouse, a server stepping it thirty times a second on
+whatever arrived last, for a minute.
+
+| | turn re-simulated (before) | facing sent (after) |
+|---|---|---|
+| character | 146° and 15 m apart | 0.00° and 0.11 m |
+| ship | 180° apart | 0.9° |
+
+The before column is asserted too, as a control, so the test cannot pass against an arrangement that
+never diverged. **The first version of this test used a smooth mouse signal and its control failed —
+0.8° apart** — because sampling a smooth signal is unbiased and averages out. That is worth keeping:
+the fault needs the burst-or-zero shape real mouse input has, and a test with idealised input would
+have called the old code correct.
+
+**Each test fails with its adoption switched off**: the character 173° and 361 m from where the
+client put it, the ship 19° off. Client 250 tests, 0 failures, after a source-engine build reporting `Result: Succeeded`; the dedicated
+server re-cooked with this in it (`BUILD SUCCESSFUL`, `check-staged-server.ps1` passes).
+
+### How it would fail
+
+- **Stutter or drift while walking on the dedicated server.** Compare `DRAW:` lines in `ClientA.log`
+  and the server's `SpaceMMO.log` for the same second: the move directions should now agree.
+- **A character facing somewhere odd on joining or stepping out.** The client takes the server's
+  facing on its first update; if that is wrong, so is the starting direction.
+- **A ship that will not hold its heading when flown on the server** — the attitude half.
+- **Anything that turns a character or ship server-side after the first update is now overridden by
+  the client's facing.** Nothing does today; a future knockback or a forced turn would need to tell
+  the client rather than set it on the server.
+
+---
+
 ## Done
 
 Nothing yet under this file's numbering.

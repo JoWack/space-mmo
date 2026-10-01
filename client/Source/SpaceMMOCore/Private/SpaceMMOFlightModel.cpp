@@ -239,3 +239,28 @@ FVector FShipFlightModel::SlideDeltaCentimetres(
 
 	return SpaceMMO::Surfaces::SlideAlong(RemainingDelta, Surface);
 }
+
+FShipFlightInput FShipFlightModel::ForServer(
+	const FShipFlightInput& Input, const FShipFlightState& State, const bool bAttitudeIsOurs)
+{
+	FShipFlightInput Sent = Input;
+
+	Sent.Torque = FVector::ZeroVector;
+	Sent.Rotation = State.Rotation;
+	Sent.AngularVelocity = State.AngularVelocity;
+	Sent.bHasAttitude = bAttitudeIsOurs;
+
+	return Sent;
+}
+
+void FShipFlightModel::AdoptClientAttitude(FShipFlightState& State, FShipFlightInput& Input)
+{
+	if (!Input.bHasAttitude)
+	{
+		return;
+	}
+
+	State.Rotation = Input.Rotation;
+	State.AngularVelocity = Input.AngularVelocity;
+	Input.Torque = FVector::ZeroVector;
+}

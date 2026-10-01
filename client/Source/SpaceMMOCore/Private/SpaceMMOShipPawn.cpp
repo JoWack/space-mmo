@@ -212,13 +212,20 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 	// branch: it is already the truth, so there is nothing to predict or reconcile against.
 	if (HasAuthority())
 	{
+		// A remote pilot's attitude is theirs, for the reason the character's facing is (task 165).
+		if (!IsLocallyControlled())
+		{
+			FShipFlightModel::AdoptClientAttitude(FlightState, PendingInput);
+		}
+
 		SimulateStep(DeltaSeconds);
 		PublishNetState();
 	}
 	else if (IsLocallyControlled())
 	{
 		SimulateStep(DeltaSeconds);
-		ServerSendInput(PendingInput);
+		ServerSendInput(
+			FShipFlightModel::ForServer(PendingInput, FlightState, bTookServerAttitude));
 		ReconcileWithServer(DeltaSeconds);
 	}
 	else
@@ -346,8 +353,14 @@ void ASpaceMMOShipPawn::Tick(const float DeltaSeconds)
 
 	// Axes are cleared each frame because the legacy input path calls the handlers only while a
 	// key is held. Without this a tapped key would stay applied forever.
-	PendingInput.Thrust = FVector::ZeroVector;
-	PendingInput.Torque = FVector::ZeroVector;
+	//
+	// Only where that path runs: on a dedicated server a remote pilot's input is held until their
+	// next message replaces it, rather than dropped on every tick none arrived in (task 165).
+	if (IsLocallyControlled())
+	{
+		PendingInput.Thrust = FVector::ZeroVector;
+		PendingInput.Torque = FVector::ZeroVector;
+	}
 
 	// The three on-screen readouts that used to live here are gone. USpaceMMOFlightReadout says all
 	// of it now, in a widget, where the lines appear in the order they are written -- these were
@@ -898,6 +911,13 @@ void ASpaceMMOShipPawn::ReconcileWithServer(const double DeltaSeconds)
 	}
 
 	LastAppliedServerTime = NetState.ServerTimeSeconds;
+
+	// The server's attitude once, then the pilot's own (task 165), as the character does.
+	if (!bTookServerAttitude)
+	{
+		FlightState.Rotation = NetState.Rotation;
+		bTookServerAttitude = true;
+	}
 
 	const FSystemCoordinate Corrected = FShipFlightModel::ReconcilePosition(
 		Navigation.SystemPosition, NetState.SystemPosition, Reconciliation, DeltaSeconds);

@@ -618,6 +618,9 @@ protected:
 
 	FWalkInput PendingInput;
 
+	/** Whether this client has taken the server's facing yet; until then it sends none of its own. */
+	bool bTookServerFacing = false;
+
 	FVector SurfaceNormal = FVector::UpVector;
 
 	FVector Gravity = FVector::ZeroVector;

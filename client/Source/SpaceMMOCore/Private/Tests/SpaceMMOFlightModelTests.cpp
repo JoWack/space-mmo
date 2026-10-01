@@ -770,4 +770,88 @@ bool FSpaceMMOFlightSpendsTheRestOfTheStepAlongTheWallTest::RunTest(const FStrin
 	return true;
 }
 
+namespace
+{
+	/** The ship's version of the same race: per-frame mouse torque at 200 Hz against a 30 Hz server. */
+	void FlyClientAgainstServer(const bool bSendAttitude, double& OutDegreesApart)
+	{
+		const FShipFlightConfig Config;
+
+		FShipFlightState Client;
+		FShipFlightState Server;
+
+		constexpr double ClientStep = 1.0 / 200.0;
+		constexpr double ServerStep = 1.0 / 30.0;
+
+		FShipFlightInput LastSent;
+		double ServerClock = 0.0;
+
+		int32 Frame = 0;
+
+		for (double Clock = 0.0; Clock < 60.0; Clock += ClientStep, ++Frame)
+		{
+			// A 125 Hz mouse into 200 Hz frames, as SpaceMMO.Walk.ServerFacesWhereTheClientFaces
+			// explains: a burst or a zero, never the smooth curve that would average out.
+			const bool bReported =
+				FMath::FloorToInt32((Frame + 1) * 125.0 / 200.0) > FMath::FloorToInt32(Frame * 125.0 / 200.0);
+
+			const double Burst = bReported ? 200.0 / 125.0 : 0.0;
+
+			FShipFlightInput Input;
+			Input.Thrust = FVector(1.0, 0.0, 0.0);
+			Input.Torque = FVector(
+				0.0,
+				0.3 * FMath::Sin(Clock * 2.3) * Burst,
+				(FMath::Fmod(Clock, 20.0) < 10.0 ? 0.6 : -0.4) * (0.5 + 0.5 * FMath::Sin(Clock * 3.7)) * Burst);
+
+			Client = FShipFlightModel::Step(Client, Input, Config, ClientStep);
+
+			LastSent = bSendAttitude ? FShipFlightModel::ForServer(Input, Client, true) : Input;
+
+			while (ServerClock + ServerStep <= Clock + ClientStep)
+			{
+				FShipFlightInput Received = LastSent.Sanitised();
+
+				if (bSendAttitude)
+				{
+					FShipFlightModel::AdoptClientAttitude(Server, Received);
+				}
+
+				Server = FShipFlightModel::Step(Server, Received, Config, ServerStep);
+
+				ServerClock += ServerStep;
+			}
+		}
+
+		OutDegreesApart = FMath::RadiansToDegrees(Client.Rotation.AngularDistance(Server.Rotation));
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOFlightServerPointsWhereThePilotPointsTest,
+	"SpaceMMO.Flight.ServerPointsWhereThePilotPoints",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOFlightServerPointsWhereThePilotPointsTest::RunTest(const FString& Parameters)
+{
+	// The sibling of SpaceMMO.Walk.ServerFacesWhereTheClientFaces (task 165): the ship took mouse
+	// torque the same way and reconciled its attitude no more than the character did.
+	double OldDegrees = 0.0;
+	FlyClientAgainstServer(false, OldDegrees);
+
+	double NewDegrees = 0.0;
+	FlyClientAgainstServer(true, NewDegrees);
+
+	AddInfo(FString::Printf(
+		TEXT("Torque re-simulated by the server: %.1f deg apart after a minute. Attitude sent: %.2f deg."),
+		OldDegrees, NewDegrees));
+
+	TestTrue(TEXT("Re-simulating the torque diverges"), OldDegrees > 20.0);
+
+	TestTrue(FString::Printf(TEXT("Server points where the pilot points (%.2f deg)"), NewDegrees),
+		NewDegrees < 3.0);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

@@ -38,6 +38,25 @@ struct SPACEMMOCORE_API FWalkInput
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
 	bool bSprint = false;
 
+	/**
+	 * Which way the client faces after its own step, for the server to adopt (task 165).
+	 *
+	 * <strong>Turning is the client's, and only the result crosses the wire.</strong> Turn is the
+	 * mouse's movement in one frame. The client applied it two hundred times a second; the server
+	 * applied whichever frame's value had arrived last, thirty times a second -- so the two faced
+	 * different ways within seconds, the server walked the character along its own facing, and
+	 * reconciliation dragged the client after it. On a dedicated server that was stutter and a
+	 * character going somewhere other than where it was pointed. Sending the facing removes the
+	 * re-simulation entirely, which is what Unreal's own character movement does with the control
+	 * rotation. Position stays the server's.
+	 */
+	UPROPERTY()
+	FQuat Facing = FQuat::Identity;
+
+	/** False until the client has a facing worth adopting: it takes the server's first. */
+	UPROPERTY()
+	bool bHasFacing = false;
+
 	/** Clamps every axis into range, for the same reason ship input is clamped: clients lie. */
 	FWalkInput Sanitised() const
 	{
@@ -47,6 +66,11 @@ struct SPACEMMOCORE_API FWalkInput
 		Result.Turn = FMath::Clamp(Turn, -1.0, 1.0);
 		Result.bJump = bJump;
 		Result.bSprint = bSprint;
+
+		// A facing that is not a rotation is no facing: the server keeps its own.
+		Result.bHasFacing =
+			bHasFacing && !Facing.ContainsNaN() && Facing.SizeSquared() > UE_KINDA_SMALL_NUMBER;
+		Result.Facing = Result.bHasFacing ? Facing.GetNormalized() : FQuat::Identity;
 
 		return Result;
 	}
@@ -156,6 +180,20 @@ public:
 	 * NaN rotation that propagates into the transform and makes the character vanish.
 	 */
 	static FQuat AlignToSurface(const FQuat& Current, const FVector& SurfaceNormal);
+
+	/**
+	 * The input a client sends: its own facing after the step it just took, and no turn, because
+	 * the turn is already in the facing and applying it again on the server is the fault task 165
+	 * removed.
+	 *
+	 * @param bFacingIsOurs Whether this client has taken the server's facing yet. Until it has,
+	 *                      sending its own would overwrite one the server chose deliberately --
+	 *                      stepping out of a ship facing its nose, say.
+	 */
+	static FWalkInput ForServer(const FWalkInput& Input, const FWalkState& State, bool bFacingIsOurs);
+
+	/** The server's half: the client's facing becomes the character's, and no turn is re-applied. */
+	static void AdoptClientFacing(FWalkState& State, FWalkInput& Input);
 
 	/** How far the character moves this step, in kilometres, ready to add to a system position. */
 	static FVector PositionDeltaKilometres(const FWalkState& State, double DeltaSeconds);
