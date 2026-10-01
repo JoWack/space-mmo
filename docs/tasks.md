@@ -6064,9 +6064,8 @@ is what fixes the far field; this does not claim to.
 
 **A parked ship was "blocked" by a rock 42 m away**, 444 times in one headless minute, with the
 reported normal swinging steadily from sideways to straight up — logged by
-`ASpaceMMOShipPawn::ReportBlocking`, the ship at rest, the rock `node_ares_regolith_b`. Task 139 fixed
-the starter ship's collision being a hundred times its drawn size; this ship is the Shuttle, hull 5,
-a different mesh. Not investigated, and not caused by this change, which touches no collision.
+`ASpaceMMOShipPawn::ReportBlocking`, the ship at rest, the rock `node_ares_regolith_b`. Investigated as
+task 166, which also corrects what this paragraph first said: the Shuttle is *not* a different mesh.
 
 **The staged dedicated server is from 13 August** and does not have this. The height function is
 shared C++, so a server not re-cooked would stand every player on the old nine-octave ground while
@@ -6186,6 +6185,53 @@ server re-cooked with this in it (`BUILD SUCCESSFUL`, `check-staged-server.ps1` 
 - **Anything that turns a character or ship server-side after the first update is now overridden by
   the client's facing.** Nothing does today; a future knockback or a forced turn would need to tell
   the client rather than set it on the server.
+
+---
+
+## 166 — A parked ship reported touching a rock 42 m away, and only without a renderer
+
+**Closed 30 September as not reproducing in play, and instrumented** — the line below is what makes
+it a grep rather than an investigation if it ever does.
+
+Seen in the 164 headless run: the Shuttle, resumed flying on Ares and touched down, logged `Ship
+blocked by SpaceMMODepositActor_1` 444 times in a minute, the rock 42 m away by both system positions,
+the reported normal swinging steadily from sideways to straight up.
+
+### Ruled out, and how
+
+- **A different, unmeasured hull mesh** — what 164 first guessed. Every hull draws
+  `/Game/Ships/StarterShip` (`DefaultGame.ini`); "Shuttle" is only the item's name, and that mesh's
+  collision is the one 139 fixed and `SpaceMMO.Ship.HullCanBeBumpedInto` still checks.
+- **The ship's collision being large.** The blocking sweep does not use the mesh at all: it is a
+  sphere of `HullRadiusKilometres`, two metres. It cannot reach a rock 42 m off unless one of the two
+  is drawn somewhere other than its system position says.
+- **A deposit stranded by a render-origin change.** A deposit re-places itself whenever the origin's
+  revision moves, and `SetRenderOrigin` bumps the revision on every change; the run logged no
+  rebase at all.
+
+### The observation that put it out of reach of play
+
+Joe's rendered session the same evening went through the same path — his character resumed flying
+on Ares — and then touched down eight times, including skimming the ground at 70 to 90 m/s near the
+same rocks. **It logged no `Ship blocked by` line at all.** The 444 came from the one run with no
+renderer.
+
+So it is something about a headless world, or about that run's exact start, and not something a
+player meets today. Reproducing it means signing a headless run in as Joe's character, which a
+remembered session for another account now gets in the way of; not worth it while play never shows
+it.
+
+### What was done
+
+`ReportBlocking` now prints, with every `Ship blocked by` line, where the ship and what it touched
+actually are in render space, the touched thing's bounds, and the distance from the ship to them. If
+a ship ever reports a contact in play, that line says at once which of the two is misplaced. Client
+250 tests, 0 failures.
+
+**And a headless run against the real API is not anonymous just because the login file is
+missing**: one restored a remembered session for account 8 instead. It found no characters and
+played as nobody, but the memory that says to point the backend at a dead port is the only reliable
+way.
 
 ---
 

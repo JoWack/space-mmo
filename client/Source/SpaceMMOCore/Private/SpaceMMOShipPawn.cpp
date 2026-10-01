@@ -769,6 +769,25 @@ void ASpaceMMOShipPawn::ReportBlocking(
 		UE_LOG(LogSpaceMMO, Log,
 			TEXT("Ship blocked by %s, normal %s."),
 			*GetNameSafe(Touched), *Normal.ToCompactString());
+
+		// Where both of them actually are, in the space the sweep ran in. The ship sweeps a sphere
+		// of HullRadiusKilometres, two metres, and on 30 September it reported touching a rock the
+		// two system positions put 42 m away -- which only adds up if one of the two is drawn
+		// somewhere other than where its system position says. These are the numbers that decide
+		// which (task 166).
+		const FBox TouchedBounds = Touched->GetComponentsBoundingBox(true);
+
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("  ship at %s (system %s); %s at %s, bounds centre %s extent %s; %.0f cm apart, "
+				"%.0f cm from the ship to the nearest point of those bounds."),
+			*GetActorLocation().ToCompactString(),
+			*Navigation.SystemPosition.ToString(),
+			*GetNameSafe(Touched),
+			*Touched->GetActorLocation().ToCompactString(),
+			*TouchedBounds.GetCenter().ToCompactString(),
+			*TouchedBounds.GetExtent().ToCompactString(),
+			FVector::Dist(GetActorLocation(), Touched->GetActorLocation()),
+			FMath::Sqrt(TouchedBounds.ComputeSquaredDistanceToPoint(GetActorLocation())));
 	}
 }
 
