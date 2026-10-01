@@ -23,7 +23,10 @@ planet; neither is changeable later.
 | `space_orc` | Space Orc | `faction_b` | `body_grimhold` | Dark, industrial, grimy; heavy gravity, perpetual overcast |
 
 - `TODO(name)`: display names for all four planets.
-- `TODO(name)`: display names for `faction_a` and `faction_b`.
+- **Faction names, final (Joe, 30 September 2026): `faction_a` is _Humanity United_, `faction_b` is
+  _Tusk and Thorn_.** Display names only. The keys stay `faction_a` / `faction_b`, and the stored enum
+  values stay `A` / `B`: the server persists enums as strings, so renaming those is a data migration
+  that buys nothing a display name does not.
 
 All four starting bodies sit in the **starting system** (`system_origin`), alongside
 the **capital world** (`body_capital`) — a neutral hub hosting the global market,
@@ -436,7 +439,7 @@ future credit source must route through them.
 4. **Repeatable sidequest content** — the daily cap and the mechanism are designed;
    the actual quests are not written.
 5. **Career questline content** — the natural M4 content milestone.
-6. **All `TODO(name)` naming** — planets and factions.
+6. **All `TODO(name)` naming** — planets. (Factions named 30 September: §1.)
 
 ### Recently resolved
 

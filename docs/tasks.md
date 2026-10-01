@@ -1378,10 +1378,61 @@ Follow-on: 116 (drag a stack onto the market to sell it) is still open.
 
 ## 110 — Menus
 
-**Pending.**
+**Designed and agreed with Joe, 30 September; not built.** Everything below was shown as ASCII sketches
+and then as Higgsfield renders, and each decision was Joe's.
 
 No main menu, no character select, no settings. A character is chosen today with `-CharacterId=10`
-on a command line, or by taking the first one on the account.
+on a command line, or by taking the first one on the account — and an account with none logs
+"nothing to play as" and stops there, which account 8 did on 30 September.
+
+### Agreed shape
+
+**Overlays, not a menu level** — the same arrangement 107's sign-in screen uses, for the reason it gives.
+
+1. **Character select**, after sign-in: one row per character — name; race · faction; credits; and a
+   grey "Last seen: <world>, <on foot | in the Shuttle>" line. Buttons **Play**, **New character**,
+   **Sign out**. Replaces "the first character on the account". `-CharacterId=` and the credentials
+   file stay as developer overrides, and an automated run with no screen keeps today's behaviour.
+2. **New character**, from select, or shown straight away for an account with none: a **Name** field
+   (3–20 characters, the server's rule) and a **Race** list of four rows, each "Race — Faction — home
+   world X" with a swatch of that world's palette. The server's refusal shown verbatim in red under the
+   list ("That character name is taken."). **Back**, **Create**.
+3. **Esc menu**, in game, over the world, which keeps running: **Resume**, **Settings**, **Sign out**,
+   **Quit game**.
+4. **Settings**: **Mouse sensitivity** (slider), **Invert look**, **Window mode**, **Resolution**,
+   **Graphics quality** (one preset over Unreal's scalability groups). **Back**, **Apply**.
+
+### Decided by Joe, 30 September
+
+- **No character deletion.** The server has no endpoint, and what happens to a deleted character's
+  ships, items and orders is its own question. A task of its own when wanted.
+- **Faction names are final: Humanity United (A) and Tusk and Thorn (B)** — design bible §1. Display
+  names; the stored values stay `A` / `B`.
+- **Show the home world** on the creation screen, though new characters still start at the Capital
+  until 145. It is what the race is, and the screen stays right when 145 lands.
+- **Switch character deferred.** Sign out already gets there through the login and select screens;
+  switching in place means tearing down and re-claiming a pawn on a dedicated server.
+- **All four settings in.** No audio: there is no sound yet.
+
+### The style: the new-character render, applied to all four
+
+Joe picked it from four renders that disagreed with each other; this is the menu style guide until a
+fuller one exists.
+
+- **Text:** one plain, rounded sans-serif. Primary text white, secondary muted grey.
+- **Panels:** dark translucent glass, thin hairline border, corner brackets.
+- **Selection:** a white-to-ice-blue outline with a soft glow. Not a world colour.
+- **Buttons:** one corner clipped. Back bottom-left, the primary action bottom-right.
+- **Colour:** red for errors only. World colours appear as content — the race swatches — never as UI
+  chrome.
+- **Backdrop:** the live world, darkened and blurred.
+
+### Still open for the build
+
+- **"Last seen"** needs a world name and whether the character is in a ship; the character list may
+  need a small server addition to carry them. Checked when building, not assumed.
+- **Widget Blueprints are Joe's**, as with 107's sign-in screen and 160's `StationText`: each screen is a
+  C++ class with named parts, and the layout is authored in the editor against that list.
 
 ## 105 — You can only see the book for something you already own
 
