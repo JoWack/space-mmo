@@ -52,6 +52,12 @@ appsettings.Development.json
 appsettings.Local.json
 secrets.json
 
+# ─── Working material for a task in progress ────────────────────────────────
+# Reference images, renders and drafts a task is being built against, kept beside the docs so a
+# session can find them, and out of history because they are large and temporary. Whatever a task
+# decides from them goes into docs/tasks.md as text; delete the folder when the task is done.
+docs/wip/
+
 # ─── Bought asset packs used as raw material ─────────────────────────────────
 # Kits bought from Fab that are a *source of parts* rather than something the game loads: you
 # assemble your own Blueprint out of them and commit that. Twenty megabytes of trim sheet is not

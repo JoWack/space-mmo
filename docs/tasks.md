@@ -1427,6 +1427,16 @@ fuller one exists.
   chrome.
 - **Backdrop:** the live world, darkened and blurred.
 
+### The renders, and where they are
+
+`docs/wip/110-menus/` holds the four Higgsfield renders and the prompt that made each, named by screen;
+the style reference is `2-new-character-STYLE-REFERENCE.png`. **The folder is git-ignored** (`docs/wip/`
+is for working material a task is built against), so it exists only on Joe's machine, and a clone or a
+cleared one will not have it — everything decided from the renders is the text above. Made with Nano
+Banana Pro: GPT Image 2.5 needs a paid Higgsfield plan. The other three were rendered in their own
+styles before the new-character one was chosen, so they show the layout but not the look. Delete the
+folder when 110 is done.
+
 ### Still open for the build
 
 - **"Last seen"** needs a world name and whether the character is in a ship; the character list may
