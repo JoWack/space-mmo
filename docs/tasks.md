@@ -6104,8 +6104,12 @@ runner writes `Tests.log` now, and `docs/setup.md` says so.
 
 ## 165 — On a dedicated server the character walked where the server faced, not where you did
 
-**Done 30 September, headless. Not yet confirmed by playtest** — the first two-player-style run on
-the server re-cooked for 164 is what found it, and the next one is what confirms it.
+**Done 30 September. Confirmed by playtest on the dedicated server the same evening** — Joe:
+*"working as expected"*. Comparing the two logs second by second over 84 seconds of moving, the
+client's and the server's move directions differed by 9.9 degrees on average, 64 of those seconds
+within 15, where before the fix they were 40 to 170 apart. Single seconds still reach 162: the
+client's velocity is the server's from a round trip ago, so a sharp reversal disagrees briefly. That
+is lag, not drift, and it does not accumulate.
 
 Found by Joe joining the re-cooked dedicated server: *"the character isn't moving as expected, the
 animations are stuttery and the character doesn't move where it's supposed to move."* Nothing to do
