@@ -1439,8 +1439,14 @@ folder when 110 is done.
 
 ### Still open for the build
 
-- **"Last seen"** needs a world name and whether the character is in a ship; the character list may
-  need a small server addition to carry them. Checked when building, not assumed.
+- **"Last seen"** — done on the server, 1 October. It did need an addition: the character list now
+  carries `lastSeenWorld` (the body whose *surface* was nearest the last recorded position — measuring
+  centres names a small moon over the planet a pilot was skimming, and a test pins that),
+  `lastSeenFlying`, and `lastSeenShip` (the owned hull they were sitting in; null while flying the
+  unowned prop ship, which is why the flag travels too). Worked out on each read, not stored.
+- **Race and faction names come from the server** — `GET /world/races`, unauthenticated, from
+  `Races.DisplayName` and `Factions.DisplayName`, with each race's home world by key and name. The
+  client keeps no copy, so a renamed faction cannot go stale on one side.
 - **Widget Blueprints are Joe's**, as with 107's sign-in screen and 160's `StationText`: each screen is a
   C++ class with named parts, and the layout is authored in the editor against that list.
 

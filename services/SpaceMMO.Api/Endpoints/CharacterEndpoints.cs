@@ -36,7 +36,22 @@ public sealed record CharacterResponse(
     /// character: the ships list marks which row is the active one, and a separate request to
     /// answer that would be a second round trip to decorate a list the client already has.
     /// </remarks>
-    long? ActiveShipItemInstanceId);
+    long? ActiveShipItemInstanceId,
+
+    /// <summary>
+    /// The world nearest to where this character was last seen, or null for one who has never
+    /// played. For the character select screen's "Last seen" line (task 110).
+    /// </summary>
+    string? LastSeenWorld = null,
+
+    /// <summary>Whether they were flying when last seen.</summary>
+    bool LastSeenFlying = false,
+
+    /// <summary>
+    /// The name of the owned hull they were sitting in, or null on foot — and null while flying the
+    /// unowned prop ship, which is why <see cref="LastSeenFlying"/> is sent as well.
+    /// </summary>
+    string? LastSeenShip = null);
 
 /// <param name="XpToNextLevel">
 /// XP still needed to reach the next level, or 0 at the cap.
@@ -283,10 +298,18 @@ public static class CharacterEndpoints
 
         List<Character> characters = await database.Characters
             .Where(c => c.AccountId == accountId.Value)
+            .Include(c => c.AboardShipItemInstance)
+            .ThenInclude(i => i!.ItemDef)
             .OrderBy(c => c.Id)
             .ToListAsync(cancellation);
 
-        return Results.Ok(characters.Select(ToResponse).ToList());
+        // For "last seen" on the character select screen (task 110). Every placed body at once:
+        // there are a handful, and asking per character would be a query each.
+        List<Body> worlds = await database.Bodies
+            .Where(b => b.SystemX != null)
+            .ToListAsync(cancellation);
+
+        return Results.Ok(characters.Select(c => ToResponse(c, worlds)).ToList());
     }
 
     /// <summary>
@@ -585,12 +608,70 @@ public static class CharacterEndpoints
         return null;
     }
 
-    private static CharacterResponse ToResponse(Character character) => new(
+    private static CharacterResponse ToResponse(Character character) => ToResponse(character, []);
+
+    private static CharacterResponse ToResponse(Character character, IReadOnlyList<Body> worlds) => new(
         character.Id,
         character.Name,
         character.Race,
         Races.FactionFor(character.Race),
         character.HomeBodyId,
         character.Balance.MinorUnits,
-        character.ActiveShipItemInstanceId);
+        character.ActiveShipItemInstanceId,
+        NearestWorld(character, worlds)?.Name,
+        character.LastSeenFlying,
+        character.AboardShipItemInstance?.ItemDef?.Name);
+
+    /// <summary>
+    /// The body whose surface was closest to where this character was last seen, or null for one who
+    /// has never been anywhere.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Worked out rather than stored</strong>, because it describes a position the server
+    /// already keeps, and a stored name would be a second answer that could disagree with it.
+    /// Surface distance rather than centre distance, so a pilot skimming a small moon is not reported
+    /// at the giant behind it.
+    /// </para>
+    /// <para>
+    /// Every placed body counts, from any system: positions are system kilometres and a character
+    /// carries no system of its own yet. Right while there is one system; the line to change when
+    /// there are more.
+    /// </para>
+    /// </remarks>
+    internal static Body? NearestWorld(Character character, IReadOnlyList<Body> worlds)
+    {
+        if (character.LastSystemX is not double x
+            || character.LastSystemY is not double y
+            || character.LastSystemZ is not double z)
+        {
+            return null;
+        }
+
+        Body? nearest = null;
+        double nearestKm = double.PositiveInfinity;
+
+        foreach (Body world in worlds)
+        {
+            if (world.SystemX is not double wx
+                || world.SystemY is not double wy
+                || world.SystemZ is not double wz)
+            {
+                continue;
+            }
+
+            double dx = x - wx;
+            double dy = y - wy;
+            double dz = z - wz;
+            double surfaceKm = Math.Sqrt((dx * dx) + (dy * dy) + (dz * dz)) - world.RadiusKm;
+
+            if (surfaceKm < nearestKm)
+            {
+                nearest = world;
+                nearestKm = surfaceKm;
+            }
+        }
+
+        return nearest;
+    }
 }

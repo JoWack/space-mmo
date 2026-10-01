@@ -71,4 +71,26 @@ public sealed class RacesTests
         Assert.Throws<ArgumentOutOfRangeException>(() => Races.FactionFor((Race)99));
         Assert.Throws<ArgumentOutOfRangeException>(() => Races.HomeBodyKeyFor((Race)99));
     }
+
+    [Theory]
+    [InlineData(Faction.A, "Humanity United")]
+    [InlineData(Faction.B, "Tusk and Thorn")]
+    public void Factions_AreCalledWhatJoeNamedThem(Faction faction, string expected)
+    {
+        // Final names, 30 September 2026 (design-bible §1). Display text only: the stored values
+        // stay A and B, because the enum persists as a string and renaming it is a migration.
+        Assert.Equal(expected, Factions.DisplayName(faction));
+    }
+
+    [Fact]
+    public void EveryRaceAndFaction_HasADisplayName()
+    {
+        // Every member, so a race added later without a name fails here rather than reaching a
+        // character screen as an exception.
+        Assert.All(AllRaces, race => Assert.False(string.IsNullOrWhiteSpace(Races.DisplayName(race))));
+        Assert.All(Enum.GetValues<Faction>(),
+            faction => Assert.False(string.IsNullOrWhiteSpace(Factions.DisplayName(faction))));
+
+        Assert.Equal("Space Elf", Races.DisplayName(Race.SpaceElf));
+    }
 }

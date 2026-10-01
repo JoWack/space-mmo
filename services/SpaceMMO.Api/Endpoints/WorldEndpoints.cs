@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data;
+using SpaceMMO.Domain.Characters;
 
 namespace SpaceMMO.Api.Endpoints;
 
@@ -77,6 +78,23 @@ public sealed record StationResponse(
     double DockingRangeKm);
 
 /// <summary>
+/// A playable race, with the names a creation screen shows for it (task 110).
+/// </summary>
+/// <param name="HomeBodyKey">
+/// The race's home world, by key, so a client can join it to <c>/world/bodies</c> for its palette.
+/// </param>
+/// <param name="HomeBodyName">
+/// The home world's display name, or null if that body is not seeded.
+/// </param>
+public sealed record RaceResponse(
+    Race Race,
+    string Name,
+    Faction Faction,
+    string FactionName,
+    string HomeBodyKey,
+    string? HomeBodyName);
+
+/// <summary>
 /// The shape of the world: bodies, the deposits on them, and the stations you can dock at.
 /// </summary>
 /// <remarks>
@@ -101,6 +119,41 @@ public static class WorldEndpoints
         group.MapGet("/bodies", BodiesAsync);
         group.MapGet("/nodes", NodesAsync);
         group.MapGet("/stations", StationsAsync);
+        group.MapGet("/races", RacesAsync);
+    }
+
+    /// <summary>
+    /// Every playable race, with its faction and home world named.
+    /// </summary>
+    /// <remarks>
+    /// Served rather than written into the client a second time: which faction a race belongs to and
+    /// where it comes from are rules <see cref="Races"/> already owns, and the names are Joe's to
+    /// change. A client with its own copy would show the old faction names after a rename and say
+    /// nothing about it.
+    /// </remarks>
+    private static async Task<IResult> RacesAsync(
+        SpaceMmoDbContext database, CancellationToken cancellation)
+    {
+        Dictionary<string, string> bodyNames = await database.Bodies
+            .ToDictionaryAsync(b => b.Key, b => b.Name, cancellation);
+
+        List<RaceResponse> races = Enum.GetValues<Race>()
+            .Select(race =>
+            {
+                string homeKey = Races.HomeBodyKeyFor(race);
+                Faction faction = Races.FactionFor(race);
+
+                return new RaceResponse(
+                    race,
+                    Races.DisplayName(race),
+                    faction,
+                    Factions.DisplayName(faction),
+                    homeKey,
+                    bodyNames.GetValueOrDefault(homeKey));
+            })
+            .ToList();
+
+        return Results.Ok(races);
     }
 
     /// <summary>
