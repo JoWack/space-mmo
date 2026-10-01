@@ -5377,7 +5377,17 @@ colour for a character below that, and that is content doing what ADR-0008 asked
 
 ## 159 — The project's engine pin was reverted by an unrelated commit
 
-**Pending, and it cost a build on 8 September.** Found while doing 157.
+**Done 30 September, on Joe's say-so, and guarded.** `EngineAssociation` is the source build's GUID
+again, `{76471CDA-4509-21F4-9199-24965F66CD1C}`, which the registry still maps to
+`D:/Programming/UnrealEngineSource`. `SpaceMMO.Project.PinnedToASourceBuild` now fails if the field is
+ever a version number again — checked both ways: it passes pinned and fails with "5.8", naming the
+value and the setup.md section that explains it. It asserts the form, not this machine's GUID, so a
+fresh clone with its own registration still passes. Client 251 tests, 0 failures.
+
+The guard matters more than the edit: the pin was lost once by being swept into an unrelated commit,
+and a revert that fails a test is one somebody sees the same day instead of a month later.
+
+**It cost a build on 8 September.** Found while doing 157.
 
 `SpaceMMO.uproject` says `"EngineAssociation": "5.8"`. `docs/setup.md` has a section titled *"The
 project is pinned to the source build by GUID"* which describes it as
