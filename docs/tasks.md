@@ -1378,7 +1378,9 @@ Follow-on: 116 (drag a stack onto the market to sell it) is still open.
 
 ## 110 — Menus
 
-**Built 1 October, Widget Blueprints included; a playtest outstanding.** Designed and agreed with Joe
+**Built 1 October, Widget Blueprints included. Playtested by Joe the same day:** sign-in lands on
+character select, and Esc opens the menu (after the fix below). Not yet reported on: settings
+actually applying, sign out from the Esc menu, and creating a character from the new character screen. Designed and agreed with Joe
 on 30 September: everything below was shown as ASCII sketches and then as Higgsfield renders, and each
 decision was Joe's. The menus are named in `DefaultGame.ini`; commenting those four lines out gives the
 pre-110 behaviour back, which is also what any run without them sees.
