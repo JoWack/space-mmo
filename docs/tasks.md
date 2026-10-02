@@ -1431,15 +1431,13 @@ fuller one exists.
   chrome.
 - **Backdrop:** the live world, darkened and blurred.
 
-### The renders, and where they are
+### The renders, and where they were
 
-`docs/wip/110-menus/` holds the four Higgsfield renders and the prompt that made each, named by screen;
-the style reference is `2-new-character-STYLE-REFERENCE.png`. **The folder is git-ignored** (`docs/wip/`
-is for working material a task is built against), so it exists only on Joe's machine, and a clone or a
-cleared one will not have it — everything decided from the renders is the text above. Made with Nano
-Banana Pro: GPT Image 2.5 needs a paid Higgsfield plan. The other three were rendered in their own
-styles before the new-character one was chosen, so they show the layout but not the look. Delete the
-folder when 110 is done.
+`docs/wip/110-menus/` held the four Higgsfield renders and the prompt that made each, named by screen,
+with the style reference as `2-new-character-STYLE-REFERENCE.png`. The folder was git-ignored
+(`docs/wip/` is for working material a task is built against) and **was deleted on 1 October** at Joe's
+request, once the Blueprints existed — so the renders are gone for good, and everything decided from
+them is the text above. Made with Nano Banana Pro: GPT Image 2.5 needs a paid Higgsfield plan.
 
 ### Still open for the build
 
@@ -1491,7 +1489,7 @@ each Blueprint in `DefaultGame.ini` under `[/Script/SpaceMMOBackend.SpaceMMOHudS
 - **Esc in the editor's Play-in-Editor stops PIE** before the game hears it. Test the Esc menu in
   standalone, or rebind PIE's stop key.
 - **Not done:** character deletion and in-place switching (deferred, above); audio settings (no sound).
-- **Delete `docs/wip/110-menus/` when 110 is closed.**
+- **`docs/wip/110-menus/` was deleted on 1 October** (see "The renders, and where they were").
 
 ### The Blueprints are built by code (Joe, 1 October)
 
