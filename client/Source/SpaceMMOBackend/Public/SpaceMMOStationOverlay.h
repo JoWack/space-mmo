@@ -550,6 +550,9 @@ public:
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
 
+	/** The order prompt is up from OpenOrderPrompt until ConfirmOrder or CancelOrder. */
+	virtual bool IsPromptOpen() const override { return PendingOrderItemDefId != 0; }
+
 	/**
 	 * Accepts a stack dragged out of the inventory screen, and offers to sell it.
 	 *

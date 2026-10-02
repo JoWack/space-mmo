@@ -38,8 +38,28 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	ESpaceMMOPanelSide Side = ESpaceMMOPanelSide::Centre;
 
+	/** Hidden or shown by the controller; the Blueprint's key events follow it, see SyncPromptKeys. */
+	virtual void SetVisibility(ESlateVisibility InVisibility) override;
+
 protected:
+	virtual void NativeConstruct() override;
+
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
+
+	/** Whether this panel's Blueprint prompt is waiting for an answer. */
+	virtual bool IsPromptOpen() const { return false; }
+
+	/**
+	 * Gives the Blueprint's key events the keyboard only while its prompt is up and the panel shows.
+	 *
+	 * <strong>Why this exists (1 October).</strong> Both paired panels have Enter and Escape key
+	 * events in their graphs, for their quantity and order prompts. A widget registers those on
+	 * construction and keeps them while collapsed, above the player controller -- so the inventory
+	 * and station screens held Escape for the whole game, open or not, and the Esc menu never heard
+	 * it. Found by logging the input stack when Escape arrived. Pushing and popping here keeps
+	 * Escape cancelling a prompt that is up and frees it the rest of the time; Enter, the same.
+	 */
+	void SyncPromptKeys();
 
 	/**
 	 * The thing that moves.
@@ -70,4 +90,7 @@ private:
 
 	/** Whether CurrentOffset has been placed at all, so the first frame does not slide in. */
 	bool bPlaced = false;
+
+	/** Whether the Blueprint's key events are on the controller's input stack right now. */
+	bool bPromptKeysRegistered = true;
 };

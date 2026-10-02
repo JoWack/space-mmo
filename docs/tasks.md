@@ -1513,6 +1513,18 @@ builds all six into `/Game/UI/Menus/` from the style guide above:
   "home world Grimhold" running into its swatches.
 - **Not yet seen: a populated character row.** Joe's remembered session had expired, and signing in
   through the credentials file claims a character — a write the look check was agreed not to make.
+- **Esc did nothing in Joe's first playtest (1 October), and the menu was not the cause.**
+  `WBP_InventoryScreen` and `WBP_StationOverlay` have Enter and Escape key events in their graphs, for
+  their quantity and order prompts. A widget registers such events on construction and keeps them while
+  collapsed, above the player controller, so those two screens held Escape (and Enter) for the whole
+  game. Ruled out on the way, by probe rather than by reading: the key mapping (loaded, with Escape in
+  it), Slate and the console (the viewport received both press and release), and Escape's key flags.
+  The input stack logged when Escape arrived named the two widgets. `USpaceMMOPairedPanel` now registers
+  its Blueprint's key events only while the panel shows with its prompt open, and logs `takes` /
+  `releases its prompt's keys` when that changes; Esc logs `Menus: Esc pressed (...)` with the state it
+  decides on. Checked by posting I, Esc, Esc to a game window: the first Esc saw the inventory open, the
+  second saw it closed. **Any future widget with key events in its graph has the same problem** unless
+  it derives from the paired panel or handles this itself.
 - **Approximations of the render:** the cut corner on buttons is a rounded corner (Slate's rounded box
   rounds rather than chamfers), the font is the engine's Roboto until a rounded sans is chosen, and the
   selection glow is two outlines rather than a true blur.

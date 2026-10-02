@@ -227,6 +227,9 @@ public:
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
 
+	/** The quantity prompt is up from BeginTransfer until ConfirmQuantity or CancelQuantity. */
+	virtual bool IsPromptOpen() const override { return PendingDestination != 0; }
+
 	/**
 	 * Asks the Blueprint to show its quantity prompt.
 	 *

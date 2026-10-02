@@ -1669,6 +1669,13 @@ void ASpaceMMOPlayerController::ShowMenu(const ESpaceMMOMenu Menu)
 
 void ASpaceMMOPlayerController::HandleEscape()
 {
+	// Logged with everything it decides on. Esc that "did nothing" on 1 October left no trace at all,
+	// and from the outside a key that never arrives and a key that arrives and is refused look the same.
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Menus: Esc pressed (playing %d, inventory %d, station %d, skills %d, menu %s)."),
+		bPresented ? 1 : 0, bInventoryScreenOpen ? 1 : 0, bStationOverlayOpen ? 1 : 0, bSkillsScreenOpen ? 1 : 0,
+		*UEnum::GetValueAsString(ActiveMenu));
+
 	// An open screen first, then the menu (Joe, 1 October).
 	if (bInventoryScreenOpen)
 	{

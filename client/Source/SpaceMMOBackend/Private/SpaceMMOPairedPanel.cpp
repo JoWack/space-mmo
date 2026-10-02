@@ -3,15 +3,66 @@
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/Widget.h"
+#include "SpaceMMOBackendLog.h"
 
 void USpaceMMOPairedPanel::SetSide(const ESpaceMMOPanelSide NewSide)
 {
 	Side = NewSide;
 }
 
+void USpaceMMOPairedPanel::NativeConstruct()
+{
+	// Super is what pushes the Blueprint's key events; registered is the state it leaves.
+	Super::NativeConstruct();
+
+	bPromptKeysRegistered = true;
+
+	SyncPromptKeys();
+}
+
+void USpaceMMOPairedPanel::SetVisibility(const ESlateVisibility InVisibility)
+{
+	Super::SetVisibility(InVisibility);
+
+	// Here as well as in the tick, because a collapsed widget does not tick: closing a screen with a
+	// prompt still up would otherwise leave its keys held until it was opened again.
+	SyncPromptKeys();
+}
+
+void USpaceMMOPairedPanel::SyncPromptKeys()
+{
+	const ESlateVisibility Shown = GetVisibility();
+
+	const bool bWanted = IsPromptOpen()
+		&& Shown != ESlateVisibility::Collapsed
+		&& Shown != ESlateVisibility::Hidden;
+
+	if (bWanted == bPromptKeysRegistered)
+	{
+		return;
+	}
+
+	bPromptKeysRegistered = bWanted;
+
+	if (bWanted)
+	{
+		RegisterInputComponent();
+	}
+	else
+	{
+		UnregisterInputComponent();
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log,
+		TEXT("Menus: %s %s its prompt's keys."), *GetName(), bWanted ? TEXT("takes") : TEXT("releases"));
+}
+
 void USpaceMMOPairedPanel::NativeTick(const FGeometry& Geometry, const float DeltaSeconds)
 {
 	Super::NativeTick(Geometry, DeltaSeconds);
+
+	// A prompt opens and closes from Blueprint and C++ alike; checking each frame catches all of them.
+	SyncPromptKeys();
 
 	// Not named Slot: UWidget already has a member by that name, and shadowing it is a warning this
 	// project treats as an error.
