@@ -291,6 +291,38 @@ public:
 		bool bWasStanding);
 
 	/**
+	 * Whether a character found inside a floor climbs out on top of it (task 175).
+	 *
+	 * <strong>Nothing else lifts somebody standing inside a floor.</strong> Ayla was put back where
+	 * she had logged out, which was before Borlash existed and so under its paving. The terrain caught
+	 * her thirty centimetres down inside the city's floor, and the floor probe -- which starts ten
+	 * centimetres above the feet -- began inside the slab, which says nothing about what is underfoot.
+	 * Pushing out of geometry only happens while moving, and the terrain took her back down the next
+	 * frame, so she stood half under the city until a jump let go of the ground long enough for the
+	 * floor to be found (2 October).
+	 *
+	 * Up through a floor only, never over a wall. The way out of what the probe began inside must
+	 * point up as steeply as a floor's normal can, which beside a railing it does not; the top found
+	 * above must be a floor; and it must be within a step's reach rather than a storey's.
+	 *
+	 * @param WayOut                    The direction the probe reported as the shortest way out.
+	 * @param FloorNormal               Normal of the top found by searching down from above.
+	 * @param Up                        Which way is up where the character is standing.
+	 * @param FloorAboveFeetCentimetres How far that top is above the feet.
+	 */
+	static bool ClimbsOutOnto(
+		const FVector& WayOut,
+		const FVector& FloorNormal,
+		const FVector& Up,
+		double FloorAboveFeetCentimetres);
+
+	/** Whether the way out of something is up, as out through a floor's top rather than a wall's side. */
+	static bool WayOutIsUp(const FVector& WayOut, const FVector& Up);
+
+	/** How deep inside a floor a character may be and still climb out onto it: a step, not a roof. */
+	static constexpr double DeepestClimbOutCentimetres = 100.0;
+
+	/**
 	 * Speed across the ground, ignoring any rise or fall. Centimetres per second.
 	 *
 	 * <strong>What a walk cycle should be played against, and not the same as the speed of the

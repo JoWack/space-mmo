@@ -504,11 +504,21 @@ in `BufferReader.h` reading a package summary, before any game code executes —
 fine and `-noasyncloadingthread` does not help. Cook and stage instead:
 
 ```bash
-cd /d/Programming/UnrealEngineSource && ./Engine/Build/BatchFiles/RunUAT.bat BuildCookRun -project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -noP4 -utf8output -platform=Win64 -serverconfig=Development -server -noclient -build -cook -stage -pak
+cd /d/Programming/UnrealEngineSource && for T in SpaceMMOServer SpaceMMOEditor UnrealPak ShaderCompileWorker; do ./Engine/Build/BatchFiles/Build.bat $T Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -WaitMutex -NoUBA; done
 ```
 
-That also rebuilds `SpaceMMOEditor` against the source engine, which cooking requires. Then run
-the staged server:
+```bash
+cd /d/Programming/UnrealEngineSource && ./Engine/Build/BatchFiles/RunUAT.bat BuildCookRun -project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -noP4 -utf8output -platform=Win64 -serverconfig=Development -server -noclient -cook -stage -pak -nocompileeditor
+```
+
+**Build first, then cook without `-build`.** The cook's own build step runs under the Unreal Build
+Accelerator, and on 2 October it hung twice: eight compilers queued, almost no CPU, nothing in the log
+for minutes, nothing wrong with memory. `-ubtargs=-NoUBA` does not help -- UAT appends it to the
+last target only, and the executor is chosen for the whole build. Every other build here already
+passes `-NoUBA`. Read each target's `Result:` before cooking: a cook after a failed build stages the
+old server, and nothing says so.
+
+Then run the staged server:
 
 ```bash
 ./SpaceMMOServer.exe -log -unattended -nopause -port=7777
@@ -517,6 +527,10 @@ the staged server:
 A healthy start reaches `IpNetDriver listening on port 7777` and `Bringing World
 /Engine/Maps/Entry.Entry up for play (max tick rate 30)`, with `Game class is 'SpaceMMOGameMode'`.
 Point it at a backend with `-BackendUrl=`; it defaults to `http://localhost:5000`.
+
+**The staged `SpaceMMOServer.exe` is a launcher.** It starts the real server,
+`SpaceMMO\Binaries\Win64\SpaceMMOServer.exe`, as a child, so stopping the process you launched leaves
+the server running and holding its port. Stop the child, by its PID.
 
 Keep the server target compiling even before it is needed. It exists to catch client-only code
 before it becomes load-bearing, and it earned that on its first build:

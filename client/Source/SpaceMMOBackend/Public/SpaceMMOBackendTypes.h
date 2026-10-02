@@ -821,6 +821,31 @@ struct SPACEMMOBACKEND_API FBackendActiveShip
 	FVector PositionKilometres = FVector::ZeroVector;
 };
 
+/**
+ * Ground a station levels under itself, as the server sends it with that station's body (task 168).
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendTerrainPad
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString StationKey;
+
+	/** The station's direction from the body's centre. Not necessarily unit length as served. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FVector Direction = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	double FlatRadiusKilometres = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	double BlendKilometres = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	double ElevationKilometres = 0.0;
+};
+
 /** A planet or moon, as the server describes it. */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendBody
@@ -913,6 +938,13 @@ struct SPACEMMOBACKEND_API FBackendBody
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	double BaseFrequency = 0.0;
+
+	/**
+	 * Ground this body's stations level under themselves (task 168), as served: kilometres along the
+	 * surface. The paint pass turns them into angles against the radius the planet is drawn at.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	TArray<FBackendTerrainPad> TerrainPads;
 };
 
 /**

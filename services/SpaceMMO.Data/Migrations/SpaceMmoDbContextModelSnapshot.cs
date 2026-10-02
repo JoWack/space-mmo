@@ -1508,6 +1508,18 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
+                    b.Property<double?>("PadBlendKm")
+                        .HasColumnType("double precision")
+                        .HasColumnName("pad_blend_km");
+
+                    b.Property<double?>("PadElevationKm")
+                        .HasColumnType("double precision")
+                        .HasColumnName("pad_elevation_km");
+
+                    b.Property<double?>("PadFlatRadiusKm")
+                        .HasColumnType("double precision")
+                        .HasColumnName("pad_flat_radius_km");
+
                     b.Property<int>("StarSystemId")
                         .HasColumnType("integer")
                         .HasColumnName("star_system_id");

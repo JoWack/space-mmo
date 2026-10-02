@@ -26,6 +26,7 @@
 #include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOPlanetTerrain.h"
+#include "SpaceMMORenderOrigin.h"
 #include "SpaceMMOShipPawn.h"
 #include "SpaceMMOStationActor.h"
 #include "SpaceMMOSkillsScreen.h"
@@ -2149,7 +2150,23 @@ void ASpaceMMOPlayerController::PlaceSummonedShip(
 		// Moved onto the station itself, because docking needs the same patch of ground to stand a
 		// pilot on and two copies of "beside a station, on the terrain" would be two chances to be
 		// beside it differently (task 153).
-		if (!Station->GroundPositionBeside(
+		//
+		// At a settlement, onto the landing pad of the dock nearest whoever summoned it (task 169):
+		// Borlash's own position is the middle of a city nobody may fly over.
+		FSystemCoordinate Summoner = Station->GetSystemPosition();
+
+		if (const APawn* const Summoning = GetPawn())
+		{
+			if (const USpaceMMORenderOriginSubsystem* const Origin =
+				World->GetSubsystem<USpaceMMORenderOriginSubsystem>())
+			{
+				Summoner = FSystemCoordinate::FromLocalCentimetres(
+					Summoning->GetActorLocation(), Origin->GetRenderOrigin());
+			}
+		}
+
+		if (!Station->ShipPlacementNear(
+			Summoner,
 			SummonedShipOffsetKilometres,
 			SummonedShipLiftKilometres,
 			Parking))

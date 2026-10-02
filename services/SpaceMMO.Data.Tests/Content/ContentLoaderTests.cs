@@ -210,6 +210,37 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AuthoredGroundPads_ReachTheDatabase()
+    {
+        // The ground a city stands on is part of the terrain, so it travels the path the terrain does
+        // (task 168). Three different numbers per pad, so a loader that wrote one field into another
+        // fails rather than passing on a coincidence.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        foreach (StationContent authored in pack.Stations.Where(s => s.Pad is not null))
+        {
+            Station stored = await verify.Stations.SingleAsync(s => s.Key == authored.Key);
+
+            Assert.Equal(authored.Pad!.FlatRadiusKm, stored.PadFlatRadiusKm);
+            Assert.Equal(authored.Pad.BlendKm, stored.PadBlendKm);
+            Assert.Equal(authored.Pad.ElevationKm, stored.PadElevationKm);
+        }
+
+        // A station that levels nothing stores nothing, rather than a pad of zeros.
+        Assert.All(
+            await verify.Stations.Where(s => s.PadFlatRadiusKm == null).ToListAsync(),
+            s => Assert.Null(s.PadElevationKm));
+
+        // And that any is authored, since the loop above passes against none: Borlash needs one.
+        Assert.Contains(pack.Stations, s => s.Key == "station_capital_hub" && s.Pad is not null);
+    }
+
+    [Fact]
     public async Task AuthoredBodyPositions_ReachTheDatabase()
     {
         // Where a body is travels the same path its palette and shape do: data/ -> seed ->
@@ -501,11 +532,14 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
         // The same station, relocated off its body. A reload that only wrote the new position
         // would leave the old direction beside it, producing exactly the row the validator will
         // not let anyone author.
+        // Its pad goes with it: a station in deep space has no ground to level, and the validator
+        // refuses one that claims to (task 168).
         StationContent moved = pack.Stations.Single(s => s.Key == "station_capital_hub") with
         {
             Body = null,
             Direction = null,
             SystemPosition = [12.0, 3.0, -4.0],
+            Pad = null,
         };
 
         ContentPack edited = pack with
@@ -526,6 +560,11 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.Null(station.DirectionY);
         Assert.Null(station.DirectionZ);
         Assert.Equal(12.0, station.SystemX);
+
+        // And the ground it used to level is not left levelled under a station that has gone.
+        Assert.Null(station.PadFlatRadiusKm);
+        Assert.Null(station.PadBlendKm);
+        Assert.Null(station.PadElevationKm);
     }
 
     [Fact]

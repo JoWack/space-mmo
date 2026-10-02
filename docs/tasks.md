@@ -4949,6 +4949,9 @@ three routes: the key, flying out of range, and docking a ship.
 
 ## 154 - Borlash City is an exterior blockout in five editable districts
 
+**Superseded 2 October by 167**, which rebuilt the city round from the concept art. What follows is
+the square blockout's record, kept for its measurements and reasoning.
+
 **Renumbered from 151 on 7 September, and the number it had is gone.** It was written into the
 working tree while task 151 -- boarding your ship teleports it into the station -- was being
 written, and commit bffce83 swept both in under the same identifier. Two things cannot share one,
@@ -6392,6 +6395,384 @@ a ship ever reports a contact in play, that line says at once which of the two i
 missing**: one restored a remembered session for account 8 instead. It found no characters and
 played as nobody, but the memory that says to point the backend at a dead port is the only reliable
 way.
+
+---
+
+## 167 — Borlash, rebuilt round from the concept art
+
+**Done 2 October; confirmed in Joe's playtest the same day.** Belongs to **M7 — a world worth being in**. Supersedes 154's
+square blockout. Joe asked, 2 October, for "Borlash city as close to the design bible, any other design
+docs/details, and the following images" — the CapitalGrandDistrict map and isometric sheet and the
+Capital's visual board — and for it to be built through the Blender MCP.
+
+`tools/greybox/a07_borlash_city.py` is rewritten in place; 154's version is commit 509b9c1. It runs
+headless or inside a live Blender (the MCP session execs it), writes `BorlashCity.blend` and seven
+renders to `D:/Documents/SpaceMMOAssets/Blender/Stations/BorlashCity/` (154's files moved to
+`superseded_task154/` there), and `Borlash.fbx` with `Borlash_manifest.json` to
+`client/RawContent/Stations/A07_BorlashCity/`. 154's five district FBXs are deleted: one city, one
+anchor (see 168).
+
+**Which source won, and where.** Joe's own sketch and the concept art agree on a round wall; the plan
+set had squared it, and 154 kept the square. Round now. The plan set still sets every dimension it
+states — 400 m wall to wall, 584 m across the docks, 16 m avenues, 12 m ring road, 12 m walls — and
+the twelve footprints of its station schedule, which the build asserts. The concept sets the look: a
+city in water reached by bridges, blue glass domes with brass ribs, gothic HQ spires, warm stone.
+Every deviation is listed in the manifest; the large ones:
+
+- **The city is an island in a square lagoon**, on a platform with a skirt, reached by four gate
+  bridges and four causeways from the corner docks; a perimeter road joins the docks and drops to the
+  countryside by a ramp at each axis. The concept's sea, at city scale. The Capital has no ocean.
+- **The HQ spire reaches 62 m** against the plan's 45; the concept's spires own the skyline, and the
+  plan's own visibility arithmetic (261 m + 200 √H) only improves with height.
+- **The town square is round, ringed by a canal**, and the Centre Administration moved 18 m north to
+  fit round it. Eight other buildings moved inward where the round wall cuts a corner the square one
+  did not; each move is written on its schedule row.
+- **Every building has a walk-in ground-floor hall** with the plan set's kit of parts — six market
+  terminals, four industry bays per hall, bank racking and counters, quest stand, career counters,
+  bar. A-07 drew no interiors. Upper floors are closed.
+
+**Measured on the built mesh, and the build refuses otherwise:** the twelve footprints against the
+A-07 table; the wall centreline at 200.00 m and the docks at 584.00 m read off the vertices; counts of
+docks, gates, terminals and bays; the HQ at least 45 m. **No coincident faces across two materials**
+— 2,094 on the first run, nearly all internal faces whose probe sat exactly on the boundary between
+two sectors; the check now probes just outside each patch at several points, and also tests exact
+coplanarity, because rounding a normal grouped radial planes 8 cm apart. The real ones were door
+frames in the plane of the wall's cut end, a plinth in the jamb's plane, railing caps flush with their
+bodies, and a ring-road strip at the avenue's height.
+
+**Walkability is proven on the generated collision, not the drawing.** A 0.5 m grid rasterised from
+the 1,600 hulls, obstacles grown by 0.6 m plus half a cell's diagonal, reaches all 121 named targets —
+every door inside and out, every counter, gate, dock pad and ramp foot, the whole ring road — and none
+of 16 negative controls. Those include the lagoon and the canal, which is what proves the railings
+seal the water: 1.1 m, above the character's 0.90 m jump. Getting there needed every railing run to
+end inside what it meets — bridge railings start inside the gate towers — because the first layout
+left three slots into the lagoon at junctions. FBX round trip: 23 meshes and their hulls back, bounds
+within 0.05 mm.
+
+**Not verified by anything automated:** how it looks in Unreal, and whether 400 m of city on a 20 km
+world feels right on foot. Dock to square is about 510–560 m by the grid, 85–95 s at walking speed —
+the plan set's own estimate, and the number most likely to be wrong in play.
+
+**Density, decided by Joe on 2 October: "scenery we can't enter for now".** The concept is denser than
+twelve buildings in 400 m, so the districts are now filled with 41 closed buildings -- solid blocks with
+plinths, cornices, lit windows, and slate hip roofs, small glass domes, corner spires or roof lanterns
+in turn. Each is one collision hull and has no door. They take what the schedule, parks, avenues,
+forecourts and posterns leave, placed by a fixed scan so a rebuild is the same city: five metres from
+any building or forecourt, three from a park, six and a half from an avenue's edge (its lamps and trees
+stand in the first five), nine either side of a postern's line, eight from the canal. The route check
+still reaches all 121 targets through them. Lamps and trees now keep clear of them as of every other
+building. Listed in the manifest under `scenery`.
+
+**The canal's water was under the ground, and the build now refuses that.** One water sheet at 0.70 m
+under the paving served the lagoon and the canal alike. The levelled ground is a sphere: 200 m out it
+has fallen a metre below the city's plane, so the lagoon was fine, but at the canal, 36 m out, it is
+3 cm below it -- 36 cm above the canal's water, which the terrain therefore covered. Nobody had looked
+into the canal in the game; found while reading the heights for 175. The canal has its own surface now,
+0.20 m under the paving and 13 cm clear of the ground, and `check_water_over_ground` stops the build
+if any visible water is within 5 cm of the ground under its nearest edge.
+`SpaceMMO.Terrain.CityWaterStandsAboveTheGround` checks the same against the game's own terrain.
+
+## 168 — Borlash stands on the Capital
+
+**Done 2 October; confirmed in Joe's playtest the same day.** Belongs to **M7**.
+
+1. **A pad in the height field.** The city is flat and the Capital is not: within 420 m of the site
+   the ground runs 145 to 171 m (measured with an exact Python port of `FPlanetTerrain`, checked
+   against the logged station position). Now a flat cap with a smoothstep blend ring, inside
+   `FPlanetTerrain::ElevationKilometres` itself (`FPlanetTerrainPad`), so the mesh, the ship, the
+   character and a dedicated server all ask the same function -- not a mesh, and not a second answer
+   about where the ground is. Authored on the station as `pad` in `origin.json` (flat 0.42 km, blend
+   0.15 km, at 0.172 km -- just above the highest natural ground under it, 171.2 m), validated
+   (`ValidateStationPad`: on a body, positive, within the body's relief), stored in three nullable
+   columns (migration `StationGroundPad`), served with its body as `terrainPads` on `/world/bodies`,
+   and applied by the paint pass. This is R5 of the plan set and the first customer for ADR-0011's
+   override machinery, which task 97 predicted. The platform's skirt is 6.5 m deep because the
+   levelled sphere falls 4.0 m below the city's plane at its farthest corner.
+2. **The FBX into Unreal from code**, as task 110 built its menus: the commandlet
+   `SpaceMMOAuthoring.SpaceMMOImportSettlements` (run line in its header) makes
+   `/Game/Stations/Shared/M_Settlement_Base`, one instance per manifest material, the 23 meshes with
+   their UCX hulls, and `BP_Station_Borlash` with 4 berth and 37 service-point components read from
+   the manifest. Regenerable, like the Blender side.
+3. **`station_capital_hub` drawn as Borlash** -- `BlueprintsByKey` in `DefaultGame.ini` -- keeping its
+   key (plan set R11: quest 7 docks there), and renamed Borlash in content.
+
+**Two import faults, both found by the importer's own checks rather than by looking:**
+
+- **The legacy FBX importer names multi-mesh files `<file>_<mesh>`**, so every manifest lookup missed
+  until the names were mapped back (`ManifestName`).
+- **Then the whole city arrived at a hundredth of its size**, every hull present. The FBX holds metres
+  and says so (`UnitScaleFactor` 100); `FbxMainImport.cpp:1573` converts only when
+  `bConvertSceneUnit` is set, and it defaults off. Every bounds check was off by 99% -- a dock's far
+  edge at 2.92 m instead of 292. The greybox skill's Unreal notes claimed `FBX_SCALE_UNITS` alone was
+  enough; they now say otherwise.
+
+**Verified, and how:**
+
+- Importer: 23 of 23 meshes, every hull count equal to the manifest, render bounds within 0.00 cm,
+  and -- added after the scale fault, because hulls import by a different path from triangles and
+  the render bounds say nothing about them -- every hull set spanning its mesh at full size (a dock
+  64 m across, the wall 417 m). `Result: OK`.
+- `SpaceMMO.Terrain.PadIsLevelInside`, `PadLeavesTheLandAlone`, `PadBlendsWithoutACliff`,
+  `PadSizeIsAlongTheSurface`; `SpaceMMO.Terrain.AuthoredPadsFitTheirCities` (reads `origin.json` and
+  the manifest: flat far enough for the city, above the highest ground under it, blend no steeper
+  than 25 degrees); `PadsArriveFromTheWire` (a captured `/world/bodies` payload). Server side: four
+  validator tests, one loader test, one endpoint test, each made to fail against its bug first.
+- Seeded and read back from Postgres: `station_capital_hub | Borlash | 0.42 | 0.15 | 0.172`.
+
+**Not verified by anything automated:** how it looks; whether the blend ring reads as land or as a
+plinth; whether anything natural pokes through the paving between the 24 sampled bearings.
+
+## 169 — Ships dock only at Borlash's four docks
+
+**Done 2 October; confirmed in Joe's second playtest the same day** -- readout, pad sentence and all.
+Joe, 2 October: "The docking stations in the corners of
+the city are the locations where you can dock your ship. You should not be able to fly or disembark
+your ship directly above or inside the confines of the city, only outside and at the docking
+stations."
+
+**Decided by Joe the same day: Borlash is one station.** One hangar, one book, one industry queue; the
+four docks are its only berths. Seventeen stations, as the plan set's schedule had it, would have put
+a ship's cargo in a different hangar from the refinery, a few walks away at 6 m³ a trip.
+
+- **Berths come from the building**, as `USpaceMMOBerthComponent`s the importer places from the
+  manifest: where a ship may dock is local geometry, like a door, and the Blueprint still never knows
+  where it is. The station reads them off the built components, so a berth is where it is drawn.
+- **A ship docks only on a pad** (`FSpaceMMOAirspace::IsAtBerth`: within the pad plus its 8 m rim, up
+  to 60 m above it). Elsewhere within range, G answers with the approved sentence below.
+- **Docking sets the pilot down beside that pad**, inboard, on the dock's floor, and **a summoned ship
+  comes to the pad nearest whoever summoned it** -- never into the city. The on-foot docking range is
+  now 0.42 km, the whole platform: a pilot set down 368 m out must still be docked on arrival.
+- **The no-fly zone is a cylinder over the city**, 215 m (the wall and its towers reach 210), **3 km
+  high, Joe's choice** of three offered on 2 October. Resolved like ground contact, as a pure function
+  of position (`FSpaceMMOAirspace::ResolveNoFly`), so a dedicated server agrees: out the way it came
+  in, only the inward part of the velocity removed, so a ship skimming the edge slides round it.
+- **Stepping out is refused anywhere on the platform, docks included** -- see the open question.
+- **Wording approved by Joe, 2 October** -- the full-sentence option of three. Shown as the orange
+  on-screen notice the ship already uses:
+
+  | When | Message |
+  |---|---|
+  | Flying into the city's airspace | "Borlash's airspace is closed. Dock at one of its four corner docking stations." |
+  | Pressing G anywhere but a dock | "Ships dock at Borlash's four corner docking stations, not over the city." |
+  | Stepping out over the city | "You can't step out here. Land at a docking station and press G to dock." |
+
+**Stepping out at a dock: still refused, now said properly.** Joe's words allow disembarking "at the
+docking stations"; the build reads that as docking, because a ship left on a pad would hold one of
+only four berths, and the ground rule only knows terrain (a ship on a pad rests 0.3 m above it). On a
+pad the refusal used to tell a pilot to "land at a docking station" while they were on one. Joe
+approved a sentence for the pad on 2 October, and it is what a pilot on a pad now sees:
+
+  "Ships can't be left on a landing pad. Press G to dock."
+
+The airspace zone carries its pads (`FSpaceMMOAirspaceZone::Berths`), so `StepOutRefusal` picks the
+sentence. The manifest's `no_disembark` has no exception at the docks either.
+
+**The flight readout said READY over the city; now it measures to the nearest pad.** It said READY
+anywhere within the station's 420 m docking range, the square included, where G then refused -- the
+sibling `FindStationInRange`'s comment had warned about. Joe chose option A on 2 October: within 10 km
+of a settlement a ship's line names its nearest landing pad, "Borlash NE dock  140 m  ·  dock at 20 m",
+and says READY only within the pad and its rim, which is exactly how far `IsAtBerth` reaches across.
+Far off it still names the city and its world. On foot nothing changed: the city's range is the
+station's. The berths carry `ShortName` ("NE dock") from the manifest's `short_name`.
+`SpaceMMO.Settlement.BorlashStandsAsBuilt` samples 6,936 points round the four pads (17 by 17 across, six heights up to 80 m), builds the line
+exactly as the readout does, and checks that wherever it says READY, docking would succeed.
+
+**Ruled out:** resolving a ship to exactly the cylinder's edge. The trip back through the city's frame
+lands it a nanometre inside as often as outside, so a ship hovering at the edge would have been told
+the airspace was closed every few seconds without moving. It is put a millimetre past the edge, with
+the skin ground contact uses (`SpaceMMO::Surfaces::SeparationCentimetres`). Found by the first run of
+the airspace tests, not in play.
+
+**Verified, and how:**
+
+- `SpaceMMO.Airspace.*`, six tests on a deliberately tilted zone (Borlash's own up is within two
+  degrees of world Z, where a dropped rotation would pass): the cylinder, coming out the way it went
+  in, the platform square, berths, where a pilot is set down, and the approved wording verbatim.
+  Each rule broken on purpose and the suite watched going red: the top/side choice, the velocity
+  filter, the step-out rule, the berth's height check, the pilot's side of the pad.
+- `SpaceMMO.Settlement.BorlashStandsAsBuilt` spawns the Capital's station in a game world from a
+  captured `/world/stations` and `/world/bodies` payload, the way the deposit subsystem spawns
+  stations, and checks against the manifest: it wears `BP_Station_Borlash`; every hulled mesh blocks
+  the pawn channel; the airspace it declares matches the manifest; every pad is where the build
+  script put it, read in the airspace's own frame (Unreal's -Y is Blender's north); and at each dock a
+  ship can fly to the pad, is at a berth there, may not step out, sets its pilot down inboard of that
+  pad within docking range, and is summoned onto it -- while the square is closed and not a berth.
+  Broken on purpose twice: an unrotated airspace moves all four pads, and a reversed "outward" sets
+  pilots down off the corners.
+- Client suite 274 tests, server suites 468 + 203 + 97, all passing on 2 October.
+- The dedicated server, re-cooked the same day and run against a scratch API, says what the client
+  test says: the Capital shaped with one levelled pad, `station_capital_hub` drawn as
+  `BP_Station_Borlash_C`, the airspace declared, and four berths at the same four positions, 382 m
+  out. Docking and the airspace are decided there, so a server that had not cooked the Blueprint
+  would have let ships dock anywhere within 420 m and fought the client over the no-fly zone.
+
+**Not verified by anything automated:** flying it -- the feel of the wall of air, whether the notice is
+noticed, landing on a 24 m pad, and a client and the server agreeing frame by frame at the edge.
+
+## 170 — Each Borlash building opens its own service
+
+**Pending, blocked on Joe approving the interface first** (169 was built 2 October). The manifest
+lists 37 service points, each with a building, a service, a place to stand and a facing, and since 168
+each is a `USpaceMMOServicePointComponent` on `BP_Station_Borlash`, so the client can already find
+them. The market terminals, industry bays, bank counters and quest stand map to services that run
+today. What does not exist is the client deciding that the Market Hall's terminal opens the market
+and only the market: until then Borlash's services behave as any station's do, open to anyone docked
+there, and on foot the whole platform is within its 0.42 km docking range. Show Joe the panels and
+prompts before building any of them.
+
+## 171 — The buildings whose services do not exist yet
+
+**Pending; needs design, not code.** Joe expects these to be built. Each is in the manifest as a
+service point marked unavailable, with the reason:
+
+| Building | What the art or the plan set says | State |
+|---|---|---|
+| Bank / Finance (×2) | "currency exchange, loans, investments" (concept); storage only (plan set R10) | Storage runs; finance is undesigned |
+| Hotel | "accommodations for travellers" | Nothing |
+| Apartments | player housing "when it means something" | Nothing; `construction` skill names it |
+| Pub | social hall | Nothing, by definition of `Social` |
+| Capital HQ | faction supply counter | Retired 6 Sept (task 148) |
+| Crafting / Refining career buildings | career givers | Career chains are M8 and undesigned |
+| Centre Administration | registry and insurance | ADR-0006 payouts are M6 |
+
+None of these has a milestone except careers (M8) and the registry (M6). That has to be settled, per
+CLAUDE.md, before any of them is scheduled.
+
+## 172 — A capital city on every home world
+
+**Pending, blocked on Joe's playtest of 167 to 169**, which make Borlash the template. Belongs to
+**M7** (settlements). Joe, 2 October: "I'd like to populate each world with their capital city. Let's
+start with the Capital planet and the city/settlement called Borlash."
+
+The four race worlds of `design-bible.md` -- Terra, Ares, Verdance, Grimhold -- each have one station
+today, an outpost. Each wants, in order: a name and concept art from Joe (Borlash had a plan set and
+two boards; nothing comparable exists for the others yet); a build script beside
+`a07_borlash_city.py`; a `pad` on its station in `origin.json`; a row in the importer's
+`Settlements[]`; and a `BlueprintsByKey` line. The outpost's station key stays, as
+`station_capital_hub` did, so quests and characters docked there keep working.
+
+What carries over without work: the height-field pad, berths and service points read from a
+manifest, the airspace, docking only on pads, and `SpaceMMO.Terrain.AuthoredPadsFitTheirCities` --
+which already fails for a second levelled station until it is given its own manifest to measure.
+What does not, noticed while building the first:
+
+- The importer strips `SM_Borlash_` from component names by literal (`BuildBlueprint`); a second city
+  would keep its prefix. Should be `SM_<name>_`.
+- `SpaceMMO.Settlement.BorlashStandsAsBuilt` is Borlash's alone; each city wants the same test against
+  its own captured payload and manifest.
+- The step-out and READY questions in 169 were settled on 2 October, and both answers carry over.
+
+## 173 — The game's panels in the menus' style
+
+**Pending; the look is shown to Joe before anything is built.** Belongs to **M5**. Joe, 2 October:
+"update the inventory, skills, and other panels to match the same styling of our menus that were
+recently added."
+
+The style is task 110's, which Joe picked from four renders: one rounded sans-serif, white and muted
+grey; panels of dark translucent glass with a hairline border and corner brackets; selection as a
+white-to-ice-blue outline with a soft glow; buttons with one corner clipped, back bottom-left and the
+primary action bottom-right; red for errors only, and world colours only as content. The renders
+themselves were deleted on 1 October, so that text is all that is left of them.
+
+What is not in that style yet, all in `/Game/UI/`: the inventory screen (`WBP_InventoryScreen`,
+`WBP_InventoryRow`), the skills screen (`WBP_SkillsScreen`, `WBP_SkillRow`), the station overlay and
+everything in it -- market, my orders, industry, quests, ships (`WBP_StationOverlay`, `WBP_MarketRow`,
+`WBP_BookRow`, `WBP_MyOrderRow`, `WBP_ShipRow`, `WBP_TextRow`) -- the transient messages
+(`WBP_TransientMessages`, `WBP_TransientMessageRow`), the deposit prompt, the flight and on-foot
+readouts, and the old sign-in screen (`WBP_LoginScreen`). The airspace notices of 169 are still the
+engine's orange debug text, not a widget at all.
+
+How, when it is approved: the way 110 did it, from code -- `USpaceMMOBuildMenusCommandlet` already
+builds styled Widget Blueprints and checks every `BindWidgetOptional` part is present -- extended to
+these, or a shared style asset both use. Two things 110 learned that apply here: never overwrite a
+Blueprint Joe has edited without `-Force`, and a widget with key events in its graph holds those keys
+while collapsed (it is how Escape stopped working on 1 October).
+
+First step: mocks of the inventory and skills screens, and one station panel, for Joe to say yes to.
+
+## 174 — Borlash, textured and smoothed
+
+**Pending.** Belongs to **M7**. Joe, 2 October: "use Blender MCP to add better textures and smoothing to
+really make Borlash City come to life, rather than the sort-of grey boxing it is now."
+
+What it is now, so the gap is measurable: 24 meshes and 155,768 faces, every face flat-shaded
+(`mesh_smooth_type="FACE"`), no UVs at all, and one shared Unreal material
+(`M_Settlement_Base`) that takes a colour, metalness, roughness and an emissive strength per
+instance -- twenty instances, one per manifest material. The importer warns that every mesh has
+"degenerate tangent bases", which is the missing UVs.
+
+What it needs, roughly in order:
+
+1. **UVs from the build script**, world-space box projection at a fixed texel scale, so a stone
+   course is the same size on every building and a texture can be swapped without remapping.
+2. **Materials with texture**: dressed stone, slate, paving patterns, brass, glass with reflection,
+   water that moves. Made in Blender through the MCP and baked, or tileable sets -- to be decided with
+   Joe, with renders. Texture parameters on the Unreal material, set by the importer as colours are now.
+3. **Smoothing**: smooth shading where a surface is curved (domes, drums, towers, which already mark
+   themselves `smooth=True` in places), bevels on the edges that catch light, and weighted normals.
+   Every one of these adds faces, so a budget first.
+4. **Detail the greybox left out**: window frames and mullions, cornices with depth, door surrounds,
+   roof tiles in relief, paving edges -- the concept boards are the reference.
+
+What must keep holding, because the build refuses otherwise: no coincident faces across materials,
+the route check, the schedule, water over the ground, the FBX round trip. And in Unreal, the
+importer's hull and bounds checks and `SpaceMMO.Settlement.*`. Collision stays the simple hulls it is.
+
+Not blocked on anything; best after Joe's playtest of the current city, so a look problem is not
+mistaken for a texture one.
+
+## 175 — Ayla stood half under Borlash until she jumped
+
+**Fixed 2 October; confirmed in Joe's second playtest the same day.** Found in Joe's first Borlash playtest.
+
+**What the logs said.** The server spawned her at the Capital's default point, then restored her
+saved position: "Put back at (60.491, -0.004, 20.158) km" -- 33 m from the city's centre and 20.164 km
+from the planet's, where the levelled ground is at 20.172 km. Saved before Borlash existed, the record
+was 8 m underground. Her client eased across the 490 m from spawn to record (176), and from then on
+`ClientA.log` reports her "GROUNDED", feet "0.00 m above the height function" -- standing on the
+terrain under the square, which is 0.3 m below its paving. Joe's jump at 19:42:43 is the first
+"Standing on BP_Station_Borlash_C_0".
+
+**The cause.** The floor probe starts 10 cm above the feet, so with the feet 30 cm inside the city's
+floor it began inside it, and a probe that begins inside something reports nothing about what is
+underfoot -- so the height field's answer stood, inside the floor. `ResolveBlocking` pushes out of
+geometry only while moving, and the ground took her back the next frame. A jump let go of the ground
+long enough for the floor to be found.
+
+**Ruled out:** fixing it only where characters are placed. The client eases toward the server's
+corrections without asking collision anything, so a client-side copy would have sat in the floor while
+the server had her on it. The footing is where both machines agree.
+
+**What was done.** When the probe begins inside something and the shortest way out is up, as steeply
+as a floor's normal can be, `ClimbOutOfFloor` brings the same capsule down from a metre above the feet
+and stands the character on the top it meets -- if that top is a floor and no more than a metre up
+(`FCharacterWalkModel::ClimbsOutOnto`). Out through a side is still `ResolveBlocking`'s business, so
+nobody is lifted onto a railing. It is said in the log every time ("Climbed out of ...").
+
+**Verified, and how:** `SpaceMMO.Walk.ClimbsOutOfAFloorNotOverAWall` (the rule, on a tilted up) and
+`SpaceMMO.Settlement.APilotPutUnderTheCityStandsOnIt`, which builds Borlash on the Capital wearing its
+pad, puts a character back at Ayla's exact logged position and steps it: she ends on the paving, and a
+second character put back on open ground beyond the platform stays on the terrain, 2.8 m below the
+city's floor.
+
+**How it would fail:** a character placed anywhere under a city floor standing waist-deep in it; or,
+the opposite fault, a character near a low wall or bench suddenly standing on top of it.
+
+## 176 — A server's correction takes ten seconds to arrive on the client
+
+**Pending.** Found in Ayla's log for 175. Belongs to the networking rather than to any milestone's
+features; it is a fault in M3's replication.
+
+Restored 490 m from where she spawned, Ayla's client took about ten seconds to get there, halving the
+distance roughly every second (`ClientA.log`, 19:42:31 to 19:42:42). `FShipReconciliation` asks for 5.0
+of the error removed per second and a snap past 1 km. The blend runs only on frames when a new server
+state arrives -- `ReconcileWithServer` returns early otherwise -- but uses that frame's time step, so
+at ten states a second and sixty frames it removes about 0.8 per second, not 5. The ship pawn reconciles
+the same way (`SpaceMMOShipPawn.cpp`, `LastAppliedServerTime`).
+
+Not yet decided: blend every frame toward the latest server state, or scale by the time since the last
+one, or have the server mark a teleport so the client snaps -- a restore, a dock, a summon. Each changes
+how corrections feel in ordinary play, so it wants measuring under real latency first, not reasoning.
 
 ---
 

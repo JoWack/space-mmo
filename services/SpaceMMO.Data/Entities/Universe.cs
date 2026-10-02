@@ -207,6 +207,20 @@ public class Station
     /// dock, so how far that can happen from is how far a ship can be teleported.
     /// </remarks>
     public double DockingRangeKilometres { get; set; } = 0.1;
+
+    /// <summary>
+    /// The ground this station levels under itself, or null where it stands on the land (task 168).
+    /// </summary>
+    /// <remarks>
+    /// Three columns rather than a child table: a station levels at most one patch of ground, and its
+    /// centre is the station's own direction, so nothing about a pad needs a row of its own. All three
+    /// are set or none is.
+    /// </remarks>
+    public double? PadFlatRadiusKm { get; set; }
+
+    public double? PadBlendKm { get; set; }
+
+    public double? PadElevationKm { get; set; }
 }
 
 /// <summary>

@@ -545,6 +545,12 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         station.SystemZ = content.SystemPosition is { Length: 3 } s3 ? s3[2] : null;
 
         station.DockingRangeKilometres = content.DockingRangeKm;
+
+        // Cleared with the rest when content stops authoring one, or the ground would stay levelled
+        // under a station nobody says levels it.
+        station.PadFlatRadiusKm = content.Pad?.FlatRadiusKm;
+        station.PadBlendKm = content.Pad?.BlendKm;
+        station.PadElevationKm = content.Pad?.ElevationKm;
     }
 
     private async Task UpsertResourceNodesAsync(

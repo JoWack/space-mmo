@@ -67,6 +67,12 @@ public class SpaceMMOAuthoring : ModuleRules
 			"UMG",
 			"UMGEditor",
 			"AssetRegistry",
+
+			// The settlement importer (task 168, USpaceMMOImportSettlementsCommandlet): FBX import
+			// tasks, and the material graph and instances its surfaces are drawn with. Its game classes
+			// are found by path, like the menus', so this still links nothing that talks to the backend.
+			"AssetTools",
+			"MaterialEditor",
 		});
 	}
 }

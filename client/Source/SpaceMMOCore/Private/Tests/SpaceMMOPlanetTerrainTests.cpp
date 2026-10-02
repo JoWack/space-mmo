@@ -823,4 +823,181 @@ bool FSpaceMMOContactIsWiderToLeaveThanToArriveTest::RunTest(const FString& Para
 	return true;
 }
 
+namespace
+{
+	/** A direction `Metres` along the surface from Centre, heading off along Tangent. */
+	FVector AlongSurface(const FVector& Centre, const FVector& Tangent, const double Metres)
+	{
+		const double Angle = Metres / 1000.0 / TerrainTestPlanet().RadiusKilometres;
+
+		return (Centre * FMath::Cos(Angle) + Tangent * FMath::Sin(Angle)).GetSafeNormal();
+	}
+
+	/** The test terrain with one pad on it, 420 m flat and 150 m of blend, as Borlash's. */
+	FPlanetTerrainConfig PaddedTestConfig(const FVector& Centre, const double ElevationKilometres)
+	{
+		FPlanetTerrainConfig Terrain = TerrainTestConfig();
+		Terrain.Pads.Add(FPlanetTerrain::MakePad(
+			TEXT("station_test"), Centre, 0.42, 0.15, ElevationKilometres,
+			TerrainTestPlanet().RadiusKilometres));
+
+		return Terrain;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOTerrainPadIsLevelInsideTest,
+	"SpaceMMO.Terrain.PadIsLevelInside",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOTerrainPadIsLevelInsideTest::RunTest(const FString& Parameters)
+{
+	// Task 168. A city is built flat, so inside its pad the ground has to be exactly one height --
+	// not nearly, because the paving sits 30 cm above it and anything that rose through it would show.
+	const FVector Centre = FVector(0.026, 0.0, 1.0).GetSafeNormal();
+	const FVector East = FVector::CrossProduct(FVector::YAxisVector, Centre).GetSafeNormal();
+	const FVector North = FVector::CrossProduct(Centre, East).GetSafeNormal();
+
+	const FPlanetTerrainConfig Terrain = PaddedTestConfig(Centre, 0.172);
+
+	int32 Sampled = 0;
+
+	for (const FVector& Tangent : {East, North, -East, (East + North).GetSafeNormal()})
+	{
+		for (double Metres = 0.0; Metres <= 419.0; Metres += 19.0)
+		{
+			const double Height =
+				FPlanetTerrain::ElevationKilometres(Terrain, AlongSurface(Centre, Tangent, Metres));
+
+			TestTrue(
+				*FString::Printf(TEXT("Level at %.0f m (%.6f km)"), Metres, Height),
+				FMath::IsNearlyEqual(Height, 0.172, 1e-12));
+
+			++Sampled;
+		}
+	}
+
+	TestTrue(TEXT("Sampled the flat ground at all"), Sampled > 40);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOTerrainPadLeavesTheLandAloneTest,
+	"SpaceMMO.Terrain.PadLeavesTheLandAlone",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOTerrainPadLeavesTheLandAloneTest::RunTest(const FString& Parameters)
+{
+	// Past the blend ring the planet is exactly what it was. A pad is local by construction, and a
+	// pad that leaked would move every deposit and station on the body a little, with nothing at
+	// any of them saying why.
+	const FVector Centre = FVector(0.026, 0.0, 1.0).GetSafeNormal();
+	const FVector East = FVector::CrossProduct(FVector::YAxisVector, Centre).GetSafeNormal();
+
+	const FPlanetTerrainConfig Padded = PaddedTestConfig(Centre, 0.172);
+	const FPlanetTerrainConfig Plain = TerrainTestConfig();
+
+	for (double Metres = 571.0; Metres <= 3000.0; Metres += 97.0)
+	{
+		const FVector Direction = AlongSurface(Centre, East, Metres);
+
+		TestEqual(
+			*FString::Printf(TEXT("Untouched at %.0f m"), Metres),
+			FPlanetTerrain::ElevationKilometres(Padded, Direction),
+			FPlanetTerrain::ElevationKilometres(Plain, Direction));
+	}
+
+	// And the far side of the planet, which a pad wider than a hemisphere would otherwise reach.
+	TestEqual(
+		TEXT("Untouched opposite"),
+		FPlanetTerrain::ElevationKilometres(Padded, -Centre),
+		FPlanetTerrain::ElevationKilometres(Plain, -Centre));
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOTerrainPadBlendsWithoutACliffTest,
+	"SpaceMMO.Terrain.PadBlendsWithoutACliff",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOTerrainPadBlendsWithoutACliffTest::RunTest(const FString& Parameters)
+{
+	// Across the ring the ground has to go from the pad to the land continuously. A step anywhere
+	// in it is a ledge -- and the character has no step-up, so a ledge is a wall.
+	//
+	// A pad far below the land, so the blend has real height to cover: 0.0 against land that is
+	// mostly a few hundred metres up. One metre apart, no two samples may differ by more than the
+	// steepest the blend can be (1.5 times its average) plus whatever the land does on its own.
+	const FVector Centre = FVector(-0.4, 0.8, 0.45).GetSafeNormal();
+	const FVector Tangent = FVector::CrossProduct(Centre, FVector::ZAxisVector).GetSafeNormal();
+
+	const FPlanetTerrainConfig Terrain = PaddedTestConfig(Centre, 0.0);
+
+	double Worst = 0.0;
+	double Previous = FPlanetTerrain::ElevationKilometres(Terrain, AlongSurface(Centre, Tangent, 400.0));
+
+	for (double Metres = 401.0; Metres <= 590.0; Metres += 1.0)
+	{
+		const double Height =
+			FPlanetTerrain::ElevationKilometres(Terrain, AlongSurface(Centre, Tangent, Metres));
+
+		Worst = FMath::Max(Worst, FMath::Abs(Height - Previous) * 1000.0);
+		Previous = Height;
+	}
+
+	// The highest the land gets across the ring bounds how much height the blend has to cover.
+	double Land = 0.0;
+
+	for (double Metres = 400.0; Metres <= 590.0; Metres += 5.0)
+	{
+		Land = FMath::Max(Land,
+			FPlanetTerrain::ElevationKilometres(TerrainTestConfig(), AlongSurface(Centre, Tangent, Metres)));
+	}
+
+	// Metres of rise per metre: 1.5 x (land height / 150 m) for the blend, plus a metre of slack for
+	// the land's own slope at this frequency.
+	const double Allowed = 1.5 * (Land * 1000.0 / 150.0) + 1.0;
+
+	TestTrue(
+		*FString::Printf(TEXT("Steepest metre %.3f m, allowed %.3f m"), Worst, Allowed),
+		Worst <= Allowed);
+
+	// And the blend actually did something: the pad edge is the pad, the ring's far edge is the land.
+	TestTrue(TEXT("The land is well above the pad here, or this proves nothing"), Land > 0.05);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOTerrainPadSizeIsAlongTheSurfaceTest,
+	"SpaceMMO.Terrain.PadSizeIsAlongTheSurface",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOTerrainPadSizeIsAlongTheSurfaceTest::RunTest(const FString& Parameters)
+{
+	// Content authors kilometres; the height function works in angles. MakePad is the only place one
+	// becomes the other, and getting it wrong by the radius would be a pad twenty times too big or
+	// small -- a city standing on the slope of its own levelled hill, or a hill levelled flat.
+	const FPlanetTerrainPad Pad =
+		FPlanetTerrain::MakePad(TEXT("station_test"), FVector(0.0, 0.0, 2.0), 0.42, 0.15, 0.1, 20.0);
+
+	TestTrue(TEXT("Direction normalised"), FMath::IsNearlyEqual(Pad.Direction.Size(), 1.0, 1e-12));
+	TestTrue(TEXT("420 m on a 20 km planet"), FMath::IsNearlyEqual(Pad.FlatRadians, 0.021, 1e-12));
+	TestTrue(TEXT("150 m on a 20 km planet"), FMath::IsNearlyEqual(Pad.BlendRadians, 0.0075, 1e-12));
+
+	// Inside by a metre, outside by a metre: the edges are where content said.
+	const FVector Centre = FVector::ZAxisVector;
+
+	TestEqual(TEXT("Flat at 419 m"),
+		FPlanetTerrain::PadWeight(Pad, AlongSurface(Centre, FVector::XAxisVector, 419.0)), 1.0);
+	TestTrue(TEXT("Easing at 421 m"),
+		FPlanetTerrain::PadWeight(Pad, AlongSurface(Centre, FVector::XAxisVector, 421.0)) < 1.0);
+	TestEqual(TEXT("Gone at 571 m"),
+		FPlanetTerrain::PadWeight(Pad, AlongSurface(Centre, FVector::XAxisVector, 571.0)), 0.0);
+
+	return true;
+}
+
 #endif

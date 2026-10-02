@@ -327,6 +327,28 @@ private:
 	void StandOnGround(const FGroundContact& Ground);
 
 	/**
+	 * Lifts a character found standing inside a floor onto its top (task 175).
+	 *
+	 * Called when the floor probe begins inside something, which used to be answered by standing on
+	 * the height field -- inside whatever the probe began in. FCharacterWalkModel::ClimbsOutOnto
+	 * decides whether this is a floor to climb out of; this asks the world where its top is, by
+	 * bringing the same capsule down onto it from a metre above.
+	 *
+	 * @param Inside The probe's hit, which began inside something and knows the shortest way out.
+	 * @return Whether the character was lifted, and now stands on that floor.
+	 */
+	bool ClimbOutOfFloor(const FHitResult& Inside, const FVector& Up, double HalfHeight);
+
+	/**
+	 * Says why a character found inside something was or was not lifted out, at most every two seconds.
+	 * It happens every frame for as long as somebody is stuck, and a stuck character with nothing in
+	 * the log is the playtest that finds it.
+	 */
+	void ReportEmbedding(const FHitResult& Inside, const TCHAR* Outcome);
+
+	double NextEmbeddingReportSeconds = 0.0;
+
+	/**
 	 * Whether this character is still waiting to meet the ground for the first time.
 	 *
 	 * <strong>A connection gets its pawn before the world has a planet in it</strong> — 323 ms

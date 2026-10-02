@@ -1232,4 +1232,47 @@ bool FSpaceMMOWalkServerFacesWhereTheClientFacesTest::RunTest(const FString& Par
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOWalkClimbsOutOfAFloorTest,
+	"SpaceMMO.Walk.ClimbsOutOfAFloorNotOverAWall",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOWalkClimbsOutOfAFloorTest::RunTest(const FString& Parameters)
+{
+	// Tilted, as everywhere on a planet: a rule that compared against world Z would pass upright and
+	// fail at Borlash's neighbours.
+	const FVector Up = FVector(0.6, 0.0, 0.8);
+	const FVector Sideways = FVector(0.8, 0.0, -0.6);
+
+	// Ayla, 2 October: the terrain held her 33 cm down inside the city's paving.
+	TestTrue(TEXT("Thirty-three centimetres inside a floor, out through its top: climbs onto it"),
+		FCharacterWalkModel::ClimbsOutOnto(Up, Up, Up, 33.0));
+
+	// Beside a railing the way out is through its side. Climbing onto it would put somebody on top
+	// of a fence a metre high.
+	TestFalse(TEXT("Out through a wall's side: stays where it is"),
+		FCharacterWalkModel::ClimbsOutOnto(Sideways, Up, Up, 33.0));
+
+	TestFalse(TEXT("World Z is not up where the planet's up is world X"),
+		FCharacterWalkModel::WayOutIsUp(FVector::UpVector, FVector::ForwardVector));
+	TestTrue(TEXT("Up is up wherever it points"),
+		FCharacterWalkModel::WayOutIsUp(FVector::ForwardVector, FVector::ForwardVector));
+
+	// Found from above, the "floor" must be one: a steep top is the edge of something, not a floor.
+	TestFalse(TEXT("A steep top is not a floor to stand on"),
+		FCharacterWalkModel::ClimbsOutOnto(Up, Sideways, Up, 33.0));
+
+	// A step, not a storey. Deeper than this the character is inside a building's solid, and lifting
+	// them to its roof would be worse than leaving them for ResolveBlocking.
+	TestTrue(TEXT("At the deepest allowed, still climbs"),
+		FCharacterWalkModel::ClimbsOutOnto(Up, Up, Up, FCharacterWalkModel::DeepestClimbOutCentimetres));
+	TestFalse(TEXT("Deeper than a step: does not"),
+		FCharacterWalkModel::ClimbsOutOnto(Up, Up, Up, FCharacterWalkModel::DeepestClimbOutCentimetres + 1.0));
+
+	TestFalse(TEXT("A floor at or below the feet is the ordinary probe's to find"),
+		FCharacterWalkModel::ClimbsOutOnto(Up, Up, Up, 0.0));
+
+	return true;
+}
+
 #endif

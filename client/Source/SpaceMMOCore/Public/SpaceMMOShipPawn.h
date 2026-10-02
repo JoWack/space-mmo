@@ -233,6 +233,25 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerDisembark();
 
+	/**
+	 * Tells the pilot why something did not happen, on the machine they are flying from (task 169).
+	 *
+	 * Shown where the docking messages show, which is where Joe approved the wording for.
+	 */
+	UFUNCTION(Client, Reliable)
+	void ClientNotice(const FString& Message);
+
+	/**
+	 * Keeps the ship out of every settlement's closed airspace (task 169).
+	 *
+	 * After the blocking sweep and before the ground, for the reason the sweep gives: a ship held back
+	 * from somewhere should not then be settled onto the ground it was kept from reaching.
+	 */
+	void ResolveAirspace();
+
+	/** World seconds before which the closed-airspace notice is not repeated. */
+	double NextAirspaceNoticeSeconds = 0.0;
+
 	/** Class spawned when stepping out. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Ship")
 	TSubclassOf<class ASpaceMMOCharacterPawn> CharacterClass;

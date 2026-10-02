@@ -1,5 +1,7 @@
 #include "SpaceMMOShipPawn.h"
 
+#include "GameFramework/InputSettings.h"
+#include "SpaceMMOAirspace.h"
 #include "SpaceMMOUserSettings.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
@@ -472,6 +474,9 @@ void ASpaceMMOShipPawn::SimulateStep(const double DeltaSeconds)
 	// moved, so resolving the ground at the position it was prevented from reaching would settle it
 	// onto the wrong piece of terrain for a frame.
 	ResolveBlocking(Before);
+
+	// And the air nobody may fly in, for the same reason (task 169).
+	ResolveAirspace();
 
 	// After moving, not before. Resolving first would let the very step that drives the ship into
 	// the ground happen unopposed, so it would sink one frame's worth every frame.
@@ -1103,8 +1108,84 @@ ASpaceMMOCharacterPawn* ASpaceMMOShipPawn::StepPilotOut(
 	return Character;
 }
 
+void ASpaceMMOShipPawn::ResolveAirspace()
+{
+	const UWorld* const World = GetWorld();
+
+	const USpaceMMOAirspaceSubsystem* const Airspace =
+		World != nullptr ? World->GetSubsystem<USpaceMMOAirspaceSubsystem>() : nullptr;
+
+	if (Airspace == nullptr)
+	{
+		return;
+	}
+
+	for (const FSpaceMMOAirspaceZone& Zone : Airspace->GetZones())
+	{
+		if (!FSpaceMMOAirspace::ResolveNoFly(
+				Zone, HullRadiusKilometres, Navigation.SystemPosition, FlightState.Velocity))
+		{
+			continue;
+		}
+
+		// Said on the machine doing the flying, which is predicting this same resolve, and not every
+		// frame of a ship pressed against the edge.
+		if (IsLocallyControlled() && World->GetTimeSeconds() >= NextAirspaceNoticeSeconds)
+		{
+			NextAirspaceNoticeSeconds = World->GetTimeSeconds() + 6.0;
+
+			ClientNotice_Implementation(FSpaceMMOAirspace::ClosedAirspaceMessage(Zone));
+
+			UE_LOG(LogSpaceMMO, Log,
+				TEXT("Kept out of %s's airspace at %s."), *Zone.Name, *Navigation.SystemPosition.ToString());
+		}
+	}
+}
+
+void ASpaceMMOShipPawn::ClientNotice_Implementation(const FString& Message)
+{
+	if (GEngine != nullptr)
+	{
+		GEngine->AddOnScreenDebugMessage(43, 5.0f, FColor::Orange, Message);
+	}
+}
+
 void ASpaceMMOShipPawn::ServerDisembark_Implementation()
 {
+	// Not over a settlement's platform, before anything else: the pilot is told what to do instead,
+	// rather than meeting the ground rule's silent refusal (task 169).
+	if (const USpaceMMOAirspaceSubsystem* const Airspace =
+			GetWorld() != nullptr ? GetWorld()->GetSubsystem<USpaceMMOAirspaceSubsystem>() : nullptr)
+	{
+		for (const FSpaceMMOAirspaceZone& Zone : Airspace->GetZones())
+		{
+			if (FSpaceMMOAirspace::AllowsStepOut(Zone, Navigation.SystemPosition))
+			{
+				continue;
+			}
+
+			// The key the player has bound to docking, not a letter that stops being true the moment
+			// somebody rebinds it.
+			FString DockKey = TEXT("G");
+			TArray<FInputActionKeyMapping> Mappings;
+			UInputSettings::GetInputSettings()->GetActionMappingByName(TEXT("Dock"), Mappings);
+
+			if (Mappings.Num() > 0)
+			{
+				DockKey = Mappings[0].Key.GetDisplayName().ToString();
+			}
+
+			const bool bOnPad = FSpaceMMOAirspace::IsAtAnyBerth(Zone, Navigation.SystemPosition);
+
+			UE_LOG(LogSpaceMMO, Log, TEXT("Cannot step out %s %s's platform."),
+				bOnPad ? TEXT("on a landing pad of") : TEXT("over"), *Zone.Name);
+
+			ClientNotice(FSpaceMMOAirspace::StepOutRefusal(Zone, Navigation.SystemPosition, DockKey));
+
+			return;
+		}
+	}
+
 	// Checked here rather than on the client, because this is where it counts.
 	if (!FBoarding::CanDisembark(bOnGround))
 	{

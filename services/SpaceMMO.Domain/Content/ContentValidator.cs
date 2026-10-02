@@ -160,6 +160,7 @@ public static class ContentValidator
             }
 
             ValidateStationPosition(station, errors);
+            ValidateStationPad(station, pack, errors);
         }
 
         // Only worth checking once any universe is authored at all — an empty pack is a valid
@@ -366,6 +367,52 @@ public static class ContentValidator
             // broken station rather than as unfinished content.
             errors.Add(new ContentError(
                 "station", station.Key, "Docking range must be positive."));
+        }
+    }
+
+    /// <summary>
+    /// A levelled pad needs ground to level and a height the terrain can actually stand at.
+    /// </summary>
+    /// <remarks>
+    /// The height function clamps to the body's relief, so a pad authored above it would be drawn
+    /// lower than it says with nothing anywhere looking wrong; refused here instead, naming both.
+    /// </remarks>
+    private static void ValidateStationPad(StationContent station, ContentPack pack, List<ContentError> errors)
+    {
+        if (station.Pad is not { } pad)
+        {
+            return;
+        }
+
+        if (station.Body is null || station.Direction is null)
+        {
+            errors.Add(new ContentError(
+                "station", station.Key, "Levels ground, but stands on no body for there to be ground."));
+
+            return;
+        }
+
+        if (pad.FlatRadiusKm <= 0.0)
+        {
+            errors.Add(new ContentError("station", station.Key, "Pad flat radius must be positive."));
+        }
+
+        if (pad.BlendKm < 0.0)
+        {
+            errors.Add(new ContentError("station", station.Key, "Pad blend cannot be negative."));
+        }
+
+        BodyContent? body = pack.Bodies.FirstOrDefault(b => b.Key == station.Body);
+
+        double relief = body?.Terrain?.MaxElevationKm ?? double.PositiveInfinity;
+
+        if (pad.ElevationKm < 0.0 || pad.ElevationKm > relief)
+        {
+            errors.Add(new ContentError(
+                "station",
+                station.Key,
+                $"Pad elevation {pad.ElevationKm} km is outside what '{station.Body}' can stand at "
+                + $"(0 to {relief} km)."));
         }
     }
 

@@ -11,6 +11,9 @@
 #include "SpaceMMODepositSettings.h"
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMORenderOrigin.h"
+#include "SpaceMMOAirspace.h"
+#include "SpaceMMOSettlement.h"
+#include "SpaceMMOStationMarkers.h"
 #include "SpaceMMOStationSettings.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -353,11 +356,223 @@ bool ASpaceMMOStationActor::GroundPositionBeside(
 	return true;
 }
 
+const ASpaceMMOSettlementActor* ASpaceMMOStationActor::GetSettlement() const
+{
+	return Structure != nullptr ? Cast<ASpaceMMOSettlementActor>(Structure->GetChildActor()) : nullptr;
+}
+
+int32 ASpaceMMOStationActor::GetBerthCount() const
+{
+	return BerthPlaces().Num();
+}
+
+void ASpaceMMOStationActor::GetDockMarks(TArray<FSpaceMMODockMark>& OutDocks) const
+{
+	OutDocks.Reset();
+
+	for (const FBerthPlace& Place : BerthPlaces())
+	{
+		FSpaceMMODockMark Mark;
+		Mark.ShortName = Place.ShortName;
+		Mark.Pad = Place.Pad;
+
+		// The pad and its rim, which is exactly how far across IsAtBerth reaches -- so a readout that says
+		// READY within this of the pad's centre is never followed by a refusal.
+		Mark.ReachKilometres = Place.PadRadiusKilometres + FSpaceMMOAirspace::BerthReachKilometres;
+
+		OutDocks.Add(Mark);
+	}
+}
+
+TArray<ASpaceMMOStationActor::FBerthPlace> ASpaceMMOStationActor::BerthPlaces() const
+{
+	TArray<FBerthPlace> Places;
+
+	const ASpaceMMOSettlementActor* const Settlement = GetSettlement();
+	const UWorld* const World = GetWorld();
+
+	const USpaceMMORenderOriginSubsystem* const Origin =
+		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
+
+	if (Settlement == nullptr || Origin == nullptr || !Station.bPlaced || !Station.bOnBody)
+	{
+		return Places;
+	}
+
+	TArray<const USpaceMMOBerthComponent*> Berths;
+	Settlement->GetBerths(Berths);
+
+	const FVector Up = Station.Direction.GetSafeNormal();
+	const FVector Centre = Settlement->GetActorLocation();
+
+	for (const USpaceMMOBerthComponent* Berth : Berths)
+	{
+		// Read off the built component rather than recomputed from the station, so a berth is where it
+		// is drawn: the same pad a pilot can see is the one they are measured against.
+		const FVector Pad = Berth->GetComponentLocation();
+
+		FBerthPlace Place;
+		Place.Pad = FSystemCoordinate::FromLocalCentimetres(Pad, Origin->GetRenderOrigin());
+		Place.Outward = FVector::VectorPlaneProject(Pad - Centre, Up).GetSafeNormal();
+		Place.PadRadiusKilometres = Berth->PadRadiusMetres / 1000.0;
+		Place.ShortName = Berth->ShortName;
+
+		Places.Add(Place);
+	}
+
+	return Places;
+}
+
+int32 ASpaceMMOStationActor::NearestBerth(const TArray<FBerthPlace>& Berths, const FSystemCoordinate& Near)
+{
+	int32 Best = INDEX_NONE;
+	double BestDistance = 0.0;
+
+	for (int32 Index = 0; Index < Berths.Num(); ++Index)
+	{
+		const double Distance = (Berths[Index].Pad.Kilometres - Near.Kilometres).SizeSquared();
+
+		if (Best == INDEX_NONE || Distance < BestDistance)
+		{
+			Best = Index;
+			BestDistance = Distance;
+		}
+	}
+
+	return Best;
+}
+
+bool ASpaceMMOStationActor::IsAtBerth(const FSystemCoordinate& ShipPosition) const
+{
+	const FVector Up = Station.Direction.GetSafeNormal();
+
+	for (const FBerthPlace& Place : BerthPlaces())
+	{
+		if (FSpaceMMOAirspace::IsAtBerth(Place.Pad, Up, Place.PadRadiusKilometres, ShipPosition))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool ASpaceMMOStationActor::PilotArrivalNear(
+	const FSystemCoordinate& Near, const double OffsetKilometres, FSystemCoordinate& OutPosition) const
+{
+	const TArray<FBerthPlace> Places = BerthPlaces();
+	const int32 Index = NearestBerth(Places, Near);
+
+	if (Index == INDEX_NONE)
+	{
+		return GroundPositionBeside(OffsetKilometres, 0.0, OutPosition);
+	}
+
+	// On the dock's floor, which stands above the levelled ground -- not "on the terrain beside the
+	// station", which for Borlash is under the platform. The character drops the half metre onto it.
+	const FBerthPlace& Place = Places[Index];
+
+	OutPosition = FSpaceMMOAirspace::PilotArrivalBesidePad(
+		Place.Pad, Place.Outward, Station.Direction, Place.PadRadiusKilometres);
+
+	return true;
+}
+
+bool ASpaceMMOStationActor::ShipPlacementNear(
+	const FSystemCoordinate& Near,
+	const double OffsetKilometres,
+	const double LiftKilometres,
+	FSystemCoordinate& OutPosition) const
+{
+	const TArray<FBerthPlace> Places = BerthPlaces();
+	const int32 Index = NearestBerth(Places, Near);
+
+	if (Index == INDEX_NONE)
+	{
+		return GroundPositionBeside(OffsetKilometres, LiftKilometres, OutPosition);
+	}
+
+	// On the pad itself. A ship brought to Borlash comes to a docking station, never into the city.
+	OutPosition = FSystemCoordinate(
+		Places[Index].Pad.Kilometres + (Station.Direction.GetSafeNormal() * LiftKilometres));
+
+	return true;
+}
+
+void ASpaceMMOStationActor::RegisterSettlementAirspace()
+{
+	const ASpaceMMOSettlementActor* const Settlement = GetSettlement();
+	UWorld* const World = GetWorld();
+
+	if (Settlement == nullptr || World == nullptr || !Station.bPlaced || !Station.bOnBody)
+	{
+		return;
+	}
+
+	bSettlementRegistered = true;
+
+	USpaceMMOAirspaceSubsystem* const Airspace = World->GetSubsystem<USpaceMMOAirspaceSubsystem>();
+
+	if (Airspace == nullptr)
+	{
+		return;
+	}
+
+	FSpaceMMOAirspaceZone Zone;
+	Zone.Key = Station.Key;
+	Zone.Name = Station.Name;
+	Zone.Origin = SystemPosition;
+	Zone.Rotation = FRotationMatrix::MakeFromZ(Station.Direction.GetSafeNormal()).ToQuat();
+	Zone.FloorKilometres = Settlement->FloorMetres / 1000.0;
+	Zone.NoFlyRadiusKilometres = Settlement->NoFlyRadiusMetres / 1000.0;
+	Zone.NoFlyCeilingKilometres = Settlement->NoFlyCeilingMetres / 1000.0;
+	Zone.PlatformHalfWidthKilometres = Settlement->PlatformHalfWidthMetres / 1000.0;
+
+	for (const FBerthPlace& Place : BerthPlaces())
+	{
+		FSpaceMMOAirspaceBerth Berth;
+		Berth.Pad = Place.Pad;
+		Berth.PadRadiusKilometres = Place.PadRadiusKilometres;
+
+		Zone.Berths.Add(Berth);
+	}
+
+	Airspace->SetZone(Zone);
+
+	// Every berth named with where it stands, so "I cannot dock" has its numbers in the log before
+	// anybody asks: how far the ship was from which pad.
+	for (const FBerthPlace& Place : BerthPlaces())
+	{
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("  berth at %s, pad %.0f m across, %.0f m from %s's centre."),
+			*Place.Pad.ToString(),
+			Place.PadRadiusKilometres * 2000.0,
+			(Place.Pad.Kilometres - SystemPosition.Kilometres).Size() * 1000.0,
+			*Station.Name);
+	}
+}
+
 void ASpaceMMOStationActor::BeginPlay()
 {
 	Super::BeginPlay();
 
 	ApplyRenderTransform();
+}
+
+void ASpaceMMOStationActor::EndPlay(const EEndPlayReason::Type Reason)
+{
+	if (bSettlementRegistered)
+	{
+		if (UWorld* const World = GetWorld())
+		{
+			if (USpaceMMOAirspaceSubsystem* const Airspace = World->GetSubsystem<USpaceMMOAirspaceSubsystem>())
+			{
+				Airspace->RemoveZone(Station.Key);
+			}
+		}
+	}
+
+	Super::EndPlay(Reason);
 }
 
 void ASpaceMMOStationActor::Tick(const float DeltaSeconds)
@@ -402,6 +617,12 @@ void ASpaceMMOStationActor::Tick(const float DeltaSeconds)
 			*GetActorLocation().ToCompactString(),
 			*Hull->Bounds.Origin.ToCompactString(),
 			*Hull->Bounds.BoxExtent.ToCompactString());
+	}
+
+	// The settlement's airspace, once there is a settlement to read it from (task 169).
+	if (!bSettlementRegistered && GetSettlement() != nullptr)
+	{
+		RegisterSettlementAirspace();
 	}
 
 	// Only when the origin actually moves. A station does not travel, so between rebases its

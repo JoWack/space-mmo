@@ -13,6 +13,12 @@ namespace SpaceMMO.Api.Endpoints;
 /// draws a planet for each body that has a position and nothing for the rest, which is why four
 /// stations had nowhere to stand before this was sent (task 157).
 /// </param>
+/// <param name="TerrainPads">
+/// The ground this body's stations level under themselves (task 168). Sent with the body rather than
+/// the stations because it is part of the terrain: the client shapes a planet from the bodies response
+/// before anything is placed on it (task 129), and a pad arriving with the stations would put every
+/// deposit and station near it on the unlevelled ground first.
+/// </param>
 public sealed record BodyResponse(
     int Id,
     string Key,
@@ -31,7 +37,24 @@ public sealed record BodyResponse(
     double? SlopeTo,
     long? TerrainSeed,
     double? MaxElevationKm,
-    double? BaseFrequency);
+    double? BaseFrequency,
+    IReadOnlyList<TerrainPadResponse> TerrainPads);
+
+/// <summary>
+/// One levelled patch of a body's ground, centred on the station that levels it.
+/// </summary>
+/// <remarks>
+/// The station's direction, served again here so the client can shape the planet without waiting for
+/// the stations response; it is the same column, so the two cannot disagree.
+/// </remarks>
+public sealed record TerrainPadResponse(
+    string StationKey,
+    double DirectionX,
+    double DirectionY,
+    double DirectionZ,
+    double FlatRadiusKm,
+    double BlendKm,
+    double ElevationKm);
 
 /// <param name="RequiredToolName">
 /// Display name of the tool this deposit needs, or null for bare hands. Sent so a player can be
@@ -212,7 +235,20 @@ public static class WorldEndpoints
                 b.SlopeTo,
                 b.TerrainSeed,
                 b.MaxElevationKm,
-                b.BaseFrequency))
+                b.BaseFrequency,
+                b.Stations
+                    .Where(s => s.PadFlatRadiusKm != null && s.PadBlendKm != null && s.PadElevationKm != null
+                        && s.DirectionX != null && s.DirectionY != null && s.DirectionZ != null)
+                    .OrderBy(s => s.Key)
+                    .Select(s => new TerrainPadResponse(
+                        s.Key,
+                        s.DirectionX!.Value,
+                        s.DirectionY!.Value,
+                        s.DirectionZ!.Value,
+                        s.PadFlatRadiusKm!.Value,
+                        s.PadBlendKm!.Value,
+                        s.PadElevationKm!.Value))
+                    .ToList()))
             .ToListAsync(cancellation);
 
         return Results.Ok(bodies);

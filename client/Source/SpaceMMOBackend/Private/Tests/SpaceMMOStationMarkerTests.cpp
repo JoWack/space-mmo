@@ -372,4 +372,89 @@ bool FSpaceMMOStationNearestPlacedTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOStationShipLineNamesTheDockTest,
+	"SpaceMMO.Stations.ShipLineNamesTheNearestDock",
+	EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOStationShipLineNamesTheDockTest::RunTest(const FString& Parameters)
+{
+	// Borlash's four pads, 382 m out on the diagonals, each docking within its 12 m and an 8 m rim.
+	TArray<FSpaceMMODockMark> Docks;
+
+	for (const TPair<const TCHAR*, FVector2D>& Pad : TArray<TPair<const TCHAR*, FVector2D>>{
+			{TEXT("NE dock"), FVector2D(0.27, 0.27)}, {TEXT("NW dock"), FVector2D(-0.27, 0.27)},
+			{TEXT("SW dock"), FVector2D(-0.27, -0.27)}, {TEXT("SE dock"), FVector2D(0.27, -0.27)}})
+	{
+		FSpaceMMODockMark Mark;
+		Mark.ShortName = Pad.Key;
+		Mark.Pad = FSystemCoordinate(FVector(Pad.Value.X, Pad.Value.Y, 0.0));
+		Mark.ReachKilometres = 0.020;
+
+		Docks.Add(Mark);
+	}
+
+	double Distance = 0.0;
+	TestEqual(TEXT("The nearest pad is the one nearest"),
+		FSpaceMMOStationLine::NearestDock(Docks, FSystemCoordinate(FVector(-0.2, -0.25, 0.01)), Distance), 2);
+
+	TArray<FSpaceMMODockMark> None;
+	TestEqual(TEXT("A station with no pads has no nearest one"),
+		FSpaceMMOStationLine::NearestDock(None, FSystemCoordinate(), Distance), INDEX_NONE);
+
+	auto Line = [&](const FVector& Ship, const double FromCentreKilometres)
+	{
+		FSpaceMMOStationMarkerView View;
+		View.Name = TEXT("Borlash");
+		View.DistanceKilometres = FromCentreKilometres;
+		View.DockingRangeKilometres = 0.42;
+		View.bOnBody = true;
+
+		double DockDistance = 0.0;
+		const int32 Dock = FSpaceMMOStationLine::NearestDock(Docks, FSystemCoordinate(Ship), DockDistance);
+		View.DockName = Docks[Dock].ShortName;
+		View.DockDistanceKilometres = DockDistance;
+		View.DockReachKilometres = Docks[Dock].ReachKilometres;
+
+		FString Name;
+		double ShownDistance = 0.0;
+		double Range = 0.0;
+		FSpaceMMOStationLine::ForShip(View, Name, ShownDistance, Range);
+
+		return FSpaceMMOStationLine::Format(Name, ShownDistance, Range, true, TEXT("The Capital"));
+	};
+
+	// The three lines Joe chose on 2 October.
+	TestEqual(TEXT("On the pad"),
+		Line(FVector(0.27, 0.27, 0.006), 0.382), FString(TEXT("Borlash NE dock  6 m  ·  READY")));
+
+	TestEqual(TEXT("Approaching the pad"),
+		Line(FVector(0.27, 0.27, 0.140), 0.41), FString(TEXT("Borlash NE dock  140 m  ·  dock at 20 m")));
+
+	// Over the square: within the city's own 420 m, which is what used to say READY here.
+	TestEqual(TEXT("Over the city, not ready"),
+		Line(FVector(0.10, 0.10, 0.10), 0.17), FString(TEXT("Borlash NE dock  260 m  ·  dock at 20 m")));
+
+	// Far away the city keeps its name: the question at 118 km is which world, not which dock.
+	TestEqual(TEXT("Far off, the city"),
+		Line(FVector(118.0, 0.0, 0.0), 118.0), FString(TEXT("Borlash  118 km  ·  at The Capital")));
+
+	// A station without pads reads exactly as it did.
+	FSpaceMMOStationMarkerView Outpost;
+	Outpost.Name = TEXT("Terra Outpost");
+	Outpost.DistanceKilometres = 0.084;
+	Outpost.DockingRangeKilometres = 0.1;
+
+	FString Name;
+	double ShownDistance = 0.0;
+	double Range = 0.0;
+	FSpaceMMOStationLine::ForShip(Outpost, Name, ShownDistance, Range);
+
+	TestEqual(TEXT("An outpost is unchanged"),
+		FSpaceMMOStationLine::Format(Name, ShownDistance, Range, true, TEXT("Terra")),
+		FString(TEXT("Terra Outpost  84 m  ·  READY")));
+
+	return true;
+}
+
 #endif

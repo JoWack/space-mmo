@@ -47,8 +47,16 @@ group and emits a ramp.
 ## Scale
 
 Export with `apply_scale_options="FBX_SCALE_UNITS"` and the scene in metres.
-That is what makes one metre in Blender one metre — 100 uu — in Unreal. Without
-it the usual symptom is a model imported at 1/100th or 100× size.
+The file then holds metres and says so (`UnitScaleFactor` 100), and an importer
+that reads the declaration turns one metre into 100 uu. Without it the usual
+symptom is a model imported at 1/100th or 100× size.
+
+**Unreal's legacy FBX importer does not read the declaration unless told.**
+Set `bConvertSceneUnit` ("Convert Scene Unit") on the static mesh import data,
+or every metre arrives as a centimetre: `FbxMainImport.cpp` converts units only
+behind that flag, and it defaults off. Borlash's first scripted import came in
+at a hundredth of its size with every hull present — only the bounds check
+caught it.
 
 Verify by reading the imported mesh's bounds in the static mesh editor rather
 than by looking at it in a level, where a 40 m building and a 0.4 m building

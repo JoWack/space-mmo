@@ -323,6 +323,33 @@ bool FCharacterWalkModel::StandsOn(
 	return GapCentimetres <= Tolerance;
 }
 
+bool FCharacterWalkModel::WayOutIsUp(const FVector& WayOut, const FVector& Up)
+{
+	const FVector Out = WayOut.GetSafeNormal();
+	const FVector Above = Up.GetSafeNormal();
+
+	if (Out.IsNearlyZero() || Above.IsNearlyZero())
+	{
+		return false;
+	}
+
+	// The same limit a floor is held to: anything shallower than this is a wall's side.
+	return FVector::DotProduct(Out, Above)
+		>= FMath::Cos(FMath::DegreesToRadians(SteepestWalkableSlopeDegrees));
+}
+
+bool FCharacterWalkModel::ClimbsOutOnto(
+	const FVector& WayOut,
+	const FVector& FloorNormal,
+	const FVector& Up,
+	const double FloorAboveFeetCentimetres)
+{
+	return WayOutIsUp(WayOut, Up)
+		&& WayOutIsUp(FloorNormal, Up)
+		&& FloorAboveFeetCentimetres > 0.0
+		&& FloorAboveFeetCentimetres <= DeepestClimbOutCentimetres;
+}
+
 FWalkInput FCharacterWalkModel::ForServer(
 	const FWalkInput& Input, const FWalkState& State, const bool bFacingIsOurs)
 {

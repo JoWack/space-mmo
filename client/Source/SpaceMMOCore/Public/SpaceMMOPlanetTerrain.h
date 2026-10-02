@@ -5,6 +5,45 @@
 #include "SpaceMMOPlanetTerrain.generated.h"
 
 /**
+ * A patch of ground levelled for something built flat (task 168).
+ *
+ * <strong>Part of the height function, not a mesh laid over it.</strong> Inside FlatRadians of
+ * Direction the ground stands at exactly ElevationKilometres; across BlendRadians beyond that it eases
+ * back into the planet's own shape. Every caller of ElevationKilometres sees it -- the drawn globe and
+ * patch, ground contact, stations, deposits -- and a dedicated server evaluates it from the same
+ * numbers, so where a player may stand is still one function both machines agree on.
+ *
+ * <strong>Angles, not kilometres</strong>, because the height function knows directions and not the
+ * planet's radius. MakePad converts once, against the radius the planet is drawn at, so a pad stays
+ * the size content says if that radius ever changes (task 123).
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOCORE_API FPlanetTerrainPad
+{
+	GENERATED_BODY()
+
+	/** Which station levels it. For the log and the tests; nothing branches on it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	FString Key;
+
+	/** The centre, as a unit direction from the planet's centre. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	FVector Direction = FVector::UpVector;
+
+	/** Angular radius of the level ground, in radians. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	double FlatRadians = 0.0;
+
+	/** Angular width of the ring in which the level ground returns to the land, in radians. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	double BlendRadians = 0.0;
+
+	/** Height of the level ground above the nominal radius, in kilometres. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	double ElevationKilometres = 0.0;
+};
+
+/**
  * What a planet's surface looks like, as authored content.
  *
  * Terrain is a <em>function</em>, not a heightmap asset. Nothing is stored, so the same surface
@@ -15,6 +54,15 @@ USTRUCT(BlueprintType)
 struct SPACEMMOCORE_API FPlanetTerrainConfig
 {
 	GENERATED_BODY()
+
+	/**
+	 * Ground levelled under things built flat -- a city -- applied over the noise (task 168).
+	 *
+	 * Empty on every body but one today. In the config rather than beside it, so nothing that already
+	 * receives a body's terrain can ask the ground a question and get the unlevelled answer.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
+	TArray<FPlanetTerrainPad> Pads;
 
 	/** Decorrelates one planet's surface from another's. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Terrain")
@@ -137,6 +185,24 @@ public:
 	 *         gravity-defining radius.
 	 */
 	static double ElevationKilometres(const FPlanetTerrainConfig& Terrain, const FVector& Direction);
+
+	/**
+	 * How much of a pad's level ground a direction stands on: 1 inside it, 0 beyond its blend ring,
+	 * easing between with zero slope at both edges so neither edge is a crease in the ground.
+	 */
+	static double PadWeight(const FPlanetTerrainPad& Pad, const FVector& UnitDirection);
+
+	/**
+	 * A pad from the sizes content authors, in kilometres along the surface of a planet of the given
+	 * radius. The one place kilometres become angles.
+	 */
+	static FPlanetTerrainPad MakePad(
+		const FString& Key,
+		const FVector& Direction,
+		double FlatRadiusKilometres,
+		double BlendKilometres,
+		double ElevationKilometres,
+		double PlanetRadiusKilometres);
 
 	/** Distance from the planet centre to the ground, in kilometres. */
 	static double SurfaceRadiusKilometres(

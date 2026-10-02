@@ -8,6 +8,55 @@
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOWorldSubsystem.h"
 
+namespace
+{
+	/**
+	 * A body's levelled ground, as angles on a planet of the radius it is drawn at (task 168).
+	 *
+	 * The one conversion from the kilometres content authors to what the height function uses, so the
+	 * two places below that shape a planet cannot shape it differently.
+	 */
+	TArray<FPlanetTerrainPad> PadsFor(const FBackendBody& Body, const double DrawnRadiusKilometres)
+	{
+		TArray<FPlanetTerrainPad> Pads;
+
+		for (const FBackendTerrainPad& Served : Body.TerrainPads)
+		{
+			Pads.Add(FPlanetTerrain::MakePad(
+				Served.StationKey,
+				Served.Direction,
+				Served.FlatRadiusKilometres,
+				Served.BlendKilometres,
+				Served.ElevationKilometres,
+				DrawnRadiusKilometres));
+		}
+
+		return Pads;
+	}
+
+	bool SamePads(const TArray<FPlanetTerrainPad>& A, const TArray<FPlanetTerrainPad>& B)
+	{
+		if (A.Num() != B.Num())
+		{
+			return false;
+		}
+
+		for (int32 Index = 0; Index < A.Num(); ++Index)
+		{
+			if (A[Index].Key != B[Index].Key
+				|| !A[Index].Direction.Equals(B[Index].Direction, 1e-12)
+				|| !FMath::IsNearlyEqual(A[Index].FlatRadians, B[Index].FlatRadians)
+				|| !FMath::IsNearlyEqual(A[Index].BlendRadians, B[Index].BlendRadians)
+				|| !FMath::IsNearlyEqual(A[Index].ElevationKilometres, B[Index].ElevationKilometres))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+}
+
 void USpaceMMOTerrainPaintSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
@@ -85,6 +134,8 @@ void USpaceMMOTerrainPaintSubsystem::BuildPlanetsForPlacedBodies(
 			Terrain.MaxElevationKilometres = Body.MaxElevationKilometres;
 			Terrain.BaseFrequency = Body.BaseFrequency;
 		}
+
+		Terrain.Pads = PadsFor(Body, Drawn.RadiusKilometres);
 
 		if (Scenery->EnsurePlanet(Body.Key, Config, Terrain) != nullptr)
 		{
@@ -165,6 +216,7 @@ void USpaceMMOTerrainPaintSubsystem::PaintPlanets()
 			Shape.Seed = Body->TerrainSeed;
 			Shape.MaxElevationKilometres = Body->MaxElevationKilometres;
 			Shape.BaseFrequency = Body->BaseFrequency;
+			Shape.Pads = PadsFor(*Body, Planet->GetPlanetConfig().RadiusKilometres);
 
 			// Only when something actually differs. This runs on every bodies-loaded broadcast, and
 			// rebuilding a hundred thousand triangles to arrive at the shape already on screen is
@@ -174,17 +226,32 @@ void USpaceMMOTerrainPaintSubsystem::PaintPlanets()
 			const bool bChanged =
 				Current.Seed != Shape.Seed
 				|| !FMath::IsNearlyEqual(Current.MaxElevationKilometres, Shape.MaxElevationKilometres)
-				|| !FMath::IsNearlyEqual(Current.BaseFrequency, Shape.BaseFrequency);
+				|| !FMath::IsNearlyEqual(Current.BaseFrequency, Shape.BaseFrequency)
+				|| !SamePads(Current.Pads, Shape.Pads);
 
 			if (bChanged)
 			{
 				UE_LOG(LogSpaceMMOBackend, Log,
-					TEXT("Shaping %s from body '%s': seed %lld, relief %.2f km, frequency %.1f."),
+					TEXT("Shaping %s from body '%s': seed %lld, relief %.2f km, frequency %.1f, %d "
+						"levelled pad(s)."),
 					*Planet->GetName(),
 					*Body->Key,
 					Shape.Seed,
 					Shape.MaxElevationKilometres,
-					Shape.BaseFrequency);
+					Shape.BaseFrequency,
+					Shape.Pads.Num());
+
+				// Each pad named with its size as it will be drawn, so "the city is floating" can be
+				// answered from the log: which station, how wide, and at what height.
+				for (const FPlanetTerrainPad& Pad : Shape.Pads)
+				{
+					UE_LOG(LogSpaceMMOBackend, Log,
+						TEXT("  ground levelled for %s at %.1f m, flat for %.0f m, blending over %.0f m."),
+						*Pad.Key,
+						Pad.ElevationKilometres * 1000.0,
+						Pad.FlatRadians * Planet->GetPlanetConfig().RadiusKilometres * 1000.0,
+						Pad.BlendRadians * Planet->GetPlanetConfig().RadiusKilometres * 1000.0);
+				}
 
 				Planet->SetTerrainConfig(Shape);
 			}

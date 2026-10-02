@@ -1,662 +1,2686 @@
 {
-  "asset": "Borlash City / A-07",
-  "phase": "exterior blockout",
-  "sources": [
-    "Origin Station Plans.pdf pp21-30",
-    "CapitalGrandDistrict.png",
-    "docs/design-bible.md"
-  ],
-  "deviations": [
-    "Hotel schedule 40m used over drawing 38m.",
-    "All heights other than wall12/gate20/HQ45 and silhouette details are design assumptions.",
-    "Five district FBXs with local anchors; no gameplay content, Blueprint or terrain changes.",
-    "Market is per-station; bank images interpreted as storage depots; no invented loans or NPC supply.",
-    "400m wall centrelines retained; 2m wall thickness assumed. Ring bypasses at gates added because the drawn gate towers interrupt the ring.",
-    "Interiors are not designed in A-07. All building masses intentionally closed; access validation ends at frontages."
+ "asset": "Borlash City / A-07, round, from the concept art",
+ "task": 167,
+ "built": "2026-10-02 15:40",
+ "generator": "tools/greybox/a07_borlash_city.py",
+ "units": "Blender metres, +X east, +Y north, +Z up. The FBX importer turns these into Unreal centimetres as (x*100, -y*100, z*100): Unreal is left-handed, so north is -Y there.",
+ "origin": "the levelled ground at the city centre; the walking surface is floor_m above it",
+ "floor_m": 0.3,
+ "drawn_planet_radius_m": 20000.0,
+ "pad_required": {
+  "flat_radius_m": 420.0,
+  "blend_m": 150.0,
+  "why": "the platform's farthest corner is 400 m out; the pad must be flat past it"
+ },
+ "skirt_bottom_m": -6.5,
+ "airspace": {
+  "no_fly_radius_m": 215.0,
+  "no_fly_ceiling_m": 3000.0,
+  "why": "the wall, turrets and gate towers reach 210.0 m from the centre",
+  "no_disembark": {
+   "square_half_m": 272.0,
+   "why": "the whole platform, docks included: at a dock you dock"
+  }
+ },
+ "materials": {
+  "MAT_Borlash_Stone": {
+   "base_colour_linear": [
+    0.52252,
+    0.35469,
+    0.17064
+   ],
+   "base_colour_srgb": [
+    0.75,
+    0.63,
+    0.45
+   ],
+   "metallic": 0.0,
+   "roughness": 0.72,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_StoneDark": {
+   "base_colour_linear": [
+    0.08898,
+    0.07829,
+    0.06838
+   ],
+   "base_colour_srgb": [
+    0.33,
+    0.31,
+    0.29
+   ],
+   "metallic": 0.0,
+   "roughness": 0.85,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Brass": {
+   "base_colour_linear": [
+    0.71057,
+    0.39312,
+    0.08898
+   ],
+   "base_colour_srgb": [
+    0.86,
+    0.66,
+    0.33
+   ],
+   "metallic": 1.0,
+   "roughness": 0.32,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Slate": {
+   "base_colour_linear": [
+    0.0331,
+    0.04696,
+    0.06838
+   ],
+   "base_colour_srgb": [
+    0.2,
+    0.24,
+    0.29
+   ],
+   "metallic": 0.35,
+   "roughness": 0.5,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_GlassDome": {
+   "base_colour_linear": [
+    0.04696,
+    0.14732,
+    0.31855
+   ],
+   "base_colour_srgb": [
+    0.24,
+    0.42,
+    0.6
+   ],
+   "metallic": 0.6,
+   "roughness": 0.15,
+   "emission_linear": [
+    0.0331,
+    0.21404,
+    0.69207
+   ],
+   "emission_strength": 0.8
+  },
+  "MAT_Borlash_Glass": {
+   "base_colour_linear": [
+    0.17064,
+    0.52252,
+    1.0
+   ],
+   "base_colour_srgb": [
+    0.45,
+    0.75,
+    1.0
+   ],
+   "metallic": 0.0,
+   "roughness": 0.18,
+   "emission_linear": [
+    0.17064,
+    0.60383,
+    1.0
+   ],
+   "emission_strength": 3.5
+  },
+  "MAT_Borlash_Light": {
+   "base_colour_linear": [
+    0.52252,
+    0.84809,
+    1.0
+   ],
+   "base_colour_srgb": [
+    0.75,
+    0.93,
+    1.0
+   ],
+   "metallic": 0.0,
+   "roughness": 0.3,
+   "emission_linear": [
+    0.44799,
+    0.82757,
+    1.0
+   ],
+   "emission_strength": 9.0
+  },
+  "MAT_Borlash_LightWarm": {
+   "base_colour_linear": [
+    1.0,
+    0.60383,
+    0.26327
+   ],
+   "base_colour_srgb": [
+    1.0,
+    0.8,
+    0.55
+   ],
+   "metallic": 0.0,
+   "roughness": 0.3,
+   "emission_linear": [
+    1.0,
+    0.53824,
+    0.17064
+   ],
+   "emission_strength": 7.0
+  },
+  "MAT_Borlash_Water": {
+   "base_colour_linear": [
+    0.00854,
+    0.05088,
+    0.09463
+   ],
+   "base_colour_srgb": [
+    0.09,
+    0.25,
+    0.34
+   ],
+   "metallic": 0.0,
+   "roughness": 0.04,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Grass": {
+   "base_colour_linear": [
+    0.07324,
+    0.17064,
+    0.03968
+   ],
+   "base_colour_srgb": [
+    0.3,
+    0.45,
+    0.22
+   ],
+   "metallic": 0.0,
+   "roughness": 0.9,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Foliage": {
+   "base_colour_linear": [
+    0.02721,
+    0.09463,
+    0.02452
+   ],
+   "base_colour_srgb": [
+    0.18,
+    0.34,
+    0.17
+   ],
+   "metallic": 0.0,
+   "roughness": 0.85,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Bark": {
+   "base_colour_linear": [
+    0.08898,
+    0.05088,
+    0.02721
+   ],
+   "base_colour_srgb": [
+    0.33,
+    0.25,
+    0.18
+   ],
+   "metallic": 0.0,
+   "roughness": 0.9,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Paving": {
+   "base_colour_linear": [
+    0.26327,
+    0.24287,
+    0.19599
+   ],
+   "base_colour_srgb": [
+    0.55,
+    0.53,
+    0.48
+   ],
+   "metallic": 0.0,
+   "roughness": 0.8,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_PavingLight": {
+   "base_colour_linear": [
+    0.44799,
+    0.39312,
+    0.2957
+   ],
+   "base_colour_srgb": [
+    0.7,
+    0.66,
+    0.58
+   ],
+   "metallic": 0.0,
+   "roughness": 0.74,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Road": {
+   "base_colour_linear": [
+    0.10654,
+    0.10654,
+    0.1128
+   ],
+   "base_colour_srgb": [
+    0.36,
+    0.36,
+    0.37
+   ],
+   "metallic": 0.0,
+   "roughness": 0.85,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Metal": {
+   "base_colour_linear": [
+    0.03968,
+    0.04323,
+    0.05497
+   ],
+   "base_colour_srgb": [
+    0.22,
+    0.23,
+    0.26
+   ],
+   "metallic": 0.85,
+   "roughness": 0.4,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Pad": {
+   "base_colour_linear": [
+    0.01533,
+    0.01739,
+    0.02198
+   ],
+   "base_colour_srgb": [
+    0.13,
+    0.14,
+    0.16
+   ],
+   "metallic": 0.3,
+   "roughness": 0.6,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Interior": {
+   "base_colour_linear": [
+    0.50708,
+    0.43388,
+    0.33034
+   ],
+   "base_colour_srgb": [
+    0.74,
+    0.69,
+    0.61
+   ],
+   "metallic": 0.0,
+   "roughness": 0.8,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_Floor": {
+   "base_colour_linear": [
+    0.14732,
+    0.10048,
+    0.06838
+   ],
+   "base_colour_srgb": [
+    0.42,
+    0.35,
+    0.29
+   ],
+   "metallic": 0.1,
+   "roughness": 0.42,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  },
+  "MAT_Borlash_LagoonBed": {
+   "base_colour_linear": [
+    0.01739,
+    0.02452,
+    0.02198
+   ],
+   "base_colour_srgb": [
+    0.14,
+    0.17,
+    0.16
+   ],
+   "metallic": 0.0,
+   "roughness": 0.95,
+   "emission_linear": null,
+   "emission_strength": 0.0
+  }
+ },
+ "meshes": [
+  {
+   "name": "SM_Borlash_Admin",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 5307,
+   "hulls": 77,
+   "bounds_m": [
+    [
+     -30.6,
+     30.6
+    ],
+    [
+     44.65,
+     93.35000000000001
+    ],
+    [
+     0.19999999999999998,
+     44.03
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Apartments",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_LightWarm",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 5954,
+   "hulls": 52,
+   "bounds_m": [
+    [
+     97.5,
+     144.6
+    ],
+    [
+     60.5,
+     93.6
+    ],
+    [
+     0.19999999999999998,
+     35.5
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_BankNorth",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Metal",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 4044,
+   "hulls": 49,
+   "bounds_m": [
+    [
+     -124.6,
+     -75.4
+    ],
+    [
+     23.4,
+     58.6
+    ],
+    [
+     0.19999999999999998,
+     28.71
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_BankSouth",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Metal",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 3866,
+   "hulls": 47,
+   "bounds_m": [
+    [
+     81.4,
+     126.6
+    ],
+    [
+     -118.6,
+     -85.4
+    ],
+    [
+     0.19999999999999998,
+     28.71
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_CraftingGuild",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 3956,
+   "hulls": 57,
+   "bounds_m": [
+    [
+     -112.6,
+     -55.4
+    ],
+    [
+     -133.6,
+     -96.5
+    ],
+    [
+     0.19999999999999998,
+     32.4
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_CraftingHall",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_LightWarm",
+    "MAT_Borlash_Metal",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 8023,
+   "hulls": 70,
+   "bounds_m": [
+    [
+     -124.6,
+     -49.5
+    ],
+    [
+     -76.6,
+     -29.5
+    ],
+    [
+     0.19999999999999998,
+     33.68
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Dock_NE",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Pad",
+    "MAT_Borlash_Paving",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 2631,
+   "hulls": 32,
+   "bounds_m": [
+    [
+     228.0,
+     292.0
+    ],
+    [
+     228.0,
+     292.0
+    ],
+    [
+     -6.5,
+     21.39
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Dock_NW",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Pad",
+    "MAT_Borlash_Paving",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 2631,
+   "hulls": 32,
+   "bounds_m": [
+    [
+     -292.0,
+     -228.0
+    ],
+    [
+     228.0,
+     292.0
+    ],
+    [
+     -6.5,
+     21.39
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Dock_SE",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Pad",
+    "MAT_Borlash_Paving",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 2631,
+   "hulls": 32,
+   "bounds_m": [
+    [
+     228.0,
+     292.0
+    ],
+    [
+     -292.0,
+     -228.0
+    ],
+    [
+     -6.5,
+     21.39
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Dock_SW",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Pad",
+    "MAT_Borlash_Paving",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 2631,
+   "hulls": 32,
+   "bounds_m": [
+    [
+     -292.0,
+     -228.0
+    ],
+    [
+     -292.0,
+     -228.0
+    ],
+    [
+     -6.5,
+     21.39
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Ground",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Grass",
+    "MAT_Borlash_LagoonBed",
+    "MAT_Borlash_Metal",
+    "MAT_Borlash_Paving",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Road",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 5688,
+   "hulls": 5,
+   "bounds_m": [
+    [
+     -296.0,
+     296.0
+    ],
+    [
+     -296.0,
+     296.0
+    ],
+    [
+     -6.5,
+     0.33499999999999996
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_HQ",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 4485,
+   "hulls": 71,
+   "bounds_m": [
+    [
+     33.5,
+     96.6
+    ],
+    [
+     91.5,
+     143.6
+    ],
+    [
+     0.19999999999999998,
+     65.0
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Hotel",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_LightWarm",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 3869,
+   "hulls": 44,
+   "bounds_m": [
+    [
+     41.4,
+     82.6
+    ],
+    [
+     31.0,
+     63.6
+    ],
+    [
+     0.19999999999999998,
+     36.92
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Lamps",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Metal",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 3348,
+   "hulls": 108,
+   "bounds_m": [
+    [
+     -179.51637678658508,
+     179.51637678658506
+    ],
+    [
+     -179.51637678658506,
+     179.51637678658506
+    ],
+    [
+     0.19999999999999998,
+     7.199999999999999
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Market",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Metal",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 9097,
+   "hulls": 78,
+   "bounds_m": [
+    [
+     -122.6,
+     -47.5
+    ],
+    [
+     75.5,
+     122.6
+    ],
+    [
+     0.19999999999999998,
+     42.6
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Pub",
+   "materials": [
+    "MAT_Borlash_Bark",
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_LightWarm",
+    "MAT_Borlash_Metal",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 3043,
+   "hulls": 41,
+   "bounds_m": [
+    [
+     94.4,
+     125.6
+    ],
+    [
+     26.5,
+     51.6
+    ],
+    [
+     0.19999999999999998,
+     22.569999999999997
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Railings",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 3600,
+   "hulls": 300,
+   "bounds_m": [
+    [
+     -292.0021680129282,
+     292.0021680129282
+    ],
+    [
+     -292.0021680129282,
+     292.0021680129282
+    ],
+    [
+     0.19999999999999998,
+     1.4000000000000001
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_RefiningGuild",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 4808,
+   "hulls": 57,
+   "bounds_m": [
+    [
+     21.4,
+     78.6
+    ],
+    [
+     -134.6,
+     -97.5
+    ],
+    [
+     0.19999999999999998,
+     31.950000000000003
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_RefiningHall",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Floor",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_Interior",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_LightWarm",
+    "MAT_Borlash_Metal",
+    "MAT_Borlash_PavingLight",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 7653,
+   "hulls": 70,
+   "bounds_m": [
+    [
+     53.5,
+     128.6
+    ],
+    [
+     -76.6,
+     -29.5
+    ],
+    [
+     0.19999999999999998,
+     34.52
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Scenery",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 22389,
+   "hulls": 41,
+   "bounds_m": [
+    [
+     -172.35,
+     169.35
+    ],
+    [
+     -169.5,
+     167.92000000000002
+    ],
+    [
+     0.19999999999999998,
+     26.3
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Square",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_LagoonBed",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 779,
+   "hulls": 41,
+   "bounds_m": [
+    [
+     -18.753957943692964,
+     18.753957943692964
+    ],
+    [
+     -18.75395794369296,
+     18.753957943692964
+    ],
+    [
+     -0.3,
+     16.55
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Trees",
+   "materials": [
+    "MAT_Borlash_Bark",
+    "MAT_Borlash_Foliage"
+   ],
+   "faces": 19430,
+   "hulls": 145,
+   "bounds_m": [
+    [
+     -174.53481257167275,
+     174.53481257167275
+    ],
+    [
+     -174.41075001387622,
+     174.41075001387622
+    ],
+    [
+     0.19999999999999998,
+     8.73
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Wall",
+   "materials": [
+    "MAT_Borlash_Brass",
+    "MAT_Borlash_Glass",
+    "MAT_Borlash_GlassDome",
+    "MAT_Borlash_Light",
+    "MAT_Borlash_Slate",
+    "MAT_Borlash_Stone",
+    "MAT_Borlash_StoneDark"
+   ],
+   "faces": 25784,
+   "hulls": 176,
+   "bounds_m": [
+    [
+     -208.50643138852305,
+     208.50643138852305
+    ],
+    [
+     -208.50643138852305,
+     208.50643138852305
+    ],
+    [
+     -1.5,
+     36.71
+    ]
+   ]
+  },
+  {
+   "name": "SM_Borlash_Water",
+   "materials": [
+    "MAT_Borlash_Water"
+   ],
+   "faces": 121,
+   "hulls": 0,
+   "bounds_m": [
+    [
+     -271.8,
+     271.8
+    ],
+    [
+     -271.8,
+     271.8
+    ],
+    [
+     -0.39999999999999997,
+     3.5999999999999996
+    ]
+   ]
+  }
+ ],
+ "berths": [
+  {
+   "key": "dock_ne",
+   "name": "Docking Station NE",
+   "short_name": "NE dock",
+   "pad_m": [
+    269.899,
+    269.899,
+    0.3
+   ],
+   "pad_radius_m": 12.0,
+   "dock_centre_m": [
+    260.0,
+    260.0,
+    0.3
+   ],
+   "dock_radius_m": 32.0,
+   "outward": [
+    0.707107,
+    0.707107
+   ]
+  },
+  {
+   "key": "dock_nw",
+   "name": "Docking Station NW",
+   "short_name": "NW dock",
+   "pad_m": [
+    -269.899,
+    269.899,
+    0.3
+   ],
+   "pad_radius_m": 12.0,
+   "dock_centre_m": [
+    -260.0,
+    260.0,
+    0.3
+   ],
+   "dock_radius_m": 32.0,
+   "outward": [
+    -0.707107,
+    0.707107
+   ]
+  },
+  {
+   "key": "dock_sw",
+   "name": "Docking Station SW",
+   "short_name": "SW dock",
+   "pad_m": [
+    -269.899,
+    -269.899,
+    0.3
+   ],
+   "pad_radius_m": 12.0,
+   "dock_centre_m": [
+    -260.0,
+    -260.0,
+    0.3
+   ],
+   "dock_radius_m": 32.0,
+   "outward": [
+    -0.707107,
+    -0.707107
+   ]
+  },
+  {
+   "key": "dock_se",
+   "name": "Docking Station SE",
+   "short_name": "SE dock",
+   "pad_m": [
+    269.899,
+    -269.899,
+    0.3
+   ],
+   "pad_radius_m": 12.0,
+   "dock_centre_m": [
+    260.0,
+    -260.0,
+    0.3
+   ],
+   "dock_radius_m": 32.0,
+   "outward": [
+    0.707107,
+    -0.707107
+   ]
+  }
+ ],
+ "service_points": [
+  {
+   "building": "Admin",
+   "service": "quests",
+   "label": "Arrivals and quest stand",
+   "stand_m": [
+    -10.0,
+    53.7,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Admin",
+   "service": "registry",
+   "label": "Registry and insurance",
+   "stand_m": [
+    -21.2,
+    83.6,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "ADR-0006 payouts are M6"
+  },
+  {
+   "building": "Market",
+   "service": "market",
+   "label": "Market terminal 1",
+   "stand_m": [
+    -108.0,
+    115.7,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Market",
+   "service": "market",
+   "label": "Market terminal 4",
+   "stand_m": [
+    -64.0,
+    115.7,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Market",
+   "service": "market",
+   "label": "Market terminal 2",
+   "stand_m": [
+    -99.0,
+    115.7,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Market",
+   "service": "market",
+   "label": "Market terminal 5",
+   "stand_m": [
+    -73.0,
+    115.7,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Market",
+   "service": "market",
+   "label": "Market terminal 3",
+   "stand_m": [
+    -90.0,
+    115.7,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Market",
+   "service": "market",
+   "label": "Market terminal 6",
+   "stand_m": [
+    -82.0,
+    115.7,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "BankNorth",
+   "service": "storage",
+   "label": "Bank counter",
+   "stand_m": [
+    -100.0,
+    53.6,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "BankNorth",
+   "service": "storage",
+   "label": "Vault racking, west",
+   "stand_m": [
+    -120.5,
+    43.0,
+    0.3
+   ],
+   "facing_deg": -180.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "BankNorth",
+   "service": "storage",
+   "label": "Vault racking, east",
+   "stand_m": [
+    -79.5,
+    43.0,
+    0.3
+   ],
+   "facing_deg": -0.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "BankSouth",
+   "service": "storage",
+   "label": "Bank counter",
+   "stand_m": [
+    104.0,
+    -113.6,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "BankSouth",
+   "service": "storage",
+   "label": "Vault racking, west",
+   "stand_m": [
+    85.5,
+    -104.0,
+    0.3
+   ],
+   "facing_deg": -180.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "BankSouth",
+   "service": "storage",
+   "label": "Vault racking, east",
+   "stand_m": [
+    122.5,
+    -104.0,
+    0.3
+   ],
+   "facing_deg": -0.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "HQ",
+   "service": "faction",
+   "label": "Faction supply counter",
+   "stand_m": [
+    66.0,
+    137.6,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "the faction supply order was retired on 6 September (task 148)"
+  },
+  {
+   "building": "HQ",
+   "service": "registry",
+   "label": "Registry desk",
+   "stand_m": [
+    91.6,
+    124.0,
+    0.3
+   ],
+   "facing_deg": -0.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "ADR-0006 and ADR-0009 are M6"
+  },
+  {
+   "building": "Apartments",
+   "service": "housing",
+   "label": "Residents' desk",
+   "stand_m": [
+    130.8,
+    89.5,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "player housing is not designed yet"
+  },
+  {
+   "building": "Hotel",
+   "service": "lodging",
+   "label": "Reception",
+   "stand_m": [
+    62.0,
+    58.6,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "transient rooms are not designed yet"
+  },
+  {
+   "building": "Pub",
+   "service": "social",
+   "label": "Bar",
+   "stand_m": [
+    110.0,
+    47.7,
+    0.3
+   ],
+   "facing_deg": 90.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "CraftingHall",
+   "service": "industry",
+   "label": "Industry bay 1",
+   "stand_m": [
+    -114.4,
+    -71.0,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "skills": [
+    "toolcrafting",
+    "shipcrafting",
+    "electronics",
+    "armorcrafting",
+    "weaponcrafting",
+    "construction"
+   ]
+  },
+  {
+   "building": "CraftingHall",
+   "service": "industry",
+   "label": "Industry bay 2",
+   "stand_m": [
+    -96.8,
+    -71.0,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "skills": [
+    "toolcrafting",
+    "shipcrafting",
+    "electronics",
+    "armorcrafting",
+    "weaponcrafting",
+    "construction"
+   ]
+  },
+  {
+   "building": "CraftingHall",
+   "service": "industry",
+   "label": "Industry bay 3",
+   "stand_m": [
+    -79.2,
+    -71.0,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "skills": [
+    "toolcrafting",
+    "shipcrafting",
+    "electronics",
+    "armorcrafting",
+    "weaponcrafting",
+    "construction"
+   ]
+  },
+  {
+   "building": "CraftingHall",
+   "service": "industry",
+   "label": "Industry bay 4",
+   "stand_m": [
+    -61.6,
+    -71.0,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "skills": [
+    "toolcrafting",
+    "shipcrafting",
+    "electronics",
+    "armorcrafting",
+    "weaponcrafting",
+    "construction"
+   ]
+  },
+  {
+   "building": "RefiningHall",
+   "service": "industry",
+   "label": "Industry bay 1",
+   "stand_m": [
+    65.6,
+    -71.0,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "skills": [
+    "refining"
+   ]
+  },
+  {
+   "building": "RefiningHall",
+   "service": "industry",
+   "label": "Industry bay 2",
+   "stand_m": [
+    83.2,
+    -71.0,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "skills": [
+    "refining"
+   ]
+  },
+  {
+   "building": "RefiningHall",
+   "service": "industry",
+   "label": "Industry bay 3",
+   "stand_m": [
+    100.8,
+    -71.0,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "skills": [
+    "refining"
+   ]
+  },
+  {
+   "building": "RefiningHall",
+   "service": "industry",
+   "label": "Industry bay 4",
+   "stand_m": [
+    118.4,
+    -71.0,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "skills": [
+    "refining"
+   ]
+  },
+  {
+   "building": "CraftingGuild",
+   "service": "careers",
+   "label": "Career giver 1",
+   "stand_m": [
+    -102.133,
+    -129.5,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "career chains are M8 and not designed (design-bible 4)"
+  },
+  {
+   "building": "CraftingGuild",
+   "service": "careers",
+   "label": "Career giver 2",
+   "stand_m": [
+    -84.0,
+    -129.5,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "career chains are M8 and not designed (design-bible 4)"
+  },
+  {
+   "building": "CraftingGuild",
+   "service": "careers",
+   "label": "Career giver 3",
+   "stand_m": [
+    -65.867,
+    -129.5,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "career chains are M8 and not designed (design-bible 4)"
+  },
+  {
+   "building": "RefiningGuild",
+   "service": "careers",
+   "label": "Career giver 1",
+   "stand_m": [
+    31.867,
+    -130.5,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "career chains are M8 and not designed (design-bible 4)"
+  },
+  {
+   "building": "RefiningGuild",
+   "service": "careers",
+   "label": "Career giver 2",
+   "stand_m": [
+    50.0,
+    -130.5,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "career chains are M8 and not designed (design-bible 4)"
+  },
+  {
+   "building": "RefiningGuild",
+   "service": "careers",
+   "label": "Career giver 3",
+   "stand_m": [
+    68.133,
+    -130.5,
+    0.3
+   ],
+   "facing_deg": -90.0,
+   "reach_m": 2.5,
+   "available": false,
+   "note": "career chains are M8 and not designed (design-bible 4)"
+  },
+  {
+   "building": "Dock_NE",
+   "service": "ships",
+   "label": "Ship services",
+   "stand_m": [
+    254.767,
+    254.767,
+    0.3
+   ],
+   "facing_deg": 225.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Dock_NW",
+   "service": "ships",
+   "label": "Ship services",
+   "stand_m": [
+    -254.767,
+    254.767,
+    0.3
+   ],
+   "facing_deg": 315.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Dock_SW",
+   "service": "ships",
+   "label": "Ship services",
+   "stand_m": [
+    -254.767,
+    -254.767,
+    0.3
+   ],
+   "facing_deg": 45.0,
+   "reach_m": 2.5
+  },
+  {
+   "building": "Dock_SE",
+   "service": "ships",
+   "label": "Ship services",
+   "stand_m": [
+    254.767,
+    -254.767,
+    0.3
+   ],
+   "facing_deg": 135.0,
+   "reach_m": 2.5
+  }
+ ],
+ "doors": [
+  {
+   "building": "Admin",
+   "side": "S",
+   "centre_m": [
+    0.0,
+    50.0,
+    0.3
+   ],
+   "width_m": 8.0,
+   "height_m": 6.0,
+   "outward": [
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "building": "Admin",
+   "side": "N",
+   "centre_m": [
+    0.0,
+    88.0,
+    0.3
+   ],
+   "width_m": 8.0,
+   "height_m": 6.0,
+   "outward": [
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "building": "Market",
+   "side": "S",
+   "centre_m": [
+    -86.0,
+    78.0,
+    0.3
+   ],
+   "width_m": 8.0,
+   "height_m": 6.0,
+   "outward": [
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "building": "Market",
+   "side": "E",
+   "centre_m": [
+    -50.0,
+    100.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.0,
+   "outward": [
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "building": "BankNorth",
+   "side": "S",
+   "centre_m": [
+    -100.0,
+    28.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.5,
+   "outward": [
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "building": "BankSouth",
+   "side": "N",
+   "centre_m": [
+    104.0,
+    -90.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.5,
+   "outward": [
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "building": "HQ",
+   "side": "S",
+   "centre_m": [
+    66.0,
+    94.0,
+    0.3
+   ],
+   "width_m": 8.0,
+   "height_m": 6.5,
+   "outward": [
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "building": "HQ",
+   "side": "W",
+   "centre_m": [
+    36.0,
+    118.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.0,
+   "outward": [
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "building": "Apartments",
+   "side": "S",
+   "centre_m": [
+    114.0,
+    63.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 4.6,
+   "outward": [
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "building": "Apartments",
+   "side": "W",
+   "centre_m": [
+    100.0,
+    78.0,
+    0.3
+   ],
+   "width_m": 5.0,
+   "height_m": 4.6,
+   "outward": [
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "building": "Hotel",
+   "side": "S",
+   "centre_m": [
+    62.0,
+    37.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.0,
+   "outward": [
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "building": "Pub",
+   "side": "S",
+   "centre_m": [
+    110.0,
+    29.0,
+    0.3
+   ],
+   "width_m": 5.0,
+   "height_m": 4.4,
+   "outward": [
+    0.0,
+    -1.0
+   ]
+  },
+  {
+   "building": "CraftingHall",
+   "side": "N",
+   "centre_m": [
+    -88.0,
+    -32.0,
+    0.3
+   ],
+   "width_m": 8.0,
+   "height_m": 6.0,
+   "outward": [
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "building": "CraftingHall",
+   "side": "E",
+   "centre_m": [
+    -52.0,
+    -54.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.0,
+   "outward": [
+    1.0,
+    0.0
+   ]
+  },
+  {
+   "building": "RefiningHall",
+   "side": "N",
+   "centre_m": [
+    92.0,
+    -32.0,
+    0.3
+   ],
+   "width_m": 8.0,
+   "height_m": 6.0,
+   "outward": [
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "building": "RefiningHall",
+   "side": "W",
+   "centre_m": [
+    56.0,
+    -54.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.0,
+   "outward": [
+    -1.0,
+    0.0
+   ]
+  },
+  {
+   "building": "CraftingGuild",
+   "side": "N",
+   "centre_m": [
+    -84.0,
+    -99.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.5,
+   "outward": [
+    0.0,
+    1.0
+   ]
+  },
+  {
+   "building": "RefiningGuild",
+   "side": "N",
+   "centre_m": [
+    50.0,
+    -100.0,
+    0.3
+   ],
+   "width_m": 6.0,
+   "height_m": 5.5,
+   "outward": [
+    0.0,
+    1.0
+   ]
+  }
+ ],
+ "gates": [
+  {
+   "name": "North",
+   "axis_deg": 90.0,
+   "opening_m": 16.4,
+   "clear_height_m": 8.7
+  },
+  {
+   "name": "East",
+   "axis_deg": 0.0,
+   "opening_m": 16.4,
+   "clear_height_m": 8.7
+  },
+  {
+   "name": "South",
+   "axis_deg": -90.0,
+   "opening_m": 16.4,
+   "clear_height_m": 8.7
+  },
+  {
+   "name": "West",
+   "axis_deg": 180.0,
+   "opening_m": 16.4,
+   "clear_height_m": 8.7
+  }
+ ],
+ "water": [
+  {
+   "name": "lagoon",
+   "surface_m": -0.4,
+   "nearest_centre_m": 204.0,
+   "clearance_m": 0.64
+  },
+  {
+   "name": "canal",
+   "surface_m": 0.1,
+   "nearest_centre_m": 36.0,
+   "clearance_m": 0.132
+  },
+  {
+   "name": "fountain basin",
+   "surface_m": 0.72,
+   "nearest_centre_m": 0.0,
+   "clearance_m": 0.72
+  },
+  {
+   "name": "fountain bowl",
+   "surface_m": 3.6,
+   "nearest_centre_m": 0.0,
+   "clearance_m": 3.6
+  }
+ ],
+ "scenery": [
+  {
+   "rect_m": [
+    16.0,
+    44.0,
+    -169.0,
+    -151.0
+   ],
+   "height_m": 11.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -78.0,
+    -50.0,
+    -157.0,
+    -139.0
+   ],
+   "height_m": 14.0,
+   "roof": "dome"
+  },
+  {
+   "rect_m": [
+    50.0,
+    78.0,
+    -157.0,
+    -139.0
+   ],
+   "height_m": 17.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -50.0,
+    -22.0,
+    -131.0,
+    -113.0
+   ],
+   "height_m": 12.5,
+   "roof": "spires"
+  },
+  {
+   "rect_m": [
+    -158.0,
+    -130.0,
+    -77.0,
+    -59.0
+   ],
+   "height_m": 20.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    134.0,
+    162.0,
+    -65.0,
+    -47.0
+   ],
+   "height_m": 15.5,
+   "roof": "flat"
+  },
+  {
+   "rect_m": [
+    130.0,
+    158.0,
+    39.0,
+    57.0
+   ],
+   "height_m": 11.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -164.0,
+    -136.0,
+    41.0,
+    59.0
+   ],
+   "height_m": 14.0,
+   "roof": "dome"
+  },
+  {
+   "rect_m": [
+    -94.0,
+    -66.0,
+    127.0,
+    145.0
+   ],
+   "height_m": 17.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -54.0,
+    -26.0,
+    149.0,
+    167.0
+   ],
+   "height_m": 12.5,
+   "roof": "spires"
+  },
+  {
+   "rect_m": [
+    -142.0,
+    -118.0,
+    -102.0,
+    -86.0
+   ],
+   "height_m": 20.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    16.0,
+    40.0,
+    -70.0,
+    -54.0
+   ],
+   "height_m": 15.5,
+   "roof": "flat"
+  },
+  {
+   "rect_m": [
+    -166.0,
+    -142.0,
+    -54.0,
+    -38.0
+   ],
+   "height_m": 11.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -34.0,
+    -18.0,
+    -72.0,
+    -48.0
+   ],
+   "height_m": 14.0,
+   "roof": "dome"
+  },
+  {
+   "rect_m": [
+    -70.0,
+    -54.0,
+    16.0,
+    40.0
+   ],
+   "height_m": 17.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -36.0,
+    -16.0,
+    93.0,
+    107.0
+   ],
+   "height_m": 12.5,
+   "roof": "spires"
+  },
+  {
+   "rect_m": [
+    48.0,
+    68.0,
+    147.0,
+    161.0
+   ],
+   "height_m": 20.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    155.0,
+    169.0,
+    -42.0,
+    -22.0
+   ],
+   "height_m": 15.5,
+   "roof": "flat"
+  },
+  {
+   "rect_m": [
+    35.0,
+    49.0,
+    68.0,
+    88.0
+   ],
+   "height_m": 11.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -172.0,
+    -156.0,
+    -32.0,
+    -16.0
+   ],
+   "height_m": 14.0,
+   "roof": "dome"
+  },
+  {
+   "rect_m": [
+    74.0,
+    90.0,
+    16.0,
+    32.0
+   ],
+   "height_m": 17.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -68.0,
+    -52.0,
+    -94.0,
+    -82.0
+   ],
+   "height_m": 12.5,
+   "roof": "spires"
+  },
+  {
+   "rect_m": [
+    132.0,
+    144.0,
+    -100.0,
+    -88.0
+   ],
+   "height_m": 20.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -142.0,
+    -130.0,
+    64.0,
+    76.0
+   ],
+   "height_m": 15.5,
+   "roof": "flat"
+  },
+  {
+   "rect_m": [
+    -140.0,
+    -128.0,
+    94.0,
+    106.0
+   ],
+   "height_m": 11.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    16.0,
+    28.0,
+    94.0,
+    106.0
+   ],
+   "height_m": 14.0,
+   "roof": "dome"
+  },
+  {
+   "rect_m": [
+    124.0,
+    136.0,
+    98.0,
+    110.0
+   ],
+   "height_m": 17.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    84.0,
+    96.0,
+    -132.5,
+    -123.5
+   ],
+   "height_m": 12.5,
+   "roof": "spires"
+  },
+  {
+   "rect_m": [
+    -124.0,
+    -112.0,
+    -26.5,
+    -17.5
+   ],
+   "height_m": 20.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -76.0,
+    -64.0,
+    -26.5,
+    -17.5
+   ],
+   "height_m": 15.5,
+   "roof": "flat"
+  },
+  {
+   "rect_m": [
+    48.0,
+    60.0,
+    -26.5,
+    -17.5
+   ],
+   "height_m": 11.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    66.0,
+    78.0,
+    -26.5,
+    -17.5
+   ],
+   "height_m": 14.0,
+   "roof": "dome"
+  },
+  {
+   "rect_m": [
+    104.0,
+    116.0,
+    -26.5,
+    -17.5
+   ],
+   "height_m": 17.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -48.0,
+    -36.0,
+    61.5,
+    70.5
+   ],
+   "height_m": 12.5,
+   "roof": "spires"
+  },
+  {
+   "rect_m": [
+    -124.0,
+    -112.0,
+    63.5,
+    72.5
+   ],
+   "height_m": 20.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    16.0,
+    28.0,
+    129.5,
+    138.5
+   ],
+   "height_m": 15.5,
+   "roof": "flat"
+  },
+  {
+   "rect_m": [
+    -72.0,
+    -60.0,
+    151.5,
+    160.5
+   ],
+   "height_m": 11.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -24.5,
+    -15.5,
+    -108.0,
+    -96.0
+   ],
+   "height_m": 14.0,
+   "roof": "dome"
+  },
+  {
+   "rect_m": [
+    149.5,
+    158.5,
+    62.0,
+    74.0
+   ],
+   "height_m": 17.0,
+   "roof": "hip"
+  },
+  {
+   "rect_m": [
+    -44.5,
+    -35.5,
+    76.0,
+    88.0
+   ],
+   "height_m": 12.5,
+   "roof": "spires"
+  },
+  {
+   "rect_m": [
+    101.5,
+    110.5,
+    124.0,
+    136.0
+   ],
+   "height_m": 20.0,
+   "roof": "hip"
+  }
+ ],
+ "buildings": [
+  {
+   "key": "Admin",
+   "name": "Centre Administration",
+   "role": "station_capital_hub",
+   "rect_m": [
+    -30.0,
+    30.0,
+    50.0,
+    88.0
+   ],
+   "wall_height_m": 14.0,
+   "services": [
+    "quests",
+    "registry"
+   ],
+   "note": "A-07 (0,51) moved 18 m north so the canal and the south portico fit round the square"
+  },
+  {
+   "key": "Market",
+   "name": "Global Market Station",
+   "role": "market",
+   "rect_m": [
+    -122.0,
+    -50.0,
+    78.0,
+    122.0
+   ],
+   "wall_height_m": 14.0,
+   "services": [
+    "market"
+   ],
+   "note": "A-07 (-88,104) moved 2 m east and 4 m south to clear the round wall"
+  },
+  {
+   "key": "BankNorth",
+   "name": "Bank / Finance Station (Trading District)",
+   "role": "bank",
+   "rect_m": [
+    -124.0,
+    -76.0,
+    28.0,
+    58.0
+   ],
+   "wall_height_m": 12.0,
+   "services": [
+    "storage"
+   ],
+   "note": "A-07 North Depot, as drawn"
+  },
+  {
+   "key": "HQ",
+   "name": "Capital HQ Towers",
+   "role": "hq",
+   "rect_m": [
+    36.0,
+    96.0,
+    94.0,
+    142.0
+   ],
+   "wall_height_m": 14.0,
+   "services": [
+    "faction",
+    "registry"
+   ],
+   "note": "A-07 (72,110) moved 6 m west and 8 m north, around the hotel and the round wall"
+  },
+  {
+   "key": "Apartments",
+   "name": "Apartments / Residential Buildings",
+   "role": "apartments",
+   "rect_m": [
+    100.0,
+    144.0,
+    63.0,
+    93.0
+   ],
+   "wall_height_m": 8.0,
+   "services": [
+    "housing"
+   ],
+   "note": "A-07 (136,75) moved 14 m west to clear the round wall"
+  },
+  {
+   "key": "Hotel",
+   "name": "Hotel",
+   "role": "hotel",
+   "rect_m": [
+    42.0,
+    82.0,
+    37.0,
+    63.0
+   ],
+   "wall_height_m": 15.0,
+   "services": [
+    "lodging"
+   ],
+   "note": "A-07 (55,45) moved 7 m east, 5 m north; schedule's 40 m, not the drawing's 38"
+  },
+  {
+   "key": "Pub",
+   "name": "Pub",
+   "role": "pub",
+   "rect_m": [
+    95.0,
+    125.0,
+    29.0,
+    51.0
+   ],
+   "wall_height_m": 8.0,
+   "services": [
+    "social"
+   ],
+   "note": "A-07 (97,45) moved 13 m east to make room for the hotel"
+  },
+  {
+   "key": "CraftingHall",
+   "name": "Crafting Station",
+   "role": "crafting",
+   "rect_m": [
+    -124.0,
+    -52.0,
+    -76.0,
+    -32.0
+   ],
+   "wall_height_m": 12.0,
+   "services": [
+    "industry"
+   ],
+   "note": "A-07 Crafting Hall, as drawn"
+  },
+  {
+   "key": "CraftingGuild",
+   "name": "Crafting Career Building",
+   "role": "crafting_careers",
+   "rect_m": [
+    -112.0,
+    -56.0,
+    -133.0,
+    -99.0
+   ],
+   "wall_height_m": 13.0,
+   "services": [
+    "careers"
+   ],
+   "note": "A-07 (-92,-117) moved 8 m east to clear the round wall"
+  },
+  {
+   "key": "RefiningHall",
+   "name": "Refining Station",
+   "role": "refining",
+   "rect_m": [
+    56.0,
+    128.0,
+    -76.0,
+    -32.0
+   ],
+   "wall_height_m": 12.0,
+   "services": [
+    "industry"
+   ],
+   "note": "A-07 Refining Hall, as drawn"
+  },
+  {
+   "key": "RefiningGuild",
+   "name": "Refining Career Building",
+   "role": "refining_careers",
+   "rect_m": [
+    22.0,
+    78.0,
+    -134.0,
+    -100.0
+   ],
+   "wall_height_m": 13.0,
+   "services": [
+    "careers"
+   ],
+   "note": "A-07 Refining Guild Hall, as drawn"
+  },
+  {
+   "key": "BankSouth",
+   "name": "Bank / Finance Station (Refining District)",
+   "role": "bank",
+   "rect_m": [
+    82.0,
+    126.0,
+    -118.0,
+    -90.0
+   ],
+   "wall_height_m": 12.0,
+   "services": [
+    "storage"
+   ],
+   "note": "A-07 South Depot (108,-108) moved 4 m in to clear the round wall"
+  }
+ ],
+ "checks": {
+  "schedule": "PASS",
+  "coincident_across_materials": 0,
+  "routes": {
+   "cell_m": 0.5,
+   "reachable_cells": 526797,
+   "targets": 121,
+   "negatives": [
+    "inside Admin's south wall",
+    "inside Market's south wall",
+    "inside BankNorth's south wall",
+    "inside BankSouth's south wall",
+    "inside HQ's south wall",
+    "inside Apartments's south wall",
+    "inside Hotel's south wall",
+    "inside Pub's south wall",
+    "inside CraftingHall's south wall",
+    "inside RefiningHall's south wall",
+    "inside CraftingGuild's south wall",
+    "inside RefiningGuild's south wall",
+    "the lagoon, between the north bridge and the NE causeway",
+    "the lagoon, by the west road",
+    "the canal, east of north",
+    "inside the city wall"
+   ],
+   "routes_m": {
+    "ramp foot North": 337.0,
+    "ramp foot East": 316.0,
+    "ramp foot South": 271.0,
+    "ramp foot West": 316.0,
+    "North gate, outside": 259.0,
+    "North gate, inside": 233.0,
+    "East gate, outside": 238.0,
+    "East gate, inside": 212.0,
+    "South gate, outside": 193.0,
+    "South gate, inside": 167.0,
+    "West gate, outside": 238.0,
+    "West gate, inside": 212.0,
+    "Docking Station NE pad centre": 562.0,
+    "Docking Station NW pad centre": 562.0,
+    "Docking Station SW pad centre": 514.0,
+    "Docking Station SE pad centre": 514.0
+   }
+  },
+  "closed_buildings": 41,
+  "water_over_ground": "PASS",
+  "faces": 155768,
+  "hulls": 1657,
+  "bounds_m": [
+   [
+    -296.0,
+    296.0
+   ],
+   [
+    -296.0,
+    296.0
+   ],
+   [
+    -6.5,
+    65.0
+   ]
   ],
   "fbx_roundtrip": {
-    "Core": {
-      "render_meshes": 29,
-      "convex_hulls": 121,
-      "max_bounds_error_m": 4.2366981506392065e-05,
-      "status": "PASS Blender FBX roundtrip"
-    },
-    "Trading": {
-      "render_meshes": 21,
-      "convex_hulls": 101,
-      "max_bounds_error_m": 4.562139511110619e-05,
-      "status": "PASS Blender FBX roundtrip"
-    },
-    "Civil": {
-      "render_meshes": 32,
-      "convex_hulls": 174,
-      "max_bounds_error_m": 4.562139511110619e-05,
-      "status": "PASS Blender FBX roundtrip"
-    },
-    "Crafting": {
-      "render_meshes": 21,
-      "convex_hulls": 93,
-      "max_bounds_error_m": 4.561779132927768e-05,
-      "status": "PASS Blender FBX roundtrip"
-    },
-    "Refining": {
-      "render_meshes": 26,
-      "convex_hulls": 114,
-      "max_bounds_error_m": 4.561779132927768e-05,
-      "status": "PASS Blender FBX roundtrip"
-    }
-  },
-  "circulation": {
-    "minimum_route_width_m": 1.2,
-    "pawn_diameter_m": 0.68,
-    "pawn_height_m": 1.8,
-    "method": "1m conservative ground grid from generated convex collision, 0.60m clearance plus cell diagonal",
-    "limitations": "Ring route detours inward at gate towers. Exterior ground routes only; no interiors. Manhattan route lengths are upper estimates, not the PDF 85s assertion.",
-    "reachable_cells": 158619,
-    "frontages": {
-      "administration": {
-        "arrival_xy_m": [
-          0,
-          29
-        ],
-        "grid_route_to_square_m": 65
-      },
-      "market": {
-        "arrival_xy_m": [
-          -88,
-          79
-        ],
-        "grid_route_to_square_m": 185
-      },
-      "depot_n": {
-        "arrival_xy_m": [
-          -100,
-          25
-        ],
-        "grid_route_to_square_m": 143
-      },
-      "depot_s": {
-        "arrival_xy_m": [
-          108,
-          -125
-        ],
-        "grid_route_to_square_m": 215
-      },
-      "forgehall": {
-        "arrival_xy_m": [
-          -88,
-          -79
-        ],
-        "grid_route_to_square_m": 149
-      },
-      "refinehall": {
-        "arrival_xy_m": [
-          92,
-          -79
-        ],
-        "grid_route_to_square_m": 153
-      },
-      "guild_craft": {
-        "arrival_xy_m": [
-          -92,
-          -137
-        ],
-        "grid_route_to_square_m": 211
-      },
-      "guild_refine": {
-        "arrival_xy_m": [
-          50,
-          -137
-        ],
-        "grid_route_to_square_m": 169
-      },
-      "hq": {
-        "arrival_xy_m": [
-          72,
-          83
-        ],
-        "grid_route_to_square_m": 173
-      },
-      "hotel": {
-        "arrival_xy_m": [
-          56,
-          29
-        ],
-        "grid_route_to_square_m": 103
-      },
-      "apartments": {
-        "arrival_xy_m": [
-          136,
-          57
-        ],
-        "grid_route_to_square_m": 211
-      },
-      "pub": {
-        "arrival_xy_m": [
-          97,
-          31
-        ],
-        "grid_route_to_square_m": 146
-      },
-      "square": {
-        "arrival_xy_m": [
-          0,
-          -18
-        ],
-        "grid_route_to_square_m": 0
-      },
-      "dock_nw": {
-        "arrival_xy_m": [
-          -260,
-          260
-        ],
-        "grid_route_to_square_m": 538
-      },
-      "dock_ne": {
-        "arrival_xy_m": [
-          260,
-          260
-        ],
-        "grid_route_to_square_m": 538
-      },
-      "dock_sw": {
-        "arrival_xy_m": [
-          -260,
-          -260
-        ],
-        "grid_route_to_square_m": 502
-      },
-      "dock_se": {
-        "arrival_xy_m": [
-          260,
-          -260
-        ],
-        "grid_route_to_square_m": 502
-      }
-    }
-  },
-  "built": {
-    "sites": {
-      "administration": {
-        "footprint_m": [
-          60.0,
-          38.0
-        ],
-        "built_height_m": 22.0
-      },
-      "market": {
-        "footprint_m": [
-          72.0,
-          44.0
-        ],
-        "built_height_m": 25.0
-      },
-      "depot_n": {
-        "footprint_m": [
-          48.0,
-          30.0
-        ],
-        "built_height_m": 15.0
-      },
-      "depot_s": {
-        "footprint_m": [
-          44.0,
-          28.0
-        ],
-        "built_height_m": 15.0
-      },
-      "forgehall": {
-        "footprint_m": [
-          72.0,
-          44.0
-        ],
-        "built_height_m": 23.0
-      },
-      "refinehall": {
-        "footprint_m": [
-          72.0,
-          44.0
-        ],
-        "built_height_m": 27.0
-      },
-      "guild_craft": {
-        "footprint_m": [
-          56.0,
-          34.0
-        ],
-        "built_height_m": 21.0
-      },
-      "guild_refine": {
-        "footprint_m": [
-          56.0,
-          34.0
-        ],
-        "built_height_m": 21.0
-      },
-      "hq": {
-        "footprint_m": [
-          60.0,
-          48.0
-        ],
-        "built_height_m": 45.0
-      },
-      "hotel": {
-        "footprint_m": [
-          40.0,
-          26.0
-        ],
-        "built_height_m": 20.0
-      },
-      "apartments": {
-        "footprint_m": [
-          44.0,
-          30.0
-        ],
-        "built_height_m": 24.0
-      },
-      "pub": {
-        "footprint_m": [
-          30.0,
-          22.0
-        ],
-        "built_height_m": 12.0
-      },
-      "square": {
-        "footprint_m": [
-          48.0,
-          48.0
-        ],
-        "built_height_m": 8.0
-      },
-      "dock_nw": {
-        "footprint_m": [
-          64.0,
-          40.0
-        ],
-        "built_height_m": 14.0
-      },
-      "dock_ne": {
-        "footprint_m": [
-          64.0,
-          40.0
-        ],
-        "built_height_m": 14.0
-      },
-      "dock_sw": {
-        "footprint_m": [
-          64.0,
-          40.0
-        ],
-        "built_height_m": 14.0
-      },
-      "dock_se": {
-        "footprint_m": [
-          64.0,
-          40.0
-        ],
-        "built_height_m": 14.0
-      }
-    },
-    "bounds_m": [
-      [
-        -292.0,
-        292.0
-      ],
-      [
-        -280.0,
-        280.0
-      ],
-      [
-        -2.0,
-        45.0
-      ]
-    ],
-    "render_meshes": 129,
-    "faces": 13171,
-    "convex_hulls": 603,
-    "coplanar_check": "Exact duplicate polygons only, including rotated shapes. Partial polygon overlaps are not exhaustively proven; visually inspect previews and orbit in Blender."
-  },
-  "district_exports": {
-    "Core": {
-      "file": "Borlash_Core.fbx",
-      "city_local_translation_m": [
-        0,
-        0,
-        0
-      ],
-      "mesh_count": 29,
-      "convex_hulls": 121
-    },
-    "Trading": {
-      "file": "Borlash_Trading.fbx",
-      "city_local_translation_m": [
-        -88,
-        104,
-        0
-      ],
-      "mesh_count": 21,
-      "convex_hulls": 101
-    },
-    "Civil": {
-      "file": "Borlash_Civil.fbx",
-      "city_local_translation_m": [
-        72,
-        110,
-        0
-      ],
-      "mesh_count": 32,
-      "convex_hulls": 174
-    },
-    "Crafting": {
-      "file": "Borlash_Crafting.fbx",
-      "city_local_translation_m": [
-        -88,
-        -54,
-        0
-      ],
-      "mesh_count": 21,
-      "convex_hulls": 93
-    },
-    "Refining": {
-      "file": "Borlash_Refining.fbx",
-      "city_local_translation_m": [
-        92,
-        -54,
-        0
-      ],
-      "mesh_count": 26,
-      "convex_hulls": 114
-    }
-  },
-  "stations": {
-    "administration": {
-      "station_key": "station_capital_hub",
-      "district": "Core",
-      "center_m": [
-        0.0,
-        51.0,
-        0
-      ],
-      "footprint_m": [
-        60,
-        38
-      ],
-      "height_m": 22,
-      "kind": "admin",
-      "plate_mesh": "SM_Borlash_Core_administration_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "market": {
-      "station_key": "station_borlash_market",
-      "district": "Trading",
-      "center_m": [
-        -88.0,
-        104.0,
-        0
-      ],
-      "footprint_m": [
-        72,
-        44
-      ],
-      "height_m": 25,
-      "kind": "market",
-      "plate_mesh": "SM_Borlash_Trading_market_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "depot_n": {
-      "station_key": "station_borlash_depot_n",
-      "district": "Trading",
-      "center_m": [
-        -100.0,
-        43.0,
-        0
-      ],
-      "footprint_m": [
-        48,
-        30
-      ],
-      "height_m": 15,
-      "kind": "depot",
-      "plate_mesh": "SM_Borlash_Trading_depot_n_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "depot_s": {
-      "station_key": "station_borlash_depot_s",
-      "district": "Refining",
-      "center_m": [
-        108.0,
-        -108.0,
-        0
-      ],
-      "footprint_m": [
-        44,
-        28
-      ],
-      "height_m": 15,
-      "kind": "depot",
-      "plate_mesh": "SM_Borlash_Refining_depot_s_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "forgehall": {
-      "station_key": "station_borlash_forgehall",
-      "district": "Crafting",
-      "center_m": [
-        -88.0,
-        -54.0,
-        0
-      ],
-      "footprint_m": [
-        72,
-        44
-      ],
-      "height_m": 23,
-      "kind": "forge",
-      "plate_mesh": "SM_Borlash_Crafting_forgehall_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "refinehall": {
-      "station_key": "station_borlash_refinehall",
-      "district": "Refining",
-      "center_m": [
-        92.0,
-        -54.0,
-        0
-      ],
-      "footprint_m": [
-        72,
-        44
-      ],
-      "height_m": 27,
-      "kind": "refine",
-      "plate_mesh": "SM_Borlash_Refining_refinehall_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "guild_craft": {
-      "station_key": "station_borlash_guild_craft",
-      "district": "Crafting",
-      "center_m": [
-        -92.0,
-        -117.0,
-        0
-      ],
-      "footprint_m": [
-        56,
-        34
-      ],
-      "height_m": 21,
-      "kind": "guild",
-      "plate_mesh": "SM_Borlash_Crafting_guild_craft_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "guild_refine": {
-      "station_key": "station_borlash_guild_refine",
-      "district": "Refining",
-      "center_m": [
-        50.0,
-        -117.0,
-        0
-      ],
-      "footprint_m": [
-        56,
-        34
-      ],
-      "height_m": 21,
-      "kind": "guild",
-      "plate_mesh": "SM_Borlash_Refining_guild_refine_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "hq": {
-      "station_key": "station_borlash_hq",
-      "district": "Civil",
-      "center_m": [
-        72.0,
-        110.0,
-        0
-      ],
-      "footprint_m": [
-        60,
-        48
-      ],
-      "height_m": 45,
-      "kind": "hq",
-      "plate_mesh": "SM_Borlash_Civil_hq_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "hotel": {
-      "station_key": "station_borlash_hotel",
-      "district": "Civil",
-      "center_m": [
-        56.0,
-        45.0,
-        0
-      ],
-      "footprint_m": [
-        40,
-        26
-      ],
-      "height_m": 20,
-      "kind": "hotel",
-      "plate_mesh": "SM_Borlash_Civil_hotel_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "apartments": {
-      "station_key": "station_borlash_apartments",
-      "district": "Civil",
-      "center_m": [
-        136.0,
-        75.0,
-        0
-      ],
-      "footprint_m": [
-        44,
-        30
-      ],
-      "height_m": 24,
-      "kind": "apartments",
-      "plate_mesh": "SM_Borlash_Civil_apartments_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "pub": {
-      "station_key": "station_borlash_pub",
-      "district": "Civil",
-      "center_m": [
-        97.0,
-        45.0,
-        0
-      ],
-      "footprint_m": [
-        30,
-        22
-      ],
-      "height_m": 12,
-      "kind": "pub",
-      "plate_mesh": "SM_Borlash_Civil_pub_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "square": {
-      "station_key": "station_borlash_square",
-      "district": "Core",
-      "center_m": [
-        0.0,
-        0.0,
-        0
-      ],
-      "footprint_m": [
-        48,
-        48
-      ],
-      "height_m": 8,
-      "kind": "square",
-      "plate_mesh": "SM_Borlash_Core_square_Footprint_Stone",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "dock_nw": {
-      "station_key": "station_borlash_dock_nw",
-      "district": "Trading",
-      "center_m": [
-        -260.0,
-        260.0,
-        0
-      ],
-      "footprint_m": [
-        64,
-        40
-      ],
-      "height_m": 14,
-      "kind": "dock",
-      "plate_mesh": "SM_Borlash_Trading_dock_nw_Footprint_Ground",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "dock_ne": {
-      "station_key": "station_borlash_dock_ne",
-      "district": "Civil",
-      "center_m": [
-        260.0,
-        260.0,
-        0
-      ],
-      "footprint_m": [
-        64,
-        40
-      ],
-      "height_m": 14,
-      "kind": "dock",
-      "plate_mesh": "SM_Borlash_Civil_dock_ne_Footprint_Ground",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "dock_sw": {
-      "station_key": "station_borlash_dock_sw",
-      "district": "Crafting",
-      "center_m": [
-        -260.0,
-        -260.0,
-        0
-      ],
-      "footprint_m": [
-        64,
-        40
-      ],
-      "height_m": 14,
-      "kind": "dock",
-      "plate_mesh": "SM_Borlash_Crafting_dock_sw_Footprint_Ground",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    },
-    "dock_se": {
-      "station_key": "station_borlash_dock_se",
-      "district": "Refining",
-      "center_m": [
-        260.0,
-        -260.0,
-        0
-      ],
-      "footprint_m": [
-        64,
-        40
-      ],
-      "height_m": 14,
-      "kind": "dock",
-      "plate_mesh": "SM_Borlash_Refining_dock_se_Footprint_Ground",
-      "source": "A-07 PDF station schedule pp22-23; SVG location checked against PDF"
-    }
+   "render_meshes": 24,
+   "hulls": 1657,
+   "max_bounds_error_m": 4.76837158203125e-05
   }
+ },
+ "deviations": [
+  "Round wall, after the concept art and Joe's sketch; A-07 drew a clipped square (task 154 kept it).",
+  "The city stands in a square lagoon on a platform, after the concept's city on water; A-07 has none.",
+  "HQ central spire reaches 62 m (A-07: 45 m). The concept's spires dominate the skyline; the plan's own visibility arithmetic only gets better with height.",
+  "Town square made round, r 35 m inside a 6 m canal ring (A-07: 48 x 48 m square, no canal).",
+  "Admin, Market, HQ, Apartments, Hotel, Pub, guild halls and the south bank moved inward from A-07's positions where the round wall cut a corner the square wall did not; each move is on its row.",
+  "Docks are round platforms of A-07's 584 m span, not 64 x 40 m rectangles.",
+  "Every building has a walk-in ground-floor hall with the plan set's kit of parts; A-07 drew no interiors. Upper floors are closed.",
+  "No collision on roofs, domes or spires: nothing can climb, and ships may not fly over the city.",
+  "The districts are filled with closed buildings that cannot be entered -- the concept is denser than A-07's twelve, and Joe chose scenery for the gaps on 2 October. Each is one solid hull.",
+  "The canal's water stands 0.20 m below the paving, not with the lagoon's at 0.70: the levelled ground is a sphere, 3 cm below the plane at the canal, and covered the lower water."
+ ]
 }

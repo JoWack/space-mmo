@@ -639,6 +639,58 @@ public sealed class ContentValidatorTests
     }
 
     [Fact]
+    public void AStationLevellingGroundIsAccepted()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: [.. AllHomeworlds(), LevelledWorld()],
+            stations: [CityOn("body_levelled", new GroundPadContent(0.42, 0.15, 0.172))]);
+
+        Assert.Empty(ContentValidator.Validate(pack));
+    }
+
+    [Fact]
+    public void APadOnAStationInDeepSpaceHasNoGroundToLevel()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            stations:
+            [
+                new StationContent(
+                    "station_floating", "Floating", "system_origin", null, StationKind.Spaceport,
+                    SystemPosition: [30.0, 12.0, 4.0],
+                    Pad: new GroundPadContent(0.42, 0.15, 0.1)),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "no body for there to be ground"));
+    }
+
+    [Fact]
+    public void APadWithNoFlatGroundIsRejected()
+    {
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: [.. AllHomeworlds(), LevelledWorld()],
+            stations: [CityOn("body_levelled", new GroundPadContent(0.0, 0.15, 0.1))]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "flat radius must be positive"));
+    }
+
+    [Fact]
+    public void APadAboveWhatTheGroundCanReachIsRejected()
+    {
+        // The height function clamps to the body's relief, so this pad would stand at 0.35 km while
+        // content said 0.5 -- lower than authored, with nothing anywhere looking wrong.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies: [.. AllHomeworlds(), LevelledWorld()],
+            stations: [CityOn("body_levelled", new GroundPadContent(0.42, 0.15, 0.5))]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "outside what 'body_levelled' can stand at"));
+    }
+
+    [Fact]
     public void AStationMayBeAuthoredBeforeAnyoneDecidesWhereItStands()
     {
         // Unplaced is legitimate and safe: nothing can dock at a station with no position, which
@@ -820,6 +872,15 @@ public sealed class ContentValidatorTests
 
     private static StationContent Station(string key, string? body) =>
         new(key, key, "system_origin", body, StationKind.TradingHub);
+
+    /// <summary>A world with authored relief, so a pad has a ceiling to be checked against.</summary>
+    private static BodyContent LevelledWorld() =>
+        new("body_levelled", "Levelled", "system_origin", BodyKind.Planet, SecurityLevel.Secure, 700.0,
+            Terrain: new BodyTerrainContent(20260805, 0.35, 6.0));
+
+    private static StationContent CityOn(string body, GroundPadContent pad) =>
+        new("station_city", "City", "system_origin", body, StationKind.Capital,
+            Direction: [0.026, 0.0, 1.0], Pad: pad);
 
     /// <summary>The four starting bodies every race needs, so a test can add one more problem.</summary>
     private static IReadOnlyList<BodyContent> AllHomeworlds() =>

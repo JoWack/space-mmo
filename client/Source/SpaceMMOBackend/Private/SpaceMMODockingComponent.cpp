@@ -1,4 +1,5 @@
 #include "SpaceMMODockingComponent.h"
+#include "SpaceMMOAirspace.h"
 #include "SpaceMMOPlanetActor.h"
 
 #include "Components/InputComponent.h"
@@ -138,6 +139,31 @@ void USpaceMMODockingComponent::ServerToggleDock_Implementation()
 
 	const ASpaceMMOStationActor* Station = FindStationInRange();
 
+	// A ship near a settlement but not on one of its pads (task 169). Said in the words Joe approved,
+	// because "nothing in docking range" is false here -- the city is right there -- and tells the
+	// pilot nothing about where to go.
+	if (Station == nullptr && Cast<ASpaceMMOShipPawn>(GetOwner()) != nullptr)
+	{
+		double NearestKilometres = 0.0;
+		FSystemCoordinate Here;
+
+		const ASpaceMMOStationActor* const Nearest = NearestStation(NearestKilometres);
+
+		if (Nearest != nullptr && Nearest->GetBerthCount() > 0 && TryGetSystemPosition(Here)
+			&& ASpaceMMOStationActor::IsWithinDockingRange(Nearest->GetStation(), Nearest->GetSystemPosition(), Here))
+		{
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Dock refused: %s's ships dock at its berths, and this one is %.0f m from its centre."),
+				*Nearest->GetStation().Name, NearestKilometres * 1000.0);
+
+			ClientDockResult(
+				FSpaceMMOAirspace::DockAtBerthsMessage(Nearest->GetStation().Name, Nearest->GetBerthCount()),
+				false);
+
+			return;
+		}
+	}
+
 	if (Station == nullptr)
 	{
 		// Logged as well as shown. An on-screen message is the first thing lost behind a panel, and
@@ -189,9 +215,16 @@ void USpaceMMODockingComponent::ServerToggleDock_Implementation()
 	const int64 HullItemInstanceId = Ship->HullItemInstanceId;
 
 	FSystemCoordinate Ashore;
+	FSystemCoordinate ShipAt;
 
+	if (!TryGetSystemPosition(ShipAt))
+	{
+		ShipAt = Station->GetSystemPosition();
+	}
+
+	// On the dock the ship came in to, at a settlement; beside the station anywhere else (task 169).
 	const bool bCanStepAshore =
-		Station->GroundPositionBeside(DockArrivalOffsetKilometres, 0.0, Ashore);
+		Station->PilotArrivalNear(ShipAt, DockArrivalOffsetKilometres, Ashore);
 
 	// Sent before the swap, deliberately: this is an RPC on a component that is about to be
 	// destroyed with its owner, and one sent afterwards has nothing to send it from.
@@ -639,6 +672,24 @@ bool USpaceMMODockingComponent::BuildStationMarkers(
 		View.DockingRangeKilometres = Values[Index].DockingRangeKilometres;
 		View.bOnBody = Values[Index].bOnBody;
 
+		// A ship at a settlement docks on a pad, so its readout measures to the nearest one (task 169).
+		// On foot the city's own range still applies, and the view says nothing about pads.
+		if (Ship != nullptr)
+		{
+			TArray<FSpaceMMODockMark> Docks;
+			Actors[Index]->GetDockMarks(Docks);
+
+			double DockKilometres = 0.0;
+			const int32 Dock = FSpaceMMOStationLine::NearestDock(Docks, Position, DockKilometres);
+
+			if (Dock != INDEX_NONE)
+			{
+				View.DockName = Docks[Dock].ShortName;
+				View.DockDistanceKilometres = DockKilometres;
+				View.DockReachKilometres = Docks[Dock].ReachKilometres;
+			}
+		}
+
 		// Named for the readout's far form, which is the one case where "Terra Outpost" alone does
 		// not say which world to fly to.
 		if (View.bOnBody && Backend != nullptr)
@@ -681,6 +732,13 @@ ASpaceMMOStationActor* USpaceMMODockingComponent::FindStationInRange() const
 	if (Nearest == nullptr)
 	{
 		return nullptr;
+	}
+
+	// A ship at a settlement docks at a berth and nowhere else (task 169). On foot, the station's range
+	// is the city, as it is everywhere: the berths are where ships arrive, not where people stand.
+	if (Cast<ASpaceMMOShipPawn>(GetOwner()) != nullptr && Nearest->GetBerthCount() > 0)
+	{
+		return Nearest->IsAtBerth(Position) ? Nearest : nullptr;
 	}
 
 	// The same rule the client draws with, so a prompt that says "dock available" is never followed

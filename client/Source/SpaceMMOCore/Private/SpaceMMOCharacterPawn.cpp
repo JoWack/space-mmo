@@ -430,8 +430,15 @@ void ASpaceMMOCharacterPawn::ResolveFooting(
 		Params);
 
 	// A probe that begins inside something says nothing about what is underfoot -- it reports the
-	// way out of what it started in. ResolveBlocking is what pushes a character out of geometry;
-	// footing waits for it to have done so rather than guessing a floor from a depenetration.
+	// way out of what it started in. ResolveBlocking pushes a character out of walls, but only while
+	// it moves, and the ground then takes it straight back down. So a way out that leads up through
+	// a floor is taken here, measured rather than guessed: the floor's top is found from above
+	// (task 175). Any other way out still waits for ResolveBlocking.
+	if (bFound && Hit.bBlockingHit && Hit.bStartPenetrating && ClimbOutOfFloor(Hit, Up, HalfHeight))
+	{
+		return;
+	}
+
 	if (!bFound || !Hit.bBlockingHit || Hit.bStartPenetrating)
 	{
 		StandOnGround(Ground);
@@ -512,6 +519,104 @@ void ASpaceMMOCharacterPawn::StandOnGround(const FGroundContact& Ground)
 
 	Navigation.SystemPosition = Ground.Position;
 	WalkState.Velocity = Ground.Velocity;
+}
+
+void ASpaceMMOCharacterPawn::ReportEmbedding(const FHitResult& Inside, const TCHAR* Outcome)
+{
+	const UWorld* const World = GetWorld();
+	const double Now = World != nullptr ? World->GetTimeSeconds() : 0.0;
+
+	if (Now < NextEmbeddingReportSeconds)
+	{
+		return;
+	}
+
+	NextEmbeddingReportSeconds = Now + 2.0;
+
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Feet inside %s (%s), %.1f cm deep, way out %s: %s."),
+		*GetNameSafe(Inside.GetActor()), *GetNameSafe(Inside.GetComponent()), Inside.PenetrationDepth,
+		*Inside.Normal.ToCompactString(), Outcome);
+}
+
+bool ASpaceMMOCharacterPawn::ClimbOutOfFloor(const FHitResult& Inside, const FVector& Up, const double HalfHeight)
+{
+	UWorld* const World = GetWorld();
+
+	const USpaceMMORenderOriginSubsystem* const Origin =
+		World != nullptr ? World->GetSubsystem<USpaceMMORenderOriginSubsystem>() : nullptr;
+
+	if (World == nullptr || Origin == nullptr)
+	{
+		return false;
+	}
+
+	// Out through the side of something is a wall's business, and ResolveBlocking's.
+	if (!FCharacterWalkModel::WayOutIsUp(Inside.Normal, Up))
+	{
+		ReportEmbedding(Inside, TEXT("the way out is not up; left to ResolveBlocking"));
+
+		return false;
+	}
+
+	const FVector Feet = Origin->ToWorldLocation(Navigation.SystemPosition);
+
+	// The same capsule, brought down onto the floor from a step's reach above the feet. The first
+	// thing it meets is the top of whatever the feet are inside -- or, if it began inside something
+	// too, there is nothing here to stand on that this can find, and the answer is no.
+	const FVector From = Feet + Up * (HalfHeight + FCharacterWalkModel::DeepestClimbOutCentimetres);
+	const FVector To = Feet + Up * HalfHeight;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SpaceMMOCharacterClimbOut), false, this);
+	FHitResult Top;
+
+	const bool bTop = World->SweepSingleByChannel(
+		Top,
+		From,
+		To,
+		FRotationMatrix::MakeFromZ(Up).ToQuat(),
+		ECC_Pawn,
+		FCollisionShape::MakeCapsule(
+			static_cast<float>(CollisionRadiusCentimetres), static_cast<float>(HalfHeight)),
+		Params);
+
+	if (!bTop || !Top.bBlockingHit || Top.bStartPenetrating)
+	{
+		ReportEmbedding(Inside, !bTop || !Top.bBlockingHit
+			? TEXT("nothing to stand on within a metre above the feet")
+			: TEXT("a metre above the feet is inside something too"));
+
+		return false;
+	}
+
+	const FVector FloorFeet = Top.Location - Up * HalfHeight;
+	const double AboveCentimetres = FVector::DotProduct(FloorFeet - Feet, Up);
+
+	if (!FCharacterWalkModel::ClimbsOutOnto(Inside.Normal, Top.ImpactNormal, Up, AboveCentimetres))
+	{
+		ReportEmbedding(Inside, *FString::Printf(
+			TEXT("the top found above is no floor to climb onto: %.1f cm up, normal %s"),
+			AboveCentimetres, *Top.ImpactNormal.ToCompactString()));
+
+		return false;
+	}
+
+	Navigation.SystemPosition = FSystemCoordinate(
+		Navigation.SystemPosition.Kilometres
+		+ ((FloorFeet - Feet + Up * FCharacterWalkModel::SeparationCentimetres(0.0))
+			/ SpaceMMO::Coordinates::CentimetresPerKilometre));
+
+	bOnGround = true;
+	StoodOn = Top.GetActor();
+	WalkState = FCharacterWalkModel::ResolveBlockingHit(WalkState, Up, 0.0);
+
+	// Always said, not behind the draw-logging switch: it happens only when something has put a
+	// character inside a floor, and the line is how the next one is found without a playtest.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Climbed out of %s: the feet were %.0f cm inside its floor, at %s."),
+		*GetNameSafe(Top.GetActor()), AboveCentimetres, *Navigation.SystemPosition.ToString());
+
+	return true;
 }
 
 void ASpaceMMOCharacterPawn::ResolveBlocking(const FSystemCoordinate& From)

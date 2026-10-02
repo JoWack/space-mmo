@@ -120,10 +120,76 @@ double FPlanetTerrain::ElevationKilometres(
 		return 0.0;
 	}
 
-	const double Elevation =
-		FractalNoise(Terrain, Direction.GetSafeNormal()) * Terrain.MaxElevationKilometres;
+	const FVector Unit = Direction.GetSafeNormal();
+
+	double Elevation = FractalNoise(Terrain, Unit) * Terrain.MaxElevationKilometres;
+
+	// Levelled ground last, over the noise (task 168). A lerp rather than a replacement, so the edge
+	// of a pad is the land and its middle is the pad, with nothing in between that is neither.
+	for (const FPlanetTerrainPad& Pad : Terrain.Pads)
+	{
+		const double Weight = PadWeight(Pad, Unit);
+
+		if (Weight > 0.0)
+		{
+			Elevation = FMath::Lerp(Elevation, Pad.ElevationKilometres, Weight);
+		}
+	}
 
 	return FMath::Clamp(Elevation, 0.0, Terrain.MaxElevationKilometres);
+}
+
+double FPlanetTerrain::PadWeight(const FPlanetTerrainPad& Pad, const FVector& UnitDirection)
+{
+	const double Cosine = FVector::DotProduct(UnitDirection, Pad.Direction);
+
+	// The far side of the planet is never near a pad, and atan2 below would say otherwise for a pad
+	// wider than a hemisphere -- which nothing authors, but a cheap reject is worth having anyway.
+	if (Cosine <= 0.0)
+	{
+		return 0.0;
+	}
+
+	// atan2 of the cross and dot rather than acos of the dot: acos loses nearly all its precision
+	// near 1, which is exactly where a pad a few hundred metres across lives on a 20 km planet.
+	const double Angle =
+		FMath::Atan2(FVector::CrossProduct(UnitDirection, Pad.Direction).Size(), Cosine);
+
+	if (Angle <= Pad.FlatRadians)
+	{
+		return 1.0;
+	}
+
+	if (Pad.BlendRadians <= 0.0 || Angle >= Pad.FlatRadians + Pad.BlendRadians)
+	{
+		return 0.0;
+	}
+
+	return 1.0 - Smooth((Angle - Pad.FlatRadians) / Pad.BlendRadians);
+}
+
+FPlanetTerrainPad FPlanetTerrain::MakePad(
+	const FString& Key,
+	const FVector& Direction,
+	const double FlatRadiusKilometres,
+	const double BlendKilometres,
+	const double ElevationKilometres,
+	const double PlanetRadiusKilometres)
+{
+	FPlanetTerrainPad Pad;
+	Pad.Key = Key;
+	Pad.Direction = Direction.GetSafeNormal();
+	Pad.ElevationKilometres = ElevationKilometres;
+
+	// Arc length over radius. A planet of no size has nowhere to put a pad, and dividing by it would
+	// be a pad covering everything.
+	if (PlanetRadiusKilometres > 0.0)
+	{
+		Pad.FlatRadians = FMath::Max(0.0, FlatRadiusKilometres) / PlanetRadiusKilometres;
+		Pad.BlendRadians = FMath::Max(0.0, BlendKilometres) / PlanetRadiusKilometres;
+	}
+
+	return Pad;
 }
 
 double FPlanetTerrain::SurfaceRadiusKilometres(

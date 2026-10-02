@@ -8,6 +8,7 @@
 #include "SpaceMMOStationActor.generated.h"
 
 class UStaticMeshComponent;
+struct FSpaceMMODockMark;
 
 /**
  * A station in the world, wherever the server said it is.
@@ -80,8 +81,43 @@ public:
 		double LiftKilometres,
 		FSystemCoordinate& OutPosition) const;
 
+	/**
+	 * The settlement this station is drawn as, once its Blueprint has been built -- Borlash -- or null
+	 * for a station drawn as a single building.
+	 */
+	const class ASpaceMMOSettlementActor* GetSettlement() const;
+
+	/** How many berths this station's settlement has. Zero means ships dock by range, as everywhere else. */
+	int32 GetBerthCount() const;
+
+	/** Its landing pads as the flight readout names them (task 169). Empty for every other station. */
+	void GetDockMarks(TArray<FSpaceMMODockMark>& OutDocks) const;
+
+	/**
+	 * Whether a ship here is on one of this station's berths (task 169).
+	 *
+	 * Within a little of the pad and not far above it: a ship hovering over its landing pad has
+	 * arrived, and one over the city has not.
+	 */
+	bool IsAtBerth(const FSystemCoordinate& ShipPosition) const;
+
+	/**
+	 * Where a pilot docking here is set down, near where their ship was.
+	 *
+	 * At a settlement, on the dock of the nearest berth, between its pad and its hub -- not at the
+	 * station's own position, which for Borlash is the middle of the city. Anywhere else, beside the
+	 * station as before.
+	 */
+	bool PilotArrivalNear(const FSystemCoordinate& Near, double OffsetKilometres, FSystemCoordinate& OutPosition) const;
+
+	/** Where a summoned ship is stood: on the nearest berth's pad at a settlement, beside the station elsewhere. */
+	bool ShipPlacementNear(
+		const FSystemCoordinate& Near, double OffsetKilometres, double LiftKilometres, FSystemCoordinate& OutPosition) const;
+
 protected:
 	virtual void BeginPlay() override;
+
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 
 private:
 	/**
@@ -119,6 +155,31 @@ private:
 
 	/** Render-origin revision the transform was last built against. */
 	int32 BuiltAtRevision = -1;
+
+	/** A berth's pad, in system space, with the way out from the settlement there. */
+	struct FBerthPlace
+	{
+		FSystemCoordinate Pad;
+		FVector Outward = FVector::ZeroVector;
+		double PadRadiusKilometres = 0.0;
+		FString ShortName;
+	};
+
+	/** Every berth's pad in system space. Empty until the settlement exists, and for every other station. */
+	TArray<FBerthPlace> BerthPlaces() const;
+
+	/** Index of the berth nearest a position, or INDEX_NONE. */
+	static int32 NearestBerth(const TArray<FBerthPlace>& Berths, const FSystemCoordinate& Near);
+
+	/**
+	 * Hands the settlement's airspace to USpaceMMOAirspaceSubsystem once its Blueprint exists (task 169).
+	 *
+	 * From Tick, not Configure: Configure runs before FinishSpawning, when the child actor carrying the
+	 * settlement has not been built, and its berths are components on that actor.
+	 */
+	void RegisterSettlementAirspace();
+
+	bool bSettlementRegistered = false;
 
 	/**
 	 * Whether the draw-state line has been said yet.

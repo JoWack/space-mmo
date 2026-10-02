@@ -133,10 +133,14 @@ void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float D
 
 		if (Docking->BuildStationMarkers(Markers, Named) && Markers.IsValidIndex(Named))
 		{
-			Inputs.StationName = Markers[Named].Name;
+			// At a settlement, its nearest landing pad rather than its centre (task 169).
+			FSpaceMMOStationLine::ForShip(
+				Markers[Named],
+				Inputs.StationName,
+				Inputs.StationDistanceKilometres,
+				Inputs.StationDockingRangeKilometres);
+
 			Inputs.StationBodyName = Markers[Named].BodyName;
-			Inputs.StationDistanceKilometres = Markers[Named].DistanceKilometres;
-			Inputs.StationDockingRangeKilometres = Markers[Named].DockingRangeKilometres;
 			Inputs.bStationOnBody = Markers[Named].bOnBody;
 		}
 	}

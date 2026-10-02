@@ -290,15 +290,18 @@
   "stations": [
     {
       "key": "station_capital_hub",
-      "name": "Capital Trading Hub",
+      "$nameComment": "Borlash City since 2 October (task 168): the whole walled city is this one station -- one hangar, one book, one industry queue, its four corner docks the only berths (Joe, task 169). The key stays station_capital_hub because quest 7 docks here (plan set R11).",
+      "name": "Borlash",
       "system": "system_origin",
       "body": "body_capital",
       "$kindComment": "Capital, not TradingHub. It was authored as a TradingHub until 25 August, which meant StationKind.Capital was configured in DefaultGame.ini and authored on nothing -- the capital drew the same 25 m cube as every outpost, and EveryAuthoredKindHasALook could not catch it because it checks that authored kinds have a look, not that configured kinds are authored.",
       "kind": "Capital",
       "$directionComment": "About 500 m from where a character spawns, near the starter deposits: close enough to see and walk to, far enough that a 40 m building is not standing on top of the arrival point. The first station a new player meets should not be on the far side of the world.",
       "direction": [0.026000, 0.000000, 1.000000],
-      "$dockingRangeComment": "A hundred metres, down from five kilometres on 7 September. Five reached from the spawn point five hundred metres away, so a new character was docked at the capital before walking anywhere -- and it matters more now that docking puts your ship in the hangar (task 153), because how far you can dock from is how far a ship can vanish from.",
-      "dockingRangeKm": 0.1
+      "$dockingRangeComment": "The whole platform, 420 m, since 2 October (task 169). It was a hundred metres because how far you can dock from is how far a ship can vanish from (task 153) -- but a ship at Borlash now docks only on one of its four landing pads, whatever this says, so this governs a person on foot alone, and a pilot set down at a corner dock 370 m from the centre must still be docked when they arrive. It still does not reach the spawn point, 500 m out, which is what the hundred metres was first protecting.",
+      "dockingRangeKm": 0.42,
+      "$padComment": "The ground Borlash stands on, levelled in the height function itself so a dedicated server stands players on the same ground the client draws (task 168). Flat for 420 m: the city's platform reaches 400 m at its corner docks (Borlash_manifest.json, pad_required), and SpaceMMO.Terrain.AuthoredPadsFitTheirCities checks the two against each other. At 172 m, just above the highest natural ground inside it (171.2 m, surveyed with the terrain function) so the city stands on a slight rise and no hillock pokes through its paving. Eases back into the land over 150 m.",
+      "pad": { "flatRadiusKm": 0.42, "blendKm": 0.15, "elevationKm": 0.172 }
     },
     {
       "key": "station_terra_hub",

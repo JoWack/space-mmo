@@ -239,6 +239,29 @@ public sealed record ResourceNodeContent(
     double[] Direction,
     string? RequiredTool = null);
 
+/// <summary>
+/// Ground a station levels under itself, as authored in <c>data/universe/</c> (task 168).
+/// </summary>
+/// <remarks>
+/// <para>
+/// <strong>Part of the height function, not a mesh laid over it.</strong> A city is built flat and a
+/// planet is not, so inside <see cref="FlatRadiusKm"/> the ground stands at exactly
+/// <see cref="ElevationKm"/>, and across <see cref="BlendKm"/> beyond that it eases back into the
+/// body's own shape. The client and a dedicated server both evaluate it from these numbers, the same
+/// way they evaluate the noise, so where a player may stand is still one function both sides agree on
+/// (ADR-0002, ADR-0013) rather than a second surface only one of them has.
+/// </para>
+/// <para>
+/// <strong>On the station because the station is what needs it.</strong> Its centre is the station's
+/// direction rather than a second one authored beside it, which could only ever drift from it.
+/// </para>
+/// </remarks>
+/// <param name="FlatRadiusKm">How far from the station the ground is level, along the surface.</param>
+/// <param name="BlendKm">How wide the ring is in which the level ground returns to the land.</param>
+/// <param name="ElevationKm">Height of the level ground above the body's nominal radius. Between
+/// zero and the body's relief, which is all the height function can represent.</param>
+public sealed record GroundPadContent(double FlatRadiusKm, double BlendKm, double ElevationKm);
+
 /// <summary>A station, as authored in <c>data/universe/</c>.</summary>
 public sealed record StationContent(
     string Key,
@@ -248,8 +271,12 @@ public sealed record StationContent(
     StationKind Kind,
     double[]? Direction = null,
     double[]? SystemPosition = null,
-    double DockingRangeKm = 0.1)
+    double DockingRangeKm = 0.1,
+    GroundPadContent? Pad = null)
 {
+    /// <summary>The ground this station levels under itself, or null where it stands on the land.</summary>
+    public GroundPadContent? Pad { get; init; } = Pad;
+
     /// <summary>
     /// Where it stands on its body, as a direction from that body's centre.
     /// </summary>

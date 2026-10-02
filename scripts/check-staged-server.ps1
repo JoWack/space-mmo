@@ -12,7 +12,11 @@ $SourceDir = 'D:\Programming\SpaceMMO\client\Source'
 
 $Cook = @'
   cd /d D:\Programming\UnrealEngineSource
-  Engine\Build\BatchFiles\RunUAT.bat BuildCookRun -project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -noP4 -utf8output -platform=Win64 -serverconfig=Development -server -noclient -build -cook -stage -pak
+  for %T in (SpaceMMOServer SpaceMMOEditor UnrealPak ShaderCompileWorker) do Engine\Build\BatchFiles\Build.bat %T Win64 Development -Project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -WaitMutex -NoUBA
+  Engine\Build\BatchFiles\RunUAT.bat BuildCookRun -project="D:\Programming\SpaceMMO\client\SpaceMMO.uproject" -noP4 -utf8output -platform=Win64 -serverconfig=Development -server -noclient -cook -stage -pak -nocompileeditor
+
+  Built first and cooked without -build: the cook's own build hangs under the Unreal Build
+  Accelerator on this machine (docs/setup.md, "The dedicated server").
 '@
 
 $exe = Get-Item $ServerExe -ErrorAction SilentlyContinue

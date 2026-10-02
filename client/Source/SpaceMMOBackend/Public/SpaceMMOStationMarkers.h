@@ -70,6 +70,28 @@ struct SPACEMMOBACKEND_API FSpaceMMOStationMarkerView
 	double DockingRangeKilometres = 0.1;
 
 	bool bOnBody = false;
+
+	/**
+	 * For a ship at a settlement, its nearest landing pad (task 169): "NE dock", how far it is, and how
+	 * close a ship must come to dock there. Empty for every other station, and on foot.
+	 */
+	FString DockName;
+
+	double DockDistanceKilometres = 0.0;
+
+	double DockReachKilometres = 0.0;
+};
+
+/** One of a settlement's landing pads, as the flight readout needs it (task 169). */
+struct SPACEMMOBACKEND_API FSpaceMMODockMark
+{
+	/** "NE dock". */
+	FString ShortName;
+
+	FSystemCoordinate Pad;
+
+	/** How far from the pad's centre a ship still docks there: the pad and its rim. */
+	double ReachKilometres = 0.0;
 };
 
 /**
@@ -87,6 +109,49 @@ struct SPACEMMOBACKEND_API FSpaceMMOStationLine
 {
 	/** Past this, metres stop meaning anything and the line names the world instead. */
 	static constexpr double FarKilometres = 10.0;
+
+	/**
+	 * The name, distance and docking range a ship's readout shows for the station it names (task 169).
+	 *
+	 * <strong>At a settlement, its nearest landing pad.</strong> Measured to the city's centre, the line
+	 * said READY anywhere within its 420 m docking range -- over the square too, where G then refused,
+	 * which is the one thing a prompt must never do. Joe chose this on 2 October: "Borlash NE dock
+	 * 140 m  ·  dock at 20 m", then READY on the pad itself. Far away the city keeps its own name and
+	 * distance, because at 118 km the question is which world to fly to, not which dock.
+	 */
+	static void ForShip(
+		const FSpaceMMOStationMarkerView& View,
+		FString& OutName,
+		double& OutDistanceKilometres,
+		double& OutRangeKilometres)
+	{
+		const bool bDock = !View.DockName.IsEmpty() && View.DistanceKilometres < FarKilometres;
+
+		OutName = bDock ? FString::Printf(TEXT("%s %s"), *View.Name, *View.DockName) : View.Name;
+		OutDistanceKilometres = bDock ? View.DockDistanceKilometres : View.DistanceKilometres;
+		OutRangeKilometres = bDock ? View.DockReachKilometres : View.DockingRangeKilometres;
+	}
+
+	/** The pad nearest a point, as an index into Docks, or INDEX_NONE if there are none. */
+	static int32 NearestDock(
+		const TArray<FSpaceMMODockMark>& Docks, const FSystemCoordinate& From, double& OutDistanceKilometres)
+	{
+		int32 Best = INDEX_NONE;
+		OutDistanceKilometres = 0.0;
+
+		for (int32 Index = 0; Index < Docks.Num(); ++Index)
+		{
+			const double Distance = (Docks[Index].Pad.Kilometres - From.Kilometres).Size();
+
+			if (Best == INDEX_NONE || Distance < OutDistanceKilometres)
+			{
+				Best = Index;
+				OutDistanceKilometres = Distance;
+			}
+		}
+
+		return Best;
+	}
 
 	/**
 	 * Just the distance, for a chevron's label.

@@ -1500,6 +1500,48 @@ bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendB
 			Body.BaseFrequency = Frequency;
 		}
 
+		// Levelled ground (task 168). A pad missing any of its numbers is dropped whole rather than
+		// read with a zero in it: a zero radius is no pad, but a zero elevation is a pit to sea level
+		// where a city was meant to stand.
+		const TArray<TSharedPtr<FJsonValue>>* Pads = nullptr;
+
+		if (Object->TryGetArrayField(TEXT("terrainPads"), Pads) && Pads != nullptr)
+		{
+			for (const TSharedPtr<FJsonValue>& PadValue : *Pads)
+			{
+				const TSharedPtr<FJsonObject>* PadObject = nullptr;
+
+				if (!PadValue.IsValid() || !PadValue->TryGetObject(PadObject) || PadObject == nullptr)
+				{
+					continue;
+				}
+
+				FBackendTerrainPad Pad;
+				double DX = 0.0;
+				double DY = 0.0;
+				double DZ = 0.0;
+
+				const bool bComplete =
+					(*PadObject)->TryGetStringField(TEXT("stationKey"), Pad.StationKey)
+					&& (*PadObject)->TryGetNumberField(TEXT("directionX"), DX)
+					&& (*PadObject)->TryGetNumberField(TEXT("directionY"), DY)
+					&& (*PadObject)->TryGetNumberField(TEXT("directionZ"), DZ)
+					&& (*PadObject)->TryGetNumberField(TEXT("flatRadiusKm"), Pad.FlatRadiusKilometres)
+					&& (*PadObject)->TryGetNumberField(TEXT("blendKm"), Pad.BlendKilometres)
+					&& (*PadObject)->TryGetNumberField(TEXT("elevationKm"), Pad.ElevationKilometres);
+
+				// Not logged here -- this file only parses. The paint pass names every pad it applies,
+				// so one dropped here shows up there as a city standing on unlevelled ground.
+				if (!bComplete)
+				{
+					continue;
+				}
+
+				Pad.Direction = FVector(DX, DY, DZ);
+				Body.TerrainPads.Add(Pad);
+			}
+		}
+
 		int64 Id = 0;
 		int64 StarSystemId = 0;
 

@@ -113,6 +113,45 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task A_station_that_levels_ground_is_served_with_its_body()
+    {
+        // Task 168. The pad has to arrive with the body, because the client shapes a planet from the
+        // bodies response before anything is placed on it (task 129) -- and centred on the station's
+        // own direction, which is the only one content authors.
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            Station ground = context.Stations.Single(s => s.Key == "station_test_ground");
+            ground.PadFlatRadiusKm = 0.42;
+            ground.PadBlendKm = 0.15;
+            ground.PadElevationKm = 0.172;
+
+            await context.SaveChangesAsync();
+        }
+
+        BodyResponse[] bodies =
+            (await _client.GetFromJsonAsync<BodyResponse[]>("/world/bodies"))!;
+
+        BodyResponse levelled = bodies.Single(b => b.Id == _bodyId);
+        TerrainPadResponse pad = Assert.Single(levelled.TerrainPads);
+
+        Assert.Equal("station_test_ground", pad.StationKey);
+        Assert.Equal(0.42, pad.FlatRadiusKm);
+        Assert.Equal(0.15, pad.BlendKm);
+        Assert.Equal(0.172, pad.ElevationKm);
+
+        // The station's direction, component by component, so a swapped axis fails.
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+        Station stored = verify.Stations.Single(s => s.Key == "station_test_ground");
+
+        Assert.Equal(stored.DirectionX, pad.DirectionX);
+        Assert.Equal(stored.DirectionY, pad.DirectionY);
+        Assert.Equal(stored.DirectionZ, pad.DirectionZ);
+
+        // And nowhere else: a pad served under the wrong body would level some other world's ground.
+        Assert.All(bodies.Where(b => b.Id != _bodyId), b => Assert.Empty(b.TerrainPads));
+    }
+
+    [Fact]
     public async Task Deposits_are_returned_with_their_direction()
     {
         ResourceNodeResponse node =
