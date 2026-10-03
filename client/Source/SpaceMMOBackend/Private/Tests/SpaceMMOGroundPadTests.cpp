@@ -19,7 +19,9 @@
  * this module and not in SpaceMMOCore.
  */
 
-namespace
+// Named, not anonymous: in a unity build an anonymous namespace's helpers are visible to every test file
+// compiled after this one, and SpaceMMOSettlementTests.cpp's own ReadVector then became ambiguous.
+namespace SpaceMMOGroundPadTests
 {
 	bool ReadJsonFile(const FString& Path, TSharedPtr<FJsonObject>& OutRoot)
 	{
@@ -100,6 +102,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOAuthoredPadsFitTheirCitiesTest::RunTest(const FString& Parameters)
 {
+	using namespace SpaceMMOGroundPadTests;
+
 	// Three ways an authored pad can be wrong and look right in the JSON:
 	//
 	//  - too small for the city on it, so its corner docks stand on the slope of their own hill;
@@ -236,6 +240,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOTerrainPadsArriveFromTheWireTest::RunTest(const FString& Parameters)
 {
+	using namespace SpaceMMOGroundPadTests;
+
 	// Captured from a running server after seeding, not written by hand (task 168): Ares' and the
 	// Capital's entries from GET /world/bodies on 2 October, verbatim -- including "directionY":0 and
 	// "directionZ":1 as integers, which a hand-typed fixture would have written as 0.0 and 1.0. The direction is the station's as stored -- not unit
@@ -289,6 +295,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOCityWaterAboveGroundTest::RunTest(const FString& Parameters)
 {
+	using namespace SpaceMMOGroundPadTests;
+
 	// Water drawn below the ground under it is not water: the terrain covers it. Borlash's canal was
 	// drawn 0.40 m under the paving where the levelled ground is only 0.03 m under it, because the
 	// ground is a sphere and the city is a plane, and nothing measured it until 2 October.

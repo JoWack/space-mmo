@@ -2,6 +2,7 @@
 
 #include "Blueprint/DragDropOperation.h"
 #include "SpaceMMOPairedPanel.h"
+#include "SpaceMMOPanelRow.h"
 #include "CoreMinimal.h"
 #include "SpaceMMOBackendTypes.h"
 
@@ -87,7 +88,7 @@ public:
 
 /** One row. Its own widget so the Blueprint owns what a row looks like. */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOInventoryRow : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOInventoryRow : public USpaceMMOPanelRow
 {
 	GENERATED_BODY()
 
@@ -119,6 +120,9 @@ public:
 	bool bReachable = true;
 
 protected:
+	virtual SpaceMMO::Style::ERowLook Look() const override;
+	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
+
 	virtual FReply NativeOnMouseButtonDown(
 		const FGeometry& Geometry, const FPointerEvent& Event) override;
 

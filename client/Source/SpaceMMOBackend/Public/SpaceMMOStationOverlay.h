@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SpaceMMOPairedPanel.h"
+#include "SpaceMMOPanelRow.h"
 #include "CoreMinimal.h"
 
 #include "SpaceMMOStationOverlay.generated.h"
@@ -108,7 +109,7 @@ struct SPACEMMOBACKEND_API FSpaceMMOMarketRowText
 
 /** One market row's widget. Its own so the Blueprint owns the columns. */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOMarketRow : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOMarketRow : public USpaceMMOPanelRow
 {
 	GENERATED_BODY()
 
@@ -128,6 +129,9 @@ public:
 	bool bTraded = false;
 
 protected:
+	virtual SpaceMMO::Style::ERowLook Look() const override;
+	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
+
 	virtual FReply NativeOnMouseButtonDown(
 		const FGeometry& Geometry, const FPointerEvent& Event) override;
 
@@ -187,7 +191,7 @@ struct SPACEMMOBACKEND_API FSpaceMMOBookRowText
 
 /** One book row's widget. Its own, because each carries a button. */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOBookRow : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOBookRow : public USpaceMMOPanelRow
 {
 	GENERATED_BODY()
 
@@ -208,6 +212,9 @@ public:
 	bool bCanTake = false;
 
 protected:
+	virtual SpaceMMO::Style::ERowLook Look() const override;
+	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> HeadingText;
 
@@ -260,7 +267,7 @@ struct SPACEMMOBACKEND_API FSpaceMMOMyOrderRowText
 
 /** One owned hull's widget. Its own, because each row carries a summon. */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOShipRow : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOShipRow : public USpaceMMOPanelRow
 {
 	GENERATED_BODY()
 
@@ -282,6 +289,9 @@ public:
 	bool bIsActive = false;
 
 protected:
+	virtual SpaceMMO::Style::ERowLook Look() const override;
+	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> NameText;
 
@@ -303,7 +313,7 @@ private:
 
 /** One resting order's widget. Its own, because each row carries a cancel. */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOMyOrderRow : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOMyOrderRow : public USpaceMMOPanelRow
 {
 	GENERATED_BODY()
 
@@ -321,6 +331,9 @@ public:
 	bool bElsewhere = false;
 
 protected:
+	virtual SpaceMMO::Style::ERowLook Look() const override;
+	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> SideText;
 
@@ -350,7 +363,7 @@ private:
  * HUD's wording has — replacing them with structured widgets would throw it away for a nicer shape.
  */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOTextRow : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOTextRow : public USpaceMMOPanelRow
 {
 	GENERATED_BODY()
 
@@ -359,6 +372,8 @@ public:
 	void SetLine(const FString& Line);
 
 protected:
+	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> LineText;
 };
@@ -550,6 +565,43 @@ public:
 protected:
 	virtual void NativeTick(const FGeometry& Geometry, float DeltaSeconds) override;
 
+	/** Outlines the tab that is showing and quietens the rest (task 173). Only when the tab changes. */
+	void StyleTabs();
+
+	/**
+	 * The tab strip: a frame and a name per tab, the showing one outlined in ice. Built by the
+	 * SpaceMMOStylePanels commandlet; optional, so a Blueprint without them still works, untabbed.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UBorder> MarketTabFrame;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UBorder> IndustryTabFrame;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UBorder> QuestsTabFrame;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UBorder> MyOrdersTabFrame;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UBorder> ShipsTabFrame;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> MarketTabText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> IndustryTabText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> QuestsTabText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> MyOrdersTabText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> ShipsTabText;
+
 	/** The order prompt is up from OpenOrderPrompt until ConfirmOrder or CancelOrder. */
 	virtual bool IsPromptOpen() const override { return PendingOrderItemDefId != 0; }
 
@@ -656,6 +708,9 @@ private:
 	void FillPanel(class UPanelWidget* Container, const TArray<FString>& Lines, FString& Signature);
 
 	ESpaceMMOStationTab ActiveTab = ESpaceMMOStationTab::Market;
+
+	/** The tab the strip was last styled for. */
+	TOptional<ESpaceMMOStationTab> StyledTab;
 
 	/**
 	 * What each panel was last built from.

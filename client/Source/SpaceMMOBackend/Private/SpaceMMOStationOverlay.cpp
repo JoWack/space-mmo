@@ -1,5 +1,6 @@
 #include "SpaceMMOStationOverlay.h"
 
+#include "Components/Border.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
@@ -54,6 +55,13 @@ void USpaceMMOTextRow::SetLine(const FString& Line)
 	{
 		LineText->SetText(FText::FromString(Line));
 	}
+
+	RequestRestyle();
+}
+
+void USpaceMMOTextRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
+{
+	SpaceMMO::PanelLook::Apply(LineText, SpaceMMO::Style::ETextRole::Body);
 }
 
 namespace
@@ -85,6 +93,24 @@ void USpaceMMOMarketRow::SetRow(const FSpaceMMOMarketRowText& InRow)
 	Set(QuantityText, Row.Quantity);
 
 	bTraded = Row.bTraded;
+
+	RequestRestyle();
+}
+
+SpaceMMO::Style::ERowLook USpaceMMOMarketRow::Look() const
+{
+	return bSelected ? SpaceMMO::Style::ERowLook::Selected : Super::Look();
+}
+
+void USpaceMMOMarketRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
+{
+	using namespace SpaceMMO;
+
+	// An item nobody trades here is still listed, so it can be offered; it is just quieter.
+	PanelLook::Apply(NameText, bTraded ? Style::ETextRole::Body : Style::ETextRole::Dimmed);
+	PanelLook::ApplyFigure(SellText, Style::ETextRole::Figure);
+	PanelLook::ApplyFigure(BuyText, Style::ETextRole::Figure);
+	PanelLook::ApplyFigure(QuantityText, Style::ETextRole::Figure);
 }
 
 FReply USpaceMMOMarketRow::NativeOnMouseButtonDown(
@@ -119,6 +145,25 @@ void USpaceMMOBookRow::SetRow(const FSpaceMMOBookRowText& InRow)
 
 	bIsHeading = Row.bIsHeading;
 	bCanTake = Row.bCanTake;
+
+	RequestRestyle();
+}
+
+SpaceMMO::Style::ERowLook USpaceMMOBookRow::Look() const
+{
+	return bIsHeading ? SpaceMMO::Style::ERowLook::Heading : Super::Look();
+}
+
+void USpaceMMOBookRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
+{
+	using namespace SpaceMMO;
+
+	// Both figures right-aligned in their own columns. Left-aligned, the quantity ran into the price beside
+	// it and "4" and "20.00 cr" read as "420.00 cr" (3 October's look at the panels).
+	PanelLook::Apply(HeadingText, bIsHeading ? Style::ETextRole::Group : Style::ETextRole::Body);
+	PanelLook::ApplyFigure(QuantityText, Style::ETextRole::Figure, 90.0f);
+	PanelLook::ApplyFigure(PriceText, Style::ETextRole::Body);
+	PanelLook::Apply(ActionText, Style::ETextRole::ButtonSmall);
 }
 
 void USpaceMMOBookRow::Take()
@@ -270,6 +315,28 @@ void USpaceMMOMyOrderRow::SetRow(const FSpaceMMOMyOrderRowText& InRow)
 	Set(StationText, Row.Station);
 
 	bElsewhere = Row.bElsewhere;
+
+	RequestRestyle();
+}
+
+SpaceMMO::Style::ERowLook USpaceMMOMyOrderRow::Look() const
+{
+	return Super::Look();
+}
+
+void USpaceMMOMyOrderRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
+{
+	using namespace SpaceMMO;
+
+	PanelLook::Apply(SideText, Style::ETextRole::Figure);
+	PanelLook::Apply(ItemText, Style::ETextRole::Body);
+	PanelLook::ApplyFigure(QuantityText, Style::ETextRole::Figure, 90.0f);
+	PanelLook::ApplyFigure(PriceText, Style::ETextRole::Body);
+
+	// An order resting somewhere else is the one worth finding, so its station is the line that stands
+	// out -- in white, not red: it is not an error.
+	PanelLook::Apply(StationText, Style::ETextRole::Note,
+		bElsewhere ? TOptional<FLinearColor>(Style::TextPrimary()) : TOptional<FLinearColor>());
 }
 
 void USpaceMMOMyOrderRow::Cancel()
@@ -750,9 +817,49 @@ void USpaceMMOStationOverlay::FillPanel(
 	}
 }
 
+void USpaceMMOStationOverlay::StyleTabs()
+{
+	if (StyledTab.IsSet() && StyledTab.GetValue() == ActiveTab)
+	{
+		return;
+	}
+
+	StyledTab = ActiveTab;
+
+	struct FTab
+	{
+		ESpaceMMOStationTab Tab;
+		UBorder* Frame;
+		UTextBlock* Text;
+	};
+
+	const FTab Tabs[] = {
+		{ESpaceMMOStationTab::Market, MarketTabFrame.Get(), MarketTabText.Get()},
+		{ESpaceMMOStationTab::Industry, IndustryTabFrame.Get(), IndustryTabText.Get()},
+		{ESpaceMMOStationTab::Quests, QuestsTabFrame.Get(), QuestsTabText.Get()},
+		{ESpaceMMOStationTab::MyOrders, MyOrdersTabFrame.Get(), MyOrdersTabText.Get()},
+		{ESpaceMMOStationTab::Ships, ShipsTabFrame.Get(), ShipsTabText.Get()},
+	};
+
+	for (const FTab& Each : Tabs)
+	{
+		const bool bShowing = Each.Tab == ActiveTab;
+
+		if (Each.Frame != nullptr)
+		{
+			Each.Frame->SetBrush(SpaceMMO::Style::TabBrush(bShowing));
+		}
+
+		SpaceMMO::PanelLook::Apply(Each.Text, SpaceMMO::Style::ETextRole::Button,
+			bShowing ? SpaceMMO::Style::TextPrimary() : SpaceMMO::Style::TextSecondary());
+	}
+}
+
 void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float DeltaSeconds)
 {
 	Super::NativeTick(Geometry, DeltaSeconds);
+
+	StyleTabs();
 
 	// Never call SetVisibility on this widget from here — see the note on
 	// USpaceMMOFlightReadout::NativeTick. UpdateHudContext owns the Tab toggle.
@@ -1177,6 +1284,24 @@ void USpaceMMOShipRow::SetRow(const FSpaceMMOShipRowText& InRow)
 	Set(WhereText, Row.Where);
 	Set(ConditionText, Row.Condition);
 	Set(RefusalText, Row.Refusal);
+
+	RequestRestyle();
+}
+
+SpaceMMO::Style::ERowLook USpaceMMOShipRow::Look() const
+{
+	// The hull this character is flying is the selected one: the same outline, the same meaning.
+	return bIsActive ? SpaceMMO::Style::ERowLook::Selected : Super::Look();
+}
+
+void USpaceMMOShipRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
+{
+	using namespace SpaceMMO;
+
+	PanelLook::Apply(NameText, Style::ETextRole::Body);
+	PanelLook::Apply(WhereText, Style::ETextRole::Figure);
+	PanelLook::ApplyFigure(ConditionText, Style::ETextRole::Figure, 100.0f);
+	PanelLook::Apply(RefusalText, Style::ETextRole::Note);
 }
 
 void USpaceMMOShipRow::Summon()

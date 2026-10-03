@@ -1508,3 +1508,168 @@ void USpaceMMOBackendClient::FetchDeposits()
 			OnDepositsLoaded.Broadcast();
 		});
 }
+
+#if !UE_BUILD_SHIPPING
+void USpaceMMOBackendClient::UseSampleDataForLook()
+{
+	// Borlash, docked.
+	FBackendStation Borlash;
+	Borlash.Id = 1;
+	Borlash.Key = TEXT("station_capital_hub");
+	Borlash.Name = TEXT("Borlash");
+	Borlash.Kind = TEXT("Capital");
+
+	Stations.RemoveAll([](const FBackendStation& Station) { return Station.Id == 1; });
+	Stations.Add(Borlash);
+	DockedStationId = Borlash.Id;
+
+	// Three places to keep things: on the character, in the ship, in Borlash's hangar.
+	Containers.Reset();
+
+	auto Container = [this](const int64 Id, const EBackendInventoryKind Kind, const int32 Station)
+	{
+		FBackendInventoryContainer Made;
+		Made.InventoryId = Id;
+		Made.Kind = Kind;
+		Made.StationId = Station;
+		Containers.Add(Made);
+	};
+
+	Container(1, EBackendInventoryKind::CharacterCarried, 0);
+	Container(2, EBackendInventoryKind::ShipHold, 0);
+	Container(3, EBackendInventoryKind::StationHangar, Borlash.Id);
+
+	Inventory.Reset();
+
+	auto Stack = [this](const int64 Container, const int32 ItemDefId, const TCHAR* Name, const int32 Quantity,
+		const EBackendInventoryKind Kind, const int32 Station)
+	{
+		FBackendInventoryItem Made;
+		Made.InventoryId = Container;
+		Made.ItemDefId = ItemDefId;
+		Made.Name = Name;
+		Made.Quantity = Quantity;
+		Made.Kind = Kind;
+		Made.StationId = Station;
+		Inventory.Add(Made);
+	};
+
+	Stack(1, 2, TEXT("Ferrite Ore"), 12, EBackendInventoryKind::CharacterCarried, 0);
+	Stack(2, 1, TEXT("Scrap Alloy"), 120, EBackendInventoryKind::ShipHold, 0);
+	Stack(2, 2, TEXT("Ferrite Ore"), 48, EBackendInventoryKind::ShipHold, 0);
+	Stack(3, 3, TEXT("Ferrite Plate"), 30, EBackendInventoryKind::StationHangar, Borlash.Id);
+	Stack(3, 8, TEXT("Composite Frame"), 4, EBackendInventoryKind::StationHangar, Borlash.Id);
+	Stack(3, 11, TEXT("Shuttle Hull Section"), 2, EBackendInventoryKind::StationHangar, Borlash.Id);
+	Stack(3, 10, TEXT("Crude Thruster"), 1, EBackendInventoryKind::StationHangar, Borlash.Id);
+
+	ItemInstances.Reset();
+
+	FBackendItemInstance Laser;
+	Laser.InventoryId = 1;
+	Laser.Id = 501;
+	Laser.ItemDefId = 9;
+	Laser.Name = TEXT("Crude Mining Laser");
+	Laser.Condition = 87;
+	Laser.Kind = EBackendInventoryKind::CharacterCarried;
+	Laser.Category = EBackendItemCategory::Tool;
+	ItemInstances.Add(Laser);
+
+	FBackendItemInstance Shuttle;
+	Shuttle.InventoryId = 3;
+	Shuttle.Id = 502;
+	Shuttle.ItemDefId = 12;
+	Shuttle.Name = TEXT("Shuttle");
+	Shuttle.Condition = 100;
+	Shuttle.Kind = EBackendInventoryKind::StationHangar;
+	Shuttle.StationId = Borlash.Id;
+	Shuttle.Category = EBackendItemCategory::Hull;
+	ItemInstances.Add(Shuttle);
+
+	// Skills: three in use, three never touched.
+	Skills.Reset();
+
+	auto Skill = [this](const TCHAR* Key, const TCHAR* Name, const int64 Xp, const int32 Level, const int64 ToNext,
+		const float Progress)
+	{
+		FBackendSkill Made;
+		Made.Key = Key;
+		Made.Name = Name;
+		Made.Xp = Xp;
+		Made.Level = Level;
+		Made.XpToNextLevel = ToNext;
+		Made.ProgressToNextLevel = Progress;
+		Skills.Add(Made);
+	};
+
+	Skill(TEXT("gathering"), TEXT("Gathering"), 1240, 4, 340, 0.62f);
+	Skill(TEXT("mining"), TEXT("Mining"), 610, 3, 290, 0.35f);
+	Skill(TEXT("refining"), TEXT("Refining"), 260, 2, 40, 0.80f);
+	Skill(TEXT("toolcrafting"), TEXT("Toolcrafting"), 0, 1, 100, 0.0f);
+	Skill(TEXT("shipcrafting"), TEXT("Shipcrafting"), 0, 1, 100, 0.0f);
+	Skill(TEXT("electronics"), TEXT("Electronics"), 0, 1, 100, 0.0f);
+
+	// A market, one item's book, and two resting orders.
+	MarketListings.Reset();
+
+	auto Listing = [this](const int32 ItemDefId, const TCHAR* Name, const int64 Ask, const int64 Bid, const int32 ForSale)
+	{
+		FBackendMarketListing Made;
+		Made.ItemDefId = ItemDefId;
+		Made.Name = Name;
+		Made.BestAskMinorUnits = Ask;
+		Made.bHasAsk = Ask > 0;
+		Made.BestBidMinorUnits = Bid;
+		Made.bHasBid = Bid > 0;
+		Made.QuantityForSale = ForSale;
+		MarketListings.Add(Made);
+	};
+
+	Listing(2, TEXT("Ferrite Ore"), 2000, 1800, 340);
+	Listing(3, TEXT("Ferrite Plate"), 6400, 5850, 80);
+	Listing(1, TEXT("Scrap Alloy"), 700, 0, 1200);
+	Listing(6, TEXT("Luminous Amber"), 0, 0, 0);
+
+	Book.Reset();
+	BookItemDefId = 2;
+
+	auto Entry = [this](const int64 Id, const EBackendOrderSide Side, const int64 Price, const int32 Quantity)
+	{
+		FBackendBookEntry Made;
+		Made.OrderId = Id;
+		Made.Side = Side;
+		Made.PriceMinorUnits = Price;
+		Made.QuantityRemaining = Quantity;
+		Book.Add(Made);
+	};
+
+	Entry(901, EBackendOrderSide::Sell, 2000, 4);
+	Entry(902, EBackendOrderSide::Sell, 2150, 336);
+	Entry(903, EBackendOrderSide::Buy, 1800, 100);
+
+	MyOrders.Reset();
+
+	FBackendMyOrder Here;
+	Here.OrderId = 911;
+	Here.StationId = Borlash.Id;
+	Here.StationName = Borlash.Name;
+	Here.ItemDefId = 3;
+	Here.ItemName = TEXT("Ferrite Plate");
+	Here.Side = EBackendOrderSide::Sell;
+	Here.PriceMinorUnits = 6600;
+	Here.QuantityRemaining = 10;
+	MyOrders.Add(Here);
+
+	FBackendMyOrder Away = Here;
+	Away.OrderId = 912;
+	Away.StationId = 2;
+	Away.StationName = TEXT("Terra Outpost");
+	Away.ItemName = TEXT("Scrap Alloy");
+	Away.Side = EBackendOrderSide::Buy;
+	Away.PriceMinorUnits = 650;
+	Away.QuantityRemaining = 200;
+	MyOrders.Add(Away);
+
+	UE_LOG(LogSpaceMMOBackend, Warning,
+		TEXT("Look: the panels are showing SAMPLE DATA (UseSampleDataForLook), docked at Borlash. Not a session."));
+}
+#endif

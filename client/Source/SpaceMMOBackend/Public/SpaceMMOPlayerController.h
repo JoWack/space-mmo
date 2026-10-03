@@ -191,6 +191,18 @@ public:
 	void SpaceMMOShowMenu(const FString& Which);
 
 	/**
+	 * Opens the game's panels over sample data, for looking at them without a server (task 173).
+	 *
+	 *   SpaceMMOLookPanels Inventory|Station|Skills|Pair [Market|Industry|Quests|MyOrders|Ships] [prompt] [shot]
+	 *
+	 * With "shot", the screen is captured with its interface three seconds later -- once the rows have been
+	 * built -- to Saved/Screenshots/LookPanels_<view>.png, and the game quits two seconds after that. A dev
+	 * build's look check, like SpaceMMOShowMenu: nothing is sent, and it is never in a shipping build.
+	 */
+	UFUNCTION(Exec)
+	void SpaceMMOLookPanels(const FString& View, const FString& TabOrShot, const FString& Shot, const FString& More);
+
+	/**
 	 * Opens and closes the inventory screen. Bound to I.
 	 *
 	 * Refreshes on opening rather than polling, because what a player owns changes on the server and

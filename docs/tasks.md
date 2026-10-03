@@ -6664,9 +6664,11 @@ What does not, noticed while building the first:
 
 ## 173 — The game's panels in the menus' style
 
-**Pending; the look is shown to Joe before anything is built.** Belongs to **M5**. Joe, 2 October:
-"update the inventory, skills, and other panels to match the same styling of our menus that were
-recently added."
+**First round built and validated by Joe in play, 3 October: the inventory, the skills screen and the
+station overlay with all five tabs ("Validated and everything looks great"). The three differences from
+the mock below stand as built. Second round (below) being mocked.** Belongs to **M5**.
+Joe, 2 October: "update the inventory, skills, and other panels to match the same styling of our menus
+that were recently added."
 
 The style is task 110's, which Joe picked from four renders: one rounded sans-serif, white and muted
 grey; panels of dark translucent glass with a hairline border and corner brackets; selection as a
@@ -6674,21 +6676,93 @@ white-to-ice-blue outline with a soft glow; buttons with one corner clipped, bac
 primary action bottom-right; red for errors only, and world colours only as content. The renders
 themselves were deleted on 1 October, so that text is all that is left of them.
 
-What is not in that style yet, all in `/Game/UI/`: the inventory screen (`WBP_InventoryScreen`,
-`WBP_InventoryRow`), the skills screen (`WBP_SkillsScreen`, `WBP_SkillRow`), the station overlay and
-everything in it -- market, my orders, industry, quests, ships (`WBP_StationOverlay`, `WBP_MarketRow`,
-`WBP_BookRow`, `WBP_MyOrderRow`, `WBP_ShipRow`, `WBP_TextRow`) -- the transient messages
-(`WBP_TransientMessages`, `WBP_TransientMessageRow`), the deposit prompt, the flight and on-foot
-readouts, and the old sign-in screen (`WBP_LoginScreen`). The airspace notices of 169 are still the
-engine's orange debug text, not a widget at all.
+**Approved by Joe on 2 October**, from an HTML mock over a frame of the game (`docs/wip/173-panels/`,
+git-ignored):
+- Backdrop "clear everything": no panel blurs; each keeps the world visible behind a light dim.
+- Tighter rows.
+- The market's columns read **Selling at · Buying at · For sale**.
+- Build the three panels, then mock the rest as a second round before building it.
 
-How, when it is approved: the way 110 did it, from code -- `USpaceMMOBuildMenusCommandlet` already
-builds styled Widget Blueprints and checks every `BindWidgetOptional` part is present -- extended to
-these, or a shared style asset both use. Two things 110 learned that apply here: never overwrite a
-Blueprint Joe has edited without `-Force`, and a widget with key events in its graph holds those keys
-while collapsed (it is how Escape stopped working on 1 October).
+**What was built.**
+- `SpaceMMOCore/Public/SpaceMMOStyle.h`: the style as code -- colours, brushes, row looks, button styles
+  and a text role for everything a panel says (title, group, column, body, figure, note, prompt, key).
+  `USpaceMMOBuildMenusCommandlet` now takes its constants from it, so the menus and the panels cannot
+  drift apart.
+- `USpaceMMOStylePanelsCommandlet` (`-run=SpaceMMOAuthoring.SpaceMMOStylePanels`) restyles the ten
+  Blueprints **in place**:
+  - The panels are Joe's: hand-made, with the move and order prompts living in their graphs. So unlike
+    110's menus they are restyled rather than regenerated.
+  - It changes fonts, colours, the glass and brackets, buttons, fields, column widths, the station's tab
+    strip (now `1 Market` … `5 Ships`, key and word), the skill row's layout and a `WorldDim` image.
+  - It removes only the colour bindings, with their functions. Every graph with logic is left as it was,
+    checked by node count in a dump before and after.
+  - It refuses to save a Blueprint that lost a bound part, does not compile, or lacks a part the look
+    needs. It is safe to run again.
+  - It edits Joe's Blueprints without `-Force`. That is the point of it, and why it checks rather than
+    overwrites.
+- `USpaceMMOPanelRow`, the base class of every row. Each row now chooses its own look from flags it
+  already had (selected, heading, drop target, untrained, not traded, hovered). A Blueprint binding can
+  choose a tint but not an outline or the absence of a box, and the approved selection is an ice outline.
+- `USpaceMMODumpWidgetsCommandlet` (`-run=SpaceMMOAuthoring.SpaceMMODumpWidgets`, read only) prints
+  every Widget Blueprint's tree, bindings and graph nodes to `Saved/Logs/DumpWidgets.log`. It is how the
+  Blueprints were read before anything was changed, and how to check them after.
+- `SpaceMMOLookPanels <Inventory|Station|Skills|Pair> [tab] [prompt] [shot]`, a dev-build console
+  command. It opens the panels over sample data, with no server needed. With `shot` it captures
+  `Saved/Screenshots/WindowsEditor/LookPanels_*.png` and quits. Run it rendered, with
+  `-BackendUrl=http://localhost:9 -unattended`, so it neither signs in as Joe nor waits on a crash dialog.
 
-First step: mocks of the inventory and skills screens, and one station panel, for Joe to say yes to.
+**Learned, each at a cost.**
+- **A row's slot cannot be styled in `NativeConstruct`.** The row is constructed while the list is still
+  building the slot it goes in, and setting that slot's padding asserts in Slate ("Slot Attributes has to
+  be registered after the FSlot is constructed"). The first rendered look ended there, with a crash dialog
+  on Joe's desktop for a minute. Rows restyle on their first tick instead.
+- **An exec function silently drops words past its last parameter.** `Pair Market prompt shot` ran without
+  its `shot` and waited for a capture that never came, which looked like a hang. Now one parameter per
+  word, and the log line says whether a shot was asked for.
+- **Columns left to fill run into each other.** "4" and "20.00 cr" read as "420.00 cr". Figures are now
+  fixed-width and right-aligned, and the my-orders heading is laid out the way its rows are. The
+  heading's last column keeps clear of the rows' Cancel Order button by a width measured off a
+  1920×1080 capture (`CancelButtonWidth`); a different label needs measuring again.
+- **A 0.94 fill shows bright text through it.** The prompts are now at 0.98.
+
+**Differences from the mock, for Joe to rule on:**
+- The prompts keep their words, "[enter] Confirm" and "[esc] Cancel", where the mock had Back and Move.
+- The paired panels keep the code's sides: the station on the left, the inventory on the right. The mock
+  showed the reverse.
+- The Industry and Quests tabs are restyled text, still drawn as "-- Industry --" lines. Turning them into
+  rows like the market's is new interface, so it belongs in the second round's mock.
+
+**Verified, and how:**
+- `SpaceMMO.Panels.RowsStyleThemselves` and `SpaceMMO.Panels.CarryTheirLook` read the saved Blueprints.
+  The first checks every row is a `USpaceMMOPanelRow`, has its `RowFrame` and binds no colour. The second
+  checks the panels have their `WorldDim` and the overlay its five tab frames, with no colour bindings.
+  - Both were run against an unrestyled row (`WBP_TransientMessageRow`) and went red for both reasons.
+- The client suite has 281 tests, all passing on 3 October.
+- Rendered captures were checked view by view: the paired market with and without the order prompt, my
+  orders, ships, industry, quests, skills, and the inventory alone and with its move prompt.
+
+**Not verified by anything automated:**
+- Hover and drop-target looks: a capture cannot hover.
+- Sell-drop from the inventory onto the market.
+- The panels at resolutions other than 1920×1080.
+- Anything with a real server's data. The sample data stands in for it.
+- The dedicated server has not been re-cooked: nothing it runs changed, but per CLAUDE.md, re-cook it
+  before a multiplayer test anyway.
+
+**How it would fail:**
+- A row stays the old flat grey, or its selection is a tint rather than an outline: the Blueprint was not
+  restyled, or a colour binding came back.
+- Figures run together.
+- A tab's list spills past the panel's bottom edge.
+- The game stops on opening the station with the Slate slot assertion above.
+
+**Second round, to mock for Joe before building:**
+- The flight and on-foot readouts.
+- The deposit prompt.
+- The transient messages.
+- The old sign-in screen (`WBP_LoginScreen`).
+- The 169 airspace notices, which are still the engine's orange debug text.
+- The Industry and Quests tabs as rows.
 
 ## 174 — Borlash, textured and smoothed
 

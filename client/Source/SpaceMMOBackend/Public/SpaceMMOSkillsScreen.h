@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Blueprint/UserWidget.h"
+#include "SpaceMMOPanelRow.h"
 #include "CoreMinimal.h"
 #include "SpaceMMOBackendTypes.h"
 
@@ -47,7 +48,7 @@ struct SPACEMMOBACKEND_API FSpaceMMOSkillRowText
  * a number or nothing.
  */
 UCLASS()
-class SPACEMMOBACKEND_API USpaceMMOSkillRow : public UUserWidget
+class SPACEMMOBACKEND_API USpaceMMOSkillRow : public USpaceMMOPanelRow
 {
 	GENERATED_BODY()
 
@@ -74,6 +75,8 @@ public:
 	bool bHasToNext = false;
 
 protected:
+	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
+
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> NameText;
 

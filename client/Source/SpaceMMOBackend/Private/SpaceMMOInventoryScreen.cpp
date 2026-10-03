@@ -59,6 +59,39 @@ void USpaceMMOInventoryRow::SetLine(const FSpaceMMOInventoryLine& InLine)
 
 	bIsHeading = Line.bIsHeading;
 	bReachable = Line.bReachable;
+
+	RequestRestyle();
+}
+
+SpaceMMO::Style::ERowLook USpaceMMOInventoryRow::Look() const
+{
+	using SpaceMMO::Style::ERowLook;
+
+	// A heading has no box even while its container is the drop target: the rows under it light up,
+	// and a lit heading would read as a thing goods could be dropped on.
+	if (bIsHeading)
+	{
+		return ERowLook::Heading;
+	}
+
+	return bIsDropTarget ? ERowLook::DropTarget : Super::Look();
+}
+
+void USpaceMMOInventoryRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
+{
+	using namespace SpaceMMO;
+
+	if (bIsHeading)
+	{
+		PanelLook::Apply(LabelText, Style::ETextRole::Group);
+		PanelLook::Apply(AmountText, Style::ETextRole::Group);
+
+		return;
+	}
+
+	// Goods somewhere else -- another station's hangar -- read in grey: listed, and out of reach.
+	PanelLook::Apply(LabelText, bReachable ? Style::ETextRole::Body : Style::ETextRole::Dimmed);
+	PanelLook::ApplyFigure(AmountText, Style::ETextRole::Figure, 120.0f);
 }
 
 FReply USpaceMMOInventoryRow::NativeOnMouseButtonDown(

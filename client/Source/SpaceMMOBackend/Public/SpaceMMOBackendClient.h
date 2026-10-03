@@ -330,6 +330,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	int32 GetDockedStationId() const { return DockedStationId; }
 
+#if !UE_BUILD_SHIPPING
+	/**
+	 * Fills what the panels read with a made-up character -- holdings, skills, a market and two orders --
+	 * docked at Borlash, for looking at the panels without a server (task 173).
+	 *
+	 * A look, not a session: nothing is sent, the next real response replaces it, and it is never in a
+	 * shipping build. Said in the log, so a screenshot of sample data cannot pass for a real one.
+	 */
+	void UseSampleDataForLook();
+#endif
+
 	/**
 	 * Loads the recipe catalog. Unauthenticated, like bodies and deposits.
 	 *

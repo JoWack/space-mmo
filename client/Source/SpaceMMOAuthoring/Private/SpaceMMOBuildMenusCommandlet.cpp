@@ -27,6 +27,7 @@
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
 #include "SpaceMMOAuthoringLog.h"
+#include "SpaceMMOStyle.h"
 #include "UObject/Package.h"
 #include "UObject/SavePackage.h"
 #include "WidgetBlueprint.h"
@@ -41,78 +42,23 @@ namespace SpaceMMOBuildMenus
 	// chosen), white and grey text, dark translucent glass with a hairline, an ice-blue selection, and
 	// red for errors only. Colours are written as the sRGB values a designer would pick.
 
-	FLinearColor Srgb(const uint8 R, const uint8 G, const uint8 B, const float Alpha = 1.0f)
-	{
-		FLinearColor Colour = FLinearColor::FromSRGBColor(FColor(R, G, B));
-		Colour.A = Alpha;
+	// The colours, brushes and button styles are SpaceMMO::Style's (SpaceMMOStyle.h), shared with the game's
+	// panels since task 173 so the two cannot drift. Named here as before, so the builder below reads the same.
+	using SpaceMMO::Style::Rounded;
+	using SpaceMMO::Style::Solid;
+	using SpaceMMO::Style::Srgb;
+	using SpaceMMO::Style::White;
 
-		return Colour;
-	}
+	const FLinearColor TextPrimary = SpaceMMO::Style::TextPrimary();
+	const FLinearColor TextSecondary = SpaceMMO::Style::TextSecondary();
+	const FLinearColor Ice = SpaceMMO::Style::Ice();
+	const FLinearColor GlassFill = SpaceMMO::Style::GlassFill();
+	const FLinearColor ErrorRed = SpaceMMO::Style::ErrorRed();
+	const FVector4 ButtonCorners = SpaceMMO::Style::ButtonCorners();
+	const FVector4 RowCorners = SpaceMMO::Style::RowCorners();
 
-	FLinearColor White(const float Alpha) { return FLinearColor(1.0f, 1.0f, 1.0f, Alpha); }
-
-	const FLinearColor TextPrimary = Srgb(242, 245, 250);
-	const FLinearColor TextSecondary = Srgb(140, 149, 162);
-	const FLinearColor Ice = Srgb(143, 216, 255);
-	const FLinearColor GlassFill = Srgb(10, 15, 22, 0.84f);
-	const FLinearColor ErrorRed = Srgb(255, 96, 96);
-
-	/** Top left, top right, bottom right, bottom left. Buttons have one corner cut; panels are square. */
-	const FVector4 ButtonCorners(0.0, 0.0, 12.0, 0.0);
-	const FVector4 RowCorners(3.0, 3.0, 3.0, 3.0);
-
-	FSlateBrush Rounded(const FLinearColor& Fill, const FLinearColor& Outline, const float Width, const FVector4& Radii)
-	{
-		FSlateBrush Brush;
-		Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
-		Brush.TintColor = FSlateColor(Fill);
-		Brush.OutlineSettings = FSlateBrushOutlineSettings(Radii, FSlateColor(Outline), Width);
-		Brush.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
-
-		return Brush;
-	}
-
-	/** A flat block of colour: an Image with no texture draws its tint. */
-	FSlateBrush Solid(const FLinearColor& Colour, const FVector2D& Size)
-	{
-		FSlateBrush Brush;
-		Brush.DrawAs = ESlateBrushDrawType::Image;
-		Brush.TintColor = FSlateColor(Colour);
-		Brush.ImageSize = Size;
-
-		return Brush;
-	}
-
-	FButtonStyle ButtonStyle(const bool bPrimary)
-	{
-		const FLinearColor Fill = bPrimary ? FLinearColor(Ice.R, Ice.G, Ice.B, 0.16f) : White(0.04f);
-		const FLinearColor Edge = bPrimary ? Ice : White(0.30f);
-
-		FButtonStyle Style;
-		Style.SetNormal(Rounded(Fill, Edge, 1.0f, ButtonCorners));
-		Style.SetHovered(Rounded(
-			bPrimary ? FLinearColor(Ice.R, Ice.G, Ice.B, 0.28f) : White(0.09f), Ice, 1.5f, ButtonCorners));
-		Style.SetPressed(Rounded(FLinearColor(Ice.R, Ice.G, Ice.B, 0.36f), Ice, 1.5f, ButtonCorners));
-		Style.SetDisabled(Rounded(White(0.02f), White(0.10f), 1.0f, ButtonCorners));
-		Style.SetNormalPadding(FMargin(30.0f, 11.0f));
-		Style.SetPressedPadding(FMargin(30.0f, 12.0f, 30.0f, 10.0f));
-
-		return Style;
-	}
-
-	/** A whole-row button: quiet until hovered, so the selection outline is what stands out. */
-	FButtonStyle RowStyle()
-	{
-		FButtonStyle Style;
-		Style.SetNormal(Rounded(White(0.035f), White(0.12f), 1.0f, RowCorners));
-		Style.SetHovered(Rounded(White(0.07f), White(0.28f), 1.0f, RowCorners));
-		Style.SetPressed(Rounded(White(0.10f), White(0.30f), 1.0f, RowCorners));
-		Style.SetDisabled(Rounded(White(0.02f), White(0.08f), 1.0f, RowCorners));
-		Style.SetNormalPadding(FMargin(26.0f, 16.0f));
-		Style.SetPressedPadding(FMargin(26.0f, 16.0f));
-
-		return Style;
-	}
+	FButtonStyle ButtonStyle(const bool bPrimary) { return SpaceMMO::Style::ButtonStyle(bPrimary); }
+	FButtonStyle RowStyle() { return SpaceMMO::Style::RowButtonStyle(); }
 
 	// ------------------------------------------------------------------------------------------------
 	// Building a tree

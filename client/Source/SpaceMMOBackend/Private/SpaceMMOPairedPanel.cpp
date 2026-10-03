@@ -8,6 +8,18 @@
 void USpaceMMOPairedPanel::SetSide(const ESpaceMMOPanelSide NewSide)
 {
 	Side = NewSide;
+
+	if (WorldDim != nullptr)
+	{
+		const ESlateVisibility Wanted = Side == ESpaceMMOPanelSide::Right
+			? ESlateVisibility::Collapsed
+			: ESlateVisibility::HitTestInvisible;
+
+		if (WorldDim->GetVisibility() != Wanted)
+		{
+			WorldDim->SetVisibility(Wanted);
+		}
+	}
 }
 
 void USpaceMMOPairedPanel::NativeConstruct()

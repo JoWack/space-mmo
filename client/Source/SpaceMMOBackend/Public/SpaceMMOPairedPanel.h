@@ -72,6 +72,14 @@ protected:
 	TObjectPtr<class UWidget> PanelRoot;
 
 	/**
+	 * The light dim over the world behind a panel (task 173; Joe chose a clear world, lightly dimmed, over
+	 * the menus' blur). Shown by one panel at a time: two open together would dim the world twice, so the
+	 * panel on the right leaves it to the one on the left.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> WorldDim;
+
+	/**
 	 * How far from centre a side sits, as a fraction of viewport width.
 	 *
 	 * A fraction rather than pixels so the pairing holds at any resolution — the gap between two

@@ -32,6 +32,36 @@ void USpaceMMOSkillRow::SetRow(const FSpaceMMOSkillRowText& Row)
 		// Clamped rather than trusted: this arrives over the wire, and a bar asked for 1.4 draws
 		// past its own end.
 		ProgressBar->SetPercent(bHasProgress ? FMath::Clamp(Row.Progress, 0.0f, 1.0f) : 0.0f);
+
+		// Hidden rather than drawn empty when there is no figure, or an old server makes every skill
+		// look freshly started.
+		// And not for a skill never used, as in the approved mock: an empty bar there says nothing the grey
+		// name does not.
+		ProgressBar->SetVisibility(bHasProgress && bTrained ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+
+	RequestRestyle();
+}
+
+void USpaceMMOSkillRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
+{
+	using namespace SpaceMMO;
+
+	// Every skill is listed; the ones never used are quieter, not hidden.
+	const Style::ETextRole Main = bTrained ? Style::ETextRole::Body : Style::ETextRole::Dimmed;
+
+	PanelLook::Apply(NameText, Main);
+	PanelLook::Apply(LevelText, Main);
+	PanelLook::Apply(XpText, Style::ETextRole::Note);
+	PanelLook::Apply(ToNextText, Style::ETextRole::Note);
+
+	if (ProgressBar != nullptr)
+	{
+		FProgressBarStyle Bar = ProgressBar->GetWidgetStyle();
+		Bar.SetBackgroundImage(Style::Rounded(Style::White(0.10f), Style::White(0.0f), 0.0f, FVector4(3.0, 3.0, 3.0, 3.0)));
+		Bar.SetFillImage(Style::Rounded(Style::Ice(), Style::White(0.0f), 0.0f, FVector4(3.0, 3.0, 3.0, 3.0)));
+		ProgressBar->SetWidgetStyle(Bar);
+		ProgressBar->SetFillColorAndOpacity(FLinearColor::White);
 	}
 }
 

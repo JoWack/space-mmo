@@ -7,6 +7,9 @@
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Misc/Paths.h"
+#include "TimerManager.h"
+#include "UnrealClient.h"
 #include "Net/UnrealNetwork.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
@@ -1761,6 +1764,120 @@ void ASpaceMMOPlayerController::SpaceMMOShowMenu(const FString& Which)
 		Menu == ESpaceMMOMenu::None || MenuWidget(Menu) != nullptr ? TEXT("configured") : TEXT("NOT configured"));
 
 	ShowMenu(Menu);
+}
+
+void ASpaceMMOPlayerController::SpaceMMOLookPanels(
+	const FString& View, const FString& TabOrShot, const FString& Shot, const FString& More)
+{
+#if UE_BUILD_SHIPPING
+	UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: SpaceMMOLookPanels is not in a shipping build."));
+#else
+	USpaceMMOBackendClient* const Client = Backend();
+
+	if (Client == nullptr)
+	{
+		return;
+	}
+
+	// One parameter per word: an exec function drops whatever is past its last one, which is how
+	// "Pair Market prompt shot" once ran without its "shot" and waited for a capture that never came.
+	const TArray<FString> Words = {TabOrShot, Shot, More};
+	const bool bShot = Words.ContainsByPredicate([](const FString& W) { return W.Equals(TEXT("shot"), ESearchCase::IgnoreCase); });
+	const bool bPrompt = Words.ContainsByPredicate([](const FString& W) { return W.Equals(TEXT("prompt"), ESearchCase::IgnoreCase); });
+
+	Client->UseSampleDataForLook();
+
+	// Past sign-in and out of any menu, as though playing: the panels are hidden before that.
+	bAwaitingSignIn = false;
+	ShowMenu(ESpaceMMOMenu::None);
+
+	const bool bPair = View.Equals(TEXT("Pair"), ESearchCase::IgnoreCase);
+
+	bInventoryScreenOpen = bPair || View.Equals(TEXT("Inventory"), ESearchCase::IgnoreCase);
+	bStationOverlayOpen = bPair || View.Equals(TEXT("Station"), ESearchCase::IgnoreCase);
+	bSkillsScreenOpen = View.Equals(TEXT("Skills"), ESearchCase::IgnoreCase);
+
+	// Docked as of now, so the overlay is not closed for want of a station or reopened as an arrival.
+	LastDockedStationId = DockedStationId();
+
+	const TPair<const TCHAR*, ESpaceMMOStationTab> Tabs[] = {
+		{TEXT("Market"), ESpaceMMOStationTab::Market},
+		{TEXT("Industry"), ESpaceMMOStationTab::Industry},
+		{TEXT("Quests"), ESpaceMMOStationTab::Quests},
+		{TEXT("MyOrders"), ESpaceMMOStationTab::MyOrders},
+		{TEXT("Ships"), ESpaceMMOStationTab::Ships},
+	};
+
+	FString TabName;
+
+	for (const auto& Tab : Tabs)
+	{
+		if (StationOverlay != nullptr && TabOrShot.Equals(Tab.Key, ESearchCase::IgnoreCase))
+		{
+			StationOverlay->SetTab(Tab.Value);
+			TabName = Tab.Key;
+		}
+	}
+
+	// Ferrite ore selected, so the market shows a row picked and its book underneath.
+	if (bStationOverlayOpen && StationOverlay != nullptr)
+	{
+		StationOverlay->SelectMarketItem(2);
+	}
+
+	UpdateHudContext();
+
+	if (bPrompt)
+	{
+		if (bStationOverlayOpen && StationOverlay != nullptr)
+		{
+			StationOverlay->BeginOrder(false);
+		}
+		else if (bInventoryScreenOpen && InventoryScreen != nullptr)
+		{
+			FSpaceMMOInventoryLine Scrap;
+			Scrap.InventoryId = 2;
+			Scrap.ItemDefId = 1;
+			Scrap.Quantity = 120;
+			Scrap.Label = TEXT("Scrap Alloy");
+			Scrap.Amount = TEXT("120");
+
+			InventoryScreen->BeginTransfer(Scrap, 3);
+		}
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: SpaceMMOLookPanels %s %s %s %s -- inventory %d, station %d, skills %d, shot %d."),
+		*View, *TabOrShot, *Shot, *More, bInventoryScreenOpen ? 1 : 0, bStationOverlayOpen ? 1 : 0, bSkillsScreenOpen ? 1 : 0, bShot ? 1 : 0);
+
+	if (!bShot)
+	{
+		return;
+	}
+
+	const FString Name = FString::Printf(TEXT("LookPanels_%s%s%s.png"), *View,
+		TabName.IsEmpty() ? TEXT("") : *(TEXT("_") + TabName), bPrompt ? TEXT("_prompt") : TEXT(""));
+	const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ScreenShotDir() / Name);
+
+	// Again just before the capture: without a server, a failed sign-in arrives a moment after start-up and
+	// puts the sign-in screen back over everything, which would be a screenshot of the wrong thing. Without
+	// "prompt", so a prompt opened above is left open rather than opened twice.
+	FTimerHandle Again;
+	GetWorldTimerManager().SetTimer(Again, [this, View, TabName]()
+	{
+		SpaceMMOLookPanels(View, TabName, FString(), FString());
+	}, 2.5f, false);
+
+	FTimerHandle Capture;
+	GetWorldTimerManager().SetTimer(Capture, [Path]()
+	{
+		FScreenshotRequest::RequestScreenshot(Path, true, false);
+
+		UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: captured %s."), *Path);
+	}, 3.5f, false);
+
+	FTimerHandle Leave;
+	GetWorldTimerManager().SetTimer(Leave, [this]() { QuitGame(); }, 5.5f, false);
+#endif
 }
 
 void ASpaceMMOPlayerController::QuitGame()
