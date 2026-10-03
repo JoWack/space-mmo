@@ -98,6 +98,14 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> StationText;
 
+	/** The hairline over the station line, hidden with it when there is no station to name. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> ReadoutRule;
+
+	/** The credits label and figure together, hidden when there is no balance to show (task 173). */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> CreditsLine;
+
 	/** So the warning above is said once rather than every frame. */
 	bool bReportedMissingStationBlock = false;
 };

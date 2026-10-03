@@ -1,5 +1,7 @@
 #include "SpaceMMOPlayerController.h"
 
+#include "SpaceMMOStationWork.h"
+
 #include "Components/InputComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -349,19 +351,7 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			&ASpaceMMOPlayerController::CaptureDirection);
 
 		InputComponent->BindAction(
-			TEXT("CycleRecipe"), IE_Pressed, this, &ASpaceMMOPlayerController::CycleRecipe);
-
-		InputComponent->BindAction(
-			TEXT("StartJob"), IE_Pressed, this, &ASpaceMMOPlayerController::StartSelectedJob);
-
-		InputComponent->BindAction(
-			TEXT("ClaimJob"), IE_Pressed, this, &ASpaceMMOPlayerController::ClaimReadyJob);
-
-		InputComponent->BindAction(
 			TEXT("SellToFaction"), IE_Pressed, this, &ASpaceMMOPlayerController::SellToFaction);
-
-		InputComponent->BindAction(
-			TEXT("AcceptQuest"), IE_Pressed, this, &ASpaceMMOPlayerController::AcceptNextQuest);
 
 		InputComponent->BindAction(
 			TEXT("ToggleMouseCapture"),
@@ -393,18 +383,6 @@ USpaceMMOBackendClient* ASpaceMMOPlayerController::Backend() const
 	return GameInstance != nullptr
 		? GameInstance->GetSubsystem<USpaceMMOBackendClient>()
 		: nullptr;
-}
-
-void ASpaceMMOPlayerController::CycleRecipe()
-{
-	const USpaceMMOBackendClient* Client = Backend();
-
-	if (Client == nullptr || Client->GetRecipes().Num() == 0)
-	{
-		return;
-	}
-
-	SelectedRecipeIndex = (SelectedRecipeIndex + 1) % Client->GetRecipes().Num();
 }
 
 void ASpaceMMOPlayerController::StartSelectedJob()
@@ -443,31 +421,138 @@ void ASpaceMMOPlayerController::StartSelectedJob()
 		return;
 	}
 
-	Client->StartJob(CharacterId, Available[SelectedRecipeIndex].Id, Station, 1);
+	// The count as the bar shows it: clamped by the same builder, so Start makes what its label says.
+	const FSpaceMMOStartBarText Bar = FSpaceMMOStationWork::BuildStartBar(
+		Available, Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns);
+
+	Client->StartJob(CharacterId, Available[SelectedRecipeIndex].Id, Station, Bar.Runs);
 }
 
-void ASpaceMMOPlayerController::ClaimReadyJob()
+FString ASpaceMMOPlayerController::DockedStationName() const
 {
-	USpaceMMOBackendClient* Client = Backend();
+	const USpaceMMOBackendClient* Client = Backend();
 
-	if (Client == nullptr || CharacterId == 0)
+	if (Client == nullptr)
+	{
+		return FString();
+	}
+
+	// Not named StationId: this controller already has a member by that name, and shadowing it is a
+	// warning this project treats as an error.
+	const int32 Docked = DockedStationId();
+
+	for (const FBackendStation& Station : Client->GetStations())
+	{
+		if (Station.Id == Docked)
+		{
+			return Station.Name;
+		}
+	}
+
+	return FString();
+}
+
+void ASpaceMMOPlayerController::GetStationWork(
+	TArray<FSpaceMMORecipeRowText>& OutRecipes,
+	TArray<FSpaceMMOJobRowText>& OutJobs,
+	TArray<FSpaceMMOQuestRowText>& OutQuests,
+	FSpaceMMOStartBarText& OutStartBar) const
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr)
 	{
 		return;
 	}
 
-	// The server's flag, not a comparison done here. Claiming the first ready one rather than all
-	// of them keeps each press to a single answer the player can read.
-	for (const FBackendIndustryJob& Job : Client->GetJobs())
-	{
-		if (Job.bIsClaimable)
-		{
-			Client->ClaimJob(CharacterId, Job.Id);
+	const int32 Station = DockedStationId();
 
-			return;
-		}
+	OutRecipes = FSpaceMMOStationWork::BuildRecipeRows(
+		Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns);
+
+	OutStartBar = FSpaceMMOStationWork::BuildStartBar(
+		Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns);
+
+	// The inputs line follows the count the bar settled on, not the one asked for, so the two agree.
+	if (OutStartBar.Runs != SelectedRuns)
+	{
+		OutRecipes = FSpaceMMOStationWork::BuildRecipeRows(
+			Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, OutStartBar.Runs);
 	}
 
-	ShowNotice(TEXT("Nothing ready to claim"), false);
+	OutJobs = FSpaceMMOStationWork::BuildJobRows(Client->GetJobs(), Client->GetRecipes());
+	OutQuests = FSpaceMMOStationWork::BuildQuestRows(Client->GetJournal(), Client->GetAvailableQuests());
+}
+
+void ASpaceMMOPlayerController::SelectRecipe(const int32 Index)
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	const int32 Clamped = FSpaceMMOStationWork::ClampSelection(Index, Client != nullptr ? Client->GetRecipes().Num() : 0);
+
+	if (Clamped == INDEX_NONE || Clamped == SelectedRecipeIndex)
+	{
+		return;
+	}
+
+	SelectedRecipeIndex = Clamped;
+
+	// A count chosen for one recipe means nothing for another.
+	SelectedRuns = 1;
+}
+
+void ASpaceMMOPlayerController::StepRuns(const int32 Delta)
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr)
+	{
+		return;
+	}
+
+	const FSpaceMMOStartBarText Bar = FSpaceMMOStationWork::BuildStartBar(
+		Client->GetRecipes(), Client->GetInventory(), DockedStationId(), SelectedRecipeIndex, SelectedRuns);
+
+	SelectedRuns = FMath::Clamp(Bar.Runs + Delta, 1, FMath::Max(Bar.MostRuns, 1));
+}
+
+void ASpaceMMOPlayerController::ClaimJob(const int64 JobId)
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || CharacterId == 0 || JobId <= 0)
+	{
+		return;
+	}
+
+	Client->ClaimJob(CharacterId, JobId);
+}
+
+void ASpaceMMOPlayerController::HandInQuest(const FString& QuestKey, const FString& QuestName)
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || CharacterId == 0 || QuestKey.IsEmpty())
+	{
+		return;
+	}
+
+	Client->TurnInQuest(CharacterId, QuestKey);
+
+	ShowNotice(FString::Printf(TEXT("Handed in %s"), *QuestName), true);
+}
+
+void ASpaceMMOPlayerController::AcceptQuest(const FString& QuestKey)
+{
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || CharacterId == 0 || QuestKey.IsEmpty())
+	{
+		return;
+	}
+
+	// By key, the row's own. The J key took whatever was first on offer; a button names its quest.
+	Client->AcceptQuest(CharacterId, QuestKey);
 }
 
 TArray<FBackendInventoryItem> ASpaceMMOPlayerController::FilterSellable(
@@ -503,51 +588,6 @@ void ASpaceMMOPlayerController::RefreshBook()
 	{
 		Client->FetchBook(DockedStationId(), ItemDefId);
 	}
-}
-
-void ASpaceMMOPlayerController::AcceptNextQuest()
-{
-	USpaceMMOBackendClient* Client = Backend();
-
-	if (Client == nullptr || CharacterId == 0)
-	{
-		return;
-	}
-
-	// Finished work first. A player standing on a quest that is done wants paying, and offering
-	// them the next one before the reward for the last is the wrong order to do two things in --
-	// the chain hands out one at a time, so these are never both waiting anyway.
-	for (const FBackendJournalEntry& Entry : Client->GetJournal())
-	{
-		if (Entry.State != EBackendQuestState::ReadyToTurnIn)
-		{
-			continue;
-		}
-
-		Client->TurnInQuest(CharacterId, Entry.QuestKey);
-
-		ShowNotice(FString::Printf(TEXT("Handed in %s"), *Entry.Name), true);
-
-		return;
-	}
-
-	const TArray<FBackendAvailableQuest>& Available = Client->GetAvailableQuests();
-
-	if (Available.Num() == 0)
-	{
-		// Names the quest already running, because that is almost always why there is nothing on
-		// offer: the chain hands out one at a time, so having no next quest means holding the
-		// current one.
-		const FString Refusal = AcceptRefusal(Client->GetJournal());
-
-		ShowNotice(Refusal.IsEmpty() ? TEXT("Nothing to accept") : Refusal, false);
-
-		return;
-	}
-
-	// The first one, which for an ordered chain is the next link. A picker belongs with a real
-	// journal screen; this is enough to walk the onboarding line, which is what it is for.
-	Client->AcceptQuest(CharacterId, Available[0].QuestKey);
 }
 
 void ASpaceMMOPlayerController::SellToFaction()
@@ -654,11 +694,7 @@ void ASpaceMMOPlayerController::ShowNotice(const FString& Message, const bool bS
 {
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s"), *Message);
 
-	if (GEngine != nullptr)
-	{
-		GEngine->AddOnScreenDebugMessage(
-			NoticeMessageKey, 4.0f, bSucceeded ? FColor::Green : FColor::Orange, Message);
-	}
+	ShowTransientMessage(Message, bSucceeded ? ESpaceMMOMessageTone::Positive : ESpaceMMOMessageTone::Warning);
 }
 
 void ASpaceMMOPlayerController::Tick(const float DeltaSeconds)
@@ -673,7 +709,11 @@ void ASpaceMMOPlayerController::Tick(const float DeltaSeconds)
 
 void ASpaceMMOPlayerController::UpdateHudContext()
 {
+#if UE_BUILD_SHIPPING
 	const bool bFlying = Cast<ASpaceMMOShipPawn>(GetPawn()) != nullptr;
+#else
+	const bool bFlying = Cast<ASpaceMMOShipPawn>(GetPawn()) != nullptr || bLookFlight;
+#endif
 
 	// HitTestInvisible rather than Visible: a readout that swallowed clicks would make the world
 	// behind it unclickable, and nothing here is meant to be pressed.
@@ -800,38 +840,6 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// SelfHitTestInvisible for the same reason as the inventory screen: rows, tabs, a search box and
 	// two order buttons are all clicked, but the empty half of a full-screen root must not be.
 	Show(StationOverlay, bStationOverlayOpen, ESlateVisibility::SelfHitTestInvisible);
-}
-
-void ASpaceMMOPlayerController::GetStationPanels(
-	FString& OutStationName,
-	TArray<FString>& OutIndustry,
-	TArray<FString>& OutQuests) const
-{
-	const USpaceMMOBackendClient* Client = Backend();
-
-	if (Client == nullptr)
-	{
-		return;
-	}
-
-	// Not named StationId: this controller already has a member by that name, and shadowing it is a
-	// warning this project treats as an error.
-	const int32 Docked = DockedStationId();
-
-	for (const FBackendStation& Station : Client->GetStations())
-	{
-		if (Station.Id == Docked)
-		{
-			OutStationName = Station.Name;
-
-			break;
-		}
-	}
-
-	OutIndustry = BuildIndustryPanel(
-		Client->GetRecipes(), Client->GetJobs(), Client->GetInventory(), SelectedRecipeIndex);
-
-	OutQuests = BuildQuestPanel(Client->GetJournal(), Client->GetAvailableQuests());
 }
 
 void ASpaceMMOPlayerController::ToggleStationOverlay()
@@ -1092,209 +1100,6 @@ void ASpaceMMOPlayerController::RefreshCharacterState()
 	}
 
 	Client->FetchJobs(CharacterId);
-}
-
-FString ASpaceMMOPlayerController::AcceptRefusal(const TArray<FBackendJournalEntry>& Journal)
-{
-	for (const FBackendJournalEntry& Entry : Journal)
-	{
-		if (Entry.State == EBackendQuestState::Completed
-			|| Entry.State == EBackendQuestState::Abandoned)
-		{
-			continue;
-		}
-
-		if (Entry.State == EBackendQuestState::ReadyToTurnIn)
-		{
-			return FString::Printf(TEXT("%s is finished - hand it in"), *Entry.Name);
-		}
-
-		// The authored step, because it is the thing to go and do. "Salvage Rights is already
-		// active" on its own says why the key did nothing without saying what would move it.
-		if (!Entry.StepDescription.IsEmpty())
-		{
-			return FString::Printf(
-				TEXT("%s is already active - %s"), *Entry.Name, *Entry.StepDescription);
-		}
-
-		return FString::Printf(TEXT("%s is already active"), *Entry.Name);
-	}
-
-	return FString();
-}
-
-TArray<FString> ASpaceMMOPlayerController::BuildQuestPanel(
-	const TArray<FBackendJournalEntry>& Journal,
-	const TArray<FBackendAvailableQuest>& Available)
-{
-	TArray<FString> Lines;
-
-	// The hint only when the key does something. Advertising it with nothing on offer is how a
-	// quest already running came to read as one waiting to be accepted -- the player pressed the
-	// key the header named, got "Nothing to accept", and concluded the system was broken.
-	// Names what the key will actually do. One key doing the obvious next thing is only obvious
-	// while the panel says which thing that is -- and handing in comes first, because a player
-	// standing on finished work wants paying before they are offered more of it.
-	const FBackendJournalEntry* Ready = Journal.FindByPredicate(
-		[](const FBackendJournalEntry& Entry)
-		{ return Entry.State == EBackendQuestState::ReadyToTurnIn; });
-
-	if (Ready != nullptr)
-	{
-		Lines.Add(FString::Printf(TEXT("-- Quests --  J hands in %s"), *Ready->Name));
-	}
-	else
-	{
-		Lines.Add(Available.Num() > 0
-			? TEXT("-- Quests --  J accepts the next one")
-			: TEXT("-- Quests --"));
-	}
-
-	bool bAnyActive = false;
-
-	for (const FBackendJournalEntry& Entry : Journal)
-	{
-		if (Entry.State == EBackendQuestState::Completed
-			|| Entry.State == EBackendQuestState::Abandoned)
-		{
-			// Finished quests are history. A journal that lists everything ever done buries the one
-			// line saying what to do next, which is the only line being looked for.
-			continue;
-		}
-
-		// Headed, and only once there is something under it. Without this an active quest and an
-		// offered one are two identical lines, and the whole difference between them -- that one is
-		// yours and the other is not -- is left for the player to infer.
-		if (!bAnyActive)
-		{
-			Lines.Add(TEXT("  ACTIVE"));
-		}
-
-		bAnyActive = true;
-
-		if (Entry.State == EBackendQuestState::ReadyToTurnIn)
-		{
-			Lines.Add(FString::Printf(TEXT("   %s  READY TO HAND IN"), *Entry.Name));
-
-			continue;
-		}
-
-		Lines.Add(FString::Printf(
-			TEXT("   %s  %d/%d"), *Entry.Name, Entry.StepProgress, Entry.StepRequired));
-
-		if (!Entry.StepDescription.IsEmpty())
-		{
-			Lines.Add(FString::Printf(TEXT("      %s"), *Entry.StepDescription));
-		}
-	}
-
-	if (!bAnyActive)
-	{
-		Lines.Add(TEXT("   none active"));
-	}
-
-	// Only worth naming when there is something to take. A permanent empty heading is noise on a
-	// display that has to be readable at a glance.
-	if (Available.Num() > 0)
-	{
-		Lines.Add(TEXT("  AVAILABLE"));
-
-		Lines.Add(FString::Printf(TEXT("   %s"), *Available[0].Name));
-
-		if (Available.Num() > 1)
-		{
-			Lines.Add(FString::Printf(TEXT("   ... and %d more"), Available.Num() - 1));
-		}
-	}
-
-	return Lines;
-}
-
-TArray<FString> ASpaceMMOPlayerController::BuildIndustryPanel(
-	const TArray<FBackendRecipe>& Recipes,
-	const TArray<FBackendIndustryJob>& Jobs,
-	const TArray<FBackendInventoryItem>& Inventory,
-	const int32 SelectedIndex)
-{
-	TArray<FString> Lines;
-
-	Lines.Add(TEXT("-- Industry --  R select  X start  Z claim"));
-
-	if (Recipes.Num() == 0)
-	{
-		Lines.Add(TEXT("   no recipes loaded"));
-	}
-
-	// Clamped rather than trusted. The catalog can be re-fetched at any time, and a selection left
-	// pointing past the end would read as "nothing is selected" while the start key silently did
-	// nothing.
-	const int32 Selected = Recipes.Num() > 0
-		? FMath::Clamp(SelectedIndex, 0, Recipes.Num() - 1)
-		: INDEX_NONE;
-
-	for (int32 Index = 0; Index < Recipes.Num(); ++Index)
-	{
-		const FBackendRecipe& Recipe = Recipes[Index];
-
-		Lines.Add(FString::Printf(
-			TEXT(" %s %s x%d  %ds  %s %d"),
-			Index == Selected ? TEXT(">") : TEXT(" "),
-			*Recipe.OutputName,
-			Recipe.OutputQuantity,
-			Recipe.JobSeconds,
-			*Recipe.SkillName,
-			Recipe.RequiredLevel));
-
-		// Materials only for the selected recipe. Listing every input of every recipe would be a
-		// wall of text on a display that has to be read at a glance.
-		if (Index != Selected)
-		{
-			continue;
-		}
-
-		if (!Recipe.RequiredToolName.IsEmpty())
-		{
-			Lines.Add(FString::Printf(TEXT("      tool: %s"), *Recipe.RequiredToolName));
-		}
-
-		for (const FBackendRecipeInput& Input : Recipe.Inputs)
-		{
-			int32 Held = 0;
-
-			for (const FBackendInventoryItem& Item : Inventory)
-			{
-				if (Item.ItemKey == Input.ItemKey)
-				{
-					Held += Item.Quantity;
-				}
-			}
-
-			// Two numbers the server already sent, shown side by side. Deliberately not turned into
-			// a verdict: deciding "you cannot build this" here would be a second copy of the gates.
-			Lines.Add(FString::Printf(
-				TEXT("      %s  %d/%d"), *Input.Name, Held, Input.Quantity));
-		}
-	}
-
-	Lines.Add(TEXT("-- Jobs --"));
-
-	if (Jobs.Num() == 0)
-	{
-		Lines.Add(TEXT("   none running"));
-	}
-
-	for (const FBackendIndustryJob& Job : Jobs)
-	{
-		Lines.Add(FString::Printf(
-			TEXT("   %s x%d  %s"),
-			*Job.OutputName,
-			Job.OutputQuantityTotal,
-			Job.bIsClaimable
-				? TEXT("READY")
-				: *FString::Printf(TEXT("%ds"), Job.SecondsRemaining)));
-	}
-
-	return Lines;
 }
 
 FString ASpaceMMOPlayerController::GetCharacterBalance() const
@@ -1787,9 +1592,33 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 
 	Client->UseSampleDataForLook();
 
-	// Past sign-in and out of any menu, as though playing: the panels are hidden before that.
-	bAwaitingSignIn = false;
+	// Past sign-in and out of any menu, as though playing: the panels are hidden before that. Except the
+	// sign-in view, which is the screen before all of it, shown with a sample refusal so its red line is seen.
+	const bool bSignIn = View.Equals(TEXT("SignIn"), ESearchCase::IgnoreCase);
+
+	bAwaitingSignIn = bSignIn && LoginScreen != nullptr;
 	ShowMenu(ESpaceMMOMenu::None);
+
+	if (bSignIn && LoginScreen != nullptr)
+	{
+		LoginScreen->FailureText = TEXT("Wrong email or password. (sample)");
+		LoginScreen->FillSampleForLook();
+	}
+
+	// The flight HUD on foot, with sample figures and the message stack's two tones.
+	bLookFlight = View.Equals(TEXT("Flight"), ESearchCase::IgnoreCase);
+
+	if (bLookFlight)
+	{
+		if (FlightReadout != nullptr)
+		{
+			FlightReadout->ShowSampleForLook();
+		}
+
+		ShowTransientMessage(TEXT("+3 Ferrite Ore   (+12 xp)   41 left"), ESpaceMMOMessageTone::Positive);
+		ShowTransientMessage(TEXT("Docked at Borlash. Your ship is in the hangar."), ESpaceMMOMessageTone::Positive);
+		ShowNotice(TEXT("Borlash's airspace is closed. Dock at one of its four corner docking stations."), false);
+	}
 
 	const bool bPair = View.Equals(TEXT("Pair"), ESearchCase::IgnoreCase);
 
@@ -1823,6 +1652,13 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 	if (bStationOverlayOpen && StationOverlay != nullptr)
 	{
 		StationOverlay->SelectMarketItem(2);
+	}
+
+	// "short": the recipe whose four inputs this hangar has none of, so the wrapped inputs line and the
+	// counted shortfall are what is looked at (Joe, 3 October).
+	if (Words.ContainsByPredicate([](const FString& W) { return W.Equals(TEXT("short"), ESearchCase::IgnoreCase); }))
+	{
+		SelectRecipe(1);
 	}
 
 	UpdateHudContext();

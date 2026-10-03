@@ -41,15 +41,21 @@ public sealed record JournalEntryResponse(
     ObjectiveType? StepObjective,
     string? StepTargetKey,
     int StepProgress,
-    int? StepRequired);
+    int? StepRequired,
+    long RewardMinorUnits);
 
 /// <summary>A quest the character could accept now.</summary>
 /// <remarks>
 /// Advisory, not authoritative. <c>QuestService.AcceptAsync</c> re-checks prerequisites, cooldowns
 /// and repeat rules and is the only thing that decides — listing a quest here and then refusing it
 /// is preferable to duplicating those rules in a query and having the two drift apart.
+/// <para>
+/// The first step's description and the reward are what the station's quest panel shows on an offer
+/// (task 173): a name alone does not say what accepting would commit to, or what it pays.
+/// </para>
 /// </remarks>
-public sealed record AvailableQuestResponse(string QuestKey, string Name, QuestKind Kind);
+public sealed record AvailableQuestResponse(
+    string QuestKey, string Name, QuestKind Kind, string? Description, long RewardMinorUnits);
 
 /// <summary>
 /// The quest journal.
@@ -207,7 +213,8 @@ public static class QuestEndpoints
                 r.Step?.ObjectiveType,
                 r.Step?.TargetKey,
                 r.Quest.StepProgress,
-                r.Step?.Quantity))
+                r.Step?.Quantity,
+                r.Quest.QuestDef.RewardCredits.MinorUnits))
             .ToList());
     }
 
@@ -245,15 +252,28 @@ public static class QuestEndpoints
             .Select(cq => cq.QuestDefId)
             .ToListAsync(cancellation);
 
-        List<AvailableQuestResponse> available = await database.QuestDefs
+        var offered = await database.QuestDefs
             .Where(q => !underway.Contains(q.Id))
             .Where(q => !completed.Contains(q.Id) || q.CooldownSeconds != null)
             .Where(q => q.PrerequisiteQuestDefId == null
                 || completed.Contains(q.PrerequisiteQuestDefId.Value))
             .OrderBy(q => q.Id)
-            .Select(q => new AvailableQuestResponse(q.Key, q.Name, q.Kind))
+            .Select(q => new
+            {
+                Quest = q,
+
+                // What accepting starts with: the lowest step, whatever ordinal it was authored at.
+                Description = database.QuestSteps
+                    .Where(s => s.QuestDefId == q.Id)
+                    .OrderBy(s => s.Ordinal)
+                    .Select(s => s.Description)
+                    .FirstOrDefault(),
+            })
             .ToListAsync(cancellation);
 
-        return Results.Ok(available);
+        return Results.Ok(offered
+            .Select(o => new AvailableQuestResponse(
+                o.Quest.Key, o.Quest.Name, o.Quest.Kind, o.Description, o.Quest.RewardCredits.MinorUnits))
+            .ToList());
     }
 }

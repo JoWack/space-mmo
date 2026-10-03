@@ -1,6 +1,7 @@
 #include "SpaceMMODepositPrompt.h"
 
 #include "Components/TextBlock.h"
+#include "SpaceMMOPanelRow.h"
 #include "Engine/GameInstance.h"
 #include "GameFramework/InputSettings.h"
 #include "SpaceMMOBackendClient.h"
@@ -176,4 +177,9 @@ void USpaceMMODepositPrompt::NativeTick(const FGeometry& Geometry, const float D
 	bNeedsTool = !Text.Tool.IsEmpty();
 	bHasLevelBlocker = !Text.LevelBlocker.IsEmpty();
 	bHasToolBlocker = !Text.ToolBlocker.IsEmpty();
+
+	const FLinearColor Gather = bCanGather ? SpaceMMO::Style::TextPrimary() : SpaceMMO::Style::TextSecondary();
+
+	SpaceMMO::PanelLook::Apply(GatherKeyText, SpaceMMO::Style::ETextRole::Key, Gather);
+	SpaceMMO::PanelLook::Apply(GatherTextLabel, SpaceMMO::Style::ETextRole::Button, Gather);
 }

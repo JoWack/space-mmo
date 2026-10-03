@@ -393,18 +393,25 @@ runs, and with it you get a process and no window.
 | `F` | Step out (only when landed) | Board a ship within 50 m |
 | `M` | Release the mouse | Release the mouse |
 
-Everything the backend does has a key too. These are the ones that were missing from this
-table for long enough that they got guessed at in conversation and guessed wrong — `E`, not
-`G`, is gather:
+The rest, read off `Config/DefaultInput.ini` on 3 October 2026 rather than remembered — this table
+was wrong for long enough that it got guessed at in conversation and guessed wrong (`E`, not `G`, is
+gather), and it still listed keys that no longer existed:
 
 | Key | Does |
 |---|---|
-| `Tab` | Show or hide the character panel: skills, holdings, quests, market, industry, jobs |
 | `E` | Gather from the deposit you are standing at |
-| `J` | Accept the next available quest |
-| `R` `X` `Z` | Industry: cycle recipe, start the job, claim it when it finishes |
-| `H` `N` `B` | Market: cycle which holding, list ten of it, buy the best ask |
+| `G` | Dock, at a docking station |
+| `Tab` | Open or close the station screen, while docked |
+| `1`–`5` | Station tabs: Market, Industry, Quests, My orders, Ships |
+| `I` | Inventory |
+| `K` | Skills |
 | `V` | Sell a parcel to the faction standing order — the worst price in the game, by design |
+| `P` | Log where you are standing as a direction, ready to paste into content |
+| `Esc` | Game menu |
+
+The station screen is worked with the mouse (task 173): click a market item for its book; on
+Industry, click a recipe, choose how many with − and +, then Start, and Claim a finished job; on
+Quests, Hand in or Accept. The `R` `X` `Z` and `J` keys that used to do the last two were removed.
 
 The ship starts 200 km from the planet, which is a long flight — use `-ShipStartX=178` to begin
 just above the surface instead. Flight assist is on by default, so releasing the stick slows you

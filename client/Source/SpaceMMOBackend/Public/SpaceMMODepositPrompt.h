@@ -167,4 +167,11 @@ protected:
 	/** Just the key, so the Blueprint can render it as "[E] gather" however it likes. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> GatherKeyText;
+
+	/**
+	 * "to gather", beside the key. Dimmed with the key when the deposit cannot be gathered -- set here
+	 * since task 173; it was a Blueprint colour binding.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> GatherTextLabel;
 };

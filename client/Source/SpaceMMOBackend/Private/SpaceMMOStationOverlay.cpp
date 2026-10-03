@@ -1,6 +1,7 @@
 #include "SpaceMMOStationOverlay.h"
 
 #include "Components/Border.h"
+#include "Components/Button.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Engine/GameInstance.h"
@@ -59,9 +60,35 @@ void USpaceMMOTextRow::SetLine(const FString& Line)
 	RequestRestyle();
 }
 
+void USpaceMMOTextRow::SetHeading(const FString& Heading)
+{
+	Role = SpaceMMO::Style::ETextRole::Group;
+
+	SetLine(Heading);
+}
+
+void USpaceMMOTextRow::SetNote(const FString& Note)
+{
+	Role = SpaceMMO::Style::ETextRole::Note;
+
+	SetLine(Note);
+}
+
+SpaceMMO::Style::ERowLook USpaceMMOTextRow::Look() const
+{
+	// A heading's spacing: air above, none below, so it sits on the rows it names.
+	return Role == SpaceMMO::Style::ETextRole::Group ? SpaceMMO::Style::ERowLook::Heading : Super::Look();
+}
+
 void USpaceMMOTextRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
 {
-	SpaceMMO::PanelLook::Apply(LineText, SpaceMMO::Style::ETextRole::Body);
+	SpaceMMO::PanelLook::Apply(LineText, Role);
+
+	// The text row has no RowFrame, so a heading's air above it is set on the text.
+	if (LineText != nullptr)
+	{
+		LineText->SetMargin(Role == SpaceMMO::Style::ETextRole::Group ? FMargin(4.0f, 16.0f, 4.0f, 4.0f) : FMargin(4.0f, 2.0f));
+	}
 }
 
 namespace
@@ -779,41 +806,262 @@ void USpaceMMOStationOverlay::SetTab(const ESpaceMMOStationTab Tab)
 	}
 }
 
-void USpaceMMOStationOverlay::FillPanel(
-	UPanelWidget* Container,
-	const TArray<FString>& Lines,
-	FString& Signature)
+void USpaceMMOStationOverlay::NativeConstruct()
 {
-	if (Container == nullptr)
+	Super::NativeConstruct();
+
+	// AddUnique, not a bool guard: a widget can be constructed again, and a guard cannot tell "already
+	// bound" from "bound to a button that is gone" -- the G key's lesson (CLAUDE.md).
+	if (RunsLess != nullptr)
 	{
-		return;
+		RunsLess->OnClicked.AddUniqueDynamic(this, &USpaceMMOStationOverlay::FewerRuns);
 	}
 
-	// Rebuilt only when the wording changed. Industry counts down every second and the market moves
-	// whenever anybody trades, so most frames still have nothing new to say.
-	const FString Next = FString::Join(Lines, TEXT("\n"));
-
-	if (Next == Signature)
+	if (RunsMore != nullptr)
 	{
-		return;
+		RunsMore->OnClicked.AddUniqueDynamic(this, &USpaceMMOStationOverlay::MoreRuns);
 	}
 
-	Signature = Next;
-
-	Container->ClearChildren();
-
-	for (const FString& Line : Lines)
+	if (StartButton != nullptr)
 	{
-		USpaceMMOTextRow* Row = CreateWidget<USpaceMMOTextRow>(GetOwningPlayer(), RowClass);
+		StartButton->OnClicked.AddUniqueDynamic(this, &USpaceMMOStationOverlay::StartSelected);
+	}
+}
 
-		if (Row == nullptr)
+void USpaceMMOStationOverlay::FillStationWork(const ASpaceMMOPlayerController& Controller)
+{
+	TArray<FSpaceMMORecipeRowText> Recipes;
+	TArray<FSpaceMMOJobRowText> Jobs;
+	TArray<FSpaceMMOQuestRowText> Quests;
+	FSpaceMMOStartBarText Bar;
+
+	Controller.GetStationWork(Recipes, Jobs, Quests, Bar);
+
+	auto Heading = [this](UPanelWidget* Container, const FString& Text, const bool bNote)
+	{
+		if (USpaceMMOTextRow* Row = CreateWidget<USpaceMMOTextRow>(GetOwningPlayer(), RowClass))
 		{
-			continue;
+			if (bNote)
+			{
+				Row->SetNote(Text);
+			}
+			else
+			{
+				Row->SetHeading(Text);
+			}
+
+			Container->AddChild(Row);
+		}
+	};
+
+	// Rebuilt only when the wording changed. A job counts down every second, so most frames still
+	// have nothing new to say, and tearing a list down on each one would show as a stutter.
+	if (IndustryRows != nullptr)
+	{
+		FString Signature;
+
+		for (const FSpaceMMORecipeRowText& Row : Recipes)
+		{
+			Signature += Row.Title + Row.Time + Row.Skill + Row.Tool + (Row.bSelected ? TEXT("*") : TEXT(""));
+
+			for (const FSpaceMMORecipeInputText& Input : Row.Inputs)
+			{
+				Signature += FString::Printf(TEXT("%s%d/%d"), *Input.Name, Input.Held, Input.Needed);
+			}
+
+			Signature += TEXT("|");
 		}
 
-		Row->SetLine(Line);
+		Signature += TEXT("#");
 
-		Container->AddChild(Row);
+		for (const FSpaceMMOJobRowText& Row : Jobs)
+		{
+			Signature += FString::Printf(TEXT("%lld%s%s%d|"), Row.JobId, *Row.Remaining, Row.bReady ? TEXT("R") : TEXT(""),
+				FMath::RoundToInt(Row.Progress * 100.0f));
+		}
+
+		if (Signature != IndustrySignature)
+		{
+			IndustrySignature = Signature;
+
+			IndustryRows->ClearChildren();
+
+			Heading(IndustryRows, TEXT("Recipes"), false);
+
+			if (Recipes.Num() == 0)
+			{
+				Heading(IndustryRows, TEXT("no recipes loaded"), true);
+			}
+
+			for (const FSpaceMMORecipeRowText& Row : Recipes)
+			{
+				if (USpaceMMORecipeRow* Widget = CreateWidget<USpaceMMORecipeRow>(GetOwningPlayer(), RecipeRowClass))
+				{
+					Widget->SetOwningOverlay(this);
+					Widget->SetRow(Row);
+
+					IndustryRows->AddChild(Widget);
+				}
+			}
+
+			Heading(IndustryRows, TEXT("Jobs"), false);
+
+			if (Jobs.Num() == 0)
+			{
+				Heading(IndustryRows, TEXT("none running"), true);
+			}
+
+			for (const FSpaceMMOJobRowText& Row : Jobs)
+			{
+				if (USpaceMMOJobRow* Widget = CreateWidget<USpaceMMOJobRow>(GetOwningPlayer(), JobRowClass))
+				{
+					Widget->SetOwningOverlay(this);
+					Widget->SetRow(Row);
+
+					IndustryRows->AddChild(Widget);
+				}
+			}
+		}
+	}
+
+	if (QuestRows != nullptr)
+	{
+		FString Signature;
+
+		for (const FSpaceMMOQuestRowText& Row : Quests)
+		{
+			Signature += FString::Printf(TEXT("%s%d%s%s%s|"), *Row.QuestKey, static_cast<int32>(Row.Kind), *Row.Progress,
+				*Row.Description, *Row.Reward);
+		}
+
+		if (Signature != QuestSignature)
+		{
+			QuestSignature = Signature;
+
+			QuestRows->ClearChildren();
+
+			// Held and offered under their own headings: without them a quest already yours and one you
+			// could take read the same, which is how a quest at 0/10 once looked broken (7 September).
+			const bool bAnyHeld = Quests.ContainsByPredicate(
+				[](const FSpaceMMOQuestRowText& Row) { return Row.Kind != ESpaceMMOQuestRowKind::Offered; });
+
+			Heading(QuestRows, TEXT("Active"), false);
+
+			if (!bAnyHeld)
+			{
+				Heading(QuestRows, TEXT("none active"), true);
+			}
+
+			bool bOffersHeaded = false;
+
+			for (const FSpaceMMOQuestRowText& Row : Quests)
+			{
+				if (Row.Kind == ESpaceMMOQuestRowKind::Offered && !bOffersHeaded)
+				{
+					Heading(QuestRows, TEXT("Available"), false);
+
+					bOffersHeaded = true;
+				}
+
+				if (USpaceMMOQuestRow* Widget = CreateWidget<USpaceMMOQuestRow>(GetOwningPlayer(), QuestRowClass))
+				{
+					Widget->SetOwningOverlay(this);
+					Widget->SetRow(Row);
+
+					QuestRows->AddChild(Widget);
+				}
+			}
+		}
+	}
+
+	// The bar is cheap to set every frame, and shows on the Industry tab only.
+	if (StartBar != nullptr)
+	{
+		StartBar->SetVisibility(bIndustryTab && Bar.bHasRecipe
+			? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	}
+
+	if (StartNote != nullptr)
+	{
+		StartNote->SetText(FText::FromString(Bar.Note));
+		SpaceMMO::PanelLook::Apply(StartNote, SpaceMMO::Style::ETextRole::Note,
+			Bar.bShort ? TOptional<FLinearColor>(SpaceMMO::Style::ErrorRed()) : TOptional<FLinearColor>());
+	}
+
+	if (RunsText != nullptr)
+	{
+		RunsText->SetText(FText::AsNumber(Bar.Runs));
+	}
+
+	if (StartText != nullptr)
+	{
+		StartText->SetText(FText::FromString(Bar.Label));
+	}
+
+	if (RunsLess != nullptr)
+	{
+		RunsLess->SetIsEnabled(Bar.Runs > 1);
+	}
+
+	if (RunsMore != nullptr)
+	{
+		RunsMore->SetIsEnabled(Bar.Runs < Bar.MostRuns);
+	}
+}
+
+void USpaceMMOStationOverlay::FewerRuns()
+{
+	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
+	{
+		Controller->StepRuns(-1);
+	}
+}
+
+void USpaceMMOStationOverlay::MoreRuns()
+{
+	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
+	{
+		Controller->StepRuns(1);
+	}
+}
+
+void USpaceMMOStationOverlay::StartSelected()
+{
+	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
+	{
+		Controller->StartSelectedJob();
+	}
+}
+
+void USpaceMMOStationOverlay::SelectRecipe(const int32 Index)
+{
+	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
+	{
+		Controller->SelectRecipe(Index);
+	}
+}
+
+void USpaceMMOStationOverlay::ClaimJob(const int64 JobId)
+{
+	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
+	{
+		Controller->ClaimJob(JobId);
+	}
+}
+
+void USpaceMMOStationOverlay::HandInQuest(const FString& QuestKey, const FString& QuestName)
+{
+	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
+	{
+		Controller->HandInQuest(QuestKey, QuestName);
+	}
+}
+
+void USpaceMMOStationOverlay::AcceptQuest(const FString& QuestKey)
+{
+	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
+	{
+		Controller->AcceptQuest(QuestKey);
 	}
 }
 
@@ -871,7 +1119,8 @@ void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float 
 		return;
 	}
 
-	if (RowClass == nullptr || (IndustryRows == nullptr && QuestRows == nullptr))
+	if (RowClass == nullptr || RecipeRowClass == nullptr || JobRowClass == nullptr || QuestRowClass == nullptr
+		|| (IndustryRows == nullptr && QuestRows == nullptr))
 	{
 		// Warned once rather than per tick: it is a wiring mistake, not an event. Without this a
 		// station overlay that opens completely empty is indistinguishable from a station with
@@ -882,26 +1131,20 @@ void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float 
 
 			UE_LOG(LogSpaceMMOBackend, Warning,
 				TEXT("HUD: the station overlay shows nothing — %s. Set them in the Widget "
-					"Blueprint; IndustryRows and QuestRows are bound by name and RowClass in "
-					"Class Defaults."),
-				RowClass == nullptr
-					? TEXT("no RowClass set")
+					"Blueprint; IndustryRows and QuestRows are bound by name, and RowClass, "
+					"RecipeRowClass, JobRowClass and QuestRowClass are Class Defaults "
+					"(SpaceMMOStylePanels sets them)."),
+				RowClass == nullptr || RecipeRowClass == nullptr || JobRowClass == nullptr || QuestRowClass == nullptr
+					? TEXT("a row class is not set")
 					: TEXT("neither IndustryRows nor QuestRows is bound"));
 		}
 
 		return;
 	}
 
-	FString StationName;
-
-	TArray<FString> Industry;
-	TArray<FString> Quests;
-
-	Controller->GetStationPanels(StationName, Industry, Quests);
-
 	if (StationNameText != nullptr)
 	{
-		StationNameText->SetText(FText::FromString(StationName));
+		StationNameText->SetText(FText::FromString(Controller->DockedStationName()));
 	}
 
 	// All three are filled rather than only the visible one. They are cheap while unchanged, and a
@@ -1136,8 +1379,7 @@ void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float 
 			}
 		}
 	}
-	FillPanel(IndustryRows, Industry, IndustrySignature);
-	FillPanel(QuestRows, Quests, QuestSignature);
+	FillStationWork(*Controller);
 }
 
 TArray<FSpaceMMOShipRowText> USpaceMMOStationOverlay::BuildShipRows(

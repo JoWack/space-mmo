@@ -84,6 +84,13 @@ namespace SpaceMMOStylePanels
 			{
 				Blueprint->OnVariableRemoved(Widget->GetFName());
 				Tree()->RemoveWidget(Widget);
+
+				// Out of the Blueprint altogether, as the designer does when it deletes (WidgetBlueprint-
+				// EditorUtils, "Rename(nullptr, GetTransientPackage())"). Taken out of its parent but still
+				// owned by the tree, a widget is found again by the compiler and reported as one added
+				// without a GUID -- which is how the sign-in screen's empty boxes failed, 3 October.
+				Widget->Rename(nullptr, GetTransientPackage(), REN_DontCreateRedirectors | REN_NonTransactional);
+				Widget->MarkAsGarbage();
 			}
 		}
 
@@ -214,6 +221,11 @@ namespace SpaceMMOStylePanels
 		Style.SetFont(Font);
 		Style.SetForegroundColor(FSlateColor(TextPrimary()));
 		Style.SetFocusedForegroundColor(FSlateColor(TextPrimary()));
+
+		// The typed text's colour is the text style's, not the box's foreground: SEditableTextBox gives the
+		// foreground to its border and the text style to the text. Left at the engine's default -- dark, for
+		// a white box -- the sign-in fields drew black on the glass (Joe, 3 October).
+		Style.TextStyle.SetColorAndOpacity(FSlateColor(TextPrimary()));
 
 		Box->SetWidgetStyle(Style);
 	}
@@ -763,6 +775,8 @@ namespace SpaceMMOStylePanels
 		}
 	}
 
+	void StartBar(FEdit& E);
+
 	void StationOverlay(FEdit& E)
 	{
 		WorldDim(E, E.Need<UCanvasPanel>(TEXT("CanvasPanel_47")));
@@ -943,6 +957,8 @@ namespace SpaceMMOStylePanels
 		Text(E.Find<UTextBlock>(TEXT("MyOrdersFooterText")), ETextRole::Note);
 		Text(E.Find<UTextBlock>(TEXT("ShipsFooterText")), ETextRole::Note);
 
+		StartBar(E);
+
 		// The order prompt. Its words are unchanged; its graph is untouched.
 		Prompt(E, E.Need<UImage>(TEXT("Image")), E.Need<UWidget>(TEXT("PromptPanelBox")));
 		Text(E.Find<UTextBlock>(TEXT("TitleText")), ETextRole::Prompt);
@@ -956,6 +972,719 @@ namespace SpaceMMOStylePanels
 		Field(E.Find<UEditableTextBox>(TEXT("PriceInput")));
 		Button(E.Find<UButton>(TEXT("MatchMarketButton")), false, true);
 		Button(E.Find<UButton>(TEXT("GuaranteedButton")), false, true);
+	}
+
+	/**
+	 * The Industry tab's Start bar, at the foot of the tab lists (task 173): what the count comes to,
+	 * a − count + stepper, and Start. Joe's mock of 3 October. The overlay shows it on the Industry tab
+	 * only, and the industry list keeps clear of it.
+	 */
+	void StartBar(FEdit& E)
+	{
+		UOverlay* Lists = E.Find<UOverlay>(TEXT("Overlay_206"));
+
+		if (Lists == nullptr)
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Panels: the station overlay has no Overlay_206 to put Start in."));
+
+			++E.Problems;
+
+			return;
+		}
+
+		bool bHad = false;
+		UHorizontalBox* Bar = E.Make<UHorizontalBox>(TEXT("StartBar"), true, &bHad);
+
+		if (!bHad)
+		{
+			UOverlaySlot* At = Lists->AddChildToOverlay(Bar);
+			At->SetHorizontalAlignment(HAlign_Fill);
+			At->SetVerticalAlignment(VAlign_Bottom);
+
+			UTextBlock* Note = E.Make<UTextBlock>(TEXT("StartNote"), true);
+			Note->SetJustification(ETextJustify::Right);
+			Note->SetAutoWrapText(true);
+			UHorizontalBoxSlot* NoteSlot = Bar->AddChildToHorizontalBox(Note);
+			NoteSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			NoteSlot->SetVerticalAlignment(VAlign_Center);
+			NoteSlot->SetPadding(FMargin(0.0f, 0.0f, 14.0f, 0.0f));
+
+			UBorder* Runs = E.Make<UBorder>(TEXT("RunsBox"), false);
+			Runs->SetPadding(FMargin(1.0f));
+			UHorizontalBoxSlot* RunsSlot = Bar->AddChildToHorizontalBox(Runs);
+			RunsSlot->SetVerticalAlignment(VAlign_Center);
+			RunsSlot->SetPadding(FMargin(0.0f, 0.0f, 14.0f, 0.0f));
+
+			UHorizontalBox* Stepper = E.Make<UHorizontalBox>(TEXT("RunsStepper"), false);
+			Runs->SetContent(Stepper);
+
+			auto Step = [&E, Stepper](const TCHAR* Name, const TCHAR* LabelName, const TCHAR* Label)
+			{
+				UButton* Made = E.Make<UButton>(Name, true);
+				UTextBlock* Text = E.Make<UTextBlock>(LabelName, false);
+				Text->SetText(FText::FromString(Label));
+				Made->SetContent(Text);
+				Stepper->AddChildToHorizontalBox(Made)->SetVerticalAlignment(VAlign_Fill);
+			};
+
+			Step(TEXT("RunsLess"), TEXT("RunsLessText"), TEXT("−"));
+
+			UTextBlock* Count = E.Make<UTextBlock>(TEXT("RunsText"), true);
+			Count->SetText(FText::FromString(TEXT("1")));
+			Count->SetJustification(ETextJustify::Center);
+			Count->SetMinDesiredWidth(56.0f);
+			UHorizontalBoxSlot* CountSlot = Stepper->AddChildToHorizontalBox(Count);
+			CountSlot->SetVerticalAlignment(VAlign_Center);
+
+			Step(TEXT("RunsMore"), TEXT("RunsMoreText"), TEXT("+"));
+
+			UButton* Start = E.Make<UButton>(TEXT("StartButton"), true);
+			UTextBlock* StartLabel = E.Make<UTextBlock>(TEXT("StartText"), true);
+			StartLabel->SetText(FText::FromString(TEXT("Start")));
+			Start->SetContent(StartLabel);
+			Bar->AddChildToHorizontalBox(Start)->SetVerticalAlignment(VAlign_Center);
+		}
+
+		// Styled every run, so a change to the style reaches it without rebuilding anything. Wrapped, so a
+		// long shortfall stays inside the panel instead of running out of its left edge (Joe, 3 October).
+		Text(E.Find<UTextBlock>(TEXT("StartNote")), ETextRole::Note);
+
+		if (UTextBlock* Note = E.Find<UTextBlock>(TEXT("StartNote")))
+		{
+			Note->SetAutoWrapText(true);
+		}
+		Text(E.Find<UTextBlock>(TEXT("RunsText")), ETextRole::Body);
+
+		if (UBorder* Runs = E.Find<UBorder>(TEXT("RunsBox")))
+		{
+			Runs->SetBrush(Rounded(White(0.02f), White(0.30f), 1.0f, RowCorners()));
+		}
+
+		for (const TCHAR* Name : {TEXT("RunsLess"), TEXT("RunsMore")})
+		{
+			if (UButton* Made = E.Find<UButton>(Name))
+			{
+				Made->SetStyle(StepperButtonStyle());
+
+				if (UTextBlock* Label = Cast<UTextBlock>(Made->GetChildAt(0)))
+				{
+					Text(Label, ETextRole::Body);
+				}
+			}
+		}
+
+		// The primary action on the tab, so ice.
+		Button(E.Find<UButton>(TEXT("StartButton")), true);
+
+		// The industry list stops short of the bar rather than scrolling under it. Both lists fill the tab:
+		// they were left-aligned, which was invisible while they held lines of text and made every row
+		// only as wide as its words once they held boxes.
+		if (UWidget* Scroll = E.Find<UWidget>(TEXT("IndustryRowsScrollBox")))
+		{
+			if (UOverlaySlot* Above = Cast<UOverlaySlot>(Scroll->Slot))
+			{
+				Above->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 64.0f));
+				Above->SetHorizontalAlignment(HAlign_Fill);
+				Above->SetVerticalAlignment(VAlign_Fill);
+			}
+		}
+
+		if (UWidget* Scroll = E.Find<UWidget>(TEXT("QuestRowsScrollBox")))
+		{
+			if (UOverlaySlot* Fill = Cast<UOverlaySlot>(Scroll->Slot))
+			{
+				Fill->SetHorizontalAlignment(HAlign_Fill);
+				Fill->SetVerticalAlignment(VAlign_Fill);
+			}
+		}
+		else
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Panels: the station overlay has no IndustryRowsScrollBox."));
+
+			++E.Problems;
+		}
+	}
+
+	/**
+	 * The station overlay's row classes for Industry and Quests, on the compiled class's defaults -- what
+	 * Class Defaults edits. The rows are built by SpaceMMOBuildMenus, so it must have run first.
+	 */
+	int32 StationOverlayDefaults(UWidgetBlueprint* Blueprint)
+	{
+		int32 Problems = 0;
+
+		const TPair<const TCHAR*, const TCHAR*> Rows[] = {
+			{TEXT("RecipeRowClass"), TEXT("/Game/UI/WBP_RecipeRow.WBP_RecipeRow_C")},
+			{TEXT("JobRowClass"), TEXT("/Game/UI/WBP_JobRow.WBP_JobRow_C")},
+			{TEXT("QuestRowClass"), TEXT("/Game/UI/WBP_QuestRow.WBP_QuestRow_C")},
+		};
+
+		for (const auto& Row : Rows)
+		{
+			UClass* RowClass = LoadObject<UClass>(nullptr, Row.Value);
+			FClassProperty* Property = FindFProperty<FClassProperty>(Blueprint->GeneratedClass, Row.Key);
+
+			if (RowClass == nullptr || Property == nullptr)
+			{
+				UE_LOG(LogSpaceMMOAuthoring, Error,
+					TEXT("Panels: could not set the station overlay's %s to %s; run SpaceMMOBuildMenus first."),
+					Row.Key, Row.Value);
+
+				++Problems;
+
+				continue;
+			}
+
+			Property->SetObjectPropertyValue_InContainer(Blueprint->GeneratedClass->GetDefaultObject(), RowClass);
+		}
+
+		return Problems;
+	}
+
+	// ------------------------------------------------------------------------------------------------
+	// Round two (task 173): the readouts, the deposit prompt, the messages and the sign-in screen.
+	// Joe approved the mock on 3 October.
+
+	/** Takes a widget out of whatever holds it, so it can be put somewhere else. Its variable stays. */
+	void Detach(UWidget* Widget)
+	{
+		if (Widget != nullptr && Widget->GetParent() != nullptr)
+		{
+			Widget->GetParent()->RemoveChild(Widget);
+		}
+	}
+
+	/** Moves every child of one panel into a vertical box, keeping each one's alignment and padding. */
+	void MoveChildren(UPanelWidget* From, UVerticalBox* To)
+	{
+		while (From->GetChildrenCount() > 0)
+		{
+			UWidget* Child = From->GetChildAt(0);
+
+			FMargin Padding;
+			EHorizontalAlignment H = HAlign_Fill;
+			EVerticalAlignment V = VAlign_Fill;
+
+			if (const UVerticalBoxSlot* Was = Cast<UVerticalBoxSlot>(Child->Slot))
+			{
+				Padding = Was->GetPadding();
+				H = Was->GetHorizontalAlignment();
+				V = Was->GetVerticalAlignment();
+			}
+
+			From->RemoveChild(Child);
+
+			UVerticalBoxSlot* Now = To->AddChildToVerticalBox(Child);
+			Now->SetPadding(Padding);
+			Now->SetHorizontalAlignment(H);
+			Now->SetVerticalAlignment(V);
+		}
+	}
+
+	/** The hairline between a readout's figures and its station line. */
+	void Rule(FEdit& E, UVerticalBox* Body, UWidget* Before, const TCHAR* Name)
+	{
+		bool bHad = false;
+		UImage* Line = E.Make<UImage>(Name, true, &bHad);
+		Line->bIsVariable = true;
+		Line->SetBrush(Solid(White(0.10f), FVector2D(1.0, 1.0)));
+
+		if (!bHad && Body != nullptr && Before != nullptr)
+		{
+			Body->InsertChildAt(Body->GetChildIndex(Before), Line);
+		}
+
+		if (UVerticalBoxSlot* At = Cast<UVerticalBoxSlot>(Line->Slot))
+		{
+			At->SetPadding(FMargin(0.0f, 10.0f, 0.0f, 8.0f));
+			At->SetHorizontalAlignment(HAlign_Fill);
+		}
+	}
+
+	/**
+	 * A readout's card: glass round its lines, a fixed width, top right of the screen. The lines' box
+	 * stays the readout's; the card goes round it.
+	 */
+	void ReadoutCard(FEdit& E, UWidget* Body)
+	{
+		bool bHad = false;
+		UBorder* Card = E.Make<UBorder>(TEXT("ReadoutCard"), true, &bHad);
+
+		if (!bHad && Body != nullptr)
+		{
+			UCanvasPanel* Canvas = Cast<UCanvasPanel>(Body->GetParent());
+
+			if (Canvas == nullptr)
+			{
+				UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Panels: %s's readout is not on its canvas."), *E.Blueprint->GetName());
+
+				++E.Problems;
+
+				return;
+			}
+
+			const int32 Index = Canvas->GetChildIndex(Body);
+			Canvas->RemoveChild(Body);
+			Canvas->InsertChildAt(Index, Card);
+
+			USizeBox* Width = E.Make<USizeBox>(TEXT("ReadoutWidth"), false);
+			Card->SetContent(Width);
+			Width->SetContent(Body);
+		}
+
+		Card->SetBrush(Glass());
+		Card->SetPadding(FMargin(22.0f, 18.0f, 22.0f, 16.0f));
+
+		if (USizeBox* Width = E.Find<USizeBox>(TEXT("ReadoutWidth")))
+		{
+			Width->SetMinDesiredWidth(336.0f);
+		}
+
+		if (UCanvasPanelSlot* At = Cast<UCanvasPanelSlot>(Card->Slot))
+		{
+			At->SetAnchors(FAnchors(1.0f, 0.0f));
+			At->SetAlignment(FVector2D(1.0, 0.0));
+			At->SetAutoSize(true);
+			At->SetPosition(FVector2D(-40.0, 36.0));
+		}
+	}
+
+	/** A label on the left in column capitals, its figure on the right in body type. */
+	void ReadoutLine(FEdit& E, const TCHAR* Box, const TCHAR* Label, const TCHAR* Word, const TCHAR* Value)
+	{
+		if (UTextBlock* Name = E.Find<UTextBlock>(Label))
+		{
+			Name->SetText(FText::FromString(Word));
+			Text(Name, ETextRole::Column);
+			Column(Name, true);
+
+			if (UHorizontalBoxSlot* At = Cast<UHorizontalBoxSlot>(Name->Slot))
+			{
+				At->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+
+		if (UTextBlock* Figure = E.Find<UTextBlock>(Value))
+		{
+			Text(Figure, ETextRole::Body);
+			Figure->SetJustification(ETextJustify::Right);
+			Column(Figure, false);
+		}
+
+		if (UWidget* Line = E.Find<UWidget>(Box))
+		{
+			if (UVerticalBoxSlot* At = Cast<UVerticalBoxSlot>(Line->Slot))
+			{
+				At->SetPadding(FMargin(0.0f, 3.0f));
+				At->SetHorizontalAlignment(HAlign_Fill);
+			}
+		}
+	}
+
+	void FlightReadout(FEdit& E)
+	{
+		UVerticalBox* Body = E.Need<UVerticalBox>(TEXT("VerticalBox_148"));
+		ReadoutCard(E, Body);
+
+		// The header: "IN FLIGHT", and where the ship is as a chip beside it.
+		UHorizontalBox* Head = E.Need<UHorizontalBox>(TEXT("FlightModeHeaderBox"));
+
+		if (UTextBlock* Title = E.Need<UTextBlock>(TEXT("FlightHeaderText")))
+		{
+			Title->SetText(FText::FromString(TEXT("In flight")));
+			Text(Title, ETextRole::Group);
+			Column(Title, true);
+
+			if (UHorizontalBoxSlot* At = Cast<UHorizontalBoxSlot>(Title->Slot))
+			{
+				At->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+
+		if (UVerticalBoxSlot* Under = Head != nullptr ? Cast<UVerticalBoxSlot>(Head->Slot) : nullptr)
+		{
+			Under->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 10.0f));
+			Under->SetHorizontalAlignment(HAlign_Fill);
+		}
+
+		bool bHad = false;
+		UBorder* Chip = E.Make<UBorder>(TEXT("ProximityChip"), false, &bHad);
+		UTextBlock* Proximity = E.Need<UTextBlock>(TEXT("ProximityText"));
+
+		if (!bHad && Head != nullptr && Proximity != nullptr)
+		{
+			Detach(Proximity);
+			Chip->SetContent(Proximity);
+			Head->AddChildToHorizontalBox(Chip)->SetVerticalAlignment(VAlign_Center);
+		}
+
+		Chip->SetBrush(Rounded(White(0.0f), White(0.22f), 1.0f, RowCorners()));
+		Chip->SetPadding(FMargin(8.0f, 2.0f));
+		Text(Proximity, ETextRole::Key);
+		Proximity->SetTextTransformPolicy(ETextTransformPolicy::ToUpper);
+
+		if (UWidget* Old = E.Find<UWidget>(TEXT("ProximityBox")))
+		{
+			Old->SetVisibility(ESlateVisibility::Collapsed);
+		}
+
+		ReadoutLine(E, TEXT("AltitudeBox"), TEXT("AltitudeLabel"), TEXT("Altitude"), TEXT("AltitudeText"));
+		ReadoutLine(E, TEXT("SpeedBox"), TEXT("SpeedLabel"), TEXT("Speed"), TEXT("SpeedText"));
+		ReadoutLine(E, TEXT("OrbitalBox"), TEXT("OrbitalSpeedLabel"), TEXT("Orbital"), TEXT("OrbitalText"));
+
+		// The station line under a rule, its label gone: the name says what it is.
+		UWidget* StationLine = E.Need<UWidget>(TEXT("HorizontalBox_345"));
+		Rule(E, Body, StationLine, TEXT("ReadoutRule"));
+
+		if (UWidget* Label = E.Find<UWidget>(TEXT("StationLabel")))
+		{
+			Label->SetVisibility(ESlateVisibility::Collapsed);
+		}
+
+		Text(E.Need<UTextBlock>(TEXT("StationText")), ETextRole::Body);
+
+		// The debug lines, quiet, and shown only with the ship's flight debug (USpaceMMOFlightReadout).
+		for (const TCHAR* Quiet : {TEXT("SystemPositionLabel"), TEXT("SystemPositionText"), TEXT("DebugLabel"), TEXT("DebugText")})
+		{
+			Text(E.Find<UTextBlock>(Quiet), ETextRole::Note);
+		}
+	}
+
+	void OnFootReadout(FEdit& E)
+	{
+		UVerticalBox* Body = E.Need<UVerticalBox>(TEXT("VerticalBox_77"));
+		ReadoutCard(E, Body);
+
+		if (UTextBlock* Title = E.Need<UTextBlock>(TEXT("OnFootHeaderBox")))
+		{
+			Title->SetText(FText::FromString(TEXT("On foot")));
+			Text(Title, ETextRole::Group);
+
+			if (UVerticalBoxSlot* Under = Cast<UVerticalBoxSlot>(Title->Slot))
+			{
+				Under->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 8.0f));
+			}
+		}
+
+		Text(E.Need<UTextBlock>(TEXT("NameText")), ETextRole::Prompt);
+
+		// Credits as a line: the word on the left, the balance on the right, hidden together.
+		bool bHad = false;
+		UHorizontalBox* Line = E.Make<UHorizontalBox>(TEXT("CreditsLine"), true, &bHad);
+		UTextBlock* Credits = E.Need<UTextBlock>(TEXT("CreditsText"));
+
+		if (!bHad && Body != nullptr && Credits != nullptr)
+		{
+			const int32 Index = Body->GetChildIndex(Credits);
+			Detach(Credits);
+			Body->InsertChildAt(Index, Line);
+
+			UTextBlock* Word = E.Make<UTextBlock>(TEXT("CreditsLabel"), false);
+			Word->SetText(FText::FromString(TEXT("Credits")));
+			Line->AddChildToHorizontalBox(Word);
+			Line->AddChildToHorizontalBox(Credits);
+		}
+
+		if (UVerticalBoxSlot* At = Cast<UVerticalBoxSlot>(Line->Slot))
+		{
+			At->SetPadding(FMargin(0.0f, 6.0f, 0.0f, 0.0f));
+			At->SetHorizontalAlignment(HAlign_Fill);
+		}
+
+		if (UTextBlock* Word = E.Find<UTextBlock>(TEXT("CreditsLabel")))
+		{
+			Text(Word, ETextRole::Column);
+			Column(Word, true);
+
+			if (UHorizontalBoxSlot* At = Cast<UHorizontalBoxSlot>(Word->Slot))
+			{
+				At->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+
+		Text(Credits, ETextRole::Body);
+		Credits->SetJustification(ETextJustify::Right);
+		Column(Credits, false);
+
+		UTextBlock* Station = E.Need<UTextBlock>(TEXT("StationText"));
+		Rule(E, Body, Station, TEXT("ReadoutRule"));
+		Text(Station, ETextRole::Body);
+	}
+
+	void DepositPrompt(FEdit& E)
+	{
+		// The key and its words are coloured by the prompt itself now (USpaceMMODepositPrompt).
+		Unbind(E, {TEXT("GatherKeyText"), TEXT("GatherTextLabel")}, {TEXT("ColorAndOpacity")});
+
+		// The card goes inside PromptRoot rather than round it: PromptRoot's visibility is bound, and a
+		// card outside it would stay on screen, empty, whenever the prompt was hidden.
+		UVerticalBox* Root = E.Need<UVerticalBox>(TEXT("PromptRoot"));
+
+		bool bHad = false;
+		UBorder* Card = E.Make<UBorder>(TEXT("PromptCard"), true, &bHad);
+
+		if (!bHad && Root != nullptr)
+		{
+			UVerticalBox* Body = E.Make<UVerticalBox>(TEXT("PromptBody"), false);
+			MoveChildren(Root, Body);
+			Root->AddChildToVerticalBox(Card);
+			Card->SetContent(Body);
+		}
+
+		Card->SetBrush(PromptGlass());
+		Card->SetPadding(FMargin(24.0f, 14.0f, 24.0f, 16.0f));
+
+		Text(E.Need<UTextBlock>(TEXT("ItemNameText")), ETextRole::Prompt);
+		Text(E.Need<UTextBlock>(TEXT("RequirementText")), ETextRole::Note);
+		Text(E.Need<UTextBlock>(TEXT("ToolText")), ETextRole::Note);
+
+		// What stops you is red, as errors are everywhere else; it was amber (Joe, 3 October).
+		Text(E.Need<UTextBlock>(TEXT("LevelBlockerText")), ETextRole::Note, SpaceMMO::Style::ErrorRed());
+		Text(E.Need<UTextBlock>(TEXT("ToolBlockerText")), ETextRole::Note, SpaceMMO::Style::ErrorRed());
+
+		// The gather line: the key in a keycap rather than brackets.
+		for (const TCHAR* Bracket : {TEXT("LeftBracket"), TEXT("RightBracket")})
+		{
+			if (UWidget* Old = E.Find<UWidget>(Bracket))
+			{
+				Old->SetVisibility(ESlateVisibility::Collapsed);
+			}
+		}
+
+		UBorder* Cap = Wrap(E, E.Need<UTextBlock>(TEXT("GatherKeyText")), TEXT("KeyCap"), false);
+		Cap->SetBrush(Rounded(White(0.05f), White(0.35f), 1.0f, RowCorners()));
+		Cap->SetPadding(FMargin(7.0f, 2.0f));
+
+		if (UHorizontalBoxSlot* At = Cast<UHorizontalBoxSlot>(Cap->Slot))
+		{
+			At->SetPadding(FMargin(0.0f, 0.0f, 8.0f, 0.0f));
+			At->SetVerticalAlignment(VAlign_Center);
+		}
+
+		if (UTextBlock* Words = E.Need<UTextBlock>(TEXT("GatherTextLabel")))
+		{
+			Words->SetText(FText::FromString(TEXT("to gather")));
+
+			if (UHorizontalBoxSlot* At = Cast<UHorizontalBoxSlot>(Words->Slot))
+			{
+				At->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+
+		if (UWidget* Gather = E.Find<UWidget>(TEXT("GatherTextBox")))
+		{
+			if (UVerticalBoxSlot* At = Cast<UVerticalBoxSlot>(Gather->Slot))
+			{
+				At->SetPadding(FMargin(0.0f, 10.0f, 0.0f, 0.0f));
+			}
+		}
+	}
+
+	void TransientMessageRow(FEdit& E)
+	{
+		// The tone is the strip's edge now, set by the row (USpaceMMOTransientMessageRow).
+		Unbind(E, {TEXT("MessageText")}, {TEXT("ColorAndOpacity")});
+
+		UTextBlock* Message = E.Need<UTextBlock>(TEXT("MessageText"));
+
+		bool bHad = false;
+		UBorder* Frame = E.Make<UBorder>(TEXT("MessageFrame"), false, &bHad);
+
+		if (!bHad && Message != nullptr)
+		{
+			UHorizontalBox* Strip = E.Make<UHorizontalBox>(TEXT("MessageStrip"), false);
+			UImage* Edge = E.Make<UImage>(TEXT("ToneEdge"), true);
+
+			Detach(Message);
+			E.Tree()->RootWidget = Frame;
+			Frame->SetContent(Strip);
+
+			Strip->AddChildToHorizontalBox(Edge)->SetVerticalAlignment(VAlign_Fill);
+
+			UHorizontalBoxSlot* At = Strip->AddChildToHorizontalBox(Message);
+			At->SetVerticalAlignment(VAlign_Center);
+			At->SetPadding(FMargin(14.0f, 8.0f, 18.0f, 8.0f));
+		}
+
+		Frame->SetBrush(Rounded(Srgb(10, 15, 22, 0.80f), White(0.16f), 1.0f, FVector4(0.0, 4.0, 4.0, 0.0)));
+		Frame->SetPadding(FMargin(0.0f));
+
+		if (UImage* Edge = E.Find<UImage>(TEXT("ToneEdge")))
+		{
+			Edge->SetBrush(Solid(FLinearColor::White, FVector2D(3.0, 3.0)));
+			Edge->SetColorAndOpacity(SpaceMMO::Style::Ice());
+		}
+
+		Text(Message, ETextRole::Body);
+	}
+
+	void LoginScreen(FEdit& E)
+	{
+		// Joe's backdrop stays; the form moves into a glass panel over a light dim, in the menus' type.
+		if (UBorder* Whole = E.Need<UBorder>(TEXT("Border_245")))
+		{
+			Whole->SetBrush(Solid(FLinearColor(0.0f, 0.0f, 0.0f, 0.25f), FVector2D(32.0, 32.0)));
+			Whole->SetBrushColor(FLinearColor::White);
+			Whole->SetHorizontalAlignment(HAlign_Center);
+			Whole->SetVerticalAlignment(VAlign_Center);
+		}
+
+		UVerticalBox* Column0 = E.Need<UVerticalBox>(TEXT("VerticalBox_0"));
+
+		if (UTextBlock* Title = E.Need<UTextBlock>(TEXT("TextBlock_464")))
+		{
+			FSlateFontInfo Font = Title->GetFont();
+			Font.TypefaceFontName = TEXT("Regular");
+			Font.Size = 64;
+			Font.LetterSpacing = 200;
+			Title->SetFont(Font);
+			Title->SetColorAndOpacity(FSlateColor(SpaceMMO::Style::TextPrimary()));
+			Title->SetTextTransformPolicy(ETextTransformPolicy::ToUpper);
+			Title->SetShadowOffset(FVector2D(0.0, 2.0));
+			Title->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f));
+
+			if (UVerticalBoxSlot* Under = Cast<UVerticalBoxSlot>(Title->Slot))
+			{
+				Under->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 56.0f));
+				Under->SetHorizontalAlignment(HAlign_Center);
+			}
+		}
+
+		bool bHad = false;
+		USizeBox* Width = E.Make<USizeBox>(TEXT("SignInWidth"), false, &bHad);
+
+		if (!bHad && Column0 != nullptr)
+		{
+			UOverlay* Panel = E.Make<UOverlay>(TEXT("SignInPanel"), false);
+			UBorder* Glass = E.Make<UBorder>(TEXT("SignInGlass"), true);
+			UVerticalBox* Body = E.Make<UVerticalBox>(TEXT("SignInBody"), false);
+
+			Width->SetContent(Panel);
+			UOverlaySlot* GlassSlot = Panel->AddChildToOverlay(Glass);
+			GlassSlot->SetHorizontalAlignment(HAlign_Fill);
+			GlassSlot->SetVerticalAlignment(VAlign_Fill);
+			Glass->SetContent(Body);
+			Brackets(E, Panel);
+
+			UVerticalBoxSlot* PanelSlot = Column0->AddChildToVerticalBox(Width);
+			PanelSlot->SetHorizontalAlignment(HAlign_Center);
+
+			UTextBlock* Heading = E.Make<UTextBlock>(TEXT("SignInTitle"), false);
+			Heading->SetText(FText::FromString(TEXT("Sign in")));
+			UVerticalBoxSlot* HeadingSlot = Body->AddChildToVerticalBox(Heading);
+			HeadingSlot->SetHorizontalAlignment(HAlign_Center);
+			HeadingSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 30.0f));
+
+			auto Add = [Body](UWidget* Widget, const FMargin& Padding, const EHorizontalAlignment H = HAlign_Fill)
+			{
+				if (Widget != nullptr)
+				{
+					Detach(Widget);
+					UVerticalBoxSlot* At = Body->AddChildToVerticalBox(Widget);
+					At->SetPadding(Padding);
+					At->SetHorizontalAlignment(H);
+				}
+			};
+
+			// Each label above its field rather than beside it.
+			Add(E.Find<UWidget>(TEXT("TextBlock_154")), FMargin(0.0f, 0.0f, 0.0f, 8.0f));
+			Add(E.Find<UWidget>(TEXT("SizeBox_0")), FMargin(0.0f, 0.0f, 0.0f, 20.0f));
+			Add(E.Find<UWidget>(TEXT("TextBlock")), FMargin(0.0f, 0.0f, 0.0f, 8.0f));
+			Add(E.Find<UWidget>(TEXT("SizeBox_1")), FMargin(0.0f, 0.0f, 0.0f, 28.0f));
+
+			// Remember me on the left, Sign in -- the primary action -- on the right.
+			UHorizontalBox* Foot = E.Make<UHorizontalBox>(TEXT("SignInFoot"), false);
+			Body->AddChildToVerticalBox(Foot);
+
+			UWidget* Remember = E.Find<UWidget>(TEXT("RememberMeBox"));
+			UWidget* RememberWords = E.Find<UWidget>(TEXT("TextBlock_947"));
+			UWidget* SignIn = E.Find<UWidget>(TEXT("SignInButton"));
+
+			for (UWidget* Part : {Remember, RememberWords, SignIn})
+			{
+				Detach(Part);
+			}
+
+			if (Remember != nullptr)
+			{
+				Foot->AddChildToHorizontalBox(Remember)->SetVerticalAlignment(VAlign_Center);
+			}
+
+			if (RememberWords != nullptr)
+			{
+				UHorizontalBoxSlot* At = Foot->AddChildToHorizontalBox(RememberWords);
+				At->SetVerticalAlignment(VAlign_Center);
+				At->SetPadding(FMargin(10.0f, 0.0f, 0.0f, 0.0f));
+				At->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+			}
+
+			if (SignIn != nullptr)
+			{
+				Foot->AddChildToHorizontalBox(SignIn)->SetVerticalAlignment(VAlign_Center);
+			}
+
+			// The refusal keeps its own border, whose visibility is bound to whether there is one.
+			Add(E.Find<UWidget>(TEXT("Border_122")), FMargin(0.0f, 22.0f, 0.0f, 0.0f), HAlign_Center);
+
+			// What held the old layout is empty now.
+			for (const TCHAR* Empty : {TEXT("HorizontalBox_120"), TEXT("Border_123"), TEXT("HorizontalBox_175"),
+					 TEXT("Border_124"), TEXT("HorizontalBox_290"), TEXT("Border_125"), TEXT("VerticalBox_102")})
+			{
+				if (UPanelWidget* Old = E.Find<UPanelWidget>(Empty))
+				{
+					// Removed in place, not detached first: the tree finds a widget through its parent, and one
+					// already taken out is left behind without a GUID -- which the compiler reports as errors
+					// and saves anyway (3 October).
+					if (Old->GetChildrenCount() == 0)
+					{
+						E.Remove(Old);
+					}
+				}
+			}
+		}
+
+		Width->SetWidthOverride(640.0f);
+
+		if (UBorder* Glass = E.Find<UBorder>(TEXT("SignInGlass")))
+		{
+			Glass->SetBrush(SpaceMMO::Style::Glass());
+			Glass->SetPadding(FMargin(60.0f, 46.0f, 60.0f, 44.0f));
+		}
+
+		Text(E.Find<UTextBlock>(TEXT("SignInTitle")), ETextRole::Title);
+
+		if (UTextBlock* Email = E.Find<UTextBlock>(TEXT("TextBlock_154")))
+		{
+			Email->SetText(FText::FromString(TEXT("Email")));
+			Text(Email, ETextRole::Column);
+		}
+
+		if (UTextBlock* Password = E.Find<UTextBlock>(TEXT("TextBlock")))
+		{
+			Password->SetText(FText::FromString(TEXT("Password")));
+			Text(Password, ETextRole::Column);
+		}
+
+		for (const TCHAR* Box : {TEXT("SizeBox_0"), TEXT("SizeBox_1")})
+		{
+			if (USizeBox* Size = E.Find<USizeBox>(Box))
+			{
+				Size->ClearWidthOverride();
+			}
+		}
+
+		Field(E.Find<UEditableTextBox>(TEXT("EmailBox")));
+		Field(E.Find<UEditableTextBox>(TEXT("PasswordBox")));
+
+		Text(E.Find<UTextBlock>(TEXT("TextBlock_947")), ETextRole::Note);
+		Button(E.Find<UButton>(TEXT("SignInButton")), true);
+
+		if (UBorder* Refusal = E.Find<UBorder>(TEXT("Border_122")))
+		{
+			Refusal->SetBrush(NoBrush());
+		}
+
+		Text(E.Find<UTextBlock>(TEXT("LoginFailureText")), ETextRole::Note, SpaceMMO::Style::ErrorRed());
 	}
 
 	// ------------------------------------------------------------------------------------------------
@@ -978,11 +1707,34 @@ namespace SpaceMMOStylePanels
 		return Found;
 	}
 
+	/**
+	 * Counts the errors anything logs while one Blueprint is edited and compiled.
+	 *
+	 * The compiler can report a broken tree -- a widget with no GUID, a variable deleted but still
+	 * referenced -- as logged errors and ensures while still calling the Blueprint good, and this
+	 * commandlet once saved one that way with "Result: OK" (3 October). Any error now stops the save.
+	 */
+	struct FErrorCount : public FOutputDevice
+	{
+		FThreadSafeCounter Errors;
+
+		virtual void Serialize(const TCHAR* Message, const ELogVerbosity::Type Verbosity, const FName& Category) override
+		{
+			if (Verbosity == ELogVerbosity::Error || Verbosity == ELogVerbosity::Fatal)
+			{
+				Errors.Increment();
+			}
+		}
+	};
+
 	struct FTarget
 	{
 		const TCHAR* Asset;
 		void (*Style)(FEdit&);
 		TArray<const TCHAR*> Needs;
+
+		/** Class defaults to set once it has compiled. Returns the problems it met. */
+		int32 (*Defaults)(UWidgetBlueprint*) = nullptr;
 	};
 }
 
@@ -1002,7 +1754,13 @@ int32 USpaceMMOStylePanelsCommandlet::Main(const FString& Params)
 		{TEXT("/Game/UI/WBP_InventoryScreen"), &InventoryScreen, {TEXT("WorldDim"), TEXT("PanelRoot")}},
 		{TEXT("/Game/UI/WBP_StationOverlay"), &StationOverlay,
 			{TEXT("WorldDim"), TEXT("PanelRoot"), TEXT("MarketTabFrame"), TEXT("ShipsTabFrame"), TEXT("MarketTabText"),
-				TEXT("ShipsTabText")}},
+				TEXT("ShipsTabText"), TEXT("StartBar"), TEXT("StartButton"), TEXT("RunsText")},
+			&StationOverlayDefaults},
+		{TEXT("/Game/UI/WBP_FlightReadout"), &FlightReadout, {TEXT("ReadoutCard"), TEXT("ProximityChip"), TEXT("ReadoutRule")}},
+		{TEXT("/Game/UI/WBP_OnFootReadout"), &OnFootReadout, {TEXT("ReadoutCard"), TEXT("CreditsLine"), TEXT("ReadoutRule")}},
+		{TEXT("/Game/UI/WBP_DepositPrompt"), &DepositPrompt, {TEXT("PromptCard"), TEXT("KeyCap")}},
+		{TEXT("/Game/UI/WBP_TransientMessageRow"), &TransientMessageRow, {TEXT("MessageFrame"), TEXT("ToneEdge")}},
+		{TEXT("/Game/UI/WBP_LoginScreen"), &LoginScreen, {TEXT("SignInGlass"), TEXT("SignInFoot")}},
 	};
 
 	int32 Problems = 0;
@@ -1029,16 +1787,34 @@ int32 USpaceMMOStylePanelsCommandlet::Main(const FString& Params)
 		Edit.Blueprint = Blueprint;
 		Edit.Blueprint->Modify();
 
+		FErrorCount Logged;
+		GLog->AddOutputDevice(&Logged);
+
 		Target.Style(Edit);
 
 		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
 		FKismetEditorUtilities::CompileBlueprint(Blueprint);
+
+		GLog->RemoveOutputDevice(&Logged);
+
+		if (Logged.Errors.GetValue() > 0)
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Panels: %s logged %d error(s) while it was edited and compiled."),
+				*PackageName, Logged.Errors.GetValue());
+
+			++Edit.Problems;
+		}
 
 		if (Blueprint->Status == BS_Error)
 		{
 			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Panels: %s did not compile."), *PackageName);
 
 			++Edit.Problems;
+		}
+
+		if (Target.Defaults != nullptr)
+		{
+			Edit.Problems += Target.Defaults(Blueprint);
 		}
 
 		// Nothing the C++ binds may have gone missing, and what the new styling needs must be there.

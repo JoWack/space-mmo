@@ -16,6 +16,7 @@
 #include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
+#include "Components/ProgressBar.h"
 #include "Components/ScrollBox.h"
 #include "Components/SizeBox.h"
 #include "Components/SizeBoxSlot.h"
@@ -24,6 +25,7 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Components/WrapBox.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
 #include "SpaceMMOAuthoringLog.h"
@@ -554,6 +556,101 @@ namespace SpaceMMOBuildMenus
 	}
 
 	// ------------------------------------------------------------------------------------------------
+	// The station's Industry and Quests rows (task 173)
+	//
+	// New rather than restyled, so built here like the menus. They are panel rows, not menu rows: the
+	// box is a Border named RowFrame that USpaceMMOPanelRow restyles by state, and clicks are the C++
+	// row's, so there is no Blueprint graph to keep.
+
+	UVerticalBox* StationRowShell(const FBuilder& B)
+	{
+		UBorder* Frame = B.Make<UBorder>(TEXT("RowFrame"), true);
+		Frame->SetBrush(SpaceMMO::Style::RowBrush(SpaceMMO::Style::ERowLook::Normal));
+		Frame->SetPadding(FMargin(20.0f, 12.0f));
+		B.Blueprint->WidgetTree->RootWidget = Frame;
+
+		UVerticalBox* Body = B.Make<UVerticalBox>(TEXT("RowBody"));
+		Frame->AddChild(Body);
+
+		return Body;
+	}
+
+	UButton* SmallButton(const FBuilder& B, const TCHAR* Name, const TCHAR* TextName, const FString& Label)
+	{
+		UButton* Made = B.Make<UButton>(Name, true);
+		Made->SetStyle(SpaceMMO::Style::ButtonStyle(false, true));
+		Made->AddChild(B.Text(TextName, Label, 16.0f, TextPrimary, TEXT("Regular"), 0, true));
+
+		return Made;
+	}
+
+	UProgressBar* ThinBar(const FBuilder& B, UVerticalBox* Body)
+	{
+		USizeBox* Size = B.Make<USizeBox>(TEXT("BarSize"));
+		Size->SetHeightOverride(4.0f);
+		AddV(Body, Size, FMargin(0, 8, 0, 0));
+
+		UProgressBar* Bar = B.Make<UProgressBar>(TEXT("ProgressBar"), true);
+		Size->AddChild(Bar);
+
+		return Bar;
+	}
+
+	void BuildRecipeRow(const FBuilder& B)
+	{
+		UVerticalBox* Body = StationRowShell(B);
+
+		UHorizontalBox* Top = B.Make<UHorizontalBox>(TEXT("TopLine"));
+		AddV(Body, Top);
+
+		AddH(Top, B.Text(TEXT("TitleText"), TEXT("Ferrite Plate ×2"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), true);
+		AddH(Top, B.Text(TEXT("TimeText"), TEXT("40 s"), 19.0f, TextSecondary, TEXT("Regular"), 0, true), false);
+		AddH(Top, B.Text(TEXT("SkillText"), TEXT("refining lv 2"), 19.0f, TextSecondary, TEXT("Regular"), 0, true), false, FMargin(16, 0, 0, 0));
+
+		// A wrap box, so a recipe with four inputs runs onto a second line rather than out of the row
+		// (Joe, 3 October: Composite Frame's fourth input was cut off at the panel's edge).
+		UWrapBox* Inputs = B.Make<UWrapBox>(TEXT("InputsBox"), true);
+		Inputs->SetInnerSlotPadding(FVector2D(22.0, 2.0));
+		AddV(Body, Inputs, FMargin(0, 6, 0, 0));
+	}
+
+	void BuildJobRow(const FBuilder& B)
+	{
+		UVerticalBox* Body = StationRowShell(B);
+
+		UHorizontalBox* Top = B.Make<UHorizontalBox>(TEXT("TopLine"));
+		AddV(Body, Top);
+
+		AddH(Top, B.Text(TEXT("TitleText"), TEXT("Ferrite Plate ×2"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), true);
+		AddH(Top, B.Text(TEXT("StatusText"), TEXT("1 m 20 s"), 19.0f, TextSecondary, TEXT("Regular"), 0, true), false);
+		AddH(Top, SmallButton(B, TEXT("ClaimButton"), TEXT("ClaimText"), TEXT("Claim")), false, FMargin(16, 0, 0, 0));
+
+		ThinBar(B, Body);
+	}
+
+	void BuildQuestRow(const FBuilder& B)
+	{
+		UVerticalBox* Body = StationRowShell(B);
+
+		UHorizontalBox* Top = B.Make<UHorizontalBox>(TEXT("TopLine"));
+		AddV(Body, Top);
+
+		AddH(Top, B.Text(TEXT("NameText"), TEXT("First Tools"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), true);
+		AddH(Top, B.Text(TEXT("StatusText"), TEXT("3/5"), 19.0f, TextSecondary, TEXT("Regular"), 0, true), false);
+		AddH(Top, SmallButton(B, TEXT("ActionButton"), TEXT("ActionText"), TEXT("Accept")), false, FMargin(16, 0, 0, 0));
+
+		UHorizontalBox* Sub = B.Make<UHorizontalBox>(TEXT("SubLine"));
+		AddV(Body, Sub, FMargin(0, 6, 0, 0));
+
+		UTextBlock* Description = B.Text(TEXT("DescriptionText"), TEXT("Craft a crude mining laser."), 15.0f, TextSecondary, TEXT("Regular"), 0, true);
+		Description->SetAutoWrapText(true);
+		AddH(Sub, Description, true, FMargin(), VAlign_Top);
+		AddH(Sub, B.Text(TEXT("RewardText"), TEXT("750.00 cr"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), false, FMargin(16, 0, 0, 0), VAlign_Top);
+
+		ThinBar(B, Body);
+	}
+
+	// ------------------------------------------------------------------------------------------------
 	// Making, saving and checking
 
 	struct FMenuAsset
@@ -571,16 +668,19 @@ namespace SpaceMMOBuildMenus
 		 * here is required: an unlisted absence is a typo until shown otherwise.
 		 */
 		TArray<FName> Omitted;
+
+		/** Where it lives, when not with the menus. The station's rows sit beside its other panels. */
+		const TCHAR* AssetFolder = nullptr;
 	};
 
-	FString PackageNameFor(const TCHAR* AssetName)
+	FString PackageNameFor(const FMenuAsset& Asset)
 	{
-		return FString::Printf(TEXT("%s/%s"), Folder, AssetName);
+		return FString::Printf(TEXT("%s/%s"), Asset.AssetFolder != nullptr ? Asset.AssetFolder : Folder, Asset.AssetName);
 	}
 
-	UWidgetBlueprint* Existing(const TCHAR* AssetName)
+	UWidgetBlueprint* Existing(const FMenuAsset& Asset)
 	{
-		const FString Path = FString::Printf(TEXT("%s.%s"), *PackageNameFor(AssetName), AssetName);
+		const FString Path = FString::Printf(TEXT("%s.%s"), *PackageNameFor(Asset), Asset.AssetName);
 
 		return LoadObject<UWidgetBlueprint>(nullptr, *Path);
 	}
@@ -649,6 +749,14 @@ int32 USpaceMMOBuildMenusCommandlet::Main(const FString& Params)
 
 	const bool bForce = FParse::Param(*Params, TEXT("Force"));
 
+	// -Rebuild=WBP_RecipeRow,WBP_JobRow rebuilds only those. -Force rebuilds everything, menus Joe may
+	// have edited included; this is for changing one generated row without touching anything else.
+	FString RebuildList;
+	FParse::Value(*Params, TEXT("Rebuild="), RebuildList);
+
+	TArray<FString> Rebuild;
+	RebuildList.ParseIntoArray(Rebuild, TEXT(","));
+
 	// Rows first: the screens name them as their row classes.
 	const FMenuAsset Assets[] = {
 		{TEXT("WBP_CharacterRow"), TEXT("/Script/SpaceMMOBackend.SpaceMMOCharacterRow"), &BuildCharacterRow},
@@ -659,6 +767,12 @@ int32 USpaceMMOBuildMenusCommandlet::Main(const FString& Params)
 		{TEXT("WBP_NewCharacter"), TEXT("/Script/SpaceMMOBackend.SpaceMMONewCharacterScreen"), &BuildNewCharacter, TEXT("RaceRowClass"), TEXT("WBP_RaceRow")},
 		{TEXT("WBP_EscapeMenu"), TEXT("/Script/SpaceMMOBackend.SpaceMMOEscapeMenu"), &BuildEscapeMenu},
 		{TEXT("WBP_Settings"), TEXT("/Script/SpaceMMOBackend.SpaceMMOSettingsScreen"), &BuildSettings},
+
+		// The station overlay names these in its class defaults; SpaceMMOStylePanels sets that, since the
+		// overlay itself is Joe's and is restyled rather than built.
+		{TEXT("WBP_RecipeRow"), TEXT("/Script/SpaceMMOBackend.SpaceMMORecipeRow"), &BuildRecipeRow, nullptr, nullptr, {}, TEXT("/Game/UI")},
+		{TEXT("WBP_JobRow"), TEXT("/Script/SpaceMMOBackend.SpaceMMOJobRow"), &BuildJobRow, nullptr, nullptr, {}, TEXT("/Game/UI")},
+		{TEXT("WBP_QuestRow"), TEXT("/Script/SpaceMMOBackend.SpaceMMOQuestRow"), &BuildQuestRow, nullptr, nullptr, {}, TEXT("/Game/UI")},
 	};
 
 	int32 Problems = 0;
@@ -680,14 +794,14 @@ int32 USpaceMMOBuildMenusCommandlet::Main(const FString& Params)
 			continue;
 		}
 
-		const FString PackageName = PackageNameFor(Asset.AssetName);
+		const FString PackageName = PackageNameFor(Asset);
 
-		if (FPackageName::DoesPackageExist(PackageName) && !bForce)
+		if (FPackageName::DoesPackageExist(PackageName) && !bForce && !Rebuild.Contains(Asset.AssetName))
 		{
 			UE_LOG(LogSpaceMMOAuthoring, Display,
 				TEXT("Menus: %s exists; left alone (it may have been edited). -Force rebuilds it."), *PackageName);
 
-			if (UWidgetBlueprint* Kept = Existing(Asset.AssetName))
+			if (UWidgetBlueprint* Kept = Existing(Asset))
 			{
 				Made.Add(Asset.AssetName, Kept);
 			}

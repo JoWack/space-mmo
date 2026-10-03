@@ -49,6 +49,11 @@ public:
 	 */
 	static FString DescribeFailure(const FBackendFailure& Failure);
 
+#if !UE_BUILD_SHIPPING
+	/** Types sample text into both boxes, for SpaceMMOLookPanels SignIn: the fields' text colour is the point. */
+	void FillSampleForLook();
+#endif
+
 	/** Why the last attempt failed, or empty. Bind a message line to this. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Identity")
 	FString FailureText;

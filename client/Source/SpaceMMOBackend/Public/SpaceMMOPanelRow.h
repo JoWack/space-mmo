@@ -7,6 +7,7 @@
 #include "SpaceMMOPanelRow.generated.h"
 
 class UBorder;
+class UProgressBar;
 class UTextBlock;
 
 /**
@@ -64,4 +65,7 @@ namespace SpaceMMO::PanelLook
 
 	/** A figure column: right-aligned at a fixed width, so a list's numbers line up under their heading. */
 	SPACEMMOBACKEND_API void ApplyFigure(UTextBlock* Text, Style::ETextRole Role, float Width = 140.0f);
+
+	/** A thin progress bar: an ice fill on a faint track. Skills, jobs and quests all draw the same one. */
+	SPACEMMOBACKEND_API void ApplyBar(UProgressBar* Bar);
 }

@@ -112,6 +112,22 @@ void USpaceMMOLoginScreen::HandleFailed(const FBackendFailure& Failure)
 	}
 }
 
+#if !UE_BUILD_SHIPPING
+void USpaceMMOLoginScreen::FillSampleForLook()
+{
+	// Not a credential: nothing here is ever sent. Two words to look at, nothing more.
+	if (EmailBox != nullptr)
+	{
+		EmailBox->SetText(FText::FromString(TEXT("pilot@example.test")));
+	}
+
+	if (PasswordBox != nullptr)
+	{
+		PasswordBox->SetText(FText::FromString(TEXT("sample")));
+	}
+}
+#endif
+
 FString USpaceMMOLoginScreen::DescribeFailure(const FBackendFailure& Failure)
 {
 	// Worded for the person typing rather than repeating the server. A 401 here has exactly one

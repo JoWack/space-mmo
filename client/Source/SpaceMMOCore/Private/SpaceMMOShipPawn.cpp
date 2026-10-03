@@ -11,6 +11,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Materials/MaterialInterface.h"
 #include "SpaceMMOLog.h"
+#include "SpaceMMONoticeSink.h"
 #include "EngineUtils.h"
 #include "SpaceMMOBoarding.h"
 #include "SpaceMMOCharacterPawn.h"
@@ -1144,6 +1145,15 @@ void ASpaceMMOShipPawn::ResolveAirspace()
 
 void ASpaceMMOShipPawn::ClientNotice_Implementation(const FString& Message)
 {
+	// Into the message stack above the player when the controller has one (task 173). Every notice the
+	// ship gives is a refusal -- airspace, stepping out -- so it is never the success colour.
+	if (ISpaceMMONoticeSink* const Sink = Cast<ISpaceMMONoticeSink>(GetController()))
+	{
+		Sink->ShowNotice(Message, false);
+
+		return;
+	}
+
 	if (GEngine != nullptr)
 	{
 		GEngine->AddOnScreenDebugMessage(43, 5.0f, FColor::Orange, Message);

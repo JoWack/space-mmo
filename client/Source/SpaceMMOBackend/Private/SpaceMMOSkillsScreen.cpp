@@ -55,14 +55,7 @@ void USpaceMMOSkillRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
 	PanelLook::Apply(XpText, Style::ETextRole::Note);
 	PanelLook::Apply(ToNextText, Style::ETextRole::Note);
 
-	if (ProgressBar != nullptr)
-	{
-		FProgressBarStyle Bar = ProgressBar->GetWidgetStyle();
-		Bar.SetBackgroundImage(Style::Rounded(Style::White(0.10f), Style::White(0.0f), 0.0f, FVector4(3.0, 3.0, 3.0, 3.0)));
-		Bar.SetFillImage(Style::Rounded(Style::Ice(), Style::White(0.0f), 0.0f, FVector4(3.0, 3.0, 3.0, 3.0)));
-		ProgressBar->SetWidgetStyle(Bar);
-		ProgressBar->SetFillColorAndOpacity(FLinearColor::White);
-	}
+	PanelLook::ApplyBar(ProgressBar);
 }
 
 TArray<FSpaceMMOSkillRowText> USpaceMMOSkillsScreen::Build(const TArray<FBackendSkill>& Skills)

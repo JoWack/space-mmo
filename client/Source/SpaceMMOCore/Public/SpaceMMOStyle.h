@@ -155,6 +155,20 @@ namespace SpaceMMO::Style
 		return Style;
 	}
 
+	/** One end of a count stepper (− and +): flat, inside a box that draws the outline for all three parts. */
+	inline FButtonStyle StepperButtonStyle()
+	{
+		FButtonStyle Style;
+		Style.SetNormal(Rounded(White(0.04f), White(0.0f), 0.0f, FVector4(0.0, 0.0, 0.0, 0.0)));
+		Style.SetHovered(Rounded(White(0.10f), White(0.0f), 0.0f, FVector4(0.0, 0.0, 0.0, 0.0)));
+		Style.SetPressed(Rounded(Ice(0.24f), White(0.0f), 0.0f, FVector4(0.0, 0.0, 0.0, 0.0)));
+		Style.SetDisabled(Rounded(White(0.0f), White(0.0f), 0.0f, FVector4(0.0, 0.0, 0.0, 0.0)));
+		Style.SetNormalPadding(FMargin(14.0f, 4.0f));
+		Style.SetPressedPadding(FMargin(14.0f, 5.0f, 14.0f, 3.0f));
+
+		return Style;
+	}
+
 	/** A whole-row button: quiet until hovered, so the selection outline is what stands out. */
 	inline FButtonStyle RowButtonStyle()
 	{

@@ -945,6 +945,8 @@ bool FSpaceMMOBackendProtocol::ParseJournal(
 			Entry.StepRequired = static_cast<int32>(Scratch);
 		}
 
+		ReadInt64(Object, TEXT("rewardMinorUnits"), Entry.RewardMinorUnits);
+
 		OutEntries.Add(Entry);
 	}
 
@@ -977,6 +979,8 @@ bool FSpaceMMOBackendProtocol::ParseAvailableQuests(
 		}
 
 		Object->TryGetStringField(TEXT("name"), Quest.Name);
+		Object->TryGetStringField(TEXT("description"), Quest.Description);
+		ReadInt64(Object, TEXT("rewardMinorUnits"), Quest.RewardMinorUnits);
 
 		OutQuests.Add(Quest);
 	}

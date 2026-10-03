@@ -1,6 +1,7 @@
 #include "SpaceMMOPanelRow.h"
 
 #include "Components/Border.h"
+#include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBoxSlot.h"
 
@@ -34,6 +35,20 @@ void SpaceMMO::PanelLook::ApplyFigure(UTextBlock* Text, const Style::ETextRole R
 		Text->SetMinDesiredWidth(Width);
 		Text->SetJustification(ETextJustify::Right);
 	}
+}
+
+void SpaceMMO::PanelLook::ApplyBar(UProgressBar* const Bar)
+{
+	if (Bar == nullptr)
+	{
+		return;
+	}
+
+	FProgressBarStyle Look = Bar->GetWidgetStyle();
+	Look.SetBackgroundImage(Style::Rounded(Style::White(0.10f), Style::White(0.0f), 0.0f, FVector4(3.0, 3.0, 3.0, 3.0)));
+	Look.SetFillImage(Style::Rounded(Style::Ice(), Style::White(0.0f), 0.0f, FVector4(3.0, 3.0, 3.0, 3.0)));
+	Bar->SetWidgetStyle(Look);
+	Bar->SetFillColorAndOpacity(FLinearColor::White);
 }
 
 void USpaceMMOPanelRow::NativeConstruct()

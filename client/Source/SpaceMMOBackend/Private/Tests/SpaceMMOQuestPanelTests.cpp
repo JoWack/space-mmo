@@ -1,15 +1,9 @@
 #include "Misc/AutomationTest.h"
-#include "SpaceMMOPanelTestHelpers.h"
 #include "SpaceMMOBackendProtocol.h"
 #include "SpaceMMOPlayerController.h"
+#include "SpaceMMOStationWork.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
-
-// Shared, because a unity build can put two of these files in one translation
-// unit, where two anonymous namespaces are the same namespace and a second copy
-// of a helper is a redefinition.
-using SpaceMMOPanelTests::AnyLineContains;
-using SpaceMMOPanelTests::IndexOfLineContaining;
 
 namespace
 {
@@ -48,19 +42,20 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOQuestPanelShowsProgressTest::RunTest(const FString& Parameters)
 {
-	const TArray<FBackendJournalEntry> Journal{
-		MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 6, 10),
-	};
+	FBackendJournalEntry Entry = MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 6, 10);
+	Entry.RewardMinorUnits = 75000;
 
-	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildQuestPanel(
-		Journal, TArray<FBackendAvailableQuest>());
+	const TArray<FSpaceMMOQuestRowText> Rows =
+		FSpaceMMOStationWork::BuildQuestRows({ Entry }, TArray<FBackendAvailableQuest>());
 
-	TestTrue(TEXT("Names the quest"), AnyLineContains(Lines, TEXT("Salvage Rights")));
-	TestTrue(TEXT("Shows progress"), AnyLineContains(Lines, TEXT("6/10")));
+	TestEqual(TEXT("One row"), Rows.Num(), 1);
+	TestEqual(TEXT("Names the quest"), Rows[0].Name, FString(TEXT("Salvage Rights")));
+	TestEqual(TEXT("Shows progress"), Rows[0].Progress, FString(TEXT("6/10")));
+	TestTrue(TEXT("...and as a fraction"), FMath::IsNearlyEqual(Rows[0].Fraction, 0.6f, 0.001f));
 
-	// The authored line is what tells a player what to actually do. A count with no description
-	// says how far through something they are without saying what it is.
-	TestTrue(TEXT("Shows the step"), AnyLineContains(Lines, TEXT("Collect scrap")));
+	// The step is the thing to go and do. A count alone says how far along without saying at what.
+	TestTrue(TEXT("Shows the step"), Rows[0].Description.Contains(TEXT("Collect scrap")));
+	TestEqual(TEXT("Shows the reward"), Rows[0].Reward, FString(TEXT("750.00 cr")));
 
 	return true;
 }
@@ -72,20 +67,20 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOQuestPanelHidesFinishedQuestsTest::RunTest(const FString& Parameters)
 {
-	// A journal accumulates every quest a character has ever taken. Listing the finished ones
-	// buries the one line saying what to do next, which is the only line being looked for.
-	const TArray<FBackendJournalEntry> Journal{
-		MakeEntry(TEXT("Old News"), EBackendQuestState::Completed),
-		MakeEntry(TEXT("Abandoned Thing"), EBackendQuestState::Abandoned),
-		MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 1, 10),
-	};
+	const TArray<FSpaceMMOQuestRowText> Rows = FSpaceMMOStationWork::BuildQuestRows(
+		{
+			MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 1, 10),
+			MakeEntry(TEXT("Old News"), EBackendQuestState::Completed),
+			MakeEntry(TEXT("Abandoned Thing"), EBackendQuestState::Abandoned),
+		},
+		TArray<FBackendAvailableQuest>());
 
-	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildQuestPanel(
-		Journal, TArray<FBackendAvailableQuest>());
+	auto Has = [&Rows](const TCHAR* Name)
+	{ return Rows.ContainsByPredicate([Name](const FSpaceMMOQuestRowText& Row) { return Row.Name == Name; }); };
 
-	TestTrue(TEXT("Keeps the active one"), AnyLineContains(Lines, TEXT("Salvage Rights")));
-	TestFalse(TEXT("Drops the completed one"), AnyLineContains(Lines, TEXT("Old News")));
-	TestFalse(TEXT("Drops the abandoned one"), AnyLineContains(Lines, TEXT("Abandoned Thing")));
+	TestTrue(TEXT("Keeps the active one"), Has(TEXT("Salvage Rights")));
+	TestFalse(TEXT("Drops the completed one"), Has(TEXT("Old News")));
+	TestFalse(TEXT("Drops the abandoned one"), Has(TEXT("Abandoned Thing")));
 
 	return true;
 }
@@ -97,17 +92,19 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOQuestPanelMarksAHandInTest::RunTest(const FString& Parameters)
 {
-	const TArray<FBackendJournalEntry> Journal{
-		MakeEntry(TEXT("An Errand"), EBackendQuestState::ReadyToTurnIn, 10, 10),
-	};
+	const TArray<FSpaceMMOQuestRowText> Rows = FSpaceMMOStationWork::BuildQuestRows(
+		{
+			MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 2, 10),
+			MakeEntry(TEXT("First Tools"), EBackendQuestState::ReadyToTurnIn, 10, 10),
+		},
+		TArray<FBackendAvailableQuest>());
 
-	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildQuestPanel(
-		Journal, TArray<FBackendAvailableQuest>());
-
-	// Finished work, unpaid. Rendering it as 10/10 alongside the unfinished ones would leave a
-	// player waiting for a counter that is never going to move.
-	TestTrue(TEXT("Says it is ready"), AnyLineContains(Lines, TEXT("READY TO HAND IN")));
-	TestFalse(TEXT("Not shown as a count"), AnyLineContains(Lines, TEXT("10/10")));
+	// Finished work first, and as a hand-in rather than as 10/10: a player standing on a quest that is
+	// done wants paying before anything else, and the row carries the button that does it.
+	TestEqual(TEXT("The finished one leads"), Rows[0].Name, FString(TEXT("First Tools")));
+	TestTrue(TEXT("Says it is ready"), Rows[0].Kind == ESpaceMMOQuestRowKind::Ready);
+	TestTrue(TEXT("Not shown as a count"), Rows[0].Progress.IsEmpty());
+	TestTrue(TEXT("The running one follows"), Rows[1].Kind == ESpaceMMOQuestRowKind::Active);
 
 	return true;
 }
@@ -119,15 +116,19 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOQuestPanelSpeaksWhenEmptyTest::RunTest(const FString& Parameters)
 {
-	// A brand-new character, and a character who has finished everything, look the same here.
-	const TArray<FString> Lines = ASpaceMMOPlayerController::BuildQuestPanel(
-		TArray<FBackendJournalEntry>(), { MakeAvailable(TEXT("Salvage Rights")) });
+	FBackendAvailableQuest Offer = MakeAvailable(TEXT("Salvage Rights"));
+	Offer.Description = TEXT("Gather 10 scrap alloy.");
+	Offer.RewardMinorUnits = 50000;
 
-	TestTrue(TEXT("Says nothing is active"), AnyLineContains(Lines, TEXT("none active")));
+	const TArray<FSpaceMMOQuestRowText> Rows =
+		FSpaceMMOStationWork::BuildQuestRows(TArray<FBackendJournalEntry>(), { Offer });
 
-	// Naming what could be taken is the entire route out of an empty journal: accepting needs a
-	// key, and nothing else in the client knows any.
-	TestTrue(TEXT("Offers what is available"), AnyLineContains(Lines, TEXT("Salvage Rights")));
+	// An offer says what it asks and what it pays, so Accept is not a leap in the dark (task 173).
+	TestEqual(TEXT("Offers what is available"), Rows.Num(), 1);
+	TestTrue(TEXT("As an offer"), Rows[0].Kind == ESpaceMMOQuestRowKind::Offered);
+	TestEqual(TEXT("By its key, which Accept names"), Rows[0].QuestKey, FString(TEXT("salvage rights")));
+	TestEqual(TEXT("With what it asks"), Rows[0].Description, FString(TEXT("Gather 10 scrap alloy.")));
+	TestEqual(TEXT("With what it pays"), Rows[0].Reward, FString(TEXT("500.00 cr")));
 
 	return true;
 }
@@ -138,8 +139,8 @@ bool FSpaceMMOQuestPanelSpeaksWhenEmptyTest::RunTest(const FString& Parameters)
  * <strong>From a playtest, 7 September.</strong> Joe pressed the accept key on Salvage Rights and
  * was told "Nothing to accept". It was true: the quest had been accepted three weeks earlier and
  * was sitting at 0/10. The panel listed it as a bare line under a header advertising the accept
- * key, so a quest that was already his read exactly like one being offered, and the whole quest
- * system read as broken.
+ * key, so a quest that was already his read exactly like one being offered. Now an offer is its own
+ * kind of row with an Accept button, and a held quest never has one.
  */
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOQuestPanelSeparatesHeldFromOfferedTest,
@@ -148,87 +149,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 
 bool FSpaceMMOQuestPanelSeparatesHeldFromOfferedTest::RunTest(const FString& Parameters)
 {
-	const TArray<FBackendJournalEntry> Journal{
-		MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 0, 10),
-	};
+	const TArray<FSpaceMMOQuestRowText> Rows = FSpaceMMOStationWork::BuildQuestRows(
+		{ MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 0, 10) },
+		{ MakeAvailable(TEXT("First Tools")) });
 
-	const TArray<FString> Held = ASpaceMMOPlayerController::BuildQuestPanel(
-		Journal, TArray<FBackendAvailableQuest>());
-
-	TestTrue(TEXT("The held one is headed"), AnyLineContains(Held, TEXT("ACTIVE")));
-
-	// The exact fault: with nothing on offer, nothing may suggest there is. The header advertised
-	// a key that could not do anything, which is what invited pressing it.
-	TestFalse(TEXT("No offer heading"), AnyLineContains(Held, TEXT("AVAILABLE")));
-	TestFalse(TEXT("...and no hint for a key with nothing to do"), AnyLineContains(Held, TEXT("J accepts")));
-
-	// Both at once, which is the case the headings exist for: two lines that would otherwise be
-	// indistinguishable, one of them yours and one of them not.
-	const TArray<FString> Both = ASpaceMMOPlayerController::BuildQuestPanel(
-		Journal, { MakeAvailable(TEXT("First Tools")) });
-
-	const int32 Active = IndexOfLineContaining(Both, TEXT("ACTIVE"));
-	const int32 Offered = IndexOfLineContaining(Both, TEXT("AVAILABLE"));
-
-	TestTrue(TEXT("Both headings appear"), Active != INDEX_NONE && Offered != INDEX_NONE);
-
-	TestTrue(
-		TEXT("What you hold comes before what you could take"),
-		Active < Offered);
-
-	TestTrue(
-		TEXT("...and the held quest sits under the held heading"),
-		IndexOfLineContaining(Both, TEXT("Salvage Rights")) > Active
-			&& IndexOfLineContaining(Both, TEXT("Salvage Rights")) < Offered);
-
-	TestTrue(
-		TEXT("...and the offered one under the offer heading"),
-		IndexOfLineContaining(Both, TEXT("First Tools")) > Offered);
-
-	TestTrue(TEXT("The hint returns with something to accept"), AnyLineContains(Both, TEXT("J accepts")));
-
-	return true;
-}
-
-/**
- * The refusal says which quest is in the way, and what would move it.
- *
- * "Nothing to accept" was true and unusable: the chain hands out one quest at a time, so having
- * nothing on offer is caused by holding the current one, and the message named neither.
- */
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSpaceMMOQuestAcceptRefusalNamesTheReasonTest,
-	"SpaceMMO.Quests.AcceptRefusalNamesTheReason",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FSpaceMMOQuestAcceptRefusalNamesTheReasonTest::RunTest(const FString& Parameters)
-{
-	const FString Running = ASpaceMMOPlayerController::AcceptRefusal({
-		MakeEntry(TEXT("Salvage Rights"), EBackendQuestState::InProgress, 0, 10),
-	});
-
-	TestTrue(TEXT("Names the quest in the way"), Running.Contains(TEXT("Salvage Rights")));
-
-	// The step, not just the name. Being told which quest is blocking says why the key did nothing
-	// without saying what would ever change it.
-	TestTrue(TEXT("...and what to go and do"), Running.Contains(TEXT("Collect scrap")));
-
-	// Finished work waiting to be paid is a different instruction entirely: there is nothing left
-	// to gather, and telling somebody to gather would send them back to a deposit for nothing.
-	const FString Ready = ASpaceMMOPlayerController::AcceptRefusal({
-		MakeEntry(TEXT("An Errand"), EBackendQuestState::ReadyToTurnIn, 10, 10),
-	});
-
-	TestTrue(TEXT("A finished quest asks to be handed in"), Ready.Contains(TEXT("hand it in")));
-	TestFalse(TEXT("...and does not repeat the step"), Ready.Contains(TEXT("Collect scrap")));
-
-	// Finished quests are not reasons. A character whose journal is all history has nothing in the
-	// way, and naming an old quest would be a refusal about something that ended weeks ago.
-	const FString Nothing = ASpaceMMOPlayerController::AcceptRefusal({
-		MakeEntry(TEXT("Old News"), EBackendQuestState::Completed),
-	});
-
-	TestTrue(TEXT("History explains nothing"), Nothing.IsEmpty());
+	TestEqual(TEXT("Both listed"), Rows.Num(), 2);
+	TestEqual(TEXT("Held first"), Rows[0].Name, FString(TEXT("Salvage Rights")));
+	TestTrue(TEXT("...as held, at 0/10"), Rows[0].Kind == ESpaceMMOQuestRowKind::Active && Rows[0].Progress == TEXT("0/10"));
+	TestTrue(TEXT("Offered after, as an offer"), Rows[1].Kind == ESpaceMMOQuestRowKind::Offered);
 
 	return true;
 }
@@ -245,7 +173,8 @@ bool FSpaceMMOQuestParsesTheJournalTest::RunTest(const FString& Parameters)
 			"questKey": "intro_gather_scrap", "name": "Salvage Rights",
 			"kind": 0, "state": 0, "stepOrdinal": 1, "completedAt": null,
 			"stepDescription": "Collect 10 scrap.", "stepObjective": 0,
-			"stepTargetKey": "scrap_alloy", "stepProgress": 6, "stepRequired": 10
+			"stepTargetKey": "scrap_alloy", "stepProgress": 6, "stepRequired": 10,
+			"rewardMinorUnits": 50000
 		},
 		{
 			"questKey": "npc_errand", "name": "An Errand",
@@ -263,6 +192,7 @@ bool FSpaceMMOQuestParsesTheJournalTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Progress"), Entries[0].StepProgress, 6);
 	TestEqual(TEXT("Required"), Entries[0].StepRequired, 10);
 	TestEqual(TEXT("State"), Entries[0].State, EBackendQuestState::InProgress);
+	TestEqual(TEXT("Reward"), Entries[0].RewardMinorUnits, static_cast<int64>(50000));
 
 	// The state that arrives as 3. Mapping it to anything else would render finished work as
 	// still in progress, or worse as abandoned.
@@ -282,7 +212,8 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 bool FSpaceMMOQuestParsesAvailableTest::RunTest(const FString& Parameters)
 {
 	const FString Json = TEXT(R"([
-		{ "questKey": "intro_gather_scrap", "name": "Salvage Rights", "kind": 0 },
+		{ "questKey": "intro_gather_scrap", "name": "Salvage Rights", "kind": 0,
+		  "description": "Collect ten of something.", "rewardMinorUnits": 50000 },
 		{ "name": "Nameless", "kind": 0 }
 	])");
 
@@ -294,6 +225,10 @@ bool FSpaceMMOQuestParsesAvailableTest::RunTest(const FString& Parameters)
 	// would offer the player something no keypress could ever take.
 	TestEqual(TEXT("Kept the usable one"), Quests.Num(), 1);
 	TestEqual(TEXT("Key"), Quests[0].QuestKey, FString(TEXT("intro_gather_scrap")));
+
+	// The keys QuestEndpointTests pins on the server's side (task 173).
+	TestEqual(TEXT("Description"), Quests[0].Description, FString(TEXT("Collect ten of something.")));
+	TestEqual(TEXT("Reward"), Quests[0].RewardMinorUnits, static_cast<int64>(50000));
 
 	const FString Body =
 		FSpaceMMOBackendProtocol::MakeAcceptQuestBody(11, TEXT("intro_gather_scrap"));

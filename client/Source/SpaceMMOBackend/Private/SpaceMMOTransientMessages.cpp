@@ -1,8 +1,11 @@
 #include "SpaceMMOTransientMessages.h"
 
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "Components/Image.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
+#include "Components/VerticalBoxSlot.h"
+#include "SpaceMMOPanelRow.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "SpaceMMOBackendLog.h"
@@ -16,6 +19,13 @@ void USpaceMMOTransientMessageRow::SetMessage(const FSpaceMMOTransientMessage& M
 	}
 
 	bIsPositive = Message.Tone == ESpaceMMOMessageTone::Positive;
+
+	SpaceMMO::PanelLook::Apply(MessageText, SpaceMMO::Style::ETextRole::Body);
+
+	if (ToneEdge != nullptr)
+	{
+		ToneEdge->SetColorAndOpacity(bIsPositive ? SpaceMMO::Style::Ice() : SpaceMMO::Style::ErrorRed());
+	}
 }
 
 void USpaceMMOTransientMessages::Push(const FString& Text, const ESpaceMMOMessageTone Tone)
@@ -81,7 +91,7 @@ void USpaceMMOTransientMessages::RebuildRows()
 
 	MessageRows->ClearChildren();
 
-	for (const FSpaceMMOTransientMessage& Message : Messages)
+	for (int32 Index = 0; Index < Messages.Num(); ++Index)
 	{
 		USpaceMMOTransientMessageRow* Row =
 			CreateWidget<USpaceMMOTransientMessageRow>(GetOwningPlayer(), RowClass);
@@ -91,9 +101,16 @@ void USpaceMMOTransientMessages::RebuildRows()
 			continue;
 		}
 
-		Row->SetMessage(Message);
+		Row->SetMessage(Messages[Index]);
 
-		MessageRows->AddChild(Row);
+		// The newest at full strength and the older ones quieter, so the one just said is the one read.
+		Row->SetRenderOpacity(Index == Messages.Num() - 1 ? 1.0f : 0.55f);
+
+		if (UVerticalBoxSlot* const At = Cast<UVerticalBoxSlot>(MessageRows->AddChild(Row)))
+		{
+			At->SetHorizontalAlignment(HAlign_Center);
+			At->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 6.0f));
+		}
 	}
 }
 

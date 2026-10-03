@@ -101,4 +101,19 @@ void USpaceMMOOnFootReadout::NativeTick(const FGeometry& Geometry, const float D
 	}
 
 	bHasCredits = Text.bHasCredits;
+
+	// The rule and the station line only when there is a station to name: an empty line under a rule
+	// reads as something failing to load.
+	for (UWidget* const Part : {ReadoutRule.Get(), static_cast<UWidget*>(StationText.Get())})
+	{
+		if (Part != nullptr)
+		{
+			Part->SetVisibility(Text.Station.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		}
+	}
+
+	if (CreditsLine != nullptr)
+	{
+		CreditsLine->SetVisibility(bHasCredits ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
 }

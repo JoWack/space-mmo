@@ -2,6 +2,7 @@
 
 #include "SpaceMMOStationMarkers.h"
 
+#include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMODockingComponent.h"
@@ -88,6 +89,46 @@ FSpaceMMOFlightReadoutText USpaceMMOFlightReadout::Build(
  * ASpaceMMOPlayerController::UpdateHudContext owns the decision instead, from a tick that always
  * runs whatever is on screen.
  */
+#if !UE_BUILD_SHIPPING
+void USpaceMMOFlightReadout::ShowSampleForLook()
+{
+	FSpaceMMOFlightReadoutInputs Inputs;
+	Inputs.SpeedCentimetresPerSecond = 8600.0;
+	Inputs.OrbitalSpeedCentimetresPerSecond = 191200.0;
+	Inputs.GroundAltitudeKilometres = 1.24;
+	Inputs.SphereAltitudeKilometres = 1.24;
+	Inputs.Proximity = EPlanetProximity::Atmospheric;
+	Inputs.StationName = TEXT("Borlash North dock");
+	Inputs.StationBodyName = TEXT("Capital");
+	Inputs.StationDistanceKilometres = 0.38;
+	Inputs.StationDockingRangeKilometres = 0.382;
+	Inputs.bStationOnBody = true;
+
+	const FSpaceMMOFlightReadoutText Text = Build(Inputs);
+
+	for (const TPair<UTextBlock*, FString>& Line : TArray<TPair<UTextBlock*, FString>>{
+			 {AltitudeText.Get(), Text.Altitude}, {SpeedText.Get(), Text.Speed}, {OrbitalText.Get(), Text.Orbital},
+			 {ProximityText.Get(), Text.Proximity}, {StationText.Get(), Text.Station}})
+	{
+		if (Line.Key != nullptr)
+		{
+			Line.Key->SetText(FText::FromString(Line.Value));
+		}
+	}
+
+	bShowDebug = false;
+	bHasOrbitalSpeed = Text.bHasOrbital;
+
+	for (UWidget* const Hidden : {DebugBox.Get(), SystemPositionBox.Get()})
+	{
+		if (Hidden != nullptr)
+		{
+			Hidden->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+}
+#endif
+
 void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float DeltaSeconds)
 {
 	Super::NativeTick(Geometry, DeltaSeconds);
@@ -176,6 +217,25 @@ void USpaceMMOFlightReadout::NativeTick(const FGeometry& Geometry, const float D
 			*Text.Station);
 	}
 	Set(DebugText, bShowDebug ? Text.Debug : FString());
+
+	// The station's whole line, label and all, is the text's parent.
+	UWidget* const StationLine = StationText != nullptr ? static_cast<UWidget*>(StationText->GetParent()) : nullptr;
+
+	for (UWidget* const Part : {ReadoutRule.Get(), StationLine})
+	{
+		if (Part != nullptr)
+		{
+			Part->SetVisibility(Text.Station.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+		}
+	}
+
+	for (UWidget* const Line : {DebugBox.Get(), SystemPositionBox.Get()})
+	{
+		if (Line != nullptr)
+		{
+			Line->SetVisibility(bShowDebug ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		}
+	}
 
 	bHasOrbitalSpeed = Text.bHasOrbital;
 }

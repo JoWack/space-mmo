@@ -1548,6 +1548,7 @@ void USpaceMMOBackendClient::UseSampleDataForLook()
 		Made.InventoryId = Container;
 		Made.ItemDefId = ItemDefId;
 		Made.Name = Name;
+		Made.ItemKey = FString(Name).ToLower().Replace(TEXT(" "), TEXT("_"));
 		Made.Quantity = Quantity;
 		Made.Kind = Kind;
 		Made.StationId = Station;
@@ -1561,6 +1562,84 @@ void USpaceMMOBackendClient::UseSampleDataForLook()
 	Stack(3, 8, TEXT("Composite Frame"), 4, EBackendInventoryKind::StationHangar, Borlash.Id);
 	Stack(3, 11, TEXT("Shuttle Hull Section"), 2, EBackendInventoryKind::StationHangar, Borlash.Id);
 	Stack(3, 10, TEXT("Crude Thruster"), 1, EBackendInventoryKind::StationHangar, Borlash.Id);
+
+	// Enough in the hangar for three runs of plate, so the Industry tab's count has somewhere to go.
+	Stack(3, 2, TEXT("Ferrite Ore"), 34, EBackendInventoryKind::StationHangar, Borlash.Id);
+	Stack(3, 1, TEXT("Scrap Alloy"), 18, EBackendInventoryKind::StationHangar, Borlash.Id);
+
+	// Industry: three recipes, one job finished and one running.
+	Recipes.Reset();
+
+	auto Recipe = [this](const int32 Id, const TCHAR* Output, const int32 Quantity, const TCHAR* Skill, const int32 Level,
+		const int32 Seconds, const TArray<TPair<const TCHAR*, int32>>& Inputs)
+	{
+		FBackendRecipe Made;
+		Made.Id = Id;
+		Made.Key = FString(Output).ToLower().Replace(TEXT(" "), TEXT("_"));
+		Made.OutputName = Output;
+		Made.OutputQuantity = Quantity;
+		Made.SkillName = Skill;
+		Made.RequiredLevel = Level;
+		Made.JobSeconds = Seconds;
+
+		for (const TPair<const TCHAR*, int32>& Input : Inputs)
+		{
+			FBackendRecipeInput Line;
+			Line.Name = Input.Key;
+			Line.ItemKey = FString(Input.Key).ToLower().Replace(TEXT(" "), TEXT("_"));
+			Line.Quantity = Input.Value;
+			Made.Inputs.Add(Line);
+		}
+
+		Recipes.Add(Made);
+	};
+
+	Recipe(1, TEXT("Ferrite Plate"), 2, TEXT("Refining"), 2, 40, {{TEXT("Ferrite Ore"), 10}, {TEXT("Scrap Alloy"), 6}});
+	// Four inputs this hangar has none of, as Joe's playtest found on Composite Frame (3 October).
+	Recipe(2, TEXT("Composite Frame"), 1, TEXT("Shipcrafting"), 20, 1800,
+		{{TEXT("Ferric Regolith"), 10}, {TEXT("Grimhold Slag"), 10}, {TEXT("Terran Ferrite"), 10}, {TEXT("Luminous Amber"), 10}});
+	Recipe(3, TEXT("Crude Thruster"), 1, TEXT("Shipcrafting"), 3, 120, {{TEXT("Composite Frame"), 2}});
+
+	Jobs.Reset();
+
+	FBackendIndustryJob Done;
+	Done.Id = 71;
+	Done.RecipeKey = TEXT("ferrite_plate");
+	Done.OutputName = TEXT("Ferrite Plate");
+	Done.OutputQuantityTotal = 2;
+	Done.Runs = 1;
+	Done.bIsClaimable = true;
+	Jobs.Add(Done);
+
+	FBackendIndustryJob Running;
+	Running.Id = 72;
+	Running.RecipeKey = TEXT("composite_frame");
+	Running.OutputName = TEXT("Composite Frame");
+	Running.OutputQuantityTotal = 1;
+	Running.Runs = 1;
+	Running.SecondsRemaining = 54;
+	Jobs.Add(Running);
+
+	// Quests: one finished and waiting to be handed in, and the next one on offer -- shown together to
+	// show both buttons, though in play the chain offers the next only after the last is handed in.
+	Journal.Reset();
+
+	FBackendJournalEntry Finished;
+	Finished.QuestKey = TEXT("intro_craft_tool");
+	Finished.Name = TEXT("First Tools");
+	Finished.State = EBackendQuestState::ReadyToTurnIn;
+	Finished.StepDescription = TEXT("Craft a crude mining laser from the scrap you collected.");
+	Finished.RewardMinorUnits = 75000;
+	Journal.Add(Finished);
+
+	AvailableQuests.Reset();
+
+	FBackendAvailableQuest Next;
+	Next.QuestKey = TEXT("intro_mine_ore");
+	Next.Name = TEXT("Into the Rock");
+	Next.Description = TEXT("Mine 20 ferrite ore. Your new laser will cut where bare hands cannot.");
+	Next.RewardMinorUnits = 100000;
+	AvailableQuests.Add(Next);
 
 	ItemInstances.Reset();
 

@@ -39,6 +39,13 @@ public:
 protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> MessageText;
+
+	/**
+	 * The strip's left edge: ice for something gained, red for anything refused (task 173). Set here
+	 * rather than bound in the Blueprint, which used to tint the text instead.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UImage> ToneEdge;
 };
 
 /**

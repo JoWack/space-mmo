@@ -1,4 +1,5 @@
 #include "SpaceMMODockingComponent.h"
+#include "SpaceMMONoticeSink.h"
 #include "SpaceMMOAirspace.h"
 #include "SpaceMMOPlanetActor.h"
 
@@ -329,6 +330,24 @@ bool USpaceMMODockingComponent::StowShipAt(
 void USpaceMMODockingComponent::ClientDockResult_Implementation(
 	const FString& Message, const bool bSucceeded)
 {
+	// Into the message stack above the player (task 173). The ship's controller when it still has one;
+	// a successful dock may already have put the pilot ashore, so otherwise this machine's own player.
+	const APawn* const Ship = Cast<APawn>(GetOwner());
+
+	AController* Controller = Ship != nullptr ? Ship->GetController() : nullptr;
+
+	if (Controller == nullptr && GetWorld() != nullptr)
+	{
+		Controller = GetWorld()->GetFirstPlayerController();
+	}
+
+	if (ISpaceMMONoticeSink* const Sink = Cast<ISpaceMMONoticeSink>(Controller))
+	{
+		Sink->ShowNotice(Message, bSucceeded);
+
+		return;
+	}
+
 	if (GEngine != nullptr)
 	{
 		GEngine->AddOnScreenDebugMessage(

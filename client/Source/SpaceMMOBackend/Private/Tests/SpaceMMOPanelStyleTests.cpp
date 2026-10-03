@@ -43,7 +43,8 @@ bool FSpaceMMOPanelRowsStyleThemselvesTest::RunTest(const FString& Parameters)
 
 	// Rows that are drawn in a box. The text row is a plain line and has none.
 	const TArray<FString> Boxed = {TEXT("WBP_InventoryRow"), TEXT("WBP_MarketRow"), TEXT("WBP_BookRow"),
-		TEXT("WBP_ShipRow"), TEXT("WBP_MyOrderRow"), TEXT("WBP_SkillRow")};
+		TEXT("WBP_ShipRow"), TEXT("WBP_MyOrderRow"), TEXT("WBP_SkillRow"), TEXT("WBP_RecipeRow"), TEXT("WBP_JobRow"),
+		TEXT("WBP_QuestRow")};
 
 	TArray<FString> Rows = Boxed;
 	Rows.Add(TEXT("WBP_TextRow"));
@@ -76,6 +77,19 @@ bool FSpaceMMOPanelRowsStyleThemselvesTest::RunTest(const FString& Parameters)
 		}
 	}
 
+	// And the overlay is told which rows to stamp out for Industry and Quests. Unset, those tabs are
+	// empty with nothing but one log line to say why -- a wiring fault that reads as no recipes at all.
+	if (const UWidgetBlueprintGeneratedClass* const Overlay = LoadPanel(TEXT("WBP_StationOverlay")))
+	{
+		for (const TCHAR* Property : {TEXT("RecipeRowClass"), TEXT("JobRowClass"), TEXT("QuestRowClass")})
+		{
+			const FClassProperty* const Slot = FindFProperty<FClassProperty>(Overlay, Property);
+
+			TestTrue(*FString::Printf(TEXT("The station overlay names its %s"), Property),
+				Slot != nullptr && Slot->GetObjectPropertyValue_InContainer(Overlay->GetDefaultObject()) != nullptr);
+		}
+	}
+
 	return true;
 }
 
@@ -99,7 +113,14 @@ bool FSpaceMMOPanelsCarryTheirLookTest::RunTest(const FString& Parameters)
 		{TEXT("WBP_SkillsScreen"), {TEXT("WorldDim")}},
 		{TEXT("WBP_StationOverlay"),
 			{TEXT("WorldDim"), TEXT("MarketTabFrame"), TEXT("IndustryTabFrame"), TEXT("QuestsTabFrame"),
-				TEXT("MyOrdersTabFrame"), TEXT("ShipsTabFrame")}},
+				TEXT("MyOrdersTabFrame"), TEXT("ShipsTabFrame"), TEXT("StartBar"), TEXT("StartButton"), TEXT("RunsText")}},
+
+		// Round two, 3 October: the readouts, the deposit prompt, the messages and the sign-in screen.
+		{TEXT("WBP_FlightReadout"), {TEXT("ReadoutCard"), TEXT("ProximityChip"), TEXT("DebugBox"), TEXT("SystemPositionBox")}},
+		{TEXT("WBP_OnFootReadout"), {TEXT("ReadoutCard"), TEXT("CreditsLine")}},
+		{TEXT("WBP_DepositPrompt"), {TEXT("PromptCard"), TEXT("KeyCap"), TEXT("GatherTextLabel")}},
+		{TEXT("WBP_TransientMessageRow"), {TEXT("MessageFrame"), TEXT("ToneEdge")}},
+		{TEXT("WBP_LoginScreen"), {TEXT("SignInGlass"), TEXT("EmailBox"), TEXT("PasswordBox"), TEXT("SignInButton")}},
 	};
 
 	for (const TPair<FString, TArray<FString>>& Panel : Needs)
@@ -119,7 +140,8 @@ bool FSpaceMMOPanelsCarryTheirLookTest::RunTest(const FString& Parameters)
 				Tree != nullptr && Tree->FindWidget(FName(*Part)) != nullptr);
 		}
 
-		// The tabs are coloured by the overlay now; a binding left on one would override it every frame.
+		// Their colours are set in C++ now -- the tabs, the gather key, a message's tone -- and a binding
+		// left on one would override it every frame.
 		for (const FDelegateRuntimeBinding& Binding : Built->Bindings)
 		{
 			TestFalse(*FString::Printf(TEXT("%s binds no colour (found %s.%s)"), *Panel.Key, *Binding.ObjectName,

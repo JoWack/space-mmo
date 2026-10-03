@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "SpaceMMOBackendTypes.h"
+#include "SpaceMMONoticeSink.h"
 #include "SpaceMMOPlayerController.generated.h"
 
 /**
@@ -59,11 +60,18 @@ enum class ESpaceMMOMenu : uint8
 };
 
 UCLASS()
-class SPACEMMOBACKEND_API ASpaceMMOPlayerController : public APlayerController
+class SPACEMMOBACKEND_API ASpaceMMOPlayerController : public APlayerController, public ISpaceMMONoticeSink
 {
 	GENERATED_BODY()
 
 public:
+	/**
+	 * A short notice above the player, in the message stack with gather results: an ice edge when it
+	 * succeeded, red when it did not. Dock results, airspace and step-out refusals, and industry and
+	 * quest answers all come here (task 173); they used to be the engine's debug text, top left.
+	 */
+	virtual void ShowNotice(const FString& Message, bool bSucceeded) override;
+
 	ASpaceMMOPlayerController();
 
 	virtual void BeginPlay() override;
@@ -193,7 +201,7 @@ public:
 	/**
 	 * Opens the game's panels over sample data, for looking at them without a server (task 173).
 	 *
-	 *   SpaceMMOLookPanels Inventory|Station|Skills|Pair [Market|Industry|Quests|MyOrders|Ships] [prompt] [shot]
+	 *   SpaceMMOLookPanels Inventory|Station|Skills|Pair|SignIn|Flight [Market|Industry|Quests|MyOrders|Ships] [prompt] [shot]
 	 *
 	 * With "shot", the screen is captured with its interface three seconds later -- once the rows have been
 	 * built -- to Saved/Screenshots/LookPanels_<view>.png, and the game quits two seconds after that. A dev
@@ -264,17 +272,35 @@ public:
 	 */
 	void CaptureDirection();
 
+	/** The name of the station this character is docked at, or empty. */
+	FString DockedStationName() const;
+
 	/**
-	 * The three panels the station overlay renders, and where the player is.
+	 * The station's Industry and Quests tabs, as rows (task 173).
 	 *
-	 * Assembled here rather than in the widget because the selection state and the price arithmetic
-	 * are the controller's, and because these are the same pure builders the debug panel uses — the
-	 * only automated coverage the HUD's wording has.
+	 * Assembled here rather than in the widget because the recipe selection and the count are the
+	 * controller's, and they have to survive the rows being rebuilt every second a job counts down.
 	 */
-	void GetStationPanels(
-		FString& OutStationName,
-		TArray<FString>& OutIndustry,
-		TArray<FString>& OutQuests) const;
+	void GetStationWork(
+		TArray<struct FSpaceMMORecipeRowText>& OutRecipes,
+		TArray<struct FSpaceMMOJobRowText>& OutJobs,
+		TArray<struct FSpaceMMOQuestRowText>& OutQuests,
+		struct FSpaceMMOStartBarText& OutStartBar) const;
+
+	/** Industry and Quests, worked with the mouse (task 173). These replaced the R, X, Z and J keys. */
+	void SelectRecipe(int32 Index);
+
+	/** Changes how many runs Start makes, within one and what this station's hangar can supply. */
+	void StepRuns(int32 Delta);
+
+	/** Starts the selected recipe at the chosen count, at the station the player is docked at. */
+	void StartSelectedJob();
+
+	void ClaimJob(int64 JobId);
+
+	void HandInQuest(const FString& QuestKey, const FString& QuestName);
+
+	void AcceptQuest(const FString& QuestKey);
 
 	/** The flight readout, or null when none is configured. */
 	UPROPERTY()
@@ -429,50 +455,6 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Market")
 	static TArray<FBackendInventoryItem> FilterSellable(
 		const TArray<FBackendInventoryItem>& Holdings);
-
-	/**
-	 * Builds the quest panel's lines.
-	 *
-	 * Pure and static like the others, so the filtering can be tested without a backend. Finished
-	 * quests are deliberately dropped: a journal listing everything ever completed buries the one
-	 * line saying what to do next, which is the only line anybody is looking for.
-	 */
-	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Quests")
-	static TArray<FString> BuildQuestPanel(
-		const TArray<FBackendJournalEntry>& Journal,
-		const TArray<FBackendAvailableQuest>& Available);
-
-	/**
-	 * Why the accept key did nothing, in a sentence a player can act on.
-	 *
-	 * <strong>"Nothing to accept" was true and useless.</strong> A character partway through the
-	 * onboarding chain has no available quest precisely <em>because</em> they have one running, and
-	 * the refusal said neither half of that — so a quest sitting at 0/10 for three weeks read as a
-	 * broken quest system rather than as one waiting to be worked on.
-	 *
-	 * Empty when there is genuinely nothing to say, which is a character with no active quest and
-	 * nothing on offer: that one is rare and is not a mistake anybody is making.
-	 */
-	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Quests")
-	static FString AcceptRefusal(const TArray<FBackendJournalEntry>& Journal);
-
-	/**
-	 * Builds the industry panel's lines: what can be built, and what is cooking.
-	 *
-	 * Pure and static, like the other panel builders, so the selection arithmetic and the
-	 * have-versus-need arithmetic can be tested without a backend.
-	 *
-	 * <strong>It reports quantities but never decides eligibility.</strong> Showing "20/8" is
-	 * arithmetic over two numbers the server already sent. Concluding "you cannot build this" would
-	 * be a second implementation of the skill, tool, material and fee gates, free to disagree with
-	 * the real ones — so the player is always allowed to press, and the server answers.
-	 */
-	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Industry")
-	static TArray<FString> BuildIndustryPanel(
-		const TArray<FBackendRecipe>& Recipes,
-		const TArray<FBackendIndustryJob>& Jobs,
-		const TArray<FBackendInventoryItem>& Inventory,
-		int32 SelectedIndex);
 
 	virtual void GetLifetimeReplicatedProps(
 		TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -682,18 +664,8 @@ private:
 	 */
 	bool bMouseCaptured = true;
 
-	void CycleRecipe();
-
-	void StartSelectedJob();
-
-	/** Claims the first job the server says is ready. */
-	void ClaimReadyJob();
-
 	/** Sells a parcel of the first faction-bought stack in the hold. */
 	void SellToFaction();
-
-	/** Accepts the first quest the server says is available. */
-	void AcceptNextQuest();
 
 	/**
 	 * The station the market keys off: where this character is docked, or zero.
@@ -722,9 +694,6 @@ private:
 	UFUNCTION()
 	void HandleIndustryMessage(const FString& Message, bool bSucceeded);
 
-	/** Puts a short-lived line under the panel, in the same place gather results appear. */
-	void ShowNotice(const FString& Message, bool bSucceeded);
-
 	/**
 	 * Polls what changes without this player doing anything: a job's remaining time, and the
 	 * credits, goods and book that another player's fill moves.
@@ -733,8 +702,16 @@ private:
 
 	FTimerHandle StateRefreshTimer;
 
-	/** Which recipe the R key has landed on. Wraps, and survives the list being re-fetched. */
+	/** Which recipe is selected on the Industry tab. Clamped on use, so it survives the list being re-fetched. */
 	int32 SelectedRecipeIndex = 0;
+
+#if !UE_BUILD_SHIPPING
+	/** SpaceMMOLookPanels Flight: show the flight HUD on foot, over sample figures (task 173). */
+	bool bLookFlight = false;
+#endif
+
+	/** How many runs Start makes. Reset to one when another recipe is selected. */
+	int32 SelectedRuns = 1;
 
 	/** Guards against subscribing twice, since identity can resolve more than once. */
 	bool bIndustryBound = false;
@@ -743,21 +720,14 @@ private:
 	class USpaceMMOBackendClient* Backend() const;
 
 	/**
-	 * Keys for the two on-screen messages that outlived the character panel.
+	 * The key for the one on-screen message that outlived the character panel: the fallback line used
+	 * only when no transient-message Widget Blueprint is configured.
 	 *
-	 * Well clear of the navigation readouts the pawns draw, which use 1 through 11: two writers
-	 * sharing a key overwrite each other, and the symptom is a line flickering between two unrelated
-	 * pieces of text. Fixed rather than allocated, so repeated presses replace the last message
-	 * rather than stacking a column of them.
-	 *
-	 * The engine offers no way to order separate messages -- it iterates its map by slot, and a zero
-	 * display time makes it delete and re-add each one every frame, so slots come back from a free
-	 * list in an order nothing here decides. That is what drove the whole HUD into UMG. These two
-	 * survive because they are single lines with nothing to be ordered against.
+	 * Well clear of the navigation readouts the pawns draw, which use 1 through 11: two writers sharing
+	 * a key overwrite each other. Fixed rather than allocated, so repeated presses replace the last
+	 * message rather than stacking a column of them. Notices had a key of their own (199) until they
+	 * joined the message stack (task 173).
 	 */
-	static constexpr int32 NoticeMessageKey = 199;
-
-	/** Only used when no transient-message Widget Blueprint is configured. */
 	static constexpr int32 TransientMessageKey = 198;
 
 

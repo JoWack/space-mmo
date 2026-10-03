@@ -8,7 +8,7 @@
 /**
  * Builds task 110's six menu Widget Blueprints from code, styled to the agreed look.
  *
- *   UnrealEditor-Cmd.exe client/SpaceMMO.uproject -run=SpaceMMOAuthoring.SpaceMMOBuildMenus [-Force]
+ *   UnrealEditor-Cmd.exe client/SpaceMMO.uproject -run=SpaceMMOAuthoring.SpaceMMOBuildMenus [-Force | -Rebuild=WBP_A,WBP_B]
  *
  * <strong>The module prefix is required.</strong> This module loads at PostEngineInit, after the
  * engine looks for commandlet classes, so a bare <c>-run=SpaceMMOBuildMenus</c> reports "could not
@@ -23,7 +23,7 @@
  *
  * <strong>It never overwrites by default.</strong> Once a Blueprint exists it is Joe's to edit in the
  * designer, and a rerun that silently replaced his edits would be the worst thing this could do. An
- * existing asset is skipped and says so; <c>-Force</c> rebuilds it.
+ * existing asset is skipped and says so; <c>-Force</c> rebuilds it, and <c>-Rebuild=</c> rebuilds only the named ones.
  *
  * <strong>It checks what it built</strong> rather than trusting it: each saved Blueprint is reloaded,
  * and every BindWidgetOptional part its C++ parent declares must be in the tree with a compatible

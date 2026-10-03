@@ -2,6 +2,7 @@
 
 #include "SpaceMMOPairedPanel.h"
 #include "SpaceMMOPanelRow.h"
+#include "SpaceMMOStationWork.h"
 #include "CoreMinimal.h"
 
 #include "SpaceMMOStationOverlay.generated.h"
@@ -371,8 +372,15 @@ public:
 	/** Fills the row in. Called by whatever panel owns it. */
 	void SetLine(const FString& Line);
 
+	/** A group heading over rows ("RECIPES"), or a quiet note where a list is empty ("none running"). */
+	void SetHeading(const FString& Heading);
+	void SetNote(const FString& Note);
+
 protected:
 	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
+	virtual SpaceMMO::Style::ERowLook Look() const override;
+
+	SpaceMMO::Style::ETextRole Role = SpaceMMO::Style::ETextRole::Body;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> LineText;
@@ -499,6 +507,12 @@ public:
 
 	/** Brings one of this character's hulls to the station they are docked at. */
 	void SummonShip(int64 HullItemInstanceId, const FString& ShipName);
+
+	/** Industry and Quests, from their rows' clicks and buttons. Each forwards to the controller. */
+	void SelectRecipe(int32 Index);
+	void ClaimJob(int64 JobId);
+	void HandInQuest(const FString& QuestKey, const FString& QuestName);
+	void AcceptQuest(const FString& QuestKey);
 
 	/** Picks the item whose book is shown below the list. */
 	void SelectMarketItem(int32 ItemDefId);
@@ -690,9 +704,55 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UPanelWidget> QuestRows;
 
-	/** What one line looks like. Set this in the Widget Blueprint's class defaults. */
+	/** Headings and notes in the Industry and Quests lists. Set this in the Widget Blueprint's class defaults. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	TSubclassOf<USpaceMMOTextRow> RowClass;
+
+	/** The Industry and Quests rows (task 173). Set by SpaceMMOStylePanels in the class defaults. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	TSubclassOf<USpaceMMORecipeRow> RecipeRowClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	TSubclassOf<USpaceMMOJobRow> JobRowClass;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	TSubclassOf<USpaceMMOQuestRow> QuestRowClass;
+
+	/**
+	 * Under the recipes: how many runs, and Start. Shown on the Industry tab only. The count is the
+	 * controller's, so it survives the rows being rebuilt every second while a job counts down.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> StartBar;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StartNote;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UButton> RunsLess;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UButton> RunsMore;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> RunsText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UButton> StartButton;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StartText;
+
+	virtual void NativeConstruct() override;
+
+	UFUNCTION()
+	void FewerRuns();
+
+	UFUNCTION()
+	void MoreRuns();
+
+	UFUNCTION()
+	void StartSelected();
 
 private:
 	/** Opens the order prompt, starting on a given amount, or on everything when that is zero. */
@@ -704,8 +764,8 @@ private:
 	/** Asks for the catalogue at this station, with whatever the search box holds. */
 	void RefreshMarketListings();
 
-	/** Rebuilds one container from its lines, but only when the lines actually changed. */
-	void FillPanel(class UPanelWidget* Container, const TArray<FString>& Lines, FString& Signature);
+	/** Rebuilds the Industry and Quests tabs from the controller's state, when it has changed. */
+	void FillStationWork(const class ASpaceMMOPlayerController& Controller);
 
 	ESpaceMMOStationTab ActiveTab = ESpaceMMOStationTab::Market;
 

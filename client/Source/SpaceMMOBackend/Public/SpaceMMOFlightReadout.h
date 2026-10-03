@@ -140,6 +140,14 @@ public:
 	 */
 	static FSpaceMMOFlightReadoutText Build(const FSpaceMMOFlightReadoutInputs& Inputs);
 
+#if !UE_BUILD_SHIPPING
+	/**
+	 * Fills the readout with a sample flight near Borlash, for SpaceMMOLookPanels Flight (task 173). The
+	 * tick leaves it alone with no ship to read, so it holds what this says.
+	 */
+	void ShowSampleForLook();
+#endif
+
 	/** Whether the debug line is shown, which follows the ship's own flight-debug flag. */
 	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|HUD")
 	bool bShowDebug = false;
@@ -195,4 +203,18 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> DebugText;
+
+	/**
+	 * The debug and system-position lines, label and all, shown only while the ship's flight debug is
+	 * on (Joe, 3 October). Emptying the text alone left "Debug:" hanging over nothing.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> DebugBox;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> SystemPositionBox;
+
+	/** The hairline over the station line, hidden with it when there is no station to name. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> ReadoutRule;
 };

@@ -713,6 +713,10 @@ struct SPACEMMOBACKEND_API FBackendJournalEntry
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
 	int32 StepRequired = 0;
+
+	/** What handing it in pays, in minor units. Zero from a server older than task 173. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	int64 RewardMinorUnits = 0;
 };
 
 /** A quest the character could accept now. */
@@ -726,6 +730,14 @@ struct SPACEMMOBACKEND_API FBackendAvailableQuest
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
 	FString Name;
+
+	/** What the quest asks first, so an offer says what accepting commits to (task 173). */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	FString Description;
+
+	/** What it pays when handed in, in minor units. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Quests")
+	int64 RewardMinorUnits = 0;
 };
 
 /** Who the backend says a connecting player is entitled to be. */

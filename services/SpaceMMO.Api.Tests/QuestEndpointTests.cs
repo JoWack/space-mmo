@@ -63,6 +63,23 @@ public sealed class QuestEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
     private sealed record TurnInPayload(
         string QuestKey, long GrantedMinorUnits, long WithheldMinorUnits);
 
+    private sealed record OfferPayload(string QuestKey, string Name, string? Description, long RewardMinorUnits);
+
+    private sealed record JournalPayload(string QuestKey, string? StepDescription, long RewardMinorUnits);
+
+    private async Task<T> GetAsync<T>(string path, string token)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, new Uri(path, UriKind.Relative));
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response = await _client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+
+        return (await response.Content.ReadFromJsonAsync<T>())!;
+    }
+
     private async Task<HttpResponseMessage> PostAsync(string path, string token, object body)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, new Uri(path, UriKind.Relative))
@@ -144,6 +161,48 @@ public sealed class QuestEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
             "/quests/turn-in", _token, new { characterId = _characterId, questKey = "errand" });
 
         Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+    }
+
+    /// <summary>
+    /// An offer says what it asks and what it pays, and so does the journal once it is taken.
+    /// </summary>
+    /// <remarks>
+    /// The station's quest panel shows both on every row (task 173). Without them on the wire, an offer
+    /// was a bare name and the panel had nothing to say about what accepting would commit to.
+    /// </remarks>
+    [Fact]
+    public async Task An_offer_and_a_journal_entry_carry_the_first_step_and_the_reward()
+    {
+        long reward = Credits.FromWholeCredits(500).MinorUnits;
+
+        List<OfferPayload> offers = await GetAsync<List<OfferPayload>>(
+            $"/quests/available/{_characterId}", _token);
+
+        OfferPayload errand = Assert.Single(offers, o => o.QuestKey == "errand");
+
+        Assert.Equal("Collect ten of something.", errand.Description);
+        Assert.Equal(reward, errand.RewardMinorUnits);
+
+        // The names the client reads (SpaceMMO.Quests.ParsesAvailable feeds these same keys), pinned
+        // here because a renamed property still round-trips through this test's own record.
+        var raw = new HttpRequestMessage(HttpMethod.Get, new Uri($"/quests/available/{_characterId}", UriKind.Relative));
+        raw.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+        string json = await (await _client.SendAsync(raw)).Content.ReadAsStringAsync();
+
+        Assert.Contains("\"description\":\"Collect ten of something.\"", json);
+        Assert.Contains($"\"rewardMinorUnits\":{reward}", json);
+
+        (await PostAsync(
+            "/quests/accept", _token, new { characterId = _characterId, questKey = "errand" }))
+            .EnsureSuccessStatusCode();
+
+        List<JournalPayload> journal = await GetAsync<List<JournalPayload>>(
+            $"/quests/journal/{_characterId}", _token);
+
+        JournalPayload taken = Assert.Single(journal, j => j.QuestKey == "errand");
+
+        Assert.Equal("Collect ten of something.", taken.StepDescription);
+        Assert.Equal(reward, taken.RewardMinorUnits);
     }
 
     [Fact]
