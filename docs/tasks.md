@@ -6870,3 +6870,1093 @@ Joe's answers, 3 October:
 - A dock or airspace message appears top left in orange: the notice found no sink.
 - The sign-in button does nothing: its click lost its graph, which the node counts say it did not.
 
+## 174 — The four races, drawn for 3D modelling
+
+**In progress: the 32 final views were made, checked and copied to Joe's asset folder on 3 October, and
+wait on his Tripo pass.** Joe picked Humanoid A, Martian B, Space Elf A and Space Orc A, and put all
+eight in a plain skin-tight space suit instead of their clothes. Belongs to **M7**. Joe, 3 October:
+*"Can you have Higgsfield help me generate character models that I can later upload to a tool like
+Tripo to generate the 3d model (myself manually) for all 4 races in my game? … Each race should have a
+male model and a female model. They should be wearing plain clothes that fit the space theme. No armor.
+Plain backgrounds"* — and *"I would like to be able to choose between a few examples for each race
+before generating the final sheets/models."*
+
+Every character in the game today is 125's rigged human, whatever their race (177).
+
+**Where each race's details came from**, so the next round reads these rather than re-deriving them:
+- `design-bible.md` §1: race, faction, home world.
+- The *Origin System — Visual Bible* artifact (https://claude.ai/artifact/DeDk1CUhhiUHHffmuQFCDz),
+  "The four peoples": build, what each race reads through, dress; and each world's palette, materials
+  and silhouette. Its central idea carries the whole brief: **the planets justify the archetypes.**
+  Martians are tall and slight because Ares is a third of a gravity; orcs are dense because Grimhold is
+  the largest world.
+- Joe's race boards, `D:/Documents/SpaceMMOAssets/{Human,Martian,SpaceElf,SpaceOrc}VisualBoard.png`
+  (4–5 August): heights, faces, hair, palettes, clothing layers.
+
+**Where those sources disagree.** Each is left to Joe's pick, with a candidate on either side:
+- **Martian skin.** The board draws them hairless and copper-skinned; the Visual Bible says pallor,
+  "translucent skin over visible vasculature". Martian A is the board, B the bible.
+- **Orc stature.** The board makes the man 2.35 m and the woman 2.10 m; the Visual Bible says "broad,
+  dense, low-slung", and argues all of Grimhold from gravity pressing things down. Orc A is the board;
+  B is low-slung, about 1.95 m and twice as wide.
+- **Every board dresses its race in gear**: the human's shoulder and knee pads and harness, the
+  Martian's ceramic arm plates, the elf's leaf pauldrons, the orc's spiked armour. The brief is plain
+  clothes, so the candidates keep each culture's materials and palette and drop the plates. Armour is
+  178.
+- **The orc board's header is wrong and should not be copied anywhere**: "Gor'thak homeworld ·
+  faction_c" under a skull. Orcs are Grimhold and `faction_b`, Tusk and Thorn, and the Visual Bible
+  gives heraldry to factions, not races.
+- The boards make the elves as tall as the Martians, 2.15 and 2.05 m. Not a conflict, but it leaves
+  build alone to tell them apart in silhouette: slender and athletic against stretched.
+
+**What an image-to-3D tool needs, and why each is in every prompt** (the shared blocks in
+`generate.py`):
+- **The whole body with margin, in an A-pose, arms clear of the torso.** An arm touching the body fuses
+  into it, and an auto-rig then weights it to the ribs.
+- **Soft, shadowless, frontal light.** The generator bakes shading into the texture, and the engine
+  lights it a second time.
+- **A plain light-grey background**, no floor line, no props.
+- **Nothing loose below the hips**: no coats, tabards, capes or loose long hair. Loose cloth does not
+  separate from the legs or back; it becomes one surface bent by the wrong bone. The elf board's long
+  front and back panels are exactly this.
+- **No insignia or lettering.** Generators garble it, and heraldry goes on later as a decal.
+- **The Visual Bible's stylised-realism anchor, without its atmosphere.** Fog, golden hour and a warm
+  key against cool fill all bake into a texture. The anchor matches the boards and the September orc
+  and human images.
+
+**Model: Nano Banana Pro**, chosen by running one prompt (humanoid A) on three. GPT Image 2.5 came back
+near-photographic, though asked not to be, with the woman's hands against her thighs; it does run on
+the starter plan, which 110 recorded as needing a paid one. Nano Banana Pro kept the arms clear and
+looked like the boards. Seedream 5.0 Pro was refused with `not_enough_credits` while over 260 credits
+remained, so it is evidently not on the starter plan. 2 credits an image at 2k and 16:9; this round
+cost 39 of 272.
+
+**Five of the first twelve missed a defining trait** and were made again before Joe saw any. The misses
+are in `candidates/rejected/`:
+- **Martian B and C came back as ordinary humans in Martian clothes**, the Visual Bible's own warning:
+  "proportion is the thing generators skip". The second pass states the proportions bluntly and passes
+  Martian A as a reference *for proportion only*. A reference with no sentence saying what it is for is
+  taken as the design to copy, and even with one, C picked up A's painted look.
+- **Elf B had no pointed ears.** Fixed by saying so first. The second pass then read "overlapping
+  leaf-like layers hardened with resin" as leaf armour, with shoulder caps, bracers and greaves, and the
+  third had to say soft cloth and list what it is not.
+- **Elf C was all teal and cyan**, the trap the Visual Bible names: "Cyan alone is Pandora; cyan
+  against amber is Verdance." The second pass makes amber a third of the outfit.
+- **Orc B's woman had no tusks** and read as a grey-skinned human.
+
+**The candidates** are in `docs/wip/174-race-characters/` (git-ignored): `candidates/<race>-<A|B|C>.png`
+at 2752×1536, one comparison sheet per race in `sheets/`, the exact prompt behind each candidate in
+`prompts.md`, and every job's model, references and result URL in `log.jsonl`. `generate.py` assembles
+the prompts and re-runs any candidate; `sheets.py` rebuilds the sheets.
+
+| Race | A | B | C |
+|---|---|---|---|
+| Humanoid | Dockhand layers: henley, canvas vest, patched trousers; nearest the board | Ship-crew coverall | Colonist field jacket over knitwear |
+| Martian | The board: hairless, copper skin, bone-white undersuit, rust piping | The bible: pallor, visible veins, oxide-rust undersuit | Indoor suit-shaped wear: quilted thermal vest |
+| Space Elf | The board, simplified: ivory, forest green, gold | Amber and resin, soft grown cloth | Membrane bodysuit, teal against amber |
+| Space Orc | The board's build, out of armour: riveted leather jerkin | Low-slung build, foundry overalls | Off duty: quilted refractory jacket, clan markings |
+
+**Flaws in the candidates as shown.** The suit edit below cleared every one that applied to a pick:
+- Humanoid B's and Orc A's women wear a braid over one shoulder.
+- Martian B has dust blowing off one side as a cloud, and particles in the air become geometry.
+- Elf A's tunic panels reach mid-thigh, both stand a little turned, and their eyes glow.
+- Orc A's burn marks glow as if still alight.
+- Martian A and C and Orc A are painted, the rest rendered.
+
+### Joe's picks, and the suit
+
+**Humanoid A, Martian B, Space Elf A, Space Orc A** (3 October). Two of those settle the conflicts
+above: the Martians take the Visual Bible's pallor rather than the board's copper skin, and the orcs
+keep the board's 2.35 m and 2.10 m, which makes 177's clearance question real rather than hypothetical.
+Every height in 175 stands as the boards give it.
+
+Then Joe, the same day: *"for the clothing, can each just wear a skin-tight, plain space suit?"*
+- **Each pick was edited rather than described again**, so the people stay exactly as chosen and only
+  the clothes change: `suits/<race>.png`, made by `generate.py suits`.
+- **One colour per world, from its palette**, so a race still reads at a glance in an otherwise
+  identical suit: Terra deep navy, Ares oxide rust, Verdance forest green, Grimhold dark iron grey. A
+  thin neck seal, boots that are part of the suit, hands and head bare, and nothing else.
+- **The suits replace the four dress cultures** the Visual Bible distinguishes (layered and repaired,
+  pressure garments, grown cloth, cast and forged). From here, colour carries a race's world, and the
+  cultures move to the armour (178).
+- **The suit is the better base for armour.** 178's pieces now fit over what is nearly the body's own
+  surface rather than over four kinds of clothing.
+- **The edit also cleared the picks' flaws**: Martian B's dust cloud is gone, Orc A is rendered rather
+  than painted, and the elves' eyes no longer glow.
+- **Two edits held on to faults the prompt had already named.** The elves stayed turned to one side,
+  and the orc woman kept her braid over the shoulder. An edit keeps pose and hair unless it is told
+  outright that the reference is wrong. The second passes say so, and edit the first suit image so that
+  nothing else moves; the first attempts are in `suits/rejected/`.
+
+Credits at that point: 51 spent, 221 left.
+
+### The final views
+
+Joe approved the suits on 3 October: *"They look great now, please go ahead!"*
+1. **Four images of each of the eight characters, alone**: front, left, back, right, at 1792×2400 (3:4).
+   The front is drawn from that race's `suits/` image, and the other three from that front, so the
+   design carries over (`generate.py finals-front`, then `finals-views`). Same A-pose, light and
+   background throughout. Tripo's multiview mode takes exactly these four; its single-image mode takes
+   the front.
+2. **"Left" is the character's own left side, so `left.png` faces the image's LEFT edge.** Tripo's
+   documentation gives only the order: front, left, back, right. Scenario's documentation of the same
+   model defines left as "90 deg — character's left arm side". Someone crossing your view from right to
+   left shows you their left side, so in `left.png` the figure faces left. Swapping left and right gives
+   Tripo a body that disagrees with itself.
+3. **Check each set for drift between views** before Tripo sees it: a seam that changes side, a neck
+   seal that changes shape, a hairline that moves. Tripo trusts every view equally.
+4. **Copied to `D:/Documents/SpaceMMOAssets/CharacterImages/<Race>-<Sex>/`**, beside Joe's other
+   character art. Each folder holds four files named `<race>-<sex>-<view>.png`, so each Tripo upload is
+   one folder.
+5. Joe makes the models in Tripo; 175 picks them up. **The Humanoid man was instead modelled in Blender
+   from these views on 3 October (180)**, at Joe's request. On 4 October Joe set that aside for a Tripo
+   model made from the same views in the right order (180), and the other seven wait on Tripo too.
+   `tools/characters/tripo_to_blend.py` takes each export from there.
+
+**Made 3 October, and what went wrong on the way.** Each of these was caught by looking at the result,
+and none of them would have shown in a log:
+- **The side-view prompt contradicted itself.** It said "left arm nearest the camera" and "faces the
+  right edge", which cannot both be true. This record said the same thing until the images were
+  checked.
+  - The generator mostly obeyed the edge, so seven of eight `left` files showed the right side. They
+    were renamed by which way the figure faces, which is the only check that works: a plain suit has
+    nothing else to tell one side from the other.
+  - The humanoid man's views had both come back facing right, so he got a fresh left view from the
+    corrected wording.
+  - `sheets/sides-check.jpg` lays every side view out in two rows; every figure in the top row faces
+    left.
+- **The Martian woman's back view was stopped by Higgsfield's filter**: status `nsfw`, three times, in
+  two wordings, a false positive on a tight suit seen from behind. GPT Image 2.5 made it from the same
+  front reference. Filtered jobs cost nothing.
+- **The runner saved a filtered job's echoed reference as if it were the result.** That put a copy of
+  her front where her back should be, under the right name. It now saves only a job whose status is
+  `completed`.
+- **The humanoid man's first right view was a three-quarter view**, chest and both arms in sight, where
+  Tripo assumes a true profile. It was made again with stricter wording.
+- **Two jobs came back empty**, exit code 3 and no job created. They worked on a plain retry.
+
+All 32 copies were compared byte for byte with the checked originals. Credits: 120 spent in all, 152
+left.
+
+**What is not verified:** whether the views make good models. Tripo is the only test of that. If a
+model comes out twisted, check the left/right slots first. If a part comes out wrong, the view that
+shows it is the one to redo, with `generate.py finals-one <race-sex> <view>`. **Joe's two multiview
+runs of the Humanoid man on 4 October were not that test**: their views were in the wrong slots
+(180's route section).
+
+Higgsfield also lists *Tripo H3.1 Multiview to 3D*, so that step could happen in the same tool. Joe chose
+to do it by hand at first. On 4 October the Humanoid man's runs went through Higgsfield instead (180).
+
+**How it would fail:**
+- **A Martian that is an ordinary human with a long head.** Check the limbs and the neck, not the face.
+- **Arms touching the torso, or fingers splayed into fans.** Both fuse in the mesh.
+- **A floor shadow**, which Tripo can read as a plate under the feet.
+- **Views that disagree**, which Tripo averages into something no view showed.
+- **Left and right swapped in Tripo's slots.** The result comes out twisted or mirrored, with nothing in
+  any single image looking wrong.
+- **The four files in filename order.** Every folder sorts as back, front, left, right, which is not
+  Tripo's front, left, back, right. A run fed them that way came out twisted at the waist (180, 4
+  October). Fill the slots by name, never by the order a folder lists them in.
+
+## 175 — Rig the race models for Unreal, through the Blender MCP
+
+**Pending, blocked on 174 and on Joe's Tripo exports — except the Humanoid man, rigged on the Unreal
+mannequin's skeleton and exported on 4 October (the last section below).** Belongs to **M7**. Joe asked for walk, run and jump through the Blender MCP
+once the models exist (176); those are keyed on a rig, so the rig comes first.
+
+**The Humanoid man is the ordered Tripo run** (180, 4 October). Joe set 180's Blender-built mesh aside
+for it.
+- `tools/characters/tripo_to_blend.py` did steps 1, 3 and 4 into
+  `D:/Documents/SpaceMMOAssets/Blender/Characters/HumanoidMale.blend`: 1.80 m, soles at z=0, facing -Y,
+  origin under the pelvis, scale 1.
+- Step 2: 94,610 triangles, against 49,826 for the human the game draws today. Joe chose to keep the
+  whole mesh as LOD0, with Unreal building the LODs (180).
+- Step 5 is the last section below. Auto-Rig Pro and its rig tools were checked enabled in Joe's
+  Blender 5.2.2 on 4 October.
+
+**Inherited from 125:**
+- **The human's rig uses UE5 mannequin bone names**, which is why it bound to the animation library's
+  skeleton with no retargeting. Its face bones (`c_eye_*`, `eyelid_*`, `c_jawbone_x`) are Auto-Rig
+  Pro's naming and the file is `HumanCharacterRiggedARP.blend`, so it was evidently rigged with Auto-Rig
+  Pro, whose UE5-mannequin export gives exactly those names. First check: is it enabled in the Blender
+  the MCP drives (`bpy.context.preferences.addons`)?
+- **The human still runs at a scale of 1.836**, because it was exported at the wrong size. Export these
+  at real height, read back from the exported file rather than from the scene.
+
+**For each of the eight models:**
+1. Import the Tripo export into `D:/Documents/SpaceMMOAssets/Blender/Characters/<Race><Sex>.blend`,
+   beside the human's. `tools/characters/tripo_to_blend.py` does this with steps 3 and 4 in one run,
+   and scores the result against the race's sheets. Fill Tripo's slots by name first (174).
+2. **Measure before changing anything**: triangles, bounds, height, how many meshes. The two full-body
+   exports already in `SpaceMMOAssets/FBX/Characters`, `HumanMale_Full.fbx` and `OrcMale_Full.fbx`, are
+   131 MB and 124 MB, far past a player character in an MMO with many on screen. Settle the triangle
+   budget and the route — Tripo's own low-poly output, a decimate, or Higgsfield's *Meshy 5 Remesh* —
+   on the first model, with its numbers in front of you.
+3. Apply transforms; feet at the origin, facing the way the human does, so one `CharacterMeshRotation`
+   serves every race.
+4. Scale to height: human 1.80 / 1.68 m, Martian 2.15 / 2.05, elf 2.15 / 2.05, orc 2.35 / 2.10. These
+   are the boards' figures, and Joe's picks in 174 kept all of them.
+5. Rig with UE5 mannequin bone names, weight, export FBX. Record here the export settings that worked.
+
+**Checks, each a measurement:**
+- **No vertex without a weight, and none with more influences than the import keeps.** Both are counts
+  read off the mesh.
+- **Pose it through the MCP and render each pose**: arms overhead, a deep squat, a full stride.
+  Shoulders and hips are where a generated mesh collapses, and the bind pose shows none of it.
+- **The exported height, read back from the FBX.**
+
+**Undecided: one skeleton per body, or every race on the human's `SK_Mannequin`.** Settled for the
+Humanoid man on 4 October, `SK_Mannequin` (the last section below); still open for the others. Matching bone names
+let a mesh bind to a skeleton; they do not stop a clip authored on one body from distorting another,
+and bodies as different as a 2.15 m Martian's and an orc's will. 176 authors clips per body anyway,
+which makes a skeleton each the natural choice, at the cost of the animation-blueprint question 176
+records.
+
+### The Humanoid man, rigged and skinned 4 October
+
+**Done in Blender, not exported.** The rig is in `D:/Documents/SpaceMMOAssets/Blender/Characters/HumanoidMale.blend`,
+saved in rest pose with every limb in IK, and checked by reopening the saved file. It was built in Joe's
+open Blender through the MCP, with Auto-Rig Pro 3.78.35, after the eyes were cleaned (180). The copy he
+had open predated the cleanup, so his session was saved aside and the file reloaded from disk first.
+
+**How it was built, so the next body can follow it:**
+1. **Smart, driven from code.** `id.get_selected_objects` and `id.add_marker` run with `EXEC_DEFAULT`
+   inside a `temp_override` of the 3D view; each marker is the empty `<part>_loc`, placed by setting its
+   location. Paired markers go on his left, +X, and Auto-Rig Pro mirrors them.
+2. **Every marker is measured off the mesh**, facing -Y, heights in metres:
+   - neck (0, 1.470), the bottom of the collar seal; chin (0, 1.535), the chin's underside;
+   - shoulder (0.175, 1.430), inside the deltoid's round; root (0, 0.920), the hip joints, about 10 cm
+     above the crotch, which is what detection takes the root for;
+   - wrist (0.453, 1.004), the arm's narrowest section sliced along its own axis (shoulder to
+     fingertip), because his arms slant and horizontal slices cut them on the diagonal;
+   - ankle (0.170, 0.090).
+3. **Auto-Rig Pro's AI files are not installed** (`C:/Users/Joe/Documents/AutoRigPro/AI` is empty), so
+   fingers use the legacy voxel-centroid engine. Detection made 66 reference bones, five fingers of three
+   joints each, with no errors. Matching made 344 bones, 68 of them deforming.
+4. **Bound with pseudo-voxels.** Heat maps gave the same result where it mattered, below.
+
+**The weights needed two corrections, both found by posing.**
+- **Both engines put upper-arm weight on the torso below the armpit**, which is at 1.245 m. His arms
+  hang close to his sides in this A-pose. Arms overhead, the flanks ballooned from the waist up.
+  - Most arm weight on a flank vertex: 0.16 at 1.15 m, 0.29 at 1.20 m, 0.49 at 1.25 m.
+  - **Fix 1:** on torso vertices (|x| < 0.18 m) the arm's weight fades from full at 5 cm above the armpit
+    to none at 3 cm below it, and the collarbone's from 2 cm above to 8 cm below. The weight goes to
+    `spine_03`. 2,156 vertices.
+- **Chest and back just inside the shoulder joint carried 0.6 of the arm's weight.**
+  - **Fix 2:** from 2 cm to 9 cm inward of the joint at (0.175, 1.43) m, the arm's weight fades out. It
+    goes to the collarbone above 1.38 m and to `spine_03` below.
+  - Then four passes of weight smoothing over the shoulder region, weights under 0.01 pruned, at most
+    eight influences kept, and everything normalised. 12,338 vertices touched.
+
+**Checks, on the saved file reopened:** no vertex without a weight; at most 7 influences; every vertex's
+weights sum to 1.0000. Auto-Rig Pro's own bind left most sums between 0.85 and 1.0, which Blender
+and Unreal both normalise at runtime, but the file now says what it means.
+
+**Pose tests**, judged from screenshots of Joe's Blender:
+- **T-pose, deep squat, full stride: pass.**
+  - The squat lowered the root 0.42 m and leaned the chest 20°: the knees stay round and the hips crease
+    rather than collapse.
+  - The stride put the feet 0.40 m forward and 0.35 m back, with toe-off: the groin, buttocks and back
+    knee stretch smoothly.
+- **Arms overhead: a known limit, not fixed.** The flank below the armpit now holds (mean 0.2 cm), but
+  the band at and just inside the shoulder joint swings outward. How far it moves:
+
+| Arm pose | Mean movement | Worst |
+|---|---|---|
+| Raised 30°, a jog's swing | 2.7 cm | 7 cm |
+| T-pose | 5.3 cm | 14 cm |
+| Raised 90° | 7.9 cm | 21 cm |
+| Overhead: collarbone 30°, arm 110° | 12.6 cm | 29 cm |
+
+  - Only the overhead pose shows a visible bulge. That is linear blend skinning, which Unreal uses: a
+    vertex weighted half to a 140°-swung arm lands halfway along the chord, outside the body.
+  - Walk, run and jump stay below it. **If an overhead move is ever added**, the fix is corrective bones
+    driven by the arm (Unreal's Pose Driver) or corrective shape keys, not more weight painting.
+
+**The skeleton question, settled for him: the Unreal mannequin's.** Joe, 4 October: *"It should use
+the unreal skeleton."* That means `/Game/FreeAnimationLibrary/Demo/Characters/Mannequins/Meshes/SK_Mannequin`,
+the skeleton `ABP_Human` and every library clip are on (125), so the game's existing clips play on him
+unchanged.
+- **That needed a different rig.** The skeleton has five spine bones and two neck bones, and Auto-Rig
+  Pro will only match it with six spine bones (its root plus five) and two neck bones; this rig had four
+  and one.
+- The counts are set with `arp.show_limb_params` (`limb_type` `spine`, `spine_count` 6; `neck`,
+  `neck_count` 2). Its poll wants Edit Mode on the rig with a reference bone selected, which
+  `arp.edit_ref` gives.
+- Then it was re-matched (355 bones, 71 deforming) and re-skinned with pseudo-voxels, and both weight
+  corrections run again. The moved weight now goes to the nearest spine bone measured along each bone's
+  length, since `spine_03` is no longer the chest.
+- The checks came out as before: every vertex weighted, at most 8 influences, sums exactly 1, and the
+  same pose numbers (T-pose band 5.3 / 14.1 cm, overhead 12.6 / 29.1 cm, flank under 0.2 cm).
+
+**Exported 4 October**, to `client/RawContent/Characters/HumanoidMale/HumanoidMale.fbx`: mesh, skeleton and
+the jump start (176). 180's old export was moved out of that folder first. The Auto-Rig Pro settings that
+worked, as scene properties:
+
+| Setting | Value |
+|---|---|
+| `arp_engine_type`, `arp_export_rig_type` | `UNREAL`, `HUMANOID` |
+| `arp_ue4` (the UE4 legacy skeleton) | off |
+| `arp_rename_for_ue`, `arp_mannequin_axes` | on, on |
+| `arp_export_twist`, `arp_ge_export_metacarp` | on, on |
+| `arp_ue_root_motion`, `arp_ue_ik` | off, off |
+| `arp_bake_anim`, `arp_bake_only_active` | on, on |
+| `arp_units_x100`, `arp_global_scale` | on, 1.0 |
+| `arp_ge_force_rest_pose_export` | on |
+
+Exported with `arp.arp_export_fbx_panel` (`EXEC_DEFAULT`, a `filepath`). **Read back in a clean Blender:**
+- All 71 bones carry names `SK_Mannequin` has, and none it does not, so importing adds nothing to the
+  shared skeleton the way 125's face bones did.
+- What it lacks is the second twist bones and the IK and helper bones, which the mesh does not need.
+- The height is 1.8000 m, and every weight group is a bone.
+- The clip has 16 frames, and its root moves 0.0000 m.
+
+**His mesh went into Unreal on 4 October, and every character draws him (177).** His jump start went
+in first (176).
+
+## 176 — Walk, run and jump for every race, through the Blender MCP
+
+**In progress: the jump start is made, imported, playing in `ABP_Human`, and passed Joe's playtest on 4
+October (the last section below; *"Playtest looks great"*). The other clips are pending, and blocked on
+175 for the bodies other than the Humanoid man's.** Belongs to **M7**. Joe, 3 October: *"record tasks for using Blender MCP to
+generate walking, jumping, and running animations once I have the 3D models created."*
+
+**Why the human's clips are not simply reused.** They work on the human today and would not elsewhere:
+arm swing made for a mannequin's chest passes through an orc's, which is twice as deep, and a 2.15 m
+Martian striding at mannequin timing reads as a human on stilts. The Visual Bible's argument, that the
+archetypes are adaptation and not costume, holds for motion as much as for build. Retargeting the
+library clips with Unreal's IK Retargeter takes minutes: do it once, as the baseline the custom clips
+must beat. For the elves it may be enough.
+
+**What the game plays**, read from 125's animation blueprint and `SpaceMMOWalkModel.h`:
+
+| Clip | Plays | Planted foot must slide at |
+|---|---|---|
+| Idle | standing | — |
+| Walk, forward loop | 2 m/s, the blend space's walk sample (125's spec) | 2 m/s |
+| Run, forward loop | 6 m/s, `WalkSpeed` | 6 m/s |
+| Sprint, forward loop | holding Shift: `WalkSpeed` × `SprintMultiplier` | 10.8 m/s |
+| Jump start, once | leaving the ground moving up | — |
+| Falling, loop | in the air | — |
+| Land, once | touching down; the fourth state 125 left for later | — |
+
+- **Idle was not asked for and is needed.** The blend space's 0 m/s sample is idle; without one a
+  standing character holds its bind pose.
+- **Forward only.** The drawn body turns to face travel (125, decided with Joe 22 August), so there are
+  no strafes or backpedals.
+- **In place, no root motion.** The server owns where a character is. Every imported clip needs **Force
+  Root Lock** ticked and **Enable Root Motion** off; 125 lost four attempts to that pair.
+- **A jump is three clips, never one.** Height and airtime come from the walk model (`JumpSpeed`,
+  4.2 m/s up), not the clip. Every world has Earth's gravity today — the compiled-in planet config sets
+  981 and `origin.json` has no gravity field — but the bible gives Ares light gravity and Grimhold
+  heavy, and a falling loop survives that where a fixed-length jump would not.
+- **Sprint has no clip of its own today, for the human either.** The blend space tops out at the 6 m/s
+  run (125's spec, not measured in game), so a sprinting character plays the run at run cadence while
+  moving 1.8 times as fast, and its feet slide. 136 recorded that "the animation needs nothing", which
+  is true of what plays and not of how it looks. A sprint sample at 10.8 m/s fixes it for every race.
+
+**The check that matters is a number, not a preview.** In an in-place cycle the planted foot slides
+backward at exactly the speed the clip is played at. Read the foot bone's world-space velocity off the
+baked action in Blender over the frames it is planted, and compare with the table: within 5%. A cycle
+can look perfect in the viewport and slide in game, and this is the one check that catches it. Also:
+each loop's first and last frames equal within a tolerance, no foot below the ground at contact, and no
+translation on the root.
+
+**Gait, for Joe to judge rather than the numbers:** the human is the baseline; the Martian a long,
+light stride with little bob; the elf upright and light-footed; the orc heavy and wide, arms swinging
+round the body rather than past it.
+
+**Into Unreal:** clips named `anim_<Race><Sex>_<Clip>` under `/Game/Characters/<Race>/`. A clip made on a
+body plays scaled twice unless that body is its retarget source, which stretched the Humanoid man's hips
+in the jump (177): list each one in `ue_import_character.py`'s `AUTHORED_ON` and run that after the clip
+importer. The script fails on one that is not listed. One state
+machine for every race, `ABP_Human`'s, with a per-race variant that swaps only the clips. If each body
+has its own skeleton (175), a child of `ABP_Human` cannot do that, since it is bound to the library's
+`SK_Mannequin`; Unreal 5's skeleton-agnostic template animation blueprints look like the answer. Read
+the engine source to confirm before building on it, which is cheaper than learning it from a character
+standing in its bind pose.
+
+**Not this task:** a character wearing their race's body in game (177).
+
+### The jump start, made 4 October
+
+Joe, 4 October: *"Right now, when you press “jump” the animation kinda squats before jumping even though
+the character moves vertically instantly. I would like the animation to match that."*
+
+- **Why it squatted:** `ABP_Human`'s `JumpStart` played the library's `anim_InPlace_Jump_L`, which
+  crouches before it leaves the ground. The walk model sets the upward speed to `JumpSpeed`, 420 cm/s,
+  on the frame jump is pressed, so the capsule was rising while the body was still going down.
+- **What the clip has to cover:** from take-off to the apex, where `JumpStart` hands to `Falling`
+  (vertical speed reaching 0, 125's table). With 981 of gravity that is 0.43 s and 0.90 m up; landing
+  on flat ground comes at 0.86 s.
+
+**The clip**, `JumpStart` in `HumanoidMale.blend`, keyed on Auto-Rig Pro's controls at 30 fps, in place:
+
+| Frame | Time | Pose |
+|---|---|---|
+| 0 | 0 s | Take-off: legs pushing straight, heels up about the ball of the foot, arms swinging forward 50° |
+| 3 | 0.10 s | Full extension: toes pointed 45°, chest up, arms forward 85° |
+| 7 | 0.23 s | Knees tucking, feet 13-15 cm up, arms easing out |
+| 13 | 0.43 s | The apex: compact, feet 23-28 cm up, arms out for balance |
+| 15 | 0.50 s | Held, in case the hand-over comes a frame late |
+
+- **No crouch anywhere.** The first frame is already pushing off; the state machine blends into it in
+  0.05 s.
+- **The arms' forward swing stops at 85°.** The first version reached 105°, which is into the range
+  where the shoulders bulge (175's known limit).
+- **The arms are FK for this clip** (`ik_fk_switch` 1, keyed); the legs stay IK, so the feet tuck by
+  moving their IK controls. The root never moves.
+- **Previewed lifted along the game's own curve** (`HumanoidMale_renders/HumanoidMale_jumpstart_preview.mp4`
+  and `_keyposes.png`), using a temporary parent of `char_grp` that is removed afterwards, so nothing of
+  it reaches the clip. Joe saw it before it went into Unreal.
+
+**Into Unreal: `USpaceMMOImportClipsCommandlet`**, in SpaceMMOAuthoring, because the editor's MCP server
+still offers only the skills toolset (110):
+
+    UnrealEditor-Cmd.exe client\SpaceMMO.uproject "-run=SpaceMMOAuthoring.SpaceMMOImportClips"
+
+- **Quote the `-run` argument in PowerShell.** Unquoted, Windows PowerShell split it at the dot, the
+  engine got `-run=SpaceMMOAuthoring .SpaceMMOImportClips` (read off `LogInit: Command Line:`), and it
+  could not find `SpaceMMOAuthoringCommandlet`. The other commandlets' run lines have the same trap;
+  `USpaceMMOBuildMenusCommandlet`'s header now says so.
+- It imports each clip in its table onto `SK_Mannequin` through the legacy FBX importer (168), as
+  `/Game/Characters/Humanoid/anim_HumanoidMale_JumpStart`.
+- It sets Force Root Lock and turns root motion off (125).
+- It repoints every sequence player in `ABP_Human` that played `anim_InPlace_Jump_L` to the new clip,
+  compiles and saves.
+- It then measures: the key count and rate, that the root stays put, the pelvis's height against
+  Blender's 92 to 96 cm (the scale check), and that the blueprint plays the new clip and nothing still
+  plays the old one.
+- The library's clip is left where it was.
+
+**Run 4 October, with Joe's editor closed: OK, no problems.**
+- The clip has 16 keys at 30 a second, 0.500 s, 72 bone tracks.
+- The root moves 0.000 cm. The pelvis is 92.0 to 96.0 cm, exactly Blender's, so the scale and the
+  vertical axis came through.
+- `ABP_Human` played `anim_InPlace_Jump_L` in one place, the `JumpStart` state; that player now plays
+  `anim_HumanoidMale_JumpStart`, and nothing plays the old clip.
+- The log has 0 errors. Its two warnings are an existing Python name clash between `EBackendRace` and
+  `BackendRace`, unrelated.
+- Building the editor for it took 19 minutes. A stray `find` of mine, left running for two and a half
+  hours by a stopped background task, was eating the disk at the same time; it was stopped by its PID.
+
+**Playtested by Joe on 4 October: passed**, on 125's human, which the game still drew then. The checklist
+it was given:
+- **Jump standing:** no crouch. He leaves the ground on the press with his arms swinging forward and
+  his toes pointed, and tucks his knees on the way up.
+- **At the top:** the hand-over to the falling loop, a 0.15 s blend, should not pop.
+- **Jump while running:** the 0.05 s blend from the run into take-off.
+- **How it would fail:**
+  - **Arms or legs that stretch or shrink during the jump.** The clip carries the Humanoid man's bone
+    lengths and the game still draws 125's human; the fix is the skeleton's translation retargeting,
+    set to Skeleton below the pelvis.
+    **This was wrong both ways round.** The stretch came on the Humanoid man himself, once he was in the
+    game, and the fix was the clip's own retarget source; the skeleton's modes would have moved every
+    library clip. See 177, *Joe's first playtest of him*.
+  - **A twisted pose.** The bone axes did not match the mannequin's, despite Mannequin Axes.
+  - **The old crouch still playing.** The editor was not restarted, or the client is running stale
+    content.
+
+## 177 — A character wears their race's body
+
+**In progress: every character draws the Humanoid man as of 4 October. Joe's first playtest of him
+found the jump stretching his hips; that was fixed, and passed his second playtest the same evening (the
+last section below). How dark he reads at night is the light's, not his, and is 181. Choosing a body by
+race is pending, blocked on 175 and 176 for the other seven bodies.** Belongs to **M7**. Noticed while
+recording 174 to 176.
+
+Every character draws the same human: the pawn reads one `CharacterMesh`, one `CharacterAnimClass` and
+one `CharacterHeightCentimetres` from `DefaultGame.ini`, and nothing in it knows a race (verified in the
+config and in `SpaceMMOCharacterPawn`). Each becomes per race and sex, chosen from the character's race,
+which character select already receives.
+
+Three of those numbers are not cosmetic:
+- **Eye height.** The cameras sit at 160 and 165 cm, for a body 180 cm tall. A 2.15 m Martian seeing
+  from there is a person kneeling.
+- **The capsule** is 34 cm in radius and 180 cm tall, and the dedicated server sweeps it (144). A
+  2.35 m orc in it puts its head through ceilings, and Joe picked the 2.35 m orc (174). A wider capsule
+  stops at door frames a human walks through. Whether the capsule follows the body is a gameplay decision with server consequences, not a
+  config line.
+- **Clearance.** 144's 1.20 m rule is about width, the greybox gap check measures the band the human's
+  capsule occupies, and nothing sets a height rule. A 2.35 m race needs both re-run against its own
+  capsule.
+
+### The Humanoid man in game, 4 October
+
+Joe asked for it after the jump passed his playtest (176): *"please continue"*. At 1.80 m he needed none of
+the gameplay numbers above changed, so he replaced 125's human for every character, as a config line.
+
+**Imported by `tools/characters/ue_import_character.py`**, through the editor's own `pythonscript`
+commandlet, which needed no C++ build. It ran beside Joe's open editor the first time, when every asset
+it saved was new. A re-run needs the editor closed (the last section below):
+
+    UnrealEditor-Cmd.exe client\SpaceMMO.uproject "-run=pythonscript" "-script=D:/Programming/SpaceMMO/tools/characters/ue_import_character.py"
+
+- **Textures:** Tripo's four maps, exported from `HumanoidMale.blend` (the colour map with 180's eye
+  cleanup) to `client/RawContent/Characters/HumanoidMale/`, under `/Game/Characters/Humanoid/Textures/`.
+  - Colour is sRGB; the rest are linear.
+  - The normal map's green is flipped, OpenGL to DirectX. That convention barely matters here: the map
+    is nearly flat (red and green average 0.498), with the detail in the colour map.
+  - Roughness averages 0.70 and metallic 0.02, which is fabric.
+- **`/Game/Characters/Shared/M_Character_Textured`**, made once and shared by every Tripo body: four
+  texture parameters wired straight to colour, normal, roughness and metallic, flagged for skeletal
+  meshes. Then `MI_HumanoidMale`, his instance of it.
+- **`SK_HumanoidMale`**, from `HumanoidMale.fbx`, on the library's `SK_Mannequin`, with a physics asset
+  and four LODs Unreal generated: 61,601, 21,350, 12,286 and 6,799 vertices. LOD0 has more than Blender's
+  47,307 because Unreal splits vertices along UV seams.
+- **Read back after saving:** on `SK_Mannequin`, 180.0 cm tall by the bounds the pawn measures, wearing
+  `MI_HumanoidMale`, the four LODs each lighter than the last, and the physics asset present.
+- **Two mistakes in the first run, both fixed in the script:**
+  - Unreal's Python hands back copies of the material-slot structs, so the material was set on copies
+    and the mesh saved bare. The read-back caught it.
+  - Saving the whole folder re-saved the jump start beside it.
+- **The run's exit code is 1 whenever the editor is open**, because the commandlet's MCP server cannot
+  bind port 8000, which the open editor holds. The script's own `CHAR: ... Result:` line is the result.
+  Its other warnings were the FBX bind pose (recreated by the importer, as Blender exports often need)
+  and no smoothing groups (the FBX carries its normals instead).
+
+**Switched in `DefaultGame.ini`:** `CharacterMesh=/Game/Characters/Humanoid/SK_HumanoidMale.SK_HumanoidMale`,
+with 125's line kept beside it as a comment. Rotation (yaw -90), offset (0) and `ABP_Human` are unchanged.
+
+**Checked headless**, `-game -nullrhi -SpawnCharacter` with `-BackendUrl=http://localhost:9`, so nothing
+signed in:
+- The log reads: *"Character drawing as 'SK_HumanoidMale': authored 180.0 cm, scaled 1.000 to stand 180.0
+  cm; rotated R(Y=-90.00), offset V(0)."* 125's human needed 1.836.
+- No animation, skeleton, mesh or material warning about him.
+
+**Not verified: how he looks.** Nothing headless renders. Joe's playtest:
+- He faces where he walks, stands on the ground rather than in it, and wears his textures, with the
+  cleaned eyes.
+- Idle, walk, run, sprint, jump and fall all play on him without stretched limbs. The library's clips
+  carry the mannequin's bone lengths onto a body with its own.
+- **How it would fail:**
+  - **Grey or checkered:** the material did not load, or lost its textures.
+  - **Facing sideways:** the yaw.
+  - **Limbs stretched or shrunk in the library's clips:** the skeleton's translation retargeting.
+  - **The old human:** a PIE session in an editor started before the config changed, which still holds
+    the old value until restarted.
+
+### Joe's first playtest of him, 4 October
+
+*"Animations looks mostly good except when jumping, the hips stretch oddly. Also, why does the texture
+look so weird? Is this just a lighting issue?"* His screenshot was at the Capital at night. It showed:
+- the face dark and blotchy brown;
+- the whites of the eyes bright, with a light line under them;
+- the hands pale.
+
+**The hips: the jump start was scaled twice.**
+- `SK_Mannequin` retargets some bones' translations with AnimationScaled, `spine_01` and the thigh twist
+  bones among them. Such a translation is scaled by the playing body's proportions over those of the
+  clip's retarget source.
+- The source defaults to the skeleton's reference pose, which has the mannequin's proportions. That is
+  right for the library's clips, which were made on the mannequin.
+- The jump start was made on the Humanoid man, at his proportions, so it was scaled a second time:
+  - `spine_01` rode 23.1 cm above the pelvis instead of 9.2;
+  - the thigh twist bones sat 30.2 cm down the thigh instead of 20.9.
+
+  That is the waist and hips pulled long.
+- **Found by measuring, not from the screenshot.** The clip and the library's idle were evaluated on his
+  mesh through Unreal's AnimPose API, bone by bone, and compared.
+- **The fix is the clip's Retarget Source Asset, `SK_HumanoidMale`.**
+  - On his own body the scale is then 1.
+  - On any other body the clip scales from his proportions, which is right. 125's human, evaluated the
+    same way, keeps its own 6.5 cm twist offset in the jump.
+  - Changing the skeleton's retargeting modes instead would have moved every library clip.
+
+**The first fix never reached the disk.**
+- It was set from a commandlet beside Joe's open editor. The save failed on the editor's lock on the file
+  (`MoveFile ... Error Code 32`).
+- The read-back, of the commandlet's own memory, said the fix had worked.
+- It was caught by the file's timestamp, older than the save, before anyone playtested it.
+
+Three things in `ue_import_character.py` now:
+- **It sets the source on every clip in `AUTHORED_ON`**, on every run.
+- **`check_clips`**: every bone's offset from its parent, at every key, retargeted and not. A clip
+  authored on this body must not move when retargeted onto it. The first version checked only the thigh
+  twist and would have missed the waist.
+- **`save()`**: each file must have been written during the run, or the run fails and names the editor.
+
+Both checks were run against the failures they exist for, writing nothing, beside the open editor:
+- `check_clips` on the clip as it is on disk went red: `spine_01` at 23.1 cm against 9.2.
+- `check_clips` with the source set in memory went green: 72 bones moved 0.00 cm.
+- `save()` on a file the editor holds reported that it did not reach the disk. The file's time did not
+  move.
+
+**Re-imported the same evening, with Joe's editor closed:**
+- With `SPACEMMO_PROVE_CLIP_CHECK=1`, which clears the source: every save reached the disk, and the run
+  failed on exactly one problem, the stretch (`spine_01` at 23.1 cm against 9.2, over all 16 keys).
+- Then normally: `Result: OK`, 0 problems. 72 bones over 16 keys move 0.00 cm, and every file was written
+  in that run.
+- A fresh process read the clip back: retarget source `SK_HumanoidMale`, Force Root Lock on, root motion
+  off.
+- **Re-running the clip importer (176) keeps the source.** It re-imports onto the same object; the file was
+  rewritten, and the clip still plays as authored (0.00 cm). Re-running it changes nothing in `ABP_Human`,
+  whose player was already repointed.
+- **The next clip made on a body** (176's walk and run) has to be in `AUTHORED_ON` too. The script now
+  fails on any `anim_<body>_*` clip in the body's folder that the table does not list. That was run both
+  ways, as the file lists it (green) and with the table emptied (red), and the clip importer's table says
+  so where the next clip will be added.
+
+**For Joe's playtest:** restart the editor first, since it was closed for the import.
+- Jump standing and while running: the waist and hips keep their proportions all the way up and into the
+  falling loop.
+- **How it would fail:**
+  - **Still stretched:** the editor or client was started before the import; the clip was last written
+    at 7:54 PM.
+  - **Stretched on the old human instead,** if `DefaultGame.ini` is switched back: the clip now scales
+    from the Humanoid man's proportions to the old human's, which measured right (6.5 cm twist offset,
+    its own), but nobody has looked at it.
+
+**Playtested by Joe on 4 October: passed.** *"Jump looks fixed now."*
+
+**The texture: the light, as `ShowFlag.Lighting 0` showed (below), with two weaknesses of its own.**
+- Unreal's import was checked first. Colour is sRGB and the other maps are linear; the normal map's green
+  is flipped; the instance wears all four maps. Nothing in the material changes the colour.
+- **His textures in Cycles, by an overcast day and by a night set up to look like the screenshot**
+  (`HumanoidMale_renders/HumanoidMale_day_night.png`). The night was a dark blue sky, a warm lamp behind
+  and above him, and a bright floor; it was set up by eye, not measured from the Capital.
+  - By day he looks as the sheets drew him.
+  - By night the same textures give every feature of the screenshot: the face dark brown with its
+    mottling exaggerated, the whites bright against it, and the hands pale where the floor lights them
+    from below.
+- **The texture's own weaknesses:**
+  - Tripo bakes some shading and mottling into the skin colour.
+  - One 2048 map covers the whole body: about 1.2 texels a millimetre on the face, roughly 175 across it.
+    That is enough at the usual camera distance and soft in a close-up.
+  - The whites are paint on the face, not eyeballs the lids can shade, so in a dark face they read as lit
+    from inside. Darker whites were tried and dropped (180).
+- **The discriminating test is one console command in the game: `ShowFlag.Lighting 0`.** It draws the
+  colour map with no light at all.
+  - If his face then looks like the daytime render, the fault is the Capital's light.
+  - If it stays dark and blotchy, the fault is the texture.
+- **Joe ran it the same evening:** *"it looks fine with ShowFlag.Lighting 0, so it must be the light."*
+  The lighting is 181. The face needs nothing for this.
+
+**If a close-up ever needs a better face**, which nobody has asked for, the face needs texels of its own,
+not more paint on these. Two ways:
+- project the approved sheet's face onto the head, which is free and scriptable, with seams to blend at
+  the sides;
+- or a paid Tripo texture pass, priced before it is run.
+## 178 — Armour concepts in each world's design language, through Higgsfield
+
+**Pending, blocked on 174**, the bodies the armour is drawn on. Belongs to **M4**, whose line names
+"equippable tools, weapons and armour"; M6 gives armour a reason to exist. Joe, 3 October: *"record
+tasks to use Higgsfield to create armor using the same design principles that can later be created in
+the game and equipped to characters."*
+
+**The principles already written down, and what each means for armour:**
+- **Recognisable by colour and silhouette alone**, the Visual Bible's one rule. Each style must read at
+  thumbnail size, before a texture resolves.
+- **Each world's buildings are its armour's language** (Visual Bible, per world):
+  - **Terran**: horizontal, maintained, repaired. Painted steel worn to bare metal at the edges,
+    standard modular parts, mismatched repairs; the board says "standardized parts for easy repair".
+  - **Martian**: vertical, slender, sealed and dusted. Light ceramic and composite plates on a pressure
+    suit, gaskets and seal rings, ribbed inflatable padding, long narrow plates that stretch the line.
+  - **Verdant**: grown, not built. No right angles, no fasteners; hardened heartwood-amber resin,
+    bark-like layers, mother-of-pearl, light from within; amber first, cyan second. 174's second Elf B
+    came back as exactly this by accident (`candidates/rejected/elf-B-try2.png` in 174's folder, while
+    it exists).
+  - **Grimhold**: braced against its own weight. Cast and riveted, thicker than it needs to be, squat,
+    wide, worn by impact. The board adds spikes and clan glyphs; the Visual Bible says play the weight,
+    not the dirt. For Joe to weigh.
+- **Style follows the materials, not the wearer.** A finished item inherits its style from its
+  components (design bible §5), and a crafted good is one `item_def` with a style tag, made by four
+  per-race recipes (ADR-0008). So every piece comes in four styles and any race can wear any of them: a
+  Martian in Grimhold plate is a legitimate thing to own. **Every style has to fit all eight bodies**,
+  and that, not the drawing, is the hard part.
+- **Heraldry is the faction's, not the race's** (Visual Bible): one mark and one colour, worn by both
+  its races. The human and Martian boards carry a Humanity United mark; Tusk and Thorn has none, since
+  the elf board's stag and the orc board's skull both predate the name.
+- **Everything is player-made** (design bible §5). Every piece needs a recipe, and early tiers have to
+  be makeable from one world's materials (ADR-0008).
+
+**Proposed rounds**, reusing `generate.py`'s style and pose blocks so the armour matches the bodies:
+1. **One full tier-1 set per style on the baseline human**, front view: four images. Joe picks and
+   iterates.
+2. **Each chosen style on all eight bodies**, with 174's final front views as references: thirty-two
+   images, about 64 credits. This is the fit test, and the Martian and the orc are where it fails. Every
+   body wears the same plain skin-tight suit (174), so the armour is drawn over that.
+3. **Each piece alone**, front, side and back, on a plain background: what Tripo needs to make a
+   separate mesh, for 179 to fit to each body.
+
+**Open, for Joe before round 1:**
+- **The slots**: head, torso, arms, hands, legs, feet? Nothing defines them. Round 1 can draw full sets
+  and be cut into pieces once slots exist.
+- **The tiers**: how many, and their names.
+- **The style of a high-tier piece**, whose recipe needs all four worlds. ADR-0008 says per-race recipe
+  variants; the Capital's architecture, four traditions solving one building together, suggests a
+  fusion style. Neither is decided.
+- **Whether `condition` shows.** An item at 30% could look it.
+
+## 179 — Armour a character can craft and wear
+
+**Pending, blocked on 178, 177, and an equipment design that does not exist.** Belongs to **M4**.
+Recorded so 178 is drawn against what armour has to become, not as a plan.
+
+Known, from documents already written:
+- **The category exists and nothing else does.** `armor` is in the design bible's taxonomy (not
+  stackable, carries `condition`) and `armorcrafting` is a named skill, not seeded (101). There are no
+  armour items or recipes (verified: nothing under `data/`).
+- **Death drops it.** Unmarked items drop, armour included; at 0% condition an item is destroyed
+  instead (112).
+- **Thirty-two fits per piece**: four styles across eight bodies. Authoring each by hand is the honest
+  cost; refitting one mesh per style to each body in Blender through the MCP, scripted with surface
+  deform or shrinkwrap, is the version a solo project can afford. Either way the body must hide where
+  armour covers it, or it pokes through.
+- **Armour goes over the suit.** Since Joe's change on 3 October, every body wears the same plain
+  skin-tight suit (174). That is nearly the body's own surface, which is the easiest thing there is to
+  fit over.
+
+## 180 — The Humanoid man, modelled in Blender from the sheets
+
+**Set aside 4 October, at Joe's word, for a Tripo model of the same man; that model's route is the last
+section below.** Joe: *"What I was making in HumanoidMale.blend was something I wanted to scratch and
+start over with using the new skills you are running now - what exists in that blend is pretty awful. I
+would rather go with the new tripo results."* This mesh's files are retired under Joe's `_Old` names, and
+its generator now writes under them. The method and lessons below stay as the record of what was tried.
+Belongs to **M7**. Joe, 3
+October: *"Using Blender, can you create a 3D model of the human male character using the sheets you
+helped generate? It should represent the character as close to the images as possible, and be created
+in a way that fits the standard for video games, and make it ready to rig and animate in future
+tasks."* Higgsfield also offers Tripo and Meshy image-to-3D; neither was used, because the brief was
+Blender.
+
+**Regenerate it** (about 50 seconds):
+
+```
+blender --factory-startup --background --python-exit-code 1 --python tools/characters/humanoid_male.py -- [--stage cage|fit|texture|full] [--check-only]
+```
+
+Since 4 October it writes `HumanoidMale_Old` everywhere the list below says `HumanoidMale`, so it cannot
+overwrite the Tripo model. The list is where it wrote on 3 October:
+- `client/RawContent/Characters/HumanoidMale/`: `HumanoidMale.fbx`, `T_HumanoidMale_BaseColor.png`
+  (2048², sRGB) and `HumanoidMale_joints.json`. These are still there, read by nothing, until 175 exports
+  the Tripo model to the same folder.
+- `D:/Documents/SpaceMMOAssets/Blender/Characters/`: `HumanoidMale.blend` and `HumanoidMale_renders/`,
+  renamed `HumanoidMale_Old.blend`, `HumanoidMale_Old.blend1` and `HumanoidMale_Old_renders/` on 4
+  October. The `.blend1` is the build's own save. The `.blend` holds Joe's work in it from the morning of
+  the 4th, saved at 10:46, which he set aside with it.
+  - The renders show the model beside each sheet from that sheet's own camera
+    (`HumanoidMale_vs_sheets.png`), plus two three-quarter views, the head, and a silhouette diff per
+    sheet.
+- The four sheets in `CharacterImages/Humanoid-Male/` are the source. Every cross-section is measured
+  off them at build time; the script holds only the choices the images cannot make.
+
+**What it is:** one closed quad mesh of 5,532 faces (11,064 triangles in engine), exactly symmetric and
+1.793 m tall. Its soles are at z=0, it faces -Y, and it has one material (`MAT_HumanoidMale`) and one
+texture.
+
+**The method**, in `tools/characters/`: `sheet_measure.py`, `character_build.py`,
+`character_texture.py` and `character_finish.py`, with `humanoid_male.py` as this character's config.
+The other seven characters need only their own config.
+1. **Measure.**
+   - Each sheet is segmented: a pixel is figure if it is far from the background's colour, or clearly
+     warmer (skin is as bright as the grey, but warm).
+   - Each sheet is registered by its own figure: soles at 0, head at 1.80 m. The four agree within
+     0.3%.
+   - Landmarks come off the silhouettes: crotch 0.786, armpit 1.264, shoulder 1.418 and neck 1.560,
+     plus the arm axes, the leg centrelines, and the wrist where the skin starts.
+2. **A designed quad cage**, with rings either side of every joint:
+   - a 24-sided tube for torso, neck and head, closed by a 6×6 grid on the crown;
+   - a 12-sided tube per arm, let into a 2×4 hole in the torso's side;
+   - a palm with four 4-sided fingers off the knuckle ring, and a thumb out of mid-palm;
+   - a 14-sided tube per leg, split off the bottom ring at the crotch and closed by a 4×3 grid sole.
+3. **One level of Catmull-Clark subdivision, then every vertex fitted** onto its part's measured
+   cross-section (a superellipse per height). Parts blend at junctions by per-vertex weights, which the
+   subdivision interpolates.
+4. **A silhouette snap.**
+   - The model's outline is rendered from each sheet's camera.
+   - The vertices on the outline move by the measured error at their row.
+   - Three passes converge (17, then 11, then 6 mm), and the result is mirrored exactly.
+5. **Seams marked on the cage**, which survive the subdivision. Then an angle-based unwrap: 20
+   islands, with the head at 1.6 times the texel density and the hands at 1.3.
+6. **The texture projected from the four sheets.** Each texel is weighted by whether that sheet could
+   see it, baked as the direct light of one sun lamp per sheet direction.
+
+**Checks.** The build refuses to save on any failure (`character_finish.run_checks`):
+
+| Check | Built | Limit |
+|---|---|---|
+| one piece / closed / manifold / genus 0 | 1 / 0 / 0 / 2 | 1 / 0 / 0 / 2 |
+| triangles and n-gons | 0 | 0 |
+| triangles in engine | 11,064 | ≤ 16,000 |
+| height | 1.793 m | 1.788–1.802 |
+| worst mirror partner | 0.000 mm | ≤ 0.1 |
+| UV corners outside the square / coverage | 0 / 0.61 | 0 / ≥ 0.5 |
+| texels no sheet saw well | 17% | ≤ 25% |
+| silhouette IoU, front / back / left / right | 0.917 / 0.948 / 0.959 / 0.958 | 0.90 / 0.93 / 0.94 / 0.94 |
+
+The exported FBX was re-imported into a fresh Blender and gave back the same mesh: 5,534 vertices,
+5,532 faces, the UV map, the material, the texture by relative path, and the same bounds at scale 1.
+
+**Where it departs from the sheets, deliberately:**
+- **The feet point straight ahead.** The sheets splay them about 12°, which is most of the front
+  IoU's shortfall, and a rig wants them forward.
+- **The two side sheets disagree about the head.** The right sheet's head sits 2.3 cm further back over
+  the hips than the left's.
+  - The geometry takes the average, so each side view is about 1.1 cm off.
+  - Each sheet's projection is shifted by its own offset; otherwise the ears land 2.3 cm apart.
+- **The hands are designed, not traced**: a palm, four fingers and a thumb, sized off the measured
+  hand. Their outline in the front sheet matches within about a centimetre, and the palms face the
+  thighs, as the side sheets show.
+- **The hair is a smooth shell** that carries the sheets' tufts in its texture. The tallest tuft is
+  why the height is 1.793 and not 1.80.
+- **The arms are as drawn.** Shoulder to wrist is 0.44 m, short against anatomy, but the sheets are
+  the brief.
+
+**Learned, each at a cost:**
+- **Blender 5.2's POSITION bake sums its samples**, where every other bake averages them.
+  - At 4 samples every position came back four times too far out. Every texel then projected off the
+    sheets, and the texture silently fell back to flat colour (99% fallback).
+  - Measured on a unit cube at x=2: 1 sample gives x 1.5..2.5, 2 gives 3..5, 4 gives 6..10.
+  - It is baked at one sample now, and a guard refuses to continue if the baked positions do not fit
+    the mesh's bounds.
+- **`node is tex` is False for the same node.** Blender hands back a fresh Python wrapper each time
+  (objects happen to be cached, nodes are not), so "select only this node" deselected everything and
+  the bake found no target. Compare Blender structs with `==`.
+- **Snapping every vertex that faces a sheet onto that sheet's outline builds the visual hull**, which
+  is a box. The snap moves only the outline, by the measured error.
+- **One ellipse round both hips is wrong in the crotch's notch.** It threw inner-thigh vertices out to
+  the hip's outline. The torso lets go of the surface over the last 6 cm above the crotch.
+- **At the neck's height, the side views' front edge is the chin.** Modelling that edge as neck made a
+  slab; pushing it back too far cut the chin off and made the mouth read as a muzzle.
+
+**Not verified by anything automated:**
+- **Importing into Unreal.** The FBX needs Convert Scene Unit on import (the greybox skill's
+  `unreal.md`), or it arrives at a hundredth of its size.
+- **Deformation under a rig**, which waits on 175.
+- **The look under the game's lighting**, and the face at close range: it has about 160 by 200 texels.
+- **No LODs and no normal map.** All the detail is in the base colour.
+
+**How it would fail:**
+- **It arrives at 1/100th or 100 times its size**: Convert Scene Unit was off on import.
+- **It faces the wrong way in game**: the pawn's `CharacterMeshRotation`. A mesh facing -Y in Blender
+  wants yaw -90.
+- **It is untextured in Unreal**: the texture lost its relative path. It sits beside the FBX.
+- **A line round the collar or down the back of the head**: those are UV seams.
+- **A sheet's colour where it does not belong** (a hand's on the hip, a face on a cheek): one of the
+  texture's region rules is off.
+
+### The route from the four views, set 4 October
+
+Joe brought the four views to `/3d-production-routing` on 4 October. What they have to become is this
+man rigged, animated and worn in game (175, 176, 177); the open question was which mesh carries him
+there. Live that day: Blender 5.2.2 with the MCP connected and Auto-Rig Pro enabled; the Higgsfield CLI
+1.1.26, signed in on the starter plan with 121 credits; no fal key; the Unreal MCP refused to connect
+because the editor was not running.
+
+**Joe had already run Tripo through Higgsfield that morning, three times, and neither multiview run was
+the test 174 asks for.** Tripo reads its four slots as front, left, back, right:
+
+| Job, 4 October | Mode | What went in each slot | Credits |
+|---|---|---|---|
+| `3a812313` 10:48 | multiview | back, front, left, right: filename order, three slots wrong | 10.5 |
+| `66015934` 10:51 | multiview | front, left, **right**, **front**: no back, and the front twice | 10.5 |
+| `06f6a85f` 11:11 | single image | front | 10.5 |
+
+- Every input was identified by matching it against the four sheets. Each matches its own view about
+  ten times more closely than any other, and the 11:11 input is byte-identical to the 10:51 front.
+- The results are in `docs/wip/180-humanoid-male/tripo-2026-10-04/` (git-ignored), named as Higgsfield
+  serves them.
+- **They are FBX, not glTF.** Tripo returns FBX when asked for quads; Higgsfield still names the file
+  `.glb` and serves it as `model/gltf-binary`. Blender's glTF importer then fails with "Bad glTF: json
+  error: utf-8", which reads like a corrupt download and is not one.
+
+**Measured against the sheets** with `tools/characters/compare_to_sheets.py`. It calls the build's own
+silhouette function, and gives 180 exactly the IoU its checks recorded:
+
+| | IoU front / left / back / right | Triangles | Pieces | Non-manifold edges |
+|---|---|---|---|---|
+| 180 | 0.917 / 0.959 / 0.948 / 0.958 | 11,064 | 1 | 0 |
+| Tripo, single image | 0.883 / 0.822 / 0.901 / 0.812 | 93,940 | 9 | 115 |
+| Tripo, front twice | 0.909 / 0.319 / 0.891 / 0.309 | 93,051 | 7 | 49 |
+| Tripo, filename order | 0.531 / 0.247 / 0.547 / 0.243 | 93,330 | 6 | 16 |
+
+- The filename-order run is twisted at the waist, and the front-twice run has a forearm floating behind
+  its back. Both are what 174 predicted for views in the wrong slots.
+- **180 wins everything a rig needs**: one closed, symmetric piece within budget, built round its
+  joints. Each Tripo export is about 47,000 quads with no flow round any joint, nearly six times 180's
+  16,000-triangle limit. Of the two silhouette scores, 180's comes partly from being fitted to these
+  outlines.
+- **Tripo wins the head, and only the head.** In clay (`compare-2026-10-04/heads_grid.png`), 180's head
+  is a smooth blob: no nose, brow or ears, with every feature painted on. Tripo's heads have all three,
+  plus the collar and real volume in the hair.
+  - The single-image face is somebody younger and rounder.
+  - The front-twice run, which did see the front and the left, is the nearest of the three to the
+    sheet's man.
+- Also visible in 180's three-quarter renders: a dark smear down the right cheek and jaw, and a light
+  patch inside one boot. Those are the 17% of texels no sheet saw well.
+
+**The route as first set**, before Joe's choice below: keep 180's topology, and take only the head's
+shape and the sheets' missing detail from Tripo. Its step 1 was one multiview run with the slots in
+order, done when `compare_to_sheets.py` gave every view IoU 0.90 or more, the body was one piece with no
+loose limb, and Joe liked the face.
+
+- **The four uploads are still on the account**, so a re-run needs nothing uploaded, and
+  `higgsfield generate cost` prices it from these IDs:
+  - front `59327ae2-9226-4ad5-a0fc-e38175354653`, left `0fc180c0-9acc-446c-bbe7-cd51ef8492c8`;
+  - back `8ebdc709-0f51-47d4-8e05-33c6fe2ae244`, right `be8400b5-b8fd-4ed8-8b72-b1eb5a3e6865`.
+  - Quads at standard quality cost 10.5 credits, detailed geometry 16.5, and detailed geometry and
+    texture 19.5.
+- **If a run fails, the faulty view is what to redo (174)**, not the Tripo settings.
+
+**Step 1, made 4 October with detailed geometry at Joe's choice: job `0667a6a5`, 16.5 credits billed as
+estimated, 104.5 left.** The job's record shows its slots as front, left, back, right. The result is
+`tripo-2026-10-04/hf_20261004_172142_0667a6a5-7403-4702-9630-642379e92e51.glb`, an FBX again, and it is
+scored in `compare-2026-10-04-ordered/`:
+
+| | IoU front / left / back / right | Triangles | Pieces |
+|---|---|---|---|
+| 180 | 0.917 / 0.959 / 0.948 / 0.958 | 11,064 | 1 |
+| Tripo, slots in order, detailed | 0.918 / 0.888 / 0.938 / 0.882 | 94,628 | 1, and two specks |
+
+Against the bar set before it ran:
+- **Front and back pass; both sides miss 0.90, by one and two points.** The model sits evenly outside
+  the sheets' outline, with no lean and nothing missing.
+  - Measured as area outside, then area inside, per unit of the sheet's perimeter: front 5.9 / 1.4 mm,
+    left 7.9 / 2.5, back 4.5 / 0.9, right 7.6 / 3.6.
+  - 180, the same way: 3.0 / 4.1, 2.1 / 1.5, 1.2 / 3.2, 1.5 / 2.3.
+- **One body, plus two specks of 7 and 17 vertices** a few millimetres across, beside the right hand at
+  about 1 m. All 32 of its non-manifold edges are there, and nothing else is loose.
+- **The face is Joe's to judge**, in `compare-2026-10-04-ordered/heads_grid.png`, second row.
+  - In clay it has the nose, brow, lips and ears 180's head lacks.
+  - Its texture gives him blue eyes ringed in orange-red, far stronger than the sheet's, and hair darker
+    and smoother than the sheet's tufts. Both came with the model Joe chose next.
+
+### Joe's choice: the Tripo model, 4 October
+
+Joe, shown the run above, chose it over 180's mesh outright (his words are at the top of this task). The
+first route's head transplant and its bake onto 180's UVs went with that.
+
+**The new source file**, made by `tools/characters/tripo_to_blend.py`, which is 175's steps 1, 3 and 4:
+
+```
+blender --factory-startup --background --python-exit-code 1 --python tools/characters/tripo_to_blend.py -- --model D:/Documents/SpaceMMOAssets/FBX/Characters/HumanoidMale_Tripo.fbx --name HumanoidMale --height 1.80 --yaw -90 --sheets "D:/Documents/SpaceMMOAssets/CharacterImages/Humanoid-Male/humanoid-male-%s.png" [--force]
+```
+
+- `D:/Documents/SpaceMMOAssets/FBX/Characters/HumanoidMale_Tripo.fbx`: the run byte for byte, under its
+  real extension.
+- `D:/Documents/SpaceMMOAssets/Blender/Characters/HumanoidMale.blend` holds:
+  - `HumanoidMale`: one closed piece, 47,307 vertices and 94,610 triangles, 1.80 m tall with its soles
+    at z=0, facing -Y, origin under the pelvis, scale 1. Its IoU is the run's, above.
+  - `HumanoidMale_TripoSource`: the import as it came, in a `Source` collection the view layer excludes.
+  - `MAT_HumanoidMale`, with Tripo's four 2048² maps packed: `T_HumanoidMale_BaseColor` (sRGB), and
+    `_Metallic`, `_Roughness` and `_Normal` (Non-Color).
+- The script deleted the two specks and closed the three holes they left, of 3, 4 and 5 edges.
+  - It refuses to save over an existing file without `--force`; that was checked by running it without.
+  - It refuses to save at all if the mean IoU is under 0.8, which is what a wrong `--yaw` or a scrambled
+    run scores.
+- Reopened and checked: the collections, the packed textures, the transform, and renders in
+  `HumanoidMale_renders/` (a three-quarter view, and the right hand where the holes were).
+- **The fingers are separate along most of their length**, webbed near the knuckles, and the thumb is
+  free, so finger bones can work.
+
+**The route now:**
+
+| Step | Task | Skill | Done when |
+|---|---|---|---|
+| 1. Ordered multiview run | 180 | `higgsfield-workflow` | Done 4 October |
+| 2. Source .blend from the export | 175, steps 1, 3, 4 | — | Done 4 October |
+| 3. Game mesh budget | 175, step 2 | `materials-to-game` | Done 4 October: the whole mesh |
+| 4. Rig and skin, UE5 mannequin names | 175, step 5 | `blender-game-animation` | Rigged and skinned 4 October; export pending (175) |
+| 5. Clips | 176 | `blender-game-animation` | Jump start done and playtested 4 October; the rest pending |
+| 6. Into Unreal | 177 | `game-animation-integration` | Done 4 October: drawn at scale 1.000, on `ABP_Human` |
+| 7. In game | 177 | `gameplay-visual-review` | Joe's playtest of the body, pending |
+
+- **Step 3: Tripo's mesh whole is LOD0, and Unreal builds the LODs.** Joe chose it on 4 October. The
+  human the game draws today (`human` in `HumanCharacterRiggedARP_Old.blend`) is 49,826 triangles; this
+  one is 94,610, so LOD1 at half lands on today's budget.
+  - Tripo's even quads deform better than what a decimation leaves.
+  - Weights move to a lighter mesh later with a Data Transfer modifier, so the choice closes nothing off.
+- **The eyes were cleaned up on 4 October, at Joe's request**, by `tools/characters/clean_eyes.py`:
+  - **Tripo's texture had an orange-red ring round both eyes, and two different irises**: a dark grey
+    wedge sitting off-centre in his right eye, blue in his left, so he looked walleyed. The sheet's man
+    has matching grey irises and plain skin round them.
+  - The ring is pulled back to the skin just outside it, keeping a soft shadow. Both irises are
+    repainted the same grey (pupil, darker rim, one catchlight), centred in the almond-shaped openings
+    the texture had: 23.2 × 7.1 mm and 20.5 × 6.8 mm, an iris radius of 4.5 mm.
+  - 6,351 texels changed, 0.15% of the texture: 174 and 148 painted in the two eyes, 1,843 and 1,754 of
+    ring pulled back, 2,488 carried into the gutters. Tripo's original is kept as
+    `T_HumanoidMale_BaseColor_Tripo` on the hidden source object, and the script always starts from it.
+    Re-run on a copy of the .blend, it reproduces the shipped PNG to the texel.
+  - **The face has about one texel per square millimetre**, since Tripo spreads one 2048 texture over
+    the whole body. An eye is about 200 texels, and every painted edge is at least a texel wide, or it
+    comes out as saw-teeth.
+  - **Its first run painted from a black copy and saved it.** A new Blender image packs what it was
+    generated as unless told its pixels changed. The file was restored from a copy taken before the run.
+    The script now refuses to save if the copy differs from the source, if the texture reads as black, or
+    if an opening measures like no eye, and those refusals were checked against a blackened texture.
+  - Two thin light slivers remain where texture islands meet, at one inner corner and one upper lid,
+    about a millimetre each.
+  - **Tripo's white runs a little past the openings**, and shows as a light line under the eyes in a
+    close-up. In Joe's first playtest at the Capital's night the whites also read as lit from inside
+    (177); with the lighting off they look fine, so that part was the light (181). Four more versions
+    were tried that day, each compared up close against this one, and all four were dropped:
+    - stopping the paint short of the lower lid uncovered more of Tripo's white;
+    - recolouring the bright texels outside the opening left a dotted ring;
+    - fading into a lid tone past the edge drew a dark outline with the white inside it;
+    - darker whites, 0.76 against 0.86, with shadow from both lids, left Tripo's own white as a bright
+      rim round them (`HumanoidMale_eyes_kept_vs_darker.png`, kept above, darker below).
+
+    At a texel a millimetre, any edge painted near the opening shows. What would fix it is more texels on
+    the face, not more paint (177 lists the ways).
+- **Into Unreal, check the normal map's green channel** before trusting its shading. Unreal expects
+  DirectX's convention, green down; glTF tools write OpenGL's, green up. The texture's Flip Green Channel
+  setting converts one to the other.
+- **This man is the one body 177's gameplay questions do not block.** At 1.80 m, the human's capsule
+  and eye height already fit him. He can replace `HumanCharacterRigged`, which still runs at a scale of
+  1.836 (175), with a config change and no new capsule.
+
+**How the route would fail:**
+- **A multiview run that is twisted, mirrored or has a spare limb**: check the slot order before
+  anything else. All three faults came from the slot order on 4 October.
+- **A Tripo file that will not import**: it is FBX named `.glb`. `compare_to_sheets.py` reads the
+  bytes, not the name.
+- **A Tripo score far below the morning's**: check the front render in `views_grid.png` shows a face.
+  The harness assumes Tripo exports face +X (yaw -90), and that held for both runs that saw the front.
+- **Renders missing from the output folder while the scores look right**: an output path that was
+  relative. Blender writes a relative image path under the root of C:, not the working directory, and
+  reads it back from there. `compare_to_sheets.py`, `tripo_to_blend.py` and `humanoid_male.py` all make
+  their paths absolute; it cost the first comparison run all its images.
+- **Bumps that shade inside out in Unreal**: the normal map's green channel convention, above.
+
+## 181 — Characters read dark and brown at night
+
+**Pending: Joe's decision on the approach, after the experiment below.** Belongs to **M7**. Found in Joe's
+first playtest of the Humanoid man at the Capital at night, 4 October (177): his face dark and blotchy
+brown, the whites of his eyes bright against it, his hands pale.
+
+**It is the light, not the character.** What was ruled out, and how:
+- **The texture.** `ShowFlag.Lighting 0` draws the colour map with no light at all. Joe: *"it looks fine
+  with ShowFlag.Lighting 0, so it must be the light."*
+- **The import.** Colour is sRGB, the other maps linear, the normal map's green flipped, and the material
+  instance wears all four maps (177).
+- **The same textures reproduce the look under the wrong light.** A Cycles render with a dark sky, a warm
+  lamp behind and above him and a bright floor gives every feature of the screenshot
+  (`HumanoidMale_renders/HumanoidMale_day_night.png`, in the assets folder). That night was set up by
+  eye, not from the Capital's numbers.
+
+**What lights a character today**, all spawned by `USpaceMMOWorldSubsystem` and all live console
+variables, read from its source:
+
+| Light | Value | Console variable |
+|---|---|---|
+| Key, directional | 25 lux, with shadows | `SpaceMMO.KeyLight`, `SpaceMMO.KeyShadows` |
+| Fill, directional, lighting the side facing away from the key | 6 lux | `SpaceMMO.FillLight` |
+| Sky light, from everywhere | 2 lux | `SpaceMMO.Ambient` |
+| Exposure, manual (auto-exposure is off in `DefaultEngine.ini`) | 8 stops | `SpaceMMO.Exposure` |
+
+How much of each reaches a face at the Capital at night, and what Borlash's own lamps add, has not been
+measured.
+
+**First, an experiment that costs one playtest and no code.** At the Capital at night, beside the
+character, raise `SpaceMMO.Ambient` from 2 in steps (4, then 8), then `SpaceMMO.FillLight`, and watch the
+face, the ground and the buildings together. These lights are shared with the world, so the question is
+whether any value fixes the face before the night stops looking like night.
+
+**Then Joe chooses:**
+- **More of the world's light:** one number in the source, and the night gets brighter for everything.
+- **A light for characters only:** each character carries a dim fill on a lighting channel of its own,
+  as many third-person games do, so the world is unchanged. It changes how every character looks, so Joe
+  sees it before it is settled.
+

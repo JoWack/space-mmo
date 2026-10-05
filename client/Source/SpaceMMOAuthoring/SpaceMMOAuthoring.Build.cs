@@ -73,6 +73,11 @@ public class SpaceMMOAuthoring : ModuleRules
 			// are found by path, like the menus', so this still links nothing that talks to the backend.
 			"AssetTools",
 			"MaterialEditor",
+
+			// The clip importer (tasks 175-176, USpaceMMOImportClipsCommandlet): it repoints the
+			// animation blueprint's sequence players, which are editor graph nodes.
+			"AnimGraph",
+			"BlueprintGraph",
 		});
 	}
 }

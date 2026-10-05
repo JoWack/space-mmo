@@ -14,6 +14,10 @@
  * engine looks for commandlet classes, so a bare <c>-run=SpaceMMOBuildMenus</c> reports "could not
  * find the class"; <c>Module.Name</c> makes the engine load the module first. And run it from
  * PowerShell or cmd, not Git Bash: Bash rewrites a <c>/Script/...</c> argument into a file path.
+ * <strong>In PowerShell, quote the whole argument</strong>, <c>"-run=SpaceMMOAuthoring.SpaceMMOBuildMenus"</c>:
+ * Windows PowerShell splits an unquoted <c>-name=a.b</c> at the dot, the engine receives
+ * <c>-run=SpaceMMOAuthoring .SpaceMMOBuildMenus</c>, and it reports it could not find
+ * <c>SpaceMMOAuthoringCommandlet</c> (4 October, the clip importer's first run).
  * Close the editor first -- it saves the assets the editor would have open.
  *
  * <strong>Why code rather than the designer.</strong> Joe asked for the Blueprints to be made for him,

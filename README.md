@@ -203,8 +203,9 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   planet is not one patch on a smooth ball, caves
   ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md)), settlements, buildings you can walk
   into and objects you cannot walk through
-  ([ADR-0013](docs/adr/0013-terrain-is-a-function-everything-else-collides.md)), and authoring
-  world content graphically instead of by hand in JSON
+  ([ADR-0013](docs/adr/0013-terrain-is-a-function-everything-else-collides.md)), the four races
+  with bodies and gaits of their own, a man and a woman of each, where today everyone is one human,
+  and authoring world content graphically instead of by hand in JSON
 - **M8** — depth: careers, repeatable quest content, the repair loop
 
 Four corrections worth keeping, because each was wrong for a long time without anybody noticing.
