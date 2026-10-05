@@ -7569,6 +7569,8 @@ same light, a ragged light strip under the hair, and a hard line at each cuff.
     that run. A fresh process read it back the same.
   - Not changed: the Blender material still uses the map, so a render from `HumanoidMale.blend` shows
     what the game no longer does. Disconnect its Normal Map node before judging one.
+- **Playtested by Joe on 4 October, after the import, with the ambient at 6 (181): passed.** *"Looks
+  great now."*
 
 **If a close-up ever needs a better face**, which nobody has asked for, the face needs texels of its own,
 not more paint on these. Two ways:
@@ -8009,4 +8011,6 @@ That needed no code change, and so no server re-cook.
   unless it is a cheat variable, which this is not.
 - A commandlet read it back as 6.0.
 - The light for characters only was not needed.
+- Joe's playtest after the editor restarted, with the Humanoid man's flat normal (177): *"Looks great
+  now."*
 
