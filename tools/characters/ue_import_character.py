@@ -40,6 +40,13 @@ CHARACTERS = [
     ("HumanoidMale", "/Game/Characters/Humanoid", 180.0),
 ]
 
+# Bodies whose own normal map is not worn: their instance takes the engine's flat normal instead. The
+# Humanoid man's drew a ragged strip along his hairline, scratches under his cuffs and blotches across his
+# face in side light, and without it he is clean; Joe checked it in game with ShowFlag.MaterialNormal 0
+# (177). The map is still imported, so a body can go back to it by leaving this set.
+FLAT_NORMAL = "/Engine/EngineMaterials/FlatNormal"
+FLAT_NORMAL_FOR = {"HumanoidMale"}
+
 # Clips authored on a body rather than on the skeleton's reference pose. SK_Mannequin retargets some bones
 # with AnimationScaled, the pelvis, spine_01 and the thigh twists among them: a clip's translations are
 # scaled by the body playing it over the clip's retarget source, which defaults to the skeleton's
@@ -152,6 +159,11 @@ def material_instance(name, folder, master, textures):
         mi = tools.create_asset(asset, folder, unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
     mel.set_material_instance_parent(mi, master)
     for role, tex in textures.items():
+        if role == "Normal" and name in FLAT_NORMAL_FOR:
+            tex = unreal.load_asset(FLAT_NORMAL)
+            if tex is None:
+                fail("no %s for %s to wear" % (FLAT_NORMAL, asset))
+                continue
         mel.set_material_instance_texture_parameter_value(mi, role, tex)
     mel.update_material_instance(mi)
     save(mi)
@@ -224,6 +236,7 @@ def main():
             clip.set_editor_property("retarget_source_asset", source)
             save(clip)
         check(name, folder, height, skeleton, mi)
+        check_normal(name, mi)
         check_clips(name, mesh)
 
 
@@ -255,6 +268,16 @@ def check(name, folder, height, skeleton, mi):
         fail("%s does not wear MI_%s" % (path, name))
     if physics is None:
         fail("%s has no physics asset" % path)
+
+
+def check_normal(name, mi):
+    """The normal the instance wears: the engine's flat one for a body in FLAT_NORMAL_FOR, its own map otherwise."""
+    worn = mel.get_material_instance_texture_parameter_value(mi, "Normal")
+    want = FLAT_NORMAL if name in FLAT_NORMAL_FOR else "%s/Textures/T_%s_Normal" % (mi.get_path_name().rsplit("/", 1)[0], name)
+    worn_path = worn.get_path_name().split(".")[0] if worn else None
+    say("MI_%s wears normal %s (expected %s)" % (name, worn_path, want))
+    if worn_path != want:
+        fail("MI_%s wears normal %s, not %s" % (name, worn_path, want))
 
 
 def check_clips(name, mesh):

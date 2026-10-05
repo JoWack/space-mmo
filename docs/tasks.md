@@ -7359,11 +7359,11 @@ it was given:
 
 ## 177 — A character wears their race's body
 
-**In progress: every character draws the Humanoid man as of 4 October. Joe's first playtest of him
-found the jump stretching his hips; that was fixed, and passed his second playtest the same evening (the
-last section below). How dark he reads at night is the light's, not his, and is 181. Choosing a body by
-race is pending, blocked on 175 and 176 for the other seven bodies.** Belongs to **M7**. Noticed while
-recording 174 to 176.
+**In progress: every character draws the Humanoid man as of 4 October. Joe's playtests that evening
+found the jump stretching his hips, and a ragged hairline, scratched cuffs and a blotchy face, which were
+his normal map. Both are fixed and checked in game (the last two sections below). How dark he read at
+night was the light's (181). Choosing a body by race is pending, blocked on 175 and 176 for the other
+seven bodies.** Belongs to **M7**. Noticed while recording 174 to 176.
 
 Every character draws the same human: the pawn reads one `CharacterMesh`, one `CharacterAnimClass` and
 one `CharacterHeightCentimetres` from `DefaultGame.ini`, and nothing in it knows a race (verified in the
@@ -7531,6 +7531,44 @@ Both checks were run against the failures they exist for, writing nothing, besid
   - If it stays dark and blotchy, the fault is the texture.
 - **Joe ran it the same evening:** *"it looks fine with ShowFlag.Lighting 0, so it must be the light."*
   The lighting is 181. The face needs nothing for this.
+
+### The face, the hairline and the cuffs: his normal map, 4 October
+
+With the ambient raised to 8 (181), Joe: *"That looks much much better, but I'm still not happy with the
+texture on the face"*, then *"The hairline in particular is very weird, and also where the space suit
+meets the hands seems weird."* His screenshot showed the face greyer and darker than his hands in the
+same light, a ragged light strip under the hair, and a hard line at each cuff.
+
+- **Measured on the texels each region covers, regions by skin weights.**
+  - Face skin and hands have nearly the same colour, (0.75, 0.54, 0.46) and (0.78, 0.58, 0.51), the same
+    metallic (0.017, 0.016) and the same roughness (0.60, 0.60).
+  - The normal map is the difference: its mean deviation from flat is 0.077 on the face, 0.019 on the
+    hands and 0.005 on the suit.
+  - `ShowFlag.Lighting 0` draws the colour map alone, so it could not show this; that is why the face
+    read "fine" under it.
+- **Rendered three ways under one hard side light**
+  (`HumanoidMale_renders/HumanoidMale_normal_map_off_on_flipped.png`):
+  - Without the normal map, the face, the hairline and the cuffs are clean.
+  - As imported, the map draws a ragged light strip along the hairline, scratches under each cuff, harsh
+    dark creases round the eyes and lips, and a black mark at the collar.
+  - Flipped, it adds blocky steps at every texture seam. So the import's convention (OpenGL, flipped to
+    DirectX) was right; the map itself is the fault.
+- **The check in the game: `ShowFlag.MaterialNormal 0`.** It replaces every material's normal with a
+  flat one. Read in the engine first: `GameViewportClient.cpp` sets the view's normal override, and
+  `MaterialTemplate.ush` applies it in development shaders, so it works in PIE. Joe, the same evening:
+  *"Looks right with MaterialNormal 0."*
+- **The fix, made that evening:** his material instance wears the engine's
+  `/Engine/EngineMaterials/FlatNormal` instead of his map.
+  - It is set per body, by `FLAT_NORMAL_FOR` in `ue_import_character.py`, so a later body with a good map
+    keeps its own. His map is still imported, so he can go back to it by leaving that set.
+  - `FlatNormal` is a normal-map texture (`TC_NORMALMAP`, linear), which is what the material's normal
+    sampler needs.
+  - The script's new `check_normal` reads back which normal the instance wears. Run against the instance
+    before the fix, it went red on his own map.
+  - Then the import: `Result: OK`, 0 problems, the instance wearing `FlatNormal`, every file written in
+    that run. A fresh process read it back the same.
+  - Not changed: the Blender material still uses the map, so a render from `HumanoidMale.blend` shows
+    what the game no longer does. Disconnect its Normal Map node before judging one.
 
 **If a close-up ever needs a better face**, which nobody has asked for, the face needs texels of its own,
 not more paint on these. Two ways:
@@ -7922,13 +7960,14 @@ blender --factory-startup --background --python-exit-code 1 --python tools/chara
 
 ## 181 — Characters read dark and brown at night
 
-**Pending: Joe's decision on the approach, after the experiment below.** Belongs to **M7**. Found in Joe's
-first playtest of the Humanoid man at the Capital at night, 4 October (177): his face dark and blotchy
-brown, the whites of his eyes bright against it, his hands pale.
+**Done, 4 October: the ambient light is 6 lux, Joe's choice (the end of this task).** Belongs to **M7**.
+Found in Joe's first playtest of the Humanoid man at the Capital at night, 4 October (177): his face dark
+and blotchy brown, the whites of his eyes bright against it, his hands pale.
 
-**It is the light, not the character.** What was ruled out, and how:
-- **The texture.** `ShowFlag.Lighting 0` draws the colour map with no light at all. Joe: *"it looks fine
-  with ShowFlag.Lighting 0, so it must be the light."*
+**The darkness is the light.** What was ruled out, and how:
+- **The colour map.** `ShowFlag.Lighting 0` draws it with no light at all. Joe: *"it looks fine with
+  ShowFlag.Lighting 0, so it must be the light."* That flag shows the colour map alone, though: the ragged
+  hairline, the cuffs and the blotches in side light were his normal map, which it hides (177).
 - **The import.** Colour is sRGB, the other maps linear, the normal map's green flipped, and the material
   instance wears all four maps (177).
 - **The same textures reproduce the look under the wrong light.** A Cycles render with a dark sky, a warm
@@ -7943,7 +7982,7 @@ variables, read from its source:
 |---|---|---|
 | Key, directional | 25 lux, with shadows | `SpaceMMO.KeyLight`, `SpaceMMO.KeyShadows` |
 | Fill, directional, lighting the side facing away from the key | 6 lux | `SpaceMMO.FillLight` |
-| Sky light, from everywhere | 2 lux | `SpaceMMO.Ambient` |
+| Sky light, from everywhere | 2 lux in the source; 6 from `DefaultEngine.ini` since 4 October | `SpaceMMO.Ambient` |
 | Exposure, manual (auto-exposure is off in `DefaultEngine.ini`) | 8 stops | `SpaceMMO.Exposure` |
 
 How much of each reaches a face at the Capital at night, and what Borlash's own lamps add, has not been
@@ -7959,4 +7998,15 @@ whether any value fixes the face before the night stops looking like night.
 - **A light for characters only:** each character carries a dim fill on a lighting channel of its own,
   as many third-person games do, so the world is unchanged. It changes how every character looks, so Joe
   sees it before it is settled.
+
+**Joe ran it on 4 October.** The log has `SpaceMMO.Ambient 4`, then `8`; the fill stayed 6. *"That looks
+much much better"* at 8, and then *"I like the ambient light at 6 better than at 8."*
+
+**Done: the ambient is 6**, as `SpaceMMO.Ambient=6` under `[ConsoleVariables]` in `DefaultEngine.ini`.
+That needed no code change, and so no server re-cook.
+- The source still starts it at 2, and the ini wins. Read in the engine first: a variable a module
+  registers after the ini has set it takes the ini's value (`ConsoleManager.cpp`, `ECVF_CreatedFromIni`),
+  unless it is a cheat variable, which this is not.
+- A commandlet read it back as 6.0.
+- The light for characters only was not needed.
 
