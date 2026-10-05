@@ -7060,8 +7060,10 @@ to do it by hand at first. On 4 October the Humanoid man's runs went through Hig
 
 ## 175 — Rig the race models for Unreal, through the Blender MCP
 
-**Pending, blocked on 174 and on Joe's Tripo exports — except the Humanoid man, rigged on the Unreal
-mannequin's skeleton and exported on 4 October (the last section below).** Belongs to **M7**. Joe asked for walk, run and jump through the Blender MCP
+**In progress: the four men are rigged on the Unreal mannequin's skeleton and exported -- the Humanoid man
+on 4 October (the last section below), the Martian, elf and orc men on 4-5 October by
+`tools/characters/rig_character.py` (182). The four women are pending, blocked on their Tripo models.**
+Belongs to **M7**. Joe asked for walk, run and jump through the Blender MCP
 once the models exist (176); those are keyed on a rig, so the rig comes first.
 
 **The Humanoid man is the ordered Tripo run** (180, 4 October). Joe set 180's Blender-built mesh aside
@@ -7217,8 +7219,9 @@ in first (176).
 ## 176 — Walk, run and jump for every race, through the Blender MCP
 
 **In progress: the jump start is made, imported, playing in `ABP_Human`, and passed Joe's playtest on 4
-October (the last section below; *"Playtest looks great"*). The other clips are pending, and blocked on
-175 for the bodies other than the Humanoid man's.** Belongs to **M7**. Joe, 3 October: *"record tasks for using Blender MCP to
+October (the last section below; *"Playtest looks great"*). The Martian, elf and orc men have it too, rebuilt
+on their rigs (182), but nothing plays theirs yet. The other clips are pending, and the women's jump starts
+are blocked on 175.** Belongs to **M7**. Joe, 3 October: *"record tasks for using Blender MCP to
 generate walking, jumping, and running animations once I have the 3D models created."*
 
 **Why the human's clips are not simply reused.** They work on the human today and would not elsewhere:
@@ -8013,4 +8016,166 @@ That needed no code change, and so no server re-cook.
 - The light for characters only was not needed.
 - Joe's playtest after the editor restarted, with the Humanoid man's flat normal (177): *"Looks great
   now."*
+
+## 182 — The Martian, elf and orc men, the Humanoid man's way
+
+**In progress: the three Tripo runs are made (below).** Belongs to **M7**. Joe, 4 October: *"proceed to
+get characters for the other races modelled, animated, and imported into the game in the same fashion we
+just did for the human male (utilize the higgsfield connection and our skills). For now, let's just do the
+male for each race."* This is 175, 176 and 177 for three more bodies, by the route 180 recorded for the
+Humanoid man, so each step's details live there; this task holds what is particular to these three.
+
+**"The same fashion"** is taken to mean every body on `SK_Mannequin`, as Joe chose for the Humanoid man.
+That settles 175's open question, one skeleton per body or one for all, for these three.
+
+| Body | Race (`EBackendRace`) | Height (175) | Views |
+|---|---|---|---|
+| `MartianMale` | `Martian` | 2.15 m | `CharacterImages/Martian-Male/martian-male-*.png` |
+| `SpaceElfMale` | `SpaceElf` | 2.15 m | `CharacterImages/SpaceElf-Male/elf-male-*.png` |
+| `SpaceOrcMale` | `SpaceOrc` | 2.35 m | `CharacterImages/SpaceOrc-Male/orc-male-*.png` |
+
+### The Tripo runs, 4 October
+
+- **The views were checked first**, in a contact sheet in Tripo's slot order: every `left` view faces the
+  image's left edge (174), and each set agrees with itself. The orc's arms hang close to his torso, which
+  Tripo can fuse.
+- **Uploaded and run through Higgsfield**, `tripo_h3_1_multiview_to_3d` with `--quad true
+  --geometry_quality detailed`, the Humanoid man's settings, slots filled by name: front, left, back,
+  right. The upload IDs are in `D:/Documents/SpaceMMOAssets/Tripo/2026-10-04/uploads.tsv`.
+- 16.5 credits each, priced first and billed as priced: 104.5 before, 55 after.
+
+| Body | Job |
+|---|---|
+| `MartianMale` | `cc84205a-3ffd-4c9e-852c-e56c79da4185` |
+| `SpaceElfMale` | `abe555cb-c60e-4e6b-8700-f0a528a34268` |
+| `SpaceOrcMale` | `18d27265-045d-40c7-b263-82e0f736c915` |
+
+- **The CLI waits on its input if the input is left open.** The first submissions, from a background shell,
+  sat for six minutes with no job created and nothing billed, and were stopped. Run with `< /dev/null`,
+  each returned its job ID in two seconds.
+- Each result was FBX named `.glb`, as before, and is kept as `FBX/Characters/<body>_Tripo.fbx`.
+
+### Against the sheets, and into Blender
+
+Scored by `compare_to_sheets.py` into `Tripo/2026-10-04/compare-<body>/`:
+
+| Body | IoU front / left / back / right | Triangles |
+|---|---|---|
+| `SpaceElfMale` | 0.910 / 0.861 / 0.918 / 0.853 | 95,008 |
+| `SpaceOrcMale` | 0.942 / 0.918 / 0.933 / **0.731** | 93,580 |
+| `MartianMale` | **0.828 / 0.765 / 0.802 / 0.768** | 92,344 |
+
+- **The orc's right view is the sheet's fault, not the model's.** In his right sheet the figure is drawn
+  larger and lower than in the other three, about 90 px at the feet; the model fits all four the same.
+- **The Martian's numbers are the measurer's.** The sheets' figure mask finds the figure by colour against
+  a pale background, and his pale skin and white hair are lost from it (red in
+  `compare-MartianMale/MartianMale_Tripo_silhouette_front.png`), so his model is marked down for having a
+  head and hands. By eye every view matches.
+- **It also crashed on him first.** `sheet_measure` calls any warm colour skin, so his terracotta suit read
+  as skin from shoulder to fingertip and left nothing to fit an arm through. The arm fit now falls back to
+  the whole arm and says so (`wrist_from_skin`).
+- The faces, in each `heads_grid.png`, are Joe's to judge. The Martian's eyes are rimmed red, as the
+  Humanoid man's were before 180's cleanup; that may be the Visual Bible's pallor, and is left alone.
+
+**Into Blender with `tripo_to_blend.py`**, as `Blender/Characters/<body>.blend`, the elf and the orc through
+its IoU gate and the Martian without it, for the reason above.
+- Each is one piece: the elf's 13 were specks round his head, the orc's round his waist seam, the Martian's
+  at his boots.
+- **Closing the holes left two faults, both fixed in the script.**
+  - A closed hole's new faces had no UVs, so each sampled the texture's corner: an off-colour speck. Their
+    corners now take UVs from the faces round them, and no corner on any of the three is left at (0, 0).
+  - Openings wider than 16 edges were left open: behind the elf's ear, the orc's ear and his waist seam,
+    the Martian's boot. `--max-hole 48` closes them. Where specks had overlapped, a fill only closes part:
+    the orc's waist seam keeps two nicks a centimetre or so across, which read as part of the seam at 45 cm.
+
+### Rigged, skinned and given the jump start, 4-5 October
+
+In Joe's Blender through the MCP, by `tools/characters/rig_character.py`, which is 175's hand-run steps
+written down: Smart, six spine and two neck bones, match, pseudo-voxel bind, 175's two weight corrections,
+checks, pose tests, the jump start, export. His own session was saved aside first.
+
+**The markers are measured, by `tools/characters/measure_landmarks.py`**, from exact cross-sections of the
+mesh, not bands of vertices: Tripo's edges are 5-8 mm, so a thin band shows false gaps inside the torso at
+nearly every height. What is judgement in it was set on the Humanoid man, whose markers were placed by hand
+and proved by posing: measured the same way he comes back within 1.5 cm of every one of them.
+- **The wrist took three tries, and the record of why matters.**
+  - The slice's middle fell just outside the Martian's thin wrist in the front view, and detection stopped
+    with "marker out of mesh". The marker is now centred in the arm's section.
+  - Slices beside the elf's hips took in his thighs and put his wrist in his palm, and finger detection
+    failed. Only points near the arm's axis count now.
+  - The orc's forearm is wider than his elbow, so the arm's narrowest point was his elbow. **The wrist is
+    now found by colour**: the cuff's edge, where the sleeve's colour gives way to the hand's. On the
+    Humanoid man that is within 1.2 cm of his hand-placed wrist.
+- Every marker was drawn on its body and looked at before rigging (`Tripo/2026-10-04/markers/`).
+- **Auto-Rig Pro's detection reports FINISHED when it fails**, leaving a half-made rig; only its log says
+  `Error during detection? True`, and `smart()` now returns that as `failed`.
+- **The bone positions it leaves are in the rig's space.** It appends its 1.84 m rig and scales the object
+  to the body (1.1689 for the Martian); matching applies that scale, so the weight corrections, run after
+  it, read world positions. Checked: rig and body at identity.
+
+| Body | Bones (deforming) | Armpit, torso edge | Weights moved: flank / medial | Checks |
+|---|---|---|---|---|
+| `MartianMale` | 355 (71) | 1.588, 0.186 m | 221.6 / 86.2 | all weighted, ≤ 8, sums 1 |
+| `SpaceElfMale` | 355 (71) | 1.536, 0.203 m | 200.7 / 112.1 | all weighted, ≤ 8, sums 1 |
+| `SpaceOrcMale` | 355 (71) | 1.540, 0.369 m | 259.2 / 193.8 | all weighted, ≤ 8, sums 1 |
+
+- **Posed** (`Blender/Characters/<body>_renders/<body>_pose_tests.png`): T-pose, deep squat, stride and arms
+  overhead, front and three-quarter. All three deform cleanly but overhead, which bulges at the shoulder as
+  the Humanoid man's does (175's known limit). The flank below the armpit does not move with the arms in
+  any of them. The orc's arms, close to his torso in the views, came free of it with nothing fused.
+- **The jump start** is 176's, rebuilt on each rig: the same angles, with the hip and foot lifts scaled by
+  root height over the Humanoid man's 0.92 m (1.326 Martian, 1.252 elf, 1.178 orc). Key poses in
+  `<body>_jumpstart_keyposes.png`; the orc's arm swing clears his chest and belly.
+- **Exported** with 175's settings to `client/RawContent/Characters/<body>/`, with the four maps, and **read
+  back by `tools/characters/verify_export.py`**: 71 bones, all of them `SK_Mannequin`'s; the height exact;
+  16 keys at 30 a second; the root still. Pelvis ranges, for the clip importer: Martian 122.0-127.3 cm, elf
+  115.2-120.2, orc 108.4-113.1.
+  - **The Martian's first export was at 24 frames a second**, Blender's default in a new file, which plays
+    the jump a third slower; the Humanoid man's file had been set to 30 by hand. `jump_start()` sets 30 now
+    and `verify_export.py` fails anything else.
+  - **The Martian was rigged twice.** His first rig used the wrist the second try found, 3.8 cm from where
+    the cuff's colour puts it, so his file was made again from the Tripo export and rigged like the others.
+
+**Their normal maps are not worn either, by their own evidence, not by the Humanoid man's.** By number they
+are gentler on the face: mean deviation from flat 0.023-0.033 against his 0.077, measured on the texels each
+region covers. Rendered under one hard side light without the map, with it and with its green flipped
+(`<body>_renders/<body>_normal_map_off_on_flipped.png`), each draws his faults in a milder form all the
+same: a scratched line under each cuff, a mark at the collar on the Martian, a seam along the orc's mohawk,
+harsh creases at the eyes and lips. Without them all three are clean. So `ue_import_character.py` gives them
+the engine's `FlatNormal` too (`FLAT_NORMAL_FOR`).
+
+### Into Unreal, 5 October
+
+With Joe's editor closed:
+- **`SpaceMMOImportClips` takes rows that repoint nothing.** The three new jump starts are rows with no
+  blueprint: which blueprint plays a body is the open question below. Rebuilt with the source engine,
+  `Result: Succeeded`.
+- **It imported all four jump starts**, `Result: OK`: each 16 keys at 30 a second and 72 bone tracks, the
+  root still, the pelvis exactly as Blender read it. The Humanoid man's re-import came back byte for byte;
+  `ABP_Human`, recompiled and re-saved with nothing repointed, was restored from git rather than committed
+  as new bytes.
+- **`ue_import_character.py` brought in the three bodies**, `Result: OK`. `SPACEMMO_CHARACTERS` limits a
+  run to the bodies named, so the Humanoid man's assets were not re-saved.
+  - Each is on `SK_Mannequin`, at its height by the bounds the pawn measures: 215.0, 215.0 and 235.0 cm.
+  - Each has four LODs, from 59,690, 63,491 and 61,759 vertices down to 6,506, 6,943 and 6,835.
+  - Each wears its own `MI_<body>`, with the flat normal, and has a physics asset.
+  - Each jump start has its body as retarget source, and plays on it as authored: 72 bones over 16 keys
+    move 0.00 cm.
+  - Every save was checked on disk.
+
+**Not done: drawing them in the game.** The pawn draws one `CharacterMesh` for everyone, and nothing tells it
+a character's race. The client knows its own characters' races; the dedicated server knows each player's
+character ID but not the race. So a body per race needs a race on the pawn, replicated to every client, a
+body per race in config, and a server re-cook. It also needs Joe's decision on 177's questions. A 2.35 m orc
+in today's 1.80 m capsule puts his head through ceilings and draws him taller than he collides. Making the
+capsule and the camera follow the body changes the server's sweeps and 144's clearance rules.
+
+**Joe's decisions, 5 October:**
+- **Each race at its true height, with today's capsule and camera.** Collision, the server's sweeps and
+  doorway clearance stay as they are; the orc's head may pass through low ceilings. A capsule and camera per
+  race is left to 177.
+- **A woman draws as her race's man** until her own body exists, so every character shows their race. The
+  backend's character has no sex today (`FBackendCharacter` is an ID, a name and a race), so a body chosen
+  by race is all the game can do anyway; a body per race and sex needs that field first.
+- Commit and push this stage before the game's code.
 

@@ -36,16 +36,23 @@ SHARED = "/Game/Characters/Shared"
 MASTER = "M_Character_Textured"
 
 CHARACTERS = [
-    # name, content folder, expected height in cm (Blender's read-back of the FBX: 1.8000 m)
+    # name, content folder, expected height in cm (Blender's read-back of the FBX, verify_export.py)
     ("HumanoidMale", "/Game/Characters/Humanoid", 180.0),
+    # The Martian, elf and orc men (182), each in the folder named for its EBackendRace
+    ("MartianMale", "/Game/Characters/Martian", 215.0),
+    ("SpaceElfMale", "/Game/Characters/SpaceElf", 215.0),
+    ("SpaceOrcMale", "/Game/Characters/SpaceOrc", 235.0),
 ]
 
 # Bodies whose own normal map is not worn: their instance takes the engine's flat normal instead. The
 # Humanoid man's drew a ragged strip along his hairline, scratches under his cuffs and blotches across his
 # face in side light, and without it he is clean; Joe checked it in game with ShowFlag.MaterialNormal 0
 # (177). The map is still imported, so a body can go back to it by leaving this set.
+# The Martian, elf and orc men's maps are gentler on the face by number (mean deviation 0.023-0.033 against
+# his 0.077) and draw the same faults in a side light all the same: a scratched line under each cuff, a mark at
+# the collar, harsh creases at the eyes and lips (`<body>_normal_map_off_on_flipped.png`, 182).
 FLAT_NORMAL = "/Engine/EngineMaterials/FlatNormal"
-FLAT_NORMAL_FOR = {"HumanoidMale"}
+FLAT_NORMAL_FOR = {"HumanoidMale", "MartianMale", "SpaceElfMale", "SpaceOrcMale"}
 
 # Clips authored on a body rather than on the skeleton's reference pose. SK_Mannequin retargets some bones
 # with AnimationScaled, the pelvis, spine_01 and the thigh twists among them: a clip's translations are
@@ -56,6 +63,9 @@ FLAT_NORMAL_FOR = {"HumanoidMale"}
 # hips stretching in the jump (177).
 AUTHORED_ON = {
     "HumanoidMale": ["/Game/Characters/Humanoid/anim_HumanoidMale_JumpStart"],
+    "MartianMale": ["/Game/Characters/Martian/anim_MartianMale_JumpStart"],
+    "SpaceElfMale": ["/Game/Characters/SpaceElf/anim_SpaceElfMale_JumpStart"],
+    "SpaceOrcMale": ["/Game/Characters/SpaceOrc/anim_SpaceOrcMale_JumpStart"],
 }
 LOD_COUNT = 4
 
@@ -198,7 +208,16 @@ def main():
     if skeleton is None:
         fail("no skeleton at %s" % SKELETON)
         return
+    # SPACEMMO_CHARACTERS=A,B imports only those, so adding a body does not re-save the others' assets: a re-save
+    # of the same source is new bytes to git and a new copy in LFS, for nothing (177).
+    only = {n for n in os.environ.get("SPACEMMO_CHARACTERS", "").split(",") if n}
+    unknown = only - {c[0] for c in CHARACTERS}
+    if unknown:
+        fail("SPACEMMO_CHARACTERS names no character here: %s" % sorted(unknown))
+        return
     for name, folder, height in CHARACTERS:
+        if only and name not in only:
+            continue
         say("%s into %s" % (name, folder))
         textures = import_textures(name, folder)
         if len(textures) != 4:

@@ -4,7 +4,7 @@ Turn a Tripo export into a character's source .blend: steps 1 to 4 of task 175.
 
     blender --factory-startup --background --python-exit-code 1 \
         --python tools/characters/tripo_to_blend.py -- \
-        --model PATH --name NAME --height M [--yaw DEG] [--sheets PATTERN] [--out DIR] [--force]
+        --model PATH --name NAME --height M [--yaw DEG] [--sheets PATTERN] [--out DIR] [--max-hole N] [--force]
 
   * Imports by what the file is, not its extension: Tripo's quad output is FBX served as .glb (180).
   * Keeps the import as it came, in a collection "Source" excluded from the view layer, so the textured
@@ -14,8 +14,8 @@ Turn a Tripo export into a character's source .blend: steps 1 to 4 of task 175.
     origin under the pelvis (compare_to_sheets.place). That is how 180's mesh stood, so the pawn's
     CharacterMeshRotation of yaw -90 serves it.
   * Deletes loose pieces under 1% of the vertices, reporting each: Tripo leaves specks. Then closes the
-    small holes a speck leaves where it broke away (up to 16 edges each), and reports any wider opening
-    without touching it.
+    small holes a speck leaves where it broke away (up to 16 edges each, or --max-hole), and reports any
+    wider opening without touching it. A closed hole's corners take their UVs from the faces round it.
   * With --sheets, scores the result against the sheets (character_build.silhouette_report) and refuses
     to save if the mean IoU is under 0.8, which is what a wrong --yaw or a scrambled multiview run scores.
   * Names the material and textures after NAME, packs the textures, and saves OUT/NAME.blend. It will not
@@ -52,7 +52,8 @@ def parse_args():
 
     args = {"model": flag("--model"), "name": flag("--name"), "height": flag("--height"),
             "yaw": float(flag("--yaw", "-90")), "sheets": flag("--sheets"),
-            "out": os.path.abspath(flag("--out", DEFAULT_OUT)), "force": "--force" in argv}
+            "out": os.path.abspath(flag("--out", DEFAULT_OUT)), "force": "--force" in argv,
+            "max_hole": int(flag("--max-hole", MAX_HOLE_EDGES))}
     if not (args["model"] and args["name"] and args["height"]):
         sys.exit("tripo_to_blend: --model, --name and --height are required")
     args["model"] = os.path.abspath(args["model"])
@@ -130,7 +131,17 @@ def fill_small_holes(obj, max_edges=MAX_HOLE_EDGES):
             left.append(len(loop))
             continue
         faces = bmesh.ops.holes_fill(bm, edges=loop, sides=0)["faces"]
-        bmesh.ops.triangulate(bm, faces=faces)
+        faces = bmesh.ops.triangulate(bm, faces=faces)["faces"]
+        # A new face's corners come with no UVs, so it sampled the texture's corner: an off-colour speck
+        # wherever a hole was closed (182). Each corner takes its vertex's UV from a face that was there before.
+        uv = bm.loops.layers.uv.active
+        if uv is not None:
+            new = set(faces)
+            for f in faces:
+                for corner in f.loops:
+                    old = next((l for l in corner.vert.link_loops if l.face not in new), None)
+                    if old is not None:
+                        corner[uv].uv = old[uv].uv
         filled.append(len(loop))
     bm.to_mesh(obj.data)
     bm.free()
@@ -177,7 +188,7 @@ def main():
     obj.name = obj.data.name = name
     cts.place(obj, args["yaw"], H)
     removed = remove_specks(obj)
-    filled, left_open = fill_small_holes(obj)
+    filled, left_open = fill_small_holes(obj, args["max_hole"])
     textures = name_material(obj, name)
     bpy.context.view_layer.update()
     report = {"model": args["model"], "yaw": args["yaw"], "height": H, "specks_removed": removed,

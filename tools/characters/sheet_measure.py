@@ -275,11 +275,18 @@ def _arms(f, lm, H):
         wrist = max(skin_z) if skin_z else 0.55 * H
         tip = min(z for z, *_ in pts)
         arm = [(z, mid) for z, mid, *_ in pts if z > wrist + 0.01]
+        wrist_from_skin = bool(skin_z) and len(arm) >= 3
+        if not wrist_from_skin:
+            # "Skin" is any warm colour, and the Martian's terracotta suit is warm while his skin is pale: the
+            # whole arm read as hand and left nothing above the wrist to fit (182). Fit the whole arm instead,
+            # and leave the wrist unmeasured rather than crash.
+            wrist = 0.55 * H
+            arm = [(z, mid) for z, mid, *_ in pts]
         zz = np.array([p[0] for p in arm])
         xx = np.array([p[1] for p in arm])
         k, c = np.polyfit(zz, xx, 1)             # x = k z + c along the arm
         out["arm_" + side] = {"k": float(k), "c": float(c), "wrist_z": float(wrist),
-                              "tip_z": float(tip),
+                              "wrist_from_skin": wrist_from_skin, "tip_z": float(tip),
                               "samples": [(float(z), float(m), float(a), float(b))
                                           for z, m, a, b in pts]}
     return out

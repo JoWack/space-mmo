@@ -30,7 +30,7 @@ namespace SpaceMMOImportClips
 		const TCHAR* Folder;      // content folder for the sequence
 		const TCHAR* Name;        // the sequence's asset name
 		const TCHAR* Skeleton;    // object path of the skeleton it plays on
-		const TCHAR* Blueprint;   // animation blueprint to point at it
+		const TCHAR* Blueprint;   // animation blueprint to point at it, or nullptr to point nothing at it
 		const TCHAR* Replaces;    // object path of the sequence it takes over from there
 		int32 Frames;             // frames Blender exported, at 30 a second
 		double PelvisMinCm;       // the pelvis's height over the clip, read back from the FBX in Blender
@@ -55,6 +55,22 @@ namespace SpaceMMOImportClips
 			TEXT("/Game/Characters/Human/ABP_Human.ABP_Human"),
 			TEXT("/Game/FreeAnimationLibrary/Animations/Jump/anim_InPlace_Jump_L.anim_InPlace_Jump_L"),
 			16, 90.0, 98.0},
+
+		// The Martian, elf and orc men's jump starts (task 182): 176's clip rebuilt on each body, its lifts scaled
+		// by leg length. Nothing plays them yet -- which blueprint a body plays is 177's -- so none repoints
+		// ABP_Human, which keeps the Humanoid man's. Pelvis ranges are each export's, read back in Blender.
+		{TEXT("RawContent/Characters/MartianMale/MartianMale.fbx"), TEXT("/Game/Characters/Martian"),
+			TEXT("anim_MartianMale_JumpStart"),
+			TEXT("/Game/FreeAnimationLibrary/Demo/Characters/Mannequins/Meshes/SK_Mannequin.SK_Mannequin"),
+			nullptr, nullptr, 16, 120.0, 130.0},
+		{TEXT("RawContent/Characters/SpaceElfMale/SpaceElfMale.fbx"), TEXT("/Game/Characters/SpaceElf"),
+			TEXT("anim_SpaceElfMale_JumpStart"),
+			TEXT("/Game/FreeAnimationLibrary/Demo/Characters/Mannequins/Meshes/SK_Mannequin.SK_Mannequin"),
+			nullptr, nullptr, 16, 113.0, 123.0},
+		{TEXT("RawContent/Characters/SpaceOrcMale/SpaceOrcMale.fbx"), TEXT("/Game/Characters/SpaceOrc"),
+			TEXT("anim_SpaceOrcMale_JumpStart"),
+			TEXT("/Game/FreeAnimationLibrary/Demo/Characters/Mannequins/Meshes/SK_Mannequin.SK_Mannequin"),
+			nullptr, nullptr, 16, 106.0, 116.0},
 	};
 
 	constexpr double FramesPerSecond = 30.0;
@@ -384,7 +400,15 @@ int32 USpaceMMOImportClipsCommandlet::Main(const FString& Params)
 
 		Problems += Save(Sequence) ? 0 : 1;
 		Problems += Check(Clip, Sequence, Skeleton);
-		Problems += Repoint(Clip, Sequence);
+
+		if (Clip.Blueprint != nullptr)
+		{
+			Problems += Repoint(Clip, Sequence);
+		}
+		else
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %s is played by no blueprint yet."), Clip.Name);
+		}
 	}
 
 	UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %d problem(s). Result: %s"),
