@@ -704,7 +704,39 @@ void ASpaceMMOPlayerController::Tick(const float DeltaSeconds)
 	if (IsLocalController())
 	{
 		UpdateHudContext();
+		ReportBodyRace();
 	}
+}
+
+void ASpaceMMOPlayerController::ReportBodyRace()
+{
+	ASpaceMMOCharacterPawn* const OnFoot = Cast<ASpaceMMOCharacterPawn>(GetPawn());
+
+	if (OnFoot == nullptr)
+	{
+		return;
+	}
+
+	// None until this character is found in the backend's list, and none with no backend at all; the
+	// pawn then keeps CharacterMesh, unless SpaceMMO.ForceBodyRace plays it as a race, which works the
+	// same signed in or not -- so the switch can be checked on a server with nobody signed in.
+	int32 Race = INDEX_NONE;
+
+	if (const USpaceMMOBackendClient* const Client = Backend(); Client != nullptr && CharacterId != 0)
+	{
+		// Not named Character: AController already has a member by that name.
+		for (const FBackendCharacter& Owned : Client->GetCharacters())
+		{
+			if (Owned.Id == CharacterId)
+			{
+				Race = static_cast<int32>(Owned.Race);
+
+				break;
+			}
+		}
+	}
+
+	OnFoot->SetBodyRace(Race);
 }
 
 void ASpaceMMOPlayerController::UpdateHudContext()

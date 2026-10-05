@@ -47,6 +47,70 @@ struct FCharacterNetState
 };
 
 /**
+ * One race's body, as config names it (task 182).
+ *
+ * The race is EBackendRace's value as a number -- Humanoid 0, Martian 1, SpaceElf 2, SpaceOrc 3 --
+ * because the enum lives in SpaceMMOBackend, which depends on this module rather than the other way
+ * round. A test there checks every race the server sends has a body here.
+ */
+USTRUCT()
+struct FSpaceMMOCharacterBody
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Config)
+	int32 Race = 0;
+
+	UPROPERTY(EditAnywhere, Config)
+	FSoftObjectPath Mesh;
+
+	/**
+	 * How tall to draw it, in centimetres: its own height. Joe chose each race at its true height,
+	 * with the capsule and cameras every character shares (182), so this sizes the drawing only and
+	 * CharacterHeightCentimetres still sizes the collision.
+	 */
+	UPROPERTY(EditAnywhere, Config)
+	double HeightCentimetres = 180.0;
+};
+
+/**
+ * How a client draws another player from the states the server sends (task 182). Pure, for the tests.
+ *
+ * It draws the newest state carried forward along its velocity -- exactly there, so a player running a
+ * straight line is drawn where the server last knew them to be heading -- plus an offset that takes up
+ * the jump each new state makes against the last one's projection, eased out over a fraction of a second.
+ *
+ * The first way blended the drawing toward that projection at 5 a second, which trails a moving target
+ * by its speed over 5: 1.2 m behind a runner and 2.2 m behind a sprinter. Joe saw it with two clients
+ * as a player drawn somewhere they were not, and stuttering (5 October).
+ */
+struct SPACEMMOCORE_API FRemoteFollower
+{
+	/** The newest state's position, velocity and when this client received it. */
+	FSystemCoordinate Position;
+	FVector VelocityCentimetres = FVector::ZeroVector;
+	double ReceivedAt = 0.0;
+
+	/** What is left of the last update's jump, still being eased out. */
+	FVector OffsetKilometres = FVector::ZeroVector;
+
+	bool bHasState = false;
+
+	/** Where the newest state puts the player at Now. */
+	FSystemCoordinate Projected(double Now) const;
+
+	/**
+	 * A new state, received at Now. The drawing stays exactly where it was this instant, and the
+	 * difference starts to ease out; a jump past SnapKilometres -- a teleport, a respawn -- is taken at once.
+	 */
+	void Receive(const FSystemCoordinate& NewPosition, const FVector& NewVelocityCentimetres, double Now,
+		double SnapKilometres);
+
+	/** Where to draw at Now, DeltaSeconds after the previous frame. */
+	FSystemCoordinate Draw(double Now, double DeltaSeconds, double EasePerSecond);
+};
+
+/**
  * A person on foot, standing on a planet.
  *
  * Holds its position as an {@link FSystemCoordinate} exactly as a ship does, and derives its
@@ -139,12 +203,35 @@ public:
 	 * <strong>Everything animation needs is already published above</strong> — ground speed,
 	 * direction, vertical speed, whether the feet are down — and all four are readable on a remote
 	 * player's pawn as well, because FollowServerState fills the same walk state from what the
-	 * server replicated. So an animation blueprint drives everybody's character from one set of
-	 * values, and none of it feeds back: animation is drawn, never simulated. The server owns where
-	 * a person is, and a pose must never be able to argue with it.
+	 * server replicated, and works out the up three of them are measured against from where it draws
+	 * them. So an animation blueprint drives everybody's character from one set of values, and none
+	 * of it feeds back: animation is drawn, never simulated. The server owns where a person is, and a
+	 * pose must never be able to argue with it.
 	 */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
 	USkeletalMeshComponent* GetBodyMesh() const { return BodyMesh; }
+
+	/**
+	 * Which race's body to draw (task 182): EBackendRace's value.
+	 *
+	 * Called on the owning client, because only it knows: the character list, with each character's
+	 * race, comes from the backend to that client, and the dedicated server knows a connection's
+	 * character by ID alone. The server keeps the value and replicates it, so every client draws
+	 * everybody's race. It takes the client's word, which is fine while a race is only how a body
+	 * looks; anything a race decides in play must ask the backend instead.
+	 *
+	 * Repeating the same race does nothing, so a caller can say it every frame.
+	 */
+	void SetBodyRace(int32 Race);
+
+	/** The race being drawn, or INDEX_NONE before anyone has said, which draws CharacterMesh. */
+	int32 GetBodyRace() const { return BodyRace; }
+
+	/** The body config gives a race, or null, which draws CharacterMesh. Pure, for the tests. */
+	static const FSpaceMMOCharacterBody* FindBody(const TArray<FSpaceMMOCharacterBody>& Bodies, int32 Race);
+
+	/** The bodies config names, for the tests to measure. */
+	const TArray<FSpaceMMOCharacterBody>& GetRaceBodies() const { return RaceBodies; }
 
 	/**
 	 * Uniform scale that stands a model of a given height at a target height.
@@ -219,6 +306,13 @@ protected:
 	/** Reliable, unlike input: a dropped boarding request is not fixed by the next frame. */
 	UFUNCTION(Server, Reliable)
 	void ServerEmbark();
+
+	/** The owning client's word for its character's race; see SetBodyRace. */
+	UFUNCTION(Server, Reliable)
+	void ServerSetBodyRace(int32 Race);
+
+	UFUNCTION()
+	void OnRep_BodyRace();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Character")
 	FWalkConfig WalkConfig;
@@ -295,6 +389,12 @@ private:
 
 	/** Gravity from every planet, and the ground beneath, resolved together. */
 	void ResolveSurface();
+
+	/**
+	 * Which way is up at Where: the ground's normal on the body underfoot, by the call ResolveSurface
+	 * takes it from. For another player's copy, which draws and never resolves the ground (task 182).
+	 */
+	FVector GroundNormalAt(const FSystemCoordinate& Where) const;
 
 	/**
 	 * Puts the character on whichever is higher, the ground or a floor, and only then moves them.
@@ -557,6 +657,53 @@ protected:
 	/** The animation blueprint to run on it. Unset leaves the model in its bind pose. */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
 	FSoftClassPath CharacterAnimClass;
+
+	/**
+	 * A body per race (task 182), drawn in place of CharacterMesh once the character's race is known.
+	 * Every one is on SK_Mannequin, so CharacterAnimClass plays on all of them. A race with no body here
+	 * draws CharacterMesh, and says so.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	TArray<FSpaceMMOCharacterBody> RaceBodies;
+
+	/** The race being drawn; INDEX_NONE until the owning client says (SetBodyRace). */
+	UPROPERTY(ReplicatedUsing = OnRep_BodyRace)
+	int32 BodyRace = INDEX_NONE;
+
+	/** The last race this client asked the server for, so a caller every frame sends it once. */
+	int32 BodyRaceRequested = INDEX_NONE;
+
+	/** SpaceMMO.ForceBodyRace as last seen, so a character with no player takes a change the frame it happens. */
+	int32 AppliedForceBodyRace = INDEX_NONE;
+
+	/** How this client draws the pawn when it is another player's (SpaceMMO.RemoteSmoothing 1). */
+	FRemoteFollower RemoteFollower;
+
+	/**
+	 * What drawing another player looked like over the last second, for the REMOTE: log line: how often
+	 * states arrived, how far each moved the projection, how far the drawing was from it, how evenly it
+	 * moved against the speed the server sent, and the biggest turn in one frame.
+	 */
+	struct FRemoteDrawStats
+	{
+		int32 Frames = 0;
+		int32 Updates = 0;
+		double GapSum = 0.0;
+		double GapMax = 0.0;
+		double LastArrival = -1.0;
+		double JumpSum = 0.0;
+		double JumpMax = 0.0;
+		double BehindSum = 0.0;
+		double BehindMax = 0.0;
+		double SpeedErrorSum = 0.0;
+		double SpeedErrorMax = 0.0;
+		double FacingStepMax = 0.0;
+	};
+
+	FRemoteDrawStats RemoteStats;
+
+	/** Logs and clears RemoteStats. */
+	void ReportRemoteDrawing();
 
 	/**
 	 * How the model sits on the pawn, which no two exporters agree about.

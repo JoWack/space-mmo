@@ -7365,8 +7365,10 @@ it was given:
 **In progress: every character draws the Humanoid man as of 4 October. Joe's playtests that evening
 found the jump stretching his hips, and a ragged hairline, scratched cuffs and a blotchy face, which were
 his normal map. Both are fixed and checked in game (the last two sections below). How dark he read at
-night was the light's (181). Choosing a body by race is pending, blocked on 175 and 176 for the other
-seven bodies.** Belongs to **M7**. Noticed while recording 174 to 176.
+night was the light's (181). Since 5 October each character draws their race's man, at his true height
+(182), awaiting Joe's playtest. Still open here: the capsule, the eye height and clearance per race, the
+women's bodies, and a blueprint per race so each plays its own clips.** Belongs to **M7**. Noticed while
+recording 174 to 176.
 
 Every character draws the same human: the pawn reads one `CharacterMesh`, one `CharacterAnimClass` and
 one `CharacterHeightCentimetres` from `DefaultGame.ini`, and nothing in it knows a race (verified in the
@@ -8019,7 +8021,10 @@ That needed no code change, and so no server re-cook.
 
 ## 182 — The Martian, elf and orc men, the Humanoid man's way
 
-**In progress: the three Tripo runs are made (below).** Belongs to **M7**. Joe, 4 October: *"proceed to
+**In progress: all three bodies are modelled, rigged and drawn in game as their races, and other players
+run and face as they do: Joe's two-client retest, 5 October, "it's working perfect now". Left: a blueprint
+per race for each race's own jump (176), and 177's capsule and women's bodies.** Belongs to **M7**. Joe,
+4 October: *"proceed to
 get characters for the other races modelled, animated, and imported into the game in the same fashion we
 just did for the human male (utilize the higgsfield connection and our skills). For now, let's just do the
 male for each race."* This is 175, 176 and 177 for three more bodies, by the route 180 recorded for the
@@ -8178,4 +8183,242 @@ capsule and the camera follow the body changes the server's sweeps and 144's cle
   backend's character has no sex today (`FBackendCharacter` is an ID, a name and a race), so a body chosen
   by race is all the game can do anyway; a body per race and sex needs that field first.
 - Commit and push this stage before the game's code.
+
+### A body per race in the game, 5 October
+
+- **The pawn draws its race's body.** `RaceBodies` in `DefaultGame.ini` gives a mesh and a drawn height per
+  `EBackendRace` value. `BodyRace` is a replicated property on the pawn; until it is set, and for a race with
+  no line, the pawn draws `CharacterMesh` as before. The drawn height scales the mesh only, and
+  `CharacterHeightCentimetres` still sizes the capsule, so collision and the cameras are unchanged, as Joe
+  chose. The log line now ends "collides as 180.0 cm".
+- **The owning client says the race.** `ASpaceMMOPlayerController::ReportBodyRace`, every frame on the
+  local controller, finds this character in the backend's list and calls `SetBodyRace`. The pawn ignores a
+  race it already has or has already asked for; otherwise it sends `ServerSetBodyRace`, or sets it
+  directly when it is the server. Every frame, because the list, the pawn and possession arrive in any
+  order, and stepping out of a ship possesses a new pawn: the pattern that cost a playtest when input
+  bindings were tied to one possession (CLAUDE.md, "When a fix is a class of bug").
+- **The server takes the client's word.** A race is only how a body looks today. Anything a race decides in
+  play must ask the backend, which knows; this does not.
+- **Every race plays `ABP_Human`**, since every body is on `SK_Mannequin`. That includes the Humanoid man's
+  jump start, which scales to each body through its retarget source. Each race's own jump start is
+  imported but waits on a blueprint per race (176): a child of `ABP_Human` overriding the clip.
+- **`SpaceMMO.ForceBodyRace N` draws every character on this machine as race N's body**, and -1 gives the
+  real races back. It is the switch for seeing all four bodies without a character of each race. It
+  changes only the drawing on the machine that sets it, never what the server replicates.
+
+**Verified, 5 October:**
+- **Two tests, `SpaceMMO.Character.*`.**
+  - `EveryRaceTheServerSendsHasABody` takes the API's own `GET /world/races` capture, not a hand-written
+    list. For each race it finds the body, loads it, checks it is on `SK_Mannequin`, and checks its bounds
+    are the height config draws it at.
+  - `ARaceWithoutABodyDrawsTheDefault` covers no race yet, an unknown race, and lookup by race rather than
+    position.
+- **Seen red for the right reasons.** With the elf's line commented out and the orc drawn at 230: "Space
+  Elf has a body in DefaultGame.ini" and "Space Orc's body measures 235.0 cm and config draws it at 230.0"
+  both failed. Restored, both green.
+- **The full suite: 284 tests, 0 failures** (282 before, plus these two).
+- **Headless**, `-game -nullrhi -SpawnCharacter`, with the backend at a dead port so nothing signs in as
+  Joe, and `-ExecCmds="SpaceMMO.ForceBodyRace 3"`:
+  - "configured as `SK_HumanoidMale` (no race yet)" at spawn, drawn at 180 cm;
+  - then "configured as `SK_SpaceOrcMale` (race 3's body, forced by SpaceMMO.ForceBodyRace)" and "drawing
+    as 'SK_SpaceOrcMale': authored 235.0 cm, scaled 1.000 to stand 235.0 cm; ... collides as 180.0 cm";
+  - no animation, skeleton or mesh warning.
+- **The dedicated server is re-cooked**, as `BodyRace` and its RPC change what client and server send
+  each other. All four targets reported `Result: Succeeded` before the cook. The cook made 627 packages,
+  `ExitCode=0`. The bodies are in the server's IoStore container (`UnrealPak <utoc> -List`), and
+  `check-staged-server.ps1` passes. The server staged on 3 October predated even the Humanoid man; that
+  went unnoticed only because a body was cosmetic then.
+- **Not verified headless: replication.** A real race reaching the server and coming back to every client
+  needs a signed-in character and two clients, which is Joe's playtest below.
+
+**Joe's playtest** (restart the editor; for two players, the re-cooked dedicated server and `join.bat a`/`b`):
+- **His own character draws as its race's body** a moment after it appears; the log says "race N's body".
+- **`SpaceMMO.ForceBodyRace 1`, 2, 3 and 0** show the Martian, the elf, the orc and the Humanoid man in
+  turn; -1 gives the real race back. Each walks, runs, sprints and jumps on `ABP_Human` without stretching.
+- **Two players, different races:** each sees the other's race, not their own.
+- **How it would fail:**
+  - **Everyone still the Humanoid man:** the race never left the client. Look for "race N's body" in
+    the log, and for "no race yet" staying put.
+  - **The other player wrong, your own right:** the server never got it, or the staged server is the
+    old one (`check-staged-server.ps1`).
+  - **A body sunk into the ground or floating:** that body's origin is not at its feet. Each was exported
+    with soles at zero, so this would be new.
+  - **The orc's head through a doorway's top:** expected. Joe chose today's capsule for every race; 177
+    holds the capsule-per-race question.
+
+### Joe's two-client playtest, 5 October, and what it found
+
+*"Each race looks great on it's own and works as expected when running one client"*, then, with two
+clients on the dedicated server: *"Each client displays both characters as whatever race they have
+selected"*, and *"Movement of the other player ... has a bit of a stutter and doesn't reflect the
+character's position very accurately"*.
+
+**1. The races: replication worked; the switch did not mean what it was used for.**
+- **`ClientB.log` shows real races arriving.** B's own character drew as the Martian it is ("race 1's
+  body"); when A's character appeared, B drew it with A's real race, 0.
+- **Each client then set `SpaceMMO.ForceBodyRace`, which this task had built to redraw every character on
+  the machine.** So each showed both players as its own choice, which looks exactly like a race that
+  never replicated.
+- **Now the switch plays your own character as the race, and sends it the way the real race goes.** It is
+  read in `SetBodyRace` before anything is sent.
+- **It also works with nobody signed in**: the controller reports "no race yet" rather than nothing, and
+  the switch stands in for it.
+- **Verified with three headless clients** (`scripts/rig-remote-drawing.ps1`). A was set to the orc and B
+  to the Martian; C was left alone. A drew B as the Martian, B drew A as the orc, and C drew both as theirs.
+
+**2. Other players' movement: the drawing trailed them, and caught up in lurches.**
+- **How a client drew another player:** the newest state carried forward along its velocity, then
+  `ReconcilePosition` blending toward that at 5 a second. Those are the ship's rules, with a 1 km snap.
+  An exponential blend trails a moving target by its speed over the rate: 1.2 m behind a runner and 2.2 m
+  behind a sprinter, and it slides on after every stop to catch up.
+- **Measured, not argued.** Each client now logs a REMOTE: line a second for every other player: updates
+  and their gaps, how far each moved the projection, how far the drawing was from it, how evenly it moved
+  against the speed the server sent, and the biggest turn in a frame. `SpaceMMO.AutoWalk` walks a client's
+  character by itself, and the rig runs three headless clients on the staged server, on port 7788.
+- **What the server sends:** 21-25 states a second, not the 30 its tick suggests, 42-50 ms apart on average
+  and up to 75 ms. Each moves the projection 2-4 cm on average and up to 27 cm.
+- **The old blend, over 55 seconds of the walk:** the drawing was 244.9 cm from where the player was
+  heading on average: 119 cm while running and 215 cm while sprinting, exactly speed over 5. After every
+  stop its speed ran 1.5 m/s off the server's on average and 4.3 at worst. Its facing stepped with each
+  update.
+- **The fix, `FRemoteFollower`:** draw the newest state's projection exactly, and ease out only the jump each
+  update makes against the last one's, at 10 a second. Facing eases toward the server's at 15 a second.
+  `SpaceMMO.RemoteSmoothing 0` brings the old blend back for comparison.
+- **Measured the same way:** 4.3 cm from the projection on average, 7.5 cm in the worst second; speed 0.15 m/s
+  off the server's on average; facing at most 1.0 degree in a frame. Both ways show two single-frame spikes,
+  and both are real jumps on the server: the first state moving the pawn onto the planet, and the walker
+  landing.
+- **The test, `SpaceMMO.Walk.RemotePlayerIsDrawnWhereTheyAre`,** streams the measured arrival pattern (30 a
+  second, 40-75 ms late, a fixed seed) of a walker who stops a second in eight.
+  - The old blend must trail by most of a metre. That is the control, 104 cm.
+  - The follower must stay within 5 cm, 3.9, with no frame over 8 m/s off and 0.6 m/s on average, 1.70 and
+    0.40.
+  - **Its first version sent states perfectly evenly and passed with the follower's continuity removed.**
+    Even arrival makes 0.15 cm jumps, so there was nothing to hide. Uneven arrival is what makes the jumps.
+  - **Its second version failed the correct follower.** In the frame a stop arrives, the drawing rightly
+    moved at the old speed, and was measured against the new one. A frame is now measured against the
+    closer of the two speeds.
+  - With continuity removed it fails as it should: 24 m/s in the worst frame, 1.24 on average.
+- **Client suite: 285 tests, 0 failures.**
+
+**Re-cooked the same day** (627 packages; `check-staged-server.ps1` passes), and the rig re-run on it: A as the
+orc and B as the Martian each drew the other's race, and C drew both. The walker was drawn about 3 cm from the
+projection on average, 5.9 cm in the worst second.
+
+### Joe's second two-client playtest, 5 October: the glide and the facing
+
+*"Characters display properly now in terms of race in multiple clients, and the animations are a bit less
+laggy. They still seem to glide rather than show the full animations to the other player, and don't always
+face the correct direction for the other player."*
+
+**What the logs said.** Every client logs a DRAW: line a second for every character it draws, with the values
+the animation blueprint reads and the body's facing. Paired by the second, B's own lines against A's lines for
+B's copy (`ClientA.log`, `ClientB.log`):
+- **Running:** B's own client read 6.00 m/s across the ground and 0.09 vertical. A's copy of him, the same
+  seconds, read 0.92 across and ±5.93 vertical. The velocity was right, since 0.92² + 5.93² = 6.0², and it was
+  measured against the wrong up. A walk played under a 6 m/s slide is the glide.
+- **Standing:** B read 0.00 across and 0.08 vertical; A's copy read 0.08 across and 0.00 vertical. The same
+  swap at rest.
+- **Sideways:** B moved at -45 and -90 degrees from his facing; A's copy read 169 and 167. The body turns toward
+  that direction, and it was measured in the wrong plane. That is the facing.
+- **The up itself:** when B's character appeared, A logged "Character ready at (0.000, 0.000, 0.000) km, up
+  V(X=-1.00, Y=-0.01, Z=-0.00)". At Borlash the ground's up is about (0.02, 0, 1), 89 degrees away.
+
+**The cause.** Another player's copy draws and never simulates, and only simulating (`ResolveSurface`) works
+out the ground. So the copy kept the up `BeginPlay` found where it began play: the system origin, before any
+state had arrived. Ground speed, vertical speed and travel direction are all measured against that up, and so
+is the body's turn toward travel.
+
+**Ruled out:**
+- **The replicated state.** Velocity, facing and on-the-ground arrived right; only the arithmetic on them was
+  wrong.
+- **Anything else the animation reads.** `ABP_Human` calls four functions on the pawn, read out of the asset:
+  ground speed, move direction, vertical speed and `IsOnGround`. Three use the up; `IsOnGround` is the server's.
+- **Ships.** Another player's ship draws its replicated position, rotation and velocity and nothing derived, so
+  this fault has no sibling there. A different one does: 183.
+
+**The fix.** `FollowServerState` sets the up each frame from where it draws the player, through `GroundNormalAt`:
+`FPlanetTerrain::ResolveContact`'s normal on the nearest body, which is the call `ResolveSurface` takes it from.
+Nothing new crosses the wire. The header's claim that all four values were "readable on a remote player's pawn
+as well" was true of the velocity and not of the up it is read against; it now says how.
+
+**DRAW lines** now name another player's copy, as "<no view target: SpaceMMOCharacterPawn_1>", since with two on
+a client their lines could not be told apart. They also print the up, after GROUNDED or AIRBORNE.
+
+**The test, `SpaceMMO.Walk.RemotePlayerRunsAndFacesAsTheyDo`,** drives the pawn rather than a function, because
+inputs built by hand would have come with an up already in them:
+- **The arrangement:** a game world whose planet is the Capital. The walker is the server's copy, walked by
+  `ServerSendWalkInput` itself. The copy is a simulated proxy, begun at the origin as Joe's was, and is handed
+  the walker's `NetState` each frame through the property, as replication writes it.
+- **The legs:** at Borlash and a quarter of the way round, the walker runs forward, right and back, sprints,
+  jumps and stands.
+- **The assertions,** from half a second into each leg: the copy's ground and vertical speed are the walker's
+  within 0.05 m/s, and its body is drawn within 2 degrees of the walker's. The walker must really move and
+  really leave the ground, or every comparison is two people standing still agreeing.
+- **With the fix:** every leg agrees within 0.001 m/s and 0.2 degrees.
+- **With the one line removed, it fails 28 assertions, none of them the walker's.** At Borlash, running right,
+  the copy read 2.07 m/s across and -5.63 vertical, and its body was drawn 133.9 degrees from the walker's. A
+  quarter of the way round, sprinting read 4.74 across and 9.71 vertical.
+- **Its first run passed in a different arrangement from Joe's.** A world with no game mode begins play for no
+  actor, so neither pawn ran `BeginPlay`, and the copy kept the class default up, (0, 0, 1), rather than the
+  origin's. Wrong by 17 degrees at Borlash, so it would still have failed, but not as Joe's did. The test now
+  begins play for both by hand, and the copy logs Joe's line: "Character ready at (0.000, 0.000, 0.000) km, up
+  V(X=-1.00, ...)".
+
+**Verified:**
+- **Client suite:** 286 tests, 0 failures.
+- **Re-cooked:** all four targets `Result: Succeeded`, then 618 of 627 packages cooked, `ExitCode=0`.
+  `check-staged-server.ps1` passes.
+- **The rig on it** (`scripts/rig-remote-drawing.ps1 -Seconds 90`), with `scripts/compare-remote-draw.py` pairing
+  the walker's own DRAW lines against each copy's, 34 seconds:
+  - **The up:** B's copy was within 0.81 degrees of the walker's own, and C's within 0.57. Each client logs at
+    its own moment in the second, so the walker has moved between them.
+  - **Running:** both copies read 6.00-10.80 m/s across the ground and at most 0.48 and 0.50 vertical. The
+    walker's own read the same 6.00-10.80 and 0.49.
+  - **Falling onto the planet at the start:** the walker read 3.73 across and -48.37 vertical; the copies read
+    3.80 and 3.70 across, -48.25 and -48.26 vertical.
+  - **The same was true either way of smoothing:** B draws by the old blend and C by the follower, and the up
+    is worked out after both.
+- **The fault was in the rig's logs before Joe saw it.** In the run before the fix, while the characters fell
+  onto the planet, a client read another's 42 m/s fall as 41.7 m/s across the ground. Only the REMOTE: lines
+  had been read, and those measure where a player is drawn, not what their animation is handed. Pairing the
+  DRAW lines is now a script; the rig's header points at it.
+
+**Joe's retest** (restart the editor; the re-cooked dedicated server and `join.bat a`/`b`):
+- **The other player runs on their legs.** Walk, run and sprint play at the speed they move, with no slide.
+- **They face where they go,** sideways and backwards included.
+- **A jump rises and falls** rather than running in mid-air. A jump's speed was read as running too.
+- **How it would fail:**
+  - **Still gliding:** `python scripts/compare-remote-draw.py ClientB.log ClientA.log` pairs B's own DRAW lines
+    with A's lines for B's copy. The ups should agree within a degree and the running speeds should match. If
+    they do and the legs still slide, the fault is in the blend space, not its inputs.
+  - **The body turns a tenth of a second after the player does:** expected. That is the network's delay and
+    the facing's easing, not this fault.
+  - **The server will not start:** the guard has found code newer than the staged server, so the cook did
+    not finish.
+
+## 183 — Other players' ships trail them by a fifth of a second
+
+*Found 5 October while fixing the same shape for characters (182); not yet seen in play.*
+
+A client draws another player's ship the way it drew other characters until 182. It takes the newest state
+carried forward along its velocity, then has `ReconcilePosition` blend toward that at `FShipReconciliation`'s 5
+a second, with a 1 km snap. An exponential blend trails a moving target by its speed over the rate:
+- **2 m behind** a ship at 10 m/s, at a dock or a pad;
+- **148 m behind** one at 738 m/s, the speed the ground-contact code is sized for.
+
+Its rotation is taken whole from each state, 21-25 times a second, so a turning ship steps. A character's
+facing did the same until 182 eased it.
+
+**Why 182's `FRemoteFollower` does not drop straight in.** It draws the newest state's projection exactly, eases
+out only the jump each update makes, and snaps past 2 m. A jump is the speed times how unevenly states arrive,
+so it scales with speed. The rig measured a 6 m/s walker's jumps at 2-4 cm on average and 27 cm at worst (182).
+At 738 m/s the same arrivals make jumps of 2.5-5 m on average and 33 m at worst. The 2 m snap would fire on
+most updates, which is a teleport each time. The follower needs a snap that scales with speed, or the ship's
+1 km.
+
+**What it needs first:** a measurement with two clients flying. The rig cannot do that yet: `SpaceMMO.AutoWalk`
+only walks.
+
+**Blocked on:** nothing.
 

@@ -42,6 +42,83 @@ namespace
 		1,
 		TEXT("Log the character's actor, mesh and camera positions once a second."),
 		ECVF_Default);
+
+	/**
+	 * Plays your own character as one race (task 182); -1 gives it its real race back.
+	 *
+	 * For seeing every body without a character of each race. It goes the way the real race goes -- to
+	 * the server, and from there to every client -- so two clients set to two races each see the other's.
+	 * The first version redrew every character on the machine instead, and with two clients each showed
+	 * both players as its own choice, which reads exactly like a race that never replicated (Joe's
+	 * playtest, 5 October).
+	 */
+	static TAutoConsoleVariable<int32> CVarForceBodyRace(
+		TEXT("SpaceMMO.ForceBodyRace"),
+		-1,
+		TEXT("Play your own character as this race, as everyone sees it: 0 Humanoid, 1 Martian, ")
+		TEXT("2 SpaceElf, 3 SpaceOrc. -1 gives it its real race back."),
+		ECVF_Default);
+
+	/**
+	 * How other players are drawn (task 182): 1 draws the newest state's projection and eases out only
+	 * each update's jump (FRemoteFollower); 0 is the first way, a blend toward the projection at 5 a
+	 * second that trails a runner by 1.2 m. A switch so one session can compare them.
+	 */
+	static TAutoConsoleVariable<int32> CVarRemoteSmoothing(
+		TEXT("SpaceMMO.RemoteSmoothing"),
+		1,
+		TEXT("1: draw other players at their projected position, easing out each update's jump. ")
+		TEXT("0: the old blend toward it, which trails a moving player."),
+		ECVF_Default);
+
+	/**
+	 * Walks your own character by itself (task 182): a wide circle, sprinting every other lap, stopping
+	 * for a second in eight. Its input goes to the server like a player's, so a second client watching it
+	 * measures how other players are drawn without anyone at the keys. Development only.
+	 */
+	static TAutoConsoleVariable<int32> CVarAutoWalk(
+		TEXT("SpaceMMO.AutoWalk"),
+		0,
+		TEXT("1: walk this client's character in a circle by itself, for measuring how others see it."),
+		ECVF_Default);
+
+	/** How fast each update's jump eases out when drawing another player, and the jump taken at once. */
+	constexpr double RemoteEasePerSecond = 10.0;
+	constexpr double RemoteSnapKilometres = 0.002;
+}
+
+FSystemCoordinate FRemoteFollower::Projected(const double Now) const
+{
+	return FShipFlightModel::Extrapolate(Position, VelocityCentimetres, Now - ReceivedAt);
+}
+
+void FRemoteFollower::Receive(
+	const FSystemCoordinate& NewPosition, const FVector& NewVelocityCentimetres, const double Now,
+	const double SnapKilometres)
+{
+	// Where the drawing is this instant, by the old state, so the new one changes nothing on screen yet.
+	const FVector WasDrawing = bHasState
+		? Projected(Now).Kilometres + OffsetKilometres
+		: NewPosition.Kilometres;
+
+	Position = NewPosition;
+	VelocityCentimetres = NewVelocityCentimetres;
+	ReceivedAt = Now;
+	bHasState = true;
+
+	OffsetKilometres = WasDrawing - NewPosition.Kilometres;
+
+	if (OffsetKilometres.Size() > SnapKilometres)
+	{
+		OffsetKilometres = FVector::ZeroVector;
+	}
+}
+
+FSystemCoordinate FRemoteFollower::Draw(const double Now, const double DeltaSeconds, const double EasePerSecond)
+{
+	OffsetKilometres *= FMath::Exp(-EasePerSecond * FMath::Max(DeltaSeconds, 0.0));
+
+	return FSystemCoordinate(Projected(Now).Kilometres + OffsetKilometres);
 }
 
 ASpaceMMOCharacterPawn::ASpaceMMOCharacterPawn()
@@ -201,6 +278,64 @@ void ASpaceMMOCharacterPawn::GetLifetimeReplicatedProps(
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ASpaceMMOCharacterPawn, NetState);
+	DOREPLIFETIME(ASpaceMMOCharacterPawn, BodyRace);
+}
+
+void ASpaceMMOCharacterPawn::SetBodyRace(const int32 RealRace)
+{
+	// SpaceMMO.ForceBodyRace stands in for the real race here, before anything is sent, so the server
+	// and every other client see the same choice.
+	const int32 Forced = CVarForceBodyRace.GetValueOnGameThread();
+	const int32 Race = Forced >= 0 ? Forced : RealRace;
+
+	if (Race == BodyRace || Race == BodyRaceRequested)
+	{
+		return;
+	}
+
+	if (Forced >= 0)
+	{
+		UE_LOG(LogSpaceMMO, Log, TEXT("SpaceMMO.ForceBodyRace plays this character as race %d (its own is %d)."),
+			Race, RealRace);
+	}
+
+	BodyRaceRequested = Race;
+
+	// On a listen server or in a standalone game this client is the server, and the property is set
+	// here; a remote client asks, and draws the body when the value comes back.
+	if (HasAuthority())
+	{
+		ServerSetBodyRace_Implementation(Race);
+	}
+	else
+	{
+		ServerSetBodyRace(Race);
+	}
+}
+
+void ASpaceMMOCharacterPawn::ServerSetBodyRace_Implementation(const int32 Race)
+{
+	if (Race == BodyRace)
+	{
+		return;
+	}
+
+	BodyRace = Race;
+
+	// The server applies it too: a listen server draws, and a dedicated one says in its log which race
+	// each pawn is, which is the first thing to read when a body comes out wrong on someone's screen.
+	ApplyCharacterMesh();
+}
+
+void ASpaceMMOCharacterPawn::OnRep_BodyRace()
+{
+	ApplyCharacterMesh();
+}
+
+const FSpaceMMOCharacterBody* ASpaceMMOCharacterPawn::FindBody(
+	const TArray<FSpaceMMOCharacterBody>& Bodies, const int32 Race)
+{
+	return Bodies.FindByPredicate([Race](const FSpaceMMOCharacterBody& Body) { return Body.Race == Race; });
 }
 
 void ASpaceMMOCharacterPawn::ResolveSurface()
@@ -380,6 +515,26 @@ void ASpaceMMOCharacterPawn::ResolveSurface()
 
 	// Both answers are in. One of them is now applied.
 	ResolveFooting(bWasOnGround, Ground);
+}
+
+FVector ASpaceMMOCharacterPawn::GroundNormalAt(const FSystemCoordinate& Where) const
+{
+	const ASpaceMMOPlanetActor* const Underfoot = ASpaceMMOPlanetActor::NearestTo(GetWorld(), Where);
+
+	// As ResolveSurface leaves it with nothing to stand on.
+	if (Underfoot == nullptr)
+	{
+		return FVector::UpVector;
+	}
+
+	// ResolveContact's own normal rather than a second way of computing it, so the copy drawing somebody
+	// and the client walking them cannot come to disagree. It depends on where, not on how fast.
+	return FPlanetTerrain::ResolveContact(
+		Underfoot->GetPlanetConfig(),
+		Underfoot->GetTerrainConfig(),
+		Where,
+		FVector::ZeroVector,
+		StandingHeightKilometres).SurfaceNormal;
 }
 
 void ASpaceMMOCharacterPawn::ResolveFooting(
@@ -894,29 +1049,152 @@ void ASpaceMMOCharacterPawn::FollowServerState(const double DeltaSeconds)
 {
 	const UWorld* World = GetWorld();
 	const double Now = World != nullptr ? World->GetTimeSeconds() : 0.0;
+	const bool bSmooth = CVarRemoteSmoothing.GetValueOnGameThread() > 0;
+
+	const FSystemCoordinate DrawnBefore = Navigation.SystemPosition;
+	const FQuat FacingBefore = WalkState.Rotation;
 
 	if (NetState.ServerTimeSeconds > LastAppliedServerTime)
 	{
+		// How far this state moves the projection: the correction each update makes, either way of drawing.
+		if (RemoteFollower.bHasState)
+		{
+			const double JumpCentimetres = (RemoteFollower.Projected(Now).Kilometres - NetState.SystemPosition.Kilometres).Size()
+				* SpaceMMO::Coordinates::CentimetresPerKilometre;
+
+			RemoteStats.JumpSum += JumpCentimetres;
+			RemoteStats.JumpMax = FMath::Max(RemoteStats.JumpMax, JumpCentimetres);
+		}
+
+		if (RemoteStats.LastArrival >= 0.0)
+		{
+			const double Gap = Now - RemoteStats.LastArrival;
+
+			RemoteStats.GapSum += Gap;
+			RemoteStats.GapMax = FMath::Max(RemoteStats.GapMax, Gap);
+		}
+
+		RemoteStats.LastArrival = Now;
+		++RemoteStats.Updates;
+
 		LastAppliedServerTime = NetState.ServerTimeSeconds;
 		LastNetStateReceivedAt = Now;
+		RemoteFollower.Receive(NetState.SystemPosition, NetState.Velocity, Now, RemoteSnapKilometres);
 	}
 
-	const FSystemCoordinate Target = FShipFlightModel::Extrapolate(
-		NetState.SystemPosition, NetState.Velocity, Now - LastNetStateReceivedAt);
+	const FSystemCoordinate Target = RemoteFollower.bHasState
+		? RemoteFollower.Projected(Now)
+		: NetState.SystemPosition;
 
-	Navigation.SystemPosition = FShipFlightModel::ReconcilePosition(
-		Navigation.SystemPosition, Target, Reconciliation, DeltaSeconds);
+	if (bSmooth && !RemoteFollower.bHasState)
+	{
+		// Nothing from the server yet to project, and an empty follower would draw them at the origin.
+		Navigation.SystemPosition = NetState.SystemPosition;
+	}
+	else if (bSmooth)
+	{
+		Navigation.SystemPosition = RemoteFollower.Draw(Now, DeltaSeconds, RemoteEasePerSecond);
 
-	// Drawn, not simulated. Orientation comes from the server, which already aligned it to the
-	// ground the character is actually standing on.
-	WalkState.Rotation = NetState.Rotation;
+		// Eased toward the server's facing rather than taking each update's: thirty steps a second
+		// show on a turning body.
+		WalkState.Rotation = FQuat::Slerp(
+			WalkState.Rotation, NetState.Rotation, 1.0 - FMath::Exp(-15.0 * FMath::Max(DeltaSeconds, 0.0)));
+	}
+	else
+	{
+		Navigation.SystemPosition = FShipFlightModel::ReconcilePosition(
+			Navigation.SystemPosition, Target, Reconciliation, DeltaSeconds);
+
+		// Drawn, not simulated. Orientation comes from the server, which already aligned it to the
+		// ground the character is actually standing on.
+		WalkState.Rotation = NetState.Rotation;
+	}
+
 	WalkState.Velocity = NetState.Velocity;
 	bOnGround = NetState.bOnGround;
+
+	// Which way is up where they are drawn, by the call their own client and the server take it from (task
+	// 182). Nothing else told this copy: it kept the up BeginPlay found at the system origin, where it began
+	// play before any state had arrived -- 89 degrees from the ground at Borlash. So a 6 m/s run was read as
+	// 0.9 m/s across the ground and 5.9 m/s straight up, the legs walked while the body slid, and the body
+	// turned toward a direction measured in the wrong plane (Joe's two clients, 5 October).
+	SurfaceNormal = GroundNormalAt(Navigation.SystemPosition);
+
+	// The rest of this second's REMOTE: line.
+	if (DeltaSeconds > 0.0 && RemoteFollower.bHasState)
+	{
+		const double Behind = (Navigation.SystemPosition.Kilometres - Target.Kilometres).Size()
+			* SpaceMMO::Coordinates::CentimetresPerKilometre;
+		const double DrawnSpeed = (Navigation.SystemPosition.Kilometres - DrawnBefore.Kilometres).Size()
+			* SpaceMMO::Coordinates::CentimetresPerKilometre / DeltaSeconds / 100.0;
+		const double SpeedError = FMath::Abs(DrawnSpeed - NetState.Velocity.Size() / 100.0);
+
+		++RemoteStats.Frames;
+		RemoteStats.BehindSum += Behind;
+		RemoteStats.BehindMax = FMath::Max(RemoteStats.BehindMax, Behind);
+		RemoteStats.SpeedErrorSum += SpeedError;
+		RemoteStats.SpeedErrorMax = FMath::Max(RemoteStats.SpeedErrorMax, SpeedError);
+		RemoteStats.FacingStepMax = FMath::Max(
+			RemoteStats.FacingStepMax, FMath::RadiansToDegrees(FacingBefore.AngularDistance(WalkState.Rotation)));
+	}
+}
+
+void ASpaceMMOCharacterPawn::ReportRemoteDrawing()
+{
+	const FRemoteDrawStats& S = RemoteStats;
+
+	if (S.Frames > 0)
+	{
+		UE_LOG(LogSpaceMMO, Log,
+			TEXT("REMOTE: %s drawn %s: %d update(s), gap mean %.0f ms, max %.0f ms; each moved the projection "
+				"%.1f cm on average, %.1f at most; drawn %.1f cm from it on average, %.1f at most; drawn speed off "
+				"the server's by %.2f m/s on average, %.2f at most; facing turned %.1f deg in one frame at most."),
+			*GetName(),
+			CVarRemoteSmoothing.GetValueOnGameThread() > 0 ? TEXT("smoothed") : TEXT("by the old blend"),
+			S.Updates,
+			S.Updates > 1 ? 1000.0 * S.GapSum / (S.Updates - 1) : 0.0,
+			1000.0 * S.GapMax,
+			S.Updates > 0 ? S.JumpSum / S.Updates : 0.0,
+			S.JumpMax,
+			S.BehindSum / S.Frames,
+			S.BehindMax,
+			S.SpeedErrorSum / S.Frames,
+			S.SpeedErrorMax,
+			S.FacingStepMax);
+	}
+
+	const double LastArrival = RemoteStats.LastArrival;
+
+	RemoteStats = FRemoteDrawStats();
+	RemoteStats.LastArrival = LastArrival;
 }
 
 void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	// A character with a player gets the switch through SetBodyRace, which its controller calls every
+	// frame. One with none -- spawned by -SpawnCharacter in a standalone game -- has no controller to
+	// ask, so the switch reaches it here, which is what lets a body be checked headless.
+	if (CVarForceBodyRace.GetValueOnGameThread() != AppliedForceBodyRace)
+	{
+		AppliedForceBodyRace = CVarForceBodyRace.GetValueOnGameThread();
+
+		if (HasAuthority() && !IsPlayerControlled())
+		{
+			SetBodyRace(INDEX_NONE);
+		}
+	}
+
+	// Input as a player's would arrive, before the step that uses it, so the server sees nothing unusual.
+	if (IsLocallyControlled() && CVarAutoWalk.GetValueOnGameThread() > 0)
+	{
+		const double Clock = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
+
+		PendingInput.Move = FMath::Fmod(Clock, 8.0) < 7.0 ? FVector2D(1.0, 0.0) : FVector2D::ZeroVector;
+		PendingInput.Turn = 0.15;
+		PendingInput.bSprint = FMath::Fmod(Clock, 16.0) >= 8.0;
+	}
 
 	if (HasAuthority())
 	{
@@ -992,6 +1270,12 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 			ReportHowItIsDrawn();
 
 			ReportGroundUnderfoot();
+
+			// Only another player's pawn on this client follows the server's states.
+			if (!HasAuthority() && !IsLocallyControlled())
+			{
+				ReportRemoteDrawing();
+			}
 
 			WorstHorizontalDegrees = 0.0;
 			WorstVerticalDegrees = 0.0;
@@ -1322,7 +1606,10 @@ void ASpaceMMOCharacterPawn::ReportHowItIsDrawn() const
 
 	// What is looking at it, and from where. A view target that is not this pawn would put the
 	// character anywhere on screen at all, and nothing else here would look wrong.
-	FString ViewReport = TEXT("<no view target>");
+	//
+	// Named when nothing is: that is another player's copy, and with two of them on a client their
+	// lines could not be told apart.
+	FString ViewReport = FString::Printf(TEXT("<no view target: %s>"), *GetName());
 
 	if (const APlayerController* const Viewer = Cast<APlayerController>(GetController()))
 	{
@@ -1363,9 +1650,12 @@ void ASpaceMMOCharacterPawn::ReportHowItIsDrawn() const
 	// The four values the animation graph is actually handed, printed beside what it drew. Which
 	// sample plays is entirely a function of these, so a wrong pose is either a wrong number here
 	// or a wrong asset there -- and there is no way to tell which from a screenshot.
+	//
+	// With the up three of them are measured against. Another player's copy kept the wrong one for
+	// as long as it was drawn, and every number here was arithmetic on it (task 182).
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("DRAW: speed %.2f m/s, direction %.1f deg (body facing %.1f, residual %.1f), "
-			"vertical %.2f m/s, %s | "
+			"vertical %.2f m/s, %s, up %s | "
 			"actor %s | mesh relative %s | root bone (component) %s | pelvis %s | %s | %s"),
 		GetGroundSpeedMetresPerSecond(),
 		GetMoveDirectionDegrees(),
@@ -1373,6 +1663,7 @@ void ASpaceMMOCharacterPawn::ReportHowItIsDrawn() const
 		GetAnimationDirectionDegrees(),
 		GetVerticalSpeedMetresPerSecond(),
 		bOnGround ? TEXT("GROUNDED") : TEXT("AIRBORNE"),
+		*SurfaceNormal.ToCompactString(),
 		*Actor.ToCompactString(),
 		BodyMesh != nullptr ? *BodyMesh->GetRelativeLocation().ToCompactString() : TEXT("<none>"),
 		*RootBone.ToCompactString(),
@@ -1525,19 +1816,29 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 		return;
 	}
 
+	// The race's body once the race is known (task 182), drawn at its own height; CharacterMesh before
+	// that, or for a race config gives no body. The collision is CharacterHeightCentimetres' either way.
+	const FSpaceMMOCharacterBody* const RaceBody = FindBody(RaceBodies, BodyRace);
+	const FSoftObjectPath& MeshPath = RaceBody != nullptr ? RaceBody->Mesh : CharacterMesh;
+	const double DrawnHeight = RaceBody != nullptr ? RaceBody->HeightCentimetres : CharacterHeightCentimetres;
+
 	// Said on every path, including the one that does nothing. An unset model and code that never
 	// ran produce the same evidence -- a tube -- and only one of them is somebody's mistake.
 	UE_LOG(LogSpaceMMO, Log,
-		TEXT("Character model configured as '%s', animation as '%s'."),
-		CharacterMesh.IsNull() ? TEXT("<unset>") : *CharacterMesh.ToString(),
+		TEXT("Character model configured as '%s' (%s, %s), animation as '%s'."),
+		MeshPath.IsNull() ? TEXT("<unset>") : *MeshPath.ToString(),
+		RaceBody != nullptr ? *FString::Printf(TEXT("race %d's body"), BodyRace)
+			: BodyRace == INDEX_NONE ? TEXT("no race yet")
+			: *FString::Printf(TEXT("race %d has no body configured"), BodyRace),
+		IsLocallyControlled() ? TEXT("this player's") : HasAuthority() ? TEXT("the server's copy") : TEXT("another player's"),
 		CharacterAnimClass.IsNull() ? TEXT("<unset>") : *CharacterAnimClass.ToString());
 
-	if (CharacterMesh.IsNull())
+	if (MeshPath.IsNull())
 	{
 		return;
 	}
 
-	USkeletalMesh* const Mesh = Cast<USkeletalMesh>(CharacterMesh.TryLoad());
+	USkeletalMesh* const Mesh = Cast<USkeletalMesh>(MeshPath.TryLoad());
 
 	// Named-but-wrong is worth saying out loud: from the outside a typo and an unset path look
 	// identical, and one of them is a mistake somebody wants telling about.
@@ -1545,7 +1846,7 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 	{
 		UE_LOG(LogSpaceMMO, Warning,
 			TEXT("Character model '%s' did not load; the placeholder stays."),
-			*CharacterMesh.ToString());
+			*MeshPath.ToString());
 
 		return;
 	}
@@ -1553,7 +1854,7 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 	// Measured off the model, not assumed. The bounds are the reference pose's, which is the only
 	// thing that knows what scale somebody exported at.
 	const double AuthoredHeight = Mesh->GetBounds().BoxExtent.Z * 2.0;
-	const double Scale = UniformScaleForHeight(AuthoredHeight, CharacterHeightCentimetres);
+	const double Scale = UniformScaleForHeight(AuthoredHeight, DrawnHeight);
 
 	BodyMesh->SetSkeletalMeshAsset(Mesh);
 	BodyMesh->SetRelativeRotation(CharacterMeshRotation);
@@ -1592,13 +1893,14 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 	// silently corrected forever.
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("Character drawing as '%s': authored %.1f cm, scaled %.3f to stand %.1f cm; "
-			"rotated %s, offset %s."),
+			"rotated %s, offset %s; collides as %.1f cm."),
 		*Mesh->GetName(),
 		AuthoredHeight,
 		Scale,
 		AuthoredHeight * Scale,
 		*CharacterMeshRotation.ToCompactString(),
-		*CharacterMeshOffset.ToCompactString());
+		*CharacterMeshOffset.ToCompactString(),
+		CharacterHeightCentimetres);
 }
 
 void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

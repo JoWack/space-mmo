@@ -590,6 +590,14 @@ private:
 	/** The hull the backend has been told this character is in, or 0. Stops repeat requests. */
 	int64 ReportedAboardHullId = 0;
 
+	/**
+	 * Tells the pawn on foot which race to draw (task 182), from this character's entry in the list the
+	 * backend sent this client. Every frame on the owning client, because the list arrives when the
+	 * backend answers, the pawn whenever possession happens, and stepping out of a ship possesses a new
+	 * one; the pawn ignores a race it already has.
+	 */
+	void ReportBodyRace();
+
 	UFUNCTION(Server, Reliable)
 	void ServerShipSummoned();
 
