@@ -50,10 +50,11 @@
     },
     {
       "key": "ferrite_plate",
-      "name": "Ferrite Plate",
+      "name": "Structural Plate",
       "category": "Refined",
       "volumeM3": 0.2,
-      "$comment": "Denser than its inputs by design: refining should make hauling easier, not harder."
+      "$comment": "Denser than its inputs by design: refining should make hauling easier, not harder.",
+      "$nameComment": "Structural Plate since 9 October 2026 (Joe; task 185), because it is refined from every homeworld's ore and plate made from oxide salt is not ferrite. The key keeps the old name: renaming a content key orphans every stack, order and recipe that holds it, and the seeder never removes the old row (task 188)."
     },
     {
       "$lockedComment": "The four level-15 planet-locked raw materials (ADR-0008), which the cross-faction frame consumes. Each occurs on exactly one homeworld and nowhere else, which is what makes hauling a profession and gives the faction line something to be a line between. Until 9 October 2026 the starter chain above was deliberately unlocked, scrap and ferrite everywhere; since task 184 only scrap is common, and each world's starter ore is locked to it, beside the scrap a new player needs.",

@@ -70,7 +70,7 @@
       "steps": [
         {
           "ordinal": 1,
-          "description": "Refine your ore into 4 ferrite plates. Good work takes time.",
+          "description": "Refine your ore into 4 structural plates. Good work takes time.",
           "objective": "Refine",
           "target": "ferrite_plate",
           "quantity": 4

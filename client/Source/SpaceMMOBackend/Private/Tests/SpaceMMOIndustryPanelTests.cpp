@@ -323,6 +323,78 @@ bool FSpaceMMOIndustryParsesTheCatalogTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+/**
+ * Recipes that make the same thing say what each is made from (task 185).
+ *
+ * Four recipes make Structural Plate since 9 October 2026, one per homeworld's ore, and with only the
+ * output to go on they were four identical rows. Joe approved naming the inputs on exactly those rows
+ * and leaving every other row alone.
+ *
+ * The catalogue is the real one, captured verbatim from GET /industry/recipes on 9 October after
+ * seeding -- not built by hand, because a hand-built recipe leaves out outputItemKey, which is the field
+ * the rule counts by, and would pass against a rule that never fires.
+ */
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOIndustryRecipesSharingAnOutputNameTheirInputsTest,
+	"SpaceMMO.Industry.RecipesSharingAnOutputNameTheirInputs",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOIndustryRecipesSharingAnOutputNameTheirInputsTest::RunTest(const FString& Parameters)
+{
+	using namespace SpaceMMOIndustryPanelTests;
+
+	const FString Json = TEXT(R"([{"id":6,"key":"assemble_hull_freighter","outputItemDefId":13,"outputItemKey":"hull_freighter","outputName":"Freighter","outputQuantity":1,"skillKey":"shipcrafting","skillName":"Shipcrafting","requiredLevel":25,"jobSeconds":3600,"xpPerRun":9000,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":12,"itemKey":"alloy_frame","name":"Composite Frame","quantity":2},{"itemDefId":5,"itemKey":"crude_thruster","name":"Crude Thruster","quantity":2},{"itemDefId":6,"itemKey":"shuttle_hull_section","name":"Shuttle Hull Section","quantity":4}]},{"id":4,"key":"assemble_hull_shuttle","outputItemDefId":7,"outputItemKey":"hull_shuttle","outputName":"Shuttle","outputQuantity":1,"skillKey":"shipcrafting","skillName":"Shipcrafting","requiredLevel":10,"jobSeconds":900,"xpPerRun":1200,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":5,"itemKey":"crude_thruster","name":"Crude Thruster","quantity":1},{"itemDefId":6,"itemKey":"shuttle_hull_section","name":"Shuttle Hull Section","quantity":1}]},{"id":5,"key":"build_alloy_frame","outputItemDefId":12,"outputItemKey":"alloy_frame","outputName":"Composite Frame","outputQuantity":1,"skillKey":"shipcrafting","skillName":"Shipcrafting","requiredLevel":20,"jobSeconds":1800,"xpPerRun":4000,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":9,"itemKey":"ares_regolith","name":"Ferric Regolith","quantity":10},{"itemDefId":11,"itemKey":"grimhold_slag","name":"Grimhold Slag","quantity":10},{"itemDefId":8,"itemKey":"terran_ferrite","name":"Terran Ferrite","quantity":10},{"itemDefId":10,"itemKey":"verdant_amber","name":"Luminous Amber","quantity":10}]},{"id":3,"key":"build_shuttle_hull_section","outputItemDefId":6,"outputItemKey":"shuttle_hull_section","outputName":"Shuttle Hull Section","outputQuantity":1,"skillKey":"shipcrafting","skillName":"Shipcrafting","requiredLevel":1,"jobSeconds":300,"xpPerRun":900,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":3,"itemKey":"ferrite_plate","name":"Structural Plate","quantity":4},{"itemDefId":1,"itemKey":"scrap_alloy","name":"Scrap Alloy","quantity":2}]},{"id":1,"key":"craft_crude_mining_laser","outputItemDefId":4,"outputItemKey":"crude_mining_laser","outputName":"Crude Mining Laser","outputQuantity":1,"skillKey":"toolcrafting","skillName":"Toolcrafting","requiredLevel":1,"jobSeconds":30,"xpPerRun":300,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":1,"itemKey":"scrap_alloy","name":"Scrap Alloy","quantity":8}]},{"id":7,"key":"craft_crude_thruster","outputItemDefId":5,"outputItemKey":"crude_thruster","outputName":"Crude Thruster","outputQuantity":1,"skillKey":"electronics","skillName":"Electronics","requiredLevel":1,"jobSeconds":120,"xpPerRun":600,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":3,"itemKey":"ferrite_plate","name":"Structural Plate","quantity":2},{"itemDefId":1,"itemKey":"scrap_alloy","name":"Scrap Alloy","quantity":4}]},{"id":10,"key":"refine_blackiron_plate","outputItemDefId":3,"outputItemKey":"ferrite_plate","outputName":"Structural Plate","outputQuantity":4,"skillKey":"refining","skillName":"Refining","requiredLevel":1,"jobSeconds":60,"xpPerRun":600,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":16,"itemKey":"blackiron_ore","name":"Blackiron Ore","quantity":20}]},{"id":2,"key":"refine_ferrite_plate","outputItemDefId":3,"outputItemKey":"ferrite_plate","outputName":"Structural Plate","outputQuantity":4,"skillKey":"refining","skillName":"Refining","requiredLevel":1,"jobSeconds":60,"xpPerRun":600,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":2,"itemKey":"ferrite_ore","name":"Ferrite Ore","quantity":20}]},{"id":8,"key":"refine_oxide_salt_plate","outputItemDefId":3,"outputItemKey":"ferrite_plate","outputName":"Structural Plate","outputQuantity":4,"skillKey":"refining","skillName":"Refining","requiredLevel":1,"jobSeconds":60,"xpPerRun":600,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":14,"itemKey":"oxide_salt","name":"Oxide Salt","quantity":20}]},{"id":9,"key":"refine_rootstone_plate","outputItemDefId":3,"outputItemKey":"ferrite_plate","outputName":"Structural Plate","outputQuantity":4,"skillKey":"refining","skillName":"Refining","requiredLevel":1,"jobSeconds":60,"xpPerRun":600,"requiredToolItemDefId":null,"requiredToolKey":null,"requiredToolName":null,"inputs":[{"itemDefId":15,"itemKey":"rootstone","name":"Rootstone","quantity":20}]}])");
+
+	TArray<FBackendRecipe> Recipes;
+
+	TestTrue(TEXT("Parsed"), FSpaceMMOBackendProtocol::ParseRecipes(Json, Recipes));
+
+	const TArray<FSpaceMMORecipeRowText> Rows =
+		FSpaceMMOStationWork::BuildRecipeRows(Recipes, TArray<FBackendInventoryItem>(), Here, 0, 1);
+
+	TestEqual(TEXT("A row per recipe"), Rows.Num(), Recipes.Num());
+
+	TSet<FString> PlateTitles;
+	int32 PlateRows = 0;
+
+	for (int32 Index = 0; Index < Recipes.Num() && Index < Rows.Num(); ++Index)
+	{
+		const FBackendRecipe& Recipe = Recipes[Index];
+		const FString& Title = Rows[Index].Title;
+
+		if (Recipe.OutputItemKey == TEXT("ferrite_plate"))
+		{
+			++PlateRows;
+			PlateTitles.Add(Title);
+
+			// Its own ore, by the name the server sent, not merely some suffix.
+			TestTrue(
+				FString::Printf(TEXT("%s names %s"), *Recipe.Key, *Recipe.Inputs[0].Name),
+				Title.EndsWith(FString::Printf(TEXT(" · %s"), *Recipe.Inputs[0].Name)));
+		}
+		else
+		{
+			// Every other row is exactly what it was.
+			TestEqual(
+				FString::Printf(TEXT("%s is unchanged"), *Recipe.Key),
+				Title,
+				FString::Printf(TEXT("%s ×%d"), *Recipe.OutputName, Recipe.OutputQuantity));
+		}
+	}
+
+	// Not vacuous: the payload does hold several plate recipes.
+	TestTrue(TEXT("Several recipes make plate"), PlateRows > 1);
+
+	// Which is the point: no two of them read alike.
+	TestEqual(TEXT("Every plate row reads differently"), PlateTitles.Num(), PlateRows);
+
+	TestTrue(
+		TEXT("As approved"),
+		PlateTitles.Contains(FString(TEXT("Structural Plate ×4 · Oxide Salt"))));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOIndustryParsesJobsTest,
 	"SpaceMMO.Industry.ParsesJobs",

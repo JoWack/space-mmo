@@ -189,7 +189,7 @@ The complete item set for the onboarding chain. This is `data/items/` and
 |---|---|---|---|---|
 | `scrap_alloy` | Scrap Alloy | `raw` | 0.1 | Hand-gatherable; the bootstrap material |
 | `ferrite_ore` | Ferrite Ore | `raw` | 0.4 | Requires a mining tool |
-| `ferrite_plate` | Ferrite Plate | `refined` | 0.2 | Refined; denser than its inputs by design |
+| `ferrite_plate` | Structural Plate | `refined` | 0.2 | Refined from any homeworld's ore; denser than its inputs by design. "Ferrite Plate" until 9 October 2026; the key keeps the old name (task 185) |
 | `crude_mining_laser` | Crude Mining Laser | `tool` | 2.0 | Gates `mining` |
 | `crude_thruster` | Crude Thruster | `component` | 5.0 | `electronics` 1 |
 | `shuttle_hull_section` | Shuttle Hull Section | `component` | 20.0 | First real manufactured good |
@@ -212,7 +212,7 @@ and meant to stay so.
 | Output | Qty | Skill | Level | Job time | Inputs |
 |---|---|---|---|---|---|
 | `crude_mining_laser` | 1 | `toolcrafting` | 1 | 30 s | 8 × `scrap_alloy` |
-| `ferrite_plate` | 4 | `refining` | 1 | 60 s | 20 × `ferrite_ore` — or 20 of any homeworld's ore, one recipe each (task 185) |
+| `ferrite_plate` | 4 | `refining` | 1 | 60 s | 20 of one homeworld's ore: `ferrite_ore`, `oxide_salt`, `rootstone` or `blackiron_ore`, one recipe each (task 185) |
 | `crude_thruster` | 1 | `electronics` | 1 | 120 s | 2 × `ferrite_plate`, 4 × `scrap_alloy` |
 | `shuttle_hull_section` | 1 | `shipcrafting` | 1 | 300 s | 4 × `ferrite_plate`, 2 × `scrap_alloy` |
 | `hull_shuttle` | 1 | `shipcrafting` | 10 | 900 s | 1 × `shuttle_hull_section`, 1 × `crude_thruster` |

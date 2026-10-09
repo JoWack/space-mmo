@@ -1,4 +1,5 @@
 using SpaceMMO.Data.Content;
+using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Content;
 using SpaceMMO.EconSim;
 using Xunit;
@@ -82,16 +83,88 @@ public sealed class EconSimMatchesTheContentPackTests
     }
 
     [Fact]
-    public async Task Refining_matches_the_shipped_recipe()
+    public async Task Refining_matches_the_shipped_recipes()
     {
+        // One per starter ore since task 185, all with the numbers the simulation shares between
+        // them. A world whose recipe was retuned alone would fail here rather than quietly running
+        // the old numbers.
         ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
 
-        RecipeContent refining = Recipe(pack, Sim.RefiningRecipeKey);
+        foreach (string ore in Sim.StarterOres)
+        {
+            RecipeContent refining = Recipe(pack, Sim.RefiningRecipeKeyFor(ore));
 
-        Assert.Equal(Sim.OrePerRefiningRun, InputQuantity(refining, Sim.Ore));
-        Assert.Equal(Sim.PlatesPerRefiningRun, refining.OutputQuantity);
-        Assert.Equal(Sim.Plate, refining.Output);
-        Assert.Equal(Sim.RefiningJobSeconds, refining.JobSeconds);
+            Assert.Equal(Sim.OrePerRefiningRun, InputQuantity(refining, ore));
+            Assert.Equal(Sim.PlatesPerRefiningRun, refining.OutputQuantity);
+            Assert.Equal(Sim.Plate, refining.Output);
+            Assert.Equal(Sim.RefiningJobSeconds, refining.JobSeconds);
+        }
+
+        // And the simulation refines every ore the pack refines into plate, so a fifth world's
+        // recipe cannot be shipped without the simulation hearing of it.
+        string[] shipped = [.. pack.Recipes
+            .Where(r => r.Output == Sim.Plate)
+            .Select(r => r.Key)
+            .Order(StringComparer.Ordinal)];
+
+        string[] simulated = [.. Sim.StarterOres
+            .Select(Sim.RefiningRecipeKeyFor)
+            .Order(StringComparer.Ordinal)];
+
+        Assert.Equal(shipped, simulated);
+    }
+
+    [Fact]
+    public async Task Each_homeworld_has_the_ores_the_simulation_mines_there()
+    {
+        // The simulation names each world's two ores in code (Sim.StarterOreOf and Sim.OreOf). If
+        // either disagrees with where content puts them, its miners gather on a world that has none.
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        foreach (Race race in Enum.GetValues<Race>())
+        {
+            string home = Races.HomeBodyKeyFor(race);
+
+            foreach (string ore in new[] { Sim.StarterOreOf(home), Sim.OreOf(home) })
+            {
+                Assert.True(
+                    pack.ResourceNodes.Any(n => n.Body == home && n.Item == ore),
+                    $"EconSim mines {ore} on {home}, and the pack puts none there.");
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Deposits_match_the_shipped_universe()
+    {
+        // SimulationConfig.Deposits is transcribed from origin.json, and drifted twice with nothing
+        // to say so: Ares has had two regolith deposits since task 158 while it said one, and the
+        // capital had three ferrite deposits while it said two. Supply is the ceiling on everything
+        // the simulation reports, so a wrong count is a wrong answer about the whole economy.
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        var config = new SimulationConfig();
+
+        foreach (string item in Sim.StarterOres.Concat(Sim.PlanetLockedOres))
+        {
+            Assert.True(
+                config.Deposits.TryGetValue(item, out SimulationConfig.Deposit deposit),
+                $"EconSim mines {item} and has no deposits configured for it.");
+
+            ResourceNodeContent[] nodes = [.. pack.ResourceNodes.Where(n => n.Item == item)];
+
+            Assert.True(
+                deposit.Count == nodes.Length,
+                $"EconSim models {deposit.Count} {item} deposit(s); the pack has {nodes.Length}.");
+
+            foreach (ResourceNodeContent node in nodes)
+            {
+                Assert.True(
+                    deposit.Capacity == node.QuantityMax && deposit.RespawnSeconds == node.RespawnSeconds,
+                    $"{node.Key} holds {node.QuantityMax} every {node.RespawnSeconds} s; EconSim "
+                    + $"models {deposit.Capacity} every {deposit.RespawnSeconds} s.");
+            }
+        }
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using SpaceMMO.Data.Content;
+using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Content;
 using SpaceMMO.Domain.Progression;
 using SpaceMMO.Domain.Quests;
@@ -70,10 +71,29 @@ public sealed class TheOpeningCanBeWalkedTests
     /// </remarks>
     private static readonly HashSet<string> KnownUnobtainable = [];
 
-    [Fact]
-    public async Task Every_craft_in_the_opening_is_reachable_with_the_skill_it_has_earned()
+    /// <summary>Every race, because the opening is walked from each homeworld separately.</summary>
+    public static IEnumerable<object[]> EveryRace() =>
+        Enum.GetValues<Race>().Select(race => new object[] { race });
+
+    /// <summary>
+    /// Whether a step is made at an industry station, and so has a recipe to walk.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Refining as well as crafting, since task 185.</strong> This walked only
+    /// <c>Craft</c> steps, so quest 4, which refines plate, was never walked at all. It did not matter
+    /// while one recipe made plate from an ore every world could reach; it does once each world refines
+    /// its own.
+    /// </remarks>
+    private static bool IsMadeAtAStation(QuestStepContent step) =>
+        step.Objective is ObjectiveType.Craft or ObjectiveType.Refine;
+
+    [Theory]
+    [MemberData(nameof(EveryRace))]
+    public async Task Every_craft_in_the_opening_is_reachable_with_the_skill_it_has_earned(Race race)
     {
         ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        string home = Races.HomeBodyKeyFor(race);
 
         // Skill key to XP. A new character has none of any of them, which is the whole premise.
         var experience = new Dictionary<string, long>();
@@ -82,19 +102,19 @@ public sealed class TheOpeningCanBeWalkedTests
         {
             foreach (QuestStepContent step in quest.Steps.OrderBy(s => s.Ordinal))
             {
-                if (step.Objective != ObjectiveType.Craft)
+                if (!IsMadeAtAStation(step))
                 {
                     continue;
                 }
 
-                RecipeContent recipe = RecipeFor(pack, step.Target, quest.Key);
+                RecipeContent recipe = RecipeFor(pack, step.Target, quest.Key, home, race);
 
                 long xp = experience.GetValueOrDefault(recipe.Skill);
                 int level = SkillCurve.LevelForXp(xp);
 
                 Assert.True(
                     level >= recipe.RequiredLevel,
-                    $"'{quest.Name}' asks for {step.Target}, which needs {recipe.Skill} "
+                    $"'{quest.Name}' asks a {race} for {step.Target}, which needs {recipe.Skill} "
                     + $"{recipe.RequiredLevel}. By this point the questline has paid out {xp} "
                     + $"{recipe.Skill} XP, which is level {level}. Nothing earlier in the chain can "
                     + $"close the gap: check what else grants {recipe.Skill} XP and what it costs "
@@ -112,51 +132,71 @@ public sealed class TheOpeningCanBeWalkedTests
         }
     }
 
-    [Fact]
-    public async Task Every_ingredient_in_the_opening_can_be_obtained()
+    /// <summary>
+    /// Every ingredient of every craft and refine in the opening can be had on the race's own world.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>At home, not anywhere, since task 185.</strong> ADR-0008: the onboarding chain stays
+    /// "self-sufficient within a race, so a new player never stalls waiting for a market that may have
+    /// no sellers". This asked whether anything anywhere produced each ingredient, which every race
+    /// passed because ferrite was on the Capital. Since 184 each world has its own ore, and a world
+    /// with no recipe for it would leave its new players holding ore they cannot use.
+    /// </para>
+    /// <para>
+    /// Gather steps are not walked yet. Quest 3 still names <c>ferrite_ore</c>, which only Terra has,
+    /// until a step can accept any homeworld's ore (task 186).
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(EveryRace))]
+    public async Task Every_ingredient_in_the_opening_can_be_obtained_at_home(Race race)
     {
         ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        string home = Races.HomeBodyKeyFor(race);
 
         foreach (QuestContent quest in MainStoryInOrder(pack))
         {
             foreach (QuestStepContent step in quest.Steps.OrderBy(s => s.Ordinal))
             {
-                if (step.Objective != ObjectiveType.Craft)
+                if (!IsMadeAtAStation(step))
                 {
                     continue;
                 }
 
-                RecipeContent recipe = RecipeFor(pack, step.Target, quest.Key);
+                // RecipeFor fails, naming the step, when no recipe for the target can be fed from home.
+                RecipeContent recipe = RecipeFor(pack, step.Target, quest.Key, home, race);
 
                 foreach (RecipeInputContent input in recipe.Inputs)
                 {
                     Assert.True(
-                        Obtainable(pack, input.Item, []),
-                        $"'{quest.Name}' asks for {step.Target}, which takes {input.Quantity} "
-                        + $"{input.Item} — and nothing in the pack gathers, refines, crafts or "
-                        + $"sells one. The chain stops here for every player, and no test of any "
-                        + "single recipe would notice.");
+                        ObtainableAt(pack, home, input.Item, []),
+                        $"'{quest.Name}' asks a {race} for {step.Target}, which takes "
+                        + $"{input.Quantity} {input.Item} — and nothing on {home} gathers, refines or "
+                        + "crafts one.");
                 }
             }
         }
     }
 
     /// <summary>
-    /// Whether a player can end up holding this item at all.
+    /// Whether a player on one world can end up holding this item without leaving it.
     /// </summary>
     /// <remarks>
-    /// Gathered from a resource node, or crafted from things that are themselves obtainable. The
-    /// recursion carries a trail so a recipe that consumes its own output cannot spin: content like
-    /// that is a fault of its own, and hanging the suite is a poor way to report one.
+    /// Gathered from a deposit on that world, or made from things that are themselves obtainable
+    /// there. The recursion carries a trail so a recipe that consumes its own output cannot spin:
+    /// content like that is a fault of its own, and hanging the suite is a poor way to report one.
     /// </remarks>
-    private static bool Obtainable(ContentPack pack, string item, HashSet<string> visiting)
+    private static bool ObtainableAt(
+        ContentPack pack, string body, string item, HashSet<string> visiting)
     {
         if (KnownUnobtainable.Contains(item))
         {
             return true;
         }
 
-        if (pack.ResourceNodes.Any(n => n.Item == item))
+        if (pack.ResourceNodes.Any(n => n.Item == item && n.Body == body))
         {
             return true;
         }
@@ -168,7 +208,7 @@ public sealed class TheOpeningCanBeWalkedTests
 
         bool madeSomehow = pack.Recipes
             .Where(r => r.Output == item)
-            .Any(r => r.Inputs.All(i => Obtainable(pack, i.Item, visiting)));
+            .Any(r => r.Inputs.All(i => ObtainableAt(pack, body, i.Item, visiting)));
 
         visiting.Remove(item);
 
@@ -210,13 +250,37 @@ public sealed class TheOpeningCanBeWalkedTests
         return ordered;
     }
 
-    private static RecipeContent RecipeFor(ContentPack pack, string output, string questKey)
+    /// <summary>
+    /// The recipe a character on this world would use to make an item: one whose inputs can all be
+    /// had there, and the easiest of those to reach.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Not "the" recipe, since task 185.</strong> This took the single recipe for an output,
+    /// and four now make plate — one per homeworld's ore — so it would have thrown on the second. The
+    /// right one depends on where the player is standing, which is the whole point of having four.
+    /// </remarks>
+    private static RecipeContent RecipeFor(
+        ContentPack pack, string output, string questKey, string home, Race race)
     {
-        RecipeContent? recipe = pack.Recipes.SingleOrDefault(r => r.Output == output);
+        RecipeContent[] makers = [.. pack.Recipes.Where(r => r.Output == output)];
+
+        Assert.True(
+            makers.Length > 0,
+            $"Quest '{questKey}' asks the player to make '{output}', and no recipe makes one.");
+
+        RecipeContent? recipe = makers
+            .Where(r => r.Inputs.All(i => ObtainableAt(pack, home, i.Item, [])))
+            .OrderBy(r => r.RequiredLevel)
+            .ThenBy(r => r.Key, StringComparer.Ordinal)
+            .FirstOrDefault();
 
         Assert.True(
             recipe is not null,
-            $"Quest '{questKey}' asks the player to craft '{output}', and no recipe makes one.");
+            $"Quest '{questKey}' asks a {race} for '{output}', and none of the "
+            + $"{makers.Length} recipe(s) that make one can be fed from {home}: "
+            + string.Join("; ", makers.Select(r =>
+                $"{r.Key} takes {string.Join(", ", r.Inputs.Select(i => i.Item))}"))
+            + ".");
 
         return recipe!;
     }

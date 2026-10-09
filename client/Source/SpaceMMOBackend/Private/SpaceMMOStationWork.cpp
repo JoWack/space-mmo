@@ -76,6 +76,22 @@ TArray<FSpaceMMORecipeRowText> FSpaceMMOStationWork::BuildRecipeRows(
 	const int32 Chosen = ClampSelection(Selected, Recipes.Num());
 	const int32 Count = FMath::Max(Runs, 1);
 
+	// How many recipes make each item. Since task 185 four make Structural Plate, one per
+	// homeworld's ore, and with only the output to go on they read as four identical rows; you had
+	// to select each to see what it took. So a row whose output another recipe also makes names what
+	// it is made from, and every other row is unchanged -- the arrangement Joe approved on 9 October.
+	// Counted by item key rather than name, and only where the key arrived, so two recipes that
+	// merely share a display name are not taken for one item.
+	TMap<FString, int32> MakersByOutput;
+
+	for (const FBackendRecipe& Recipe : Recipes)
+	{
+		if (!Recipe.OutputItemKey.IsEmpty())
+		{
+			++MakersByOutput.FindOrAdd(Recipe.OutputItemKey);
+		}
+	}
+
 	for (int32 Index = 0; Index < Recipes.Num(); ++Index)
 	{
 		const FBackendRecipe& Recipe = Recipes[Index];
@@ -84,6 +100,21 @@ TArray<FSpaceMMORecipeRowText> FSpaceMMOStationWork::BuildRecipeRows(
 
 		Row.Index = Index;
 		Row.Title = FString::Printf(TEXT("%s ×%d"), *Recipe.OutputName, Recipe.OutputQuantity);
+
+		if (MakersByOutput.FindRef(Recipe.OutputItemKey) > 1)
+		{
+			TArray<FString> MadeFrom;
+
+			for (const FBackendRecipeInput& Input : Recipe.Inputs)
+			{
+				MadeFrom.Add(Input.Name);
+			}
+
+			if (MadeFrom.Num() > 0)
+			{
+				Row.Title += FString::Printf(TEXT(" · %s"), *FString::Join(MadeFrom, TEXT(", ")));
+			}
+		}
 		Row.Time = Duration(Recipe.JobSeconds);
 		Row.Skill = FString::Printf(TEXT("%s lv %d"), *Recipe.SkillName.ToLower(), Recipe.RequiredLevel);
 		Row.bSelected = Index == Chosen;

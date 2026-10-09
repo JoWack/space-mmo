@@ -87,8 +87,8 @@ for (int day = 1; day <= config.Days; day++)
         rows.Add(string.Create(
             CultureInfo.InvariantCulture,
             $"{day},{Whole(MoneySupply(world))},{Whole(world.Escrow)},"
-            + $"{Held(world, Sim.Ore)},{Held(world, Sim.Plate)},{Held(world, Sim.Section)},"
-            + $"{Whole(LastTraded(world, Sim.Ore))},{Whole(LastTraded(world, Sim.Plate))},"
+            + $"{HeldAll(world, Sim.StarterOres)},{Held(world, Sim.Plate)},{Held(world, Sim.Section)},"
+            + $"{Whole(LowestLastTraded(world, Sim.StarterOres))},{Whole(LastTraded(world, Sim.Plate))},"
             + $"{Whole(LastTraded(world, Sim.Section))},{world.Trades.Count - tradesAtLastDay}"));
     }
 
@@ -142,7 +142,9 @@ static void RunSweep()
         Credits bootstrap = sweepConfig.BootstrapCredits * sweepConfig.TotalBots;
 
         double ratio = 100.0 * supply.MinorUnits / bootstrap.MinorUnits;
-        long oreTraded = sweepWorld.Trades.Where(t => t.Item == Sim.Ore).Sum(t => (long)t.Quantity);
+        long oreTraded = sweepWorld.Trades
+            .Where(t => Sim.StarterOres.Contains(t.Item))
+            .Sum(t => (long)t.Quantity);
 
         Console.WriteLine(
             $"  {perDay,8:N0} {Whole(supply),16:N0} {ratio,13:N1}% "
@@ -201,12 +203,12 @@ static void RunLossSweep()
             sweepBots.RunDay(day, ref sweepRng);
         }
 
-        long oreCreated = sweepWorld.Gathered.GetValueOrDefault(Sim.Ore);
-        long oreHeld = Held(sweepWorld, Sim.Ore);
+        long oreCreated = GatheredAll(sweepWorld, Sim.StarterOres);
+        long oreHeld = HeldAll(sweepWorld, Sim.StarterOres);
 
         Console.WriteLine(
             $"  {rate,9:P1} {oreCreated,14:N0} {oreCreated - oreHeld,14:N0} {oreHeld,14:N0} "
-            + $"{Money(LastTraded(sweepWorld, Sim.Ore)),11} "
+            + $"{Money(LowestLastTraded(sweepWorld, Sim.StarterOres)),11} "
             + $"{Money(LastTraded(sweepWorld, Sim.Section)),14}");
     }
 
@@ -341,12 +343,12 @@ static void RunPopulationSweep()
             sweepBots.RunDay(day, ref sweepRng);
         }
 
-        long created = sweepWorld.Gathered.GetValueOrDefault(Sim.Ore);
-        long used = sweepWorld.Destroyed.GetValueOrDefault(Sim.Ore);
+        long created = GatheredAll(sweepWorld, Sim.StarterOres);
+        long used = Sim.StarterOres.Sum(o => sweepWorld.Destroyed.GetValueOrDefault(o));
 
         Console.WriteLine(
             $"  {miners,7} {pilots,7} {(double)miners / pilots,7:N2} "
-            + $"{Money(LastTraded(sweepWorld, Sim.Ore)),14} {created,13:N0} {used,11:N0} "
+            + $"{Money(LowestLastTraded(sweepWorld, Sim.StarterOres)),14} {created,13:N0} {used,11:N0} "
             + $"{sweepWorld.Crafted.GetValueOrDefault(Sim.Frame),7:N0}");
     }
 
@@ -374,6 +376,25 @@ static string Money(Credits credits) => string.Create(
 
 static long Held(SimWorld world, string item) =>
     world.Characters.Sum(c => (long)c.Held(item)) + world.GoodsOnBook(item);
+
+/// <summary>Several items held together: the four starter ores, where one ore used to be.</summary>
+static long HeldAll(SimWorld world, IEnumerable<string> items) =>
+    items.Sum(item => Held(world, item));
+
+static long GatheredAll(SimWorld world, IEnumerable<string> items) =>
+    items.Sum(item => world.Gathered.GetValueOrDefault(item));
+
+/// <summary>
+/// The lowest of several items' last prices: the four starter ores, for a summary line that used to
+/// name ferrite alone (task 185).
+/// </summary>
+/// <remarks>
+/// The lowest rather than an average, because the line is read for whether ore has hit the floor,
+/// and an average would let one world's collapsed market hide behind three healthy ones. Each ore's
+/// own price is printed in the Prices section.
+/// </remarks>
+static Credits LowestLastTraded(SimWorld world, IEnumerable<string> items) =>
+    items.Select(item => LastTraded(world, item)).Min();
 
 /// <summary>
 /// The most recent price an item traded at, anywhere.
@@ -460,7 +481,7 @@ static void Report(SimWorld world, SimulationConfig config, List<InvariantViolat
     Console.WriteLine();
     Console.WriteLine("── Material ───────────────────────────────────────────────");
     Console.WriteLine(
-        $"  Deposit ceiling      {world.DailyCapacityFor(Sim.Ore),15:N0} ferrite/day, "
+        $"  Deposit ceiling      {world.DailyCapacityFor(Sim.FerriteOre),15:N0} per starter ore/day, "
         + $"{world.DailyCapacityFor(Sim.TerranFerrite):N0} per planet-locked ore/day");
 
     foreach (string item in Sim.TradedItems)
@@ -492,7 +513,7 @@ static void Report(SimWorld world, SimulationConfig config, List<InvariantViolat
     // Printed next to the number rather than left in a document nobody reads at 1am. A raw
     // material on the floor has been mistaken for a balance bug three times; ADR-0010 records the
     // sweeps that ruled out every cause and decided it is the right answer to an empty server.
-    if (LastTraded(world, Sim.Ore) <= Credits.FromMinorUnits(1))
+    if (LowestLastTraded(world, Sim.StarterOres) <= Credits.FromMinorUnits(1))
     {
         Console.WriteLine();
         Console.WriteLine(

@@ -95,16 +95,26 @@ public sealed record SimulationConfig
     /// a counterpart in a JSON file, and if the two drift the simulation quietly answers a question
     /// about a game nobody is building.
     /// </para>
+    /// <para>
+    /// <strong>And they had drifted, twice, with nothing to say so.</strong> Ares has had a second
+    /// regolith deposit since task 158 while this said one, and the capital had three ferrite deposits
+    /// while this said two. <c>EconSimMatchesTheContentPackTests.Deposits_match_the_shipped_universe</c>
+    /// compares the two now (task 185).
+    /// </para>
     /// </remarks>
     public Dictionary<string, Deposit> Deposits { get; init; } = new(StringComparer.Ordinal)
     {
-        // Two nodes on the capital, 200 each, twenty-minute respawn.
+        // Two nodes on each homeworld for its own starter ore, 200 each, twenty-minute respawn
+        // (task 184). Ferrite was the only starter ore until then, with its nodes on the capital.
         ["ferrite_ore"] = new Deposit(200, 1_200, 2),
+        ["oxide_salt"] = new Deposit(200, 1_200, 2),
+        ["rootstone"] = new Deposit(200, 1_200, 2),
+        ["blackiron_ore"] = new Deposit(200, 1_200, 2),
 
-        // One node per homeworld, 150 each, thirty-minute respawn. This is the real scarcity: an
-        // entire planet's export comes out of a single deposit.
+        // The level-15 ores, 150 each, thirty-minute respawn. This is the real scarcity: an entire
+        // planet's export comes out of one or two deposits.
         ["terran_ferrite"] = new Deposit(150, 1_800, 1),
-        ["ares_regolith"] = new Deposit(150, 1_800, 1),
+        ["ares_regolith"] = new Deposit(150, 1_800, 2),
         ["verdant_amber"] = new Deposit(150, 1_800, 1),
         ["grimhold_slag"] = new Deposit(150, 1_800, 1),
     };

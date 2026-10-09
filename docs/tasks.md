@@ -4337,7 +4337,7 @@ moved rather than that one. Nothing outside this file referred to the old number
 
 ## 145 — A new character starts on their race's homeworld
 
-**Pending, blocked on 185 and 186** (184 done 9 October). Picked up and split on 9 October. Belongs to **M7 — a world
+**Pending, blocked on 186** (184 and 185 done 9 October). Picked up and split on 9 October. Belongs to **M7 — a world
 worth being in** for the zone, and to **M5** for the opening.
 
 **The rule is already written down and nothing implements it.** `design-bible.md` §1 gives every race
@@ -8709,30 +8709,108 @@ How it would fail:
 
 ## 185 — Plate refines from any homeworld's ore
 
-**Pending, blocked on nothing** since 184 landed on 9 October. Split out of 145 the same day. Belongs to
-**M4**. **Blocks 145.**
+**Done 9 October, headless; awaiting a playtest.** Split out of 145 the same day. Belongs to **M4**.
+**Blocks 145**, which now waits on 186 alone.
 
 ADR-0008: a crafted good is one item made by four per-race recipes that consume different raw inputs. With
 scrap common, **only one intro recipe consumes a world's own material**: `refine_ferrite_plate`, 20
 `ferrite_ore` into 4 `ferrite_plate`. The thruster, the hull section and the shuttle take plate and scrap,
 which are both shared, and need no variants until style exists (187).
 
-- **Three refining recipes beside it**, one per new ore, with the same numbers: refining 1, 60 s, 600 XP,
-  20 in and 4 out.
-- **The plate's name, approved by Joe on 9 October.** Plate refined from oxide salt is not ferrite. The
-  key stays `ferrite_plate`, because renaming a content key orphans every stack and order that holds it,
-  and the display name becomes **Structural Plate**.
-- **At least one thing assumes one recipe per output.** `TheOpeningCanBeWalkedTests.RecipeFor` does
-  `SingleOrDefault(r => r.Output == output)` and will throw on the second plate recipe. Grep for the
-  pattern rather than the symptom before authoring: the industry panel, EconSim's single
-  `RefiningRecipeKey`, and quest objectives that match on output.
-- **The walk test has never walked quest 4.** It skips every step whose objective is not `Craft`, so
-  refining was never checked. It should walk `Refine` steps, and walk the chain once per race with only
-  that race's home ore available. That turns ADR-0008's "self-sufficient within a race" from an
-  intention into a check. Make it red by deleting one world's refining recipe.
-- **EconSim models one ore.** `SimWorld.Ore` and `RefiningRecipeKey` are single constants, and
-  `SimulationConfig` lists deposits by item. ADR-0008 says EconSim "will need all four modelled before the
-  numbers can be trusted".
+### What was done, 9 October
+
+- **Three refining recipes beside it**: `refine_oxide_salt_plate`, `refine_rootstone_plate` and
+  `refine_blackiron_plate`, each refining 1, 60 s, 600 XP, 20 in and 4 out, like ferrite's. The ferrite
+  recipe keeps its key, because industry jobs refer to it and the seeder would leave the old row (188).
+- **The plate is Structural Plate**, approved by Joe on 9 October. The key stays `ferrite_plate`, because
+  renaming a content key orphans every stack and order that holds it. Quest 4 now reads "Refine your ore
+  into 4 structural plates."; quest 3's wording is 186's.
+- **Quest 4 needed no engine change.** `IndustryService` credits a refine by the output's key and the
+  refining skill, so all four recipes count toward it. Checked in the code, not assumed.
+- **The industry tab names the ore on the plate rows**, approved by Joe on 9 October from three mocks.
+  `FSpaceMMOStationWork::BuildRecipeRows` counts recipes per output item key, and a row whose output
+  another recipe also makes gets ` · <its inputs>` after the title: "Structural Plate ×4 · Oxide Salt".
+  Every other row is unchanged. Rows whose recipe arrived with no output key are never merged.
+
+### The one-recipe-per-output assumptions, found by grepping the pattern
+
+- **`TheOpeningCanBeWalkedTests.RecipeFor`** took the single recipe for an output and would have thrown.
+  It now picks the recipe a character on that world could feed, and the easiest to reach of those.
+- **The walk test skipped every refine step**, so quest 4 had never been walked. It walks `Craft` and
+  `Refine` now, **once per race, with only that race's homeworld deposits available**: ADR-0008's
+  "self-sufficient within a race", made a check. Gather steps are not walked yet, because quest 3 still
+  names ferrite (186).
+- **EconSim modelled one starter ore, mined at the capital.** It has four now, one per world
+  (`Sim.StarterOres`, `StarterOreOf`, `RefiningRecipeKeyFor`). Miners work their world's starter ore on
+  the days they used to mine ferrite at the capital, so the effort split between starter and level-15 ore
+  is unchanged, and list it at home, where the refiners now buy it.
+- **Nothing on the server assumed it.** The validator's dependency graph already merges every recipe's
+  inputs per output, and industry jobs are started by recipe id.
+
+### Found while building: EconSim's deposits had drifted from the pack, twice
+
+`SimulationConfig.Deposits` is transcribed from `origin.json`, and nothing compared the two. **Ares has had
+two regolith deposits since 158 while the sim said one**, and the Capital had three ferrite deposits
+while it said two. `EconSimMatchesTheContentPackTests.Deposits_match_the_shipped_universe` compares count,
+size and respawn for every ore the sim mines, and the Ares figure is corrected to two.
+
+### What EconSim says now, and what is not explained
+
+Default run, 3,650 days, 99 bots, before and after:
+
+| | Before | After |
+|---|---|---|
+| Plates made | 9,996 | 4,708 |
+| Best refiner level | 65 | 40 |
+| Money retained | 29.8% | 11.4% |
+| Broker fees | 867,400 cr | 1,110,297 cr |
+| Conservation invariants | held | held |
+| Cross-faction demand | one violation, last 100 days | the same violation |
+
+The violation predates this task. Starter ore is on the floor in both runs, which ADR-0010 explains.
+**The drop in plates and the extra broker fees are not explained.** The likeliest place is the starter ore
+moving from one capital book to four home books, with roughly a quarter of the refiners and miners
+behind each, but nothing was instrumented to show it. Anyone basing a decision on EconSim's plate or
+money numbers should look there first.
+
+### What was verified, and how
+
+Server, after a build: Domain 468, Data 214, Api 98, all passing. The Api tests were built to a scratch
+output folder, since Joe's API was running from the usual one. Client: 289 tests, `PASS`
+(`scripts/tests.bat`), after a build reporting `Result: Succeeded` from `UnrealEngineSource`.
+
+- **The per-race walk was run red first**, against content with only the ferrite recipe: Martian, Space Elf
+  and Space Orc each failed at quest 4 ("none of the 1 recipe(s) that make one can be fed from
+  body_ares: refine_ferrite_plate takes ferrite_ore"), and the Humanoid passed. It is green with the
+  three recipes.
+- **`Deposits_match_the_shipped_universe` was made red** by putting Ares' regolith back to one deposit.
+- **`Refining_matches_the_shipped_recipes`** checks all four recipes against the sim's numbers, and that the
+  sim refines exactly the set of plate recipes the pack ships.
+- **`Each_homeworld_has_the_ores_the_simulation_mines_there`** checks both of each world's ores, starter and
+  level 15, against the pack.
+- **Seeded and read back** through a scratch API on :5081: `GET /industry/recipes` serves ten recipes,
+  four of them Structural Plate, each naming its own ore.
+
+- **`SpaceMMO.Industry.RecipesSharingAnOutputNameTheirInputs`** runs the industry tab's rows over that
+  captured catalogue, verbatim: every plate row names its own ore, no two plate rows read alike, and every
+  other row is unchanged. **Made red with the rule switched off**: each plate row failed to name its ore,
+  and "Every plate row reads differently" expected 4 titles and got 1.
+
+**Not verified by anything automated:** how the longer title sits in the tab's row at the game's
+resolution, whether it truncates, and refining on a homeworld end to end in play.
+
+### What a playtest has to say
+
+- **Dock at an outpost and open Industry.** Four Structural Plate rows, each ending in its ore: Ferrite Ore,
+  Oxide Salt, Rootstone, Blackiron Ore. Every other row looks as it did.
+- **On Ares, mine 20 oxide salt, dock and refine it**: four Structural Plate in the hangar, and quest 4
+  advances if it is the active quest. Quest 3 will not count the oxide salt yet; that is 186.
+
+How it would fail:
+- **Four identical plate rows.** The client is older than this change, or the catalogue arrived without
+  `outputItemKey`, which the rule counts by.
+- **Only one plate recipe listed.** The database has not been seeded since this change.
+- **The plate still called Ferrite Plate.** The same: re-seed.
 
 ## 186 — A quest step can ask for any homeworld's ore
 

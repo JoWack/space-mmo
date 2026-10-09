@@ -7,7 +7,33 @@ namespace SpaceMMO.EconSim;
 /// <summary>The items the simulation trades. Keys match <c>data/items/core.json</c>.</summary>
 public static class Sim
 {
-    public const string Ore = "ferrite_ore";
+    public const string FerriteOre = "ferrite_ore";
+    public const string OxideSalt = "oxide_salt";
+    public const string Rootstone = "rootstone";
+    public const string BlackironOre = "blackiron_ore";
+
+    /// <summary>
+    /// The four starter ores, one per homeworld and locked to it (task 184), each refined into the
+    /// same plate by a recipe of its own (task 185).
+    /// </summary>
+    /// <remarks>
+    /// One ore until 9 October 2026: ferrite, mined at the capital and bought there by every
+    /// refiner. Since each world got its own, the whole starter chain — ore, refining, plate — runs
+    /// on the home book, and the capital has no ore at all.
+    /// </remarks>
+    public static readonly string[] StarterOres = [FerriteOre, OxideSalt, Rootstone, BlackironOre];
+
+    /// <summary>The starter ore a homeworld yields. Nowhere else has it.</summary>
+    public static string StarterOreOf(string bodyKey) => bodyKey switch
+    {
+        "body_terra" => FerriteOre,
+        "body_ares" => OxideSalt,
+        "body_verdance" => Rootstone,
+        "body_grimhold" => BlackironOre,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(bodyKey), bodyKey, "No starter ore for this body."),
+    };
+
     public const string Plate = "ferrite_plate";
     public const string Section = "shuttle_hull_section";
 
@@ -52,9 +78,22 @@ public static class Sim
     /// reader has something to follow.
     /// </para>
     /// </remarks>
-    public const string RefiningRecipeKey = "refine_ferrite_plate";
+    /// <summary>The recipe that refines one starter ore into plate.</summary>
+    /// <remarks>
+    /// One per ore since task 185, with identical numbers, so the quantities below are shared and
+    /// <c>EconSimMatchesTheContentPackTests</c> checks every one of the four against them.
+    /// </remarks>
+    public static string RefiningRecipeKeyFor(string starterOre) => starterOre switch
+    {
+        FerriteOre => "refine_ferrite_plate",
+        OxideSalt => "refine_oxide_salt_plate",
+        Rootstone => "refine_rootstone_plate",
+        BlackironOre => "refine_blackiron_plate",
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(starterOre), starterOre, "Not a starter ore."),
+    };
 
-    /// <summary>Ore consumed by one run of <see cref="RefiningRecipeKey"/>.</summary>
+    /// <summary>Ore consumed by one run of a refining recipe.</summary>
     public const int OrePerRefiningRun = 20;
 
     /// <summary>Plates produced by one run of it.</summary>
@@ -80,7 +119,7 @@ public static class Sim
     public const int OrePerFrame = 10;
 
     public static readonly string[] TradedItems =
-        [Ore, Plate, Section, Frame, .. PlanetLockedOres];
+        [.. StarterOres, Plate, Section, Frame, .. PlanetLockedOres];
 
     /// <summary>Market venues: the four homeworlds and the shared capital.</summary>
     public const string Capital = "body_capital";
@@ -117,8 +156,11 @@ public sealed class SimCharacter(int id, string archetype, Race race)
 
     public string HomeBody => Races.HomeBodyKeyFor(Race);
 
-    /// <summary>The planet-locked ore this character can gather, and nobody else can.</summary>
+    /// <summary>The level-15 planet-locked ore this character can gather, and nobody else can.</summary>
     public string HomeOre => Sim.OreOf(HomeBody);
+
+    /// <summary>The starter ore this character's world yields, which it refines into plate.</summary>
+    public string HomeStarterOre => Sim.StarterOreOf(HomeBody);
 
     public Credits Balance { get; set; }
 
@@ -249,7 +291,8 @@ public sealed class SimWorld
     /// <summary>Opening price for an item nobody has traded yet.</summary>
     private static Credits SeedPrice(string item) => item switch
     {
-        Sim.Ore => Credits.FromWholeCredits(40),
+        Sim.FerriteOre or Sim.OxideSalt or Sim.Rootstone or Sim.BlackironOre =>
+            Credits.FromWholeCredits(40),
         Sim.Plate => Credits.FromWholeCredits(250),
         Sim.Section => Credits.FromWholeCredits(1_400),
 

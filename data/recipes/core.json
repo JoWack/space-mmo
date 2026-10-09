@@ -16,6 +16,7 @@
       "$comment": "The first craft. Deliberately needs no tool, or the chain could never start."
     },
     {
+      "$comment": "Terra's. One of four recipes for the same plate, one per homeworld's ore (ADR-0008: a crafted good is one item made by per-race recipes that consume different raw inputs; task 185). Identical numbers on all four, so no race refines faster or cheaper than another, and TheOpeningCanBeWalkedTests walks the questline from each world with only that world's ore. The key keeps the old name because industry jobs refer to it.",
       "key": "refine_ferrite_plate",
       "output": "ferrite_plate",
       "outputQuantity": 4,
@@ -26,6 +27,48 @@
       "requiredTool": null,
       "inputs": [
         { "item": "ferrite_ore", "quantity": 20 }
+      ]
+    },
+    {
+      "$comment": "Ares'. The same plate from oxide salt; see refine_ferrite_plate.",
+      "key": "refine_oxide_salt_plate",
+      "output": "ferrite_plate",
+      "outputQuantity": 4,
+      "skill": "refining",
+      "requiredLevel": 1,
+      "jobSeconds": 60,
+      "xpPerRun": 600,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "oxide_salt", "quantity": 20 }
+      ]
+    },
+    {
+      "$comment": "Verdance's. The same plate from rootstone; see refine_ferrite_plate.",
+      "key": "refine_rootstone_plate",
+      "output": "ferrite_plate",
+      "outputQuantity": 4,
+      "skill": "refining",
+      "requiredLevel": 1,
+      "jobSeconds": 60,
+      "xpPerRun": 600,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "rootstone", "quantity": 20 }
+      ]
+    },
+    {
+      "$comment": "Grimhold's. The same plate from blackiron ore; see refine_ferrite_plate.",
+      "key": "refine_blackiron_plate",
+      "output": "ferrite_plate",
+      "outputQuantity": 4,
+      "skill": "refining",
+      "requiredLevel": 1,
+      "jobSeconds": 60,
+      "xpPerRun": 600,
+      "requiredTool": null,
+      "inputs": [
+        { "item": "blackiron_ore", "quantity": 20 }
       ]
     },
     {

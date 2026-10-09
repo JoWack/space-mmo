@@ -39,12 +39,10 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
 
     public void RunDay(int day, ref SplitMix64 rng)
     {
-        foreach (string ore in Sim.PlanetLockedOres)
+        foreach (string ore in Sim.PlanetLockedOres.Concat(Sim.StarterOres))
         {
             _oreLeftToday[ore] = _world.DailyCapacityFor(ore);
         }
-
-        _oreLeftToday[Sim.Ore] = _world.DailyCapacityFor(Sim.Ore);
 
         _world.ExpireOrders(day);
 
@@ -58,16 +56,19 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
                     RunMiner(character, day);
                     break;
 
-                // Refiners buy their ferrite where it is mined — the capital — and sell plates at
-                // home. Crafters never leave: plates and hull sections are made and consumed on the
-                // same homeworld. That is what keeps four local books worth opening.
+                // Refiners buy their world's starter ore where it is mined — at home — and sell
+                // plates there too. Until task 185 they bought ferrite at the capital, which was
+                // where the only starter ore was; since each world has its own, the refining chain
+                // never leaves home. Crafters never leave either: plates and hull sections are made
+                // and consumed on the same homeworld. That is what keeps four local books worth
+                // opening.
                 case "refiner":
                     RunIndustry(
                         character, day, "refining",
-                        Sim.Ore, Sim.OrePerRefiningRun,
+                        character.HomeStarterOre, Sim.OrePerRefiningRun,
                         Sim.Plate, Sim.PlatesPerRefiningRun,
                         Sim.RefiningJobSeconds,
-                        inputMarket: Sim.Capital, outputMarket: character.HomeBody);
+                        inputMarket: character.HomeBody, outputMarket: character.HomeBody);
                     break;
 
                 case "crafter":
@@ -136,14 +137,18 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
     /// </remarks>
     private void RunMiner(SimCharacter character, int day)
     {
-        // At home, the miner works its homeworld's ore, which exists nowhere else. On a capital
-        // trip it works the capital's common ferrite instead. That keeps the original refining
-        // chain supplied — ferrite deposits are authored on the capital, not the homeworlds — and
-        // it means the ore that crosses factions is the scarce one, which is the point.
+        // Most days the miner works its homeworld's level-15 ore, which exists nowhere else. On the
+        // days it flies to the capital it works its world's starter ore before leaving, lists that
+        // at home where the refiners are, and carries the level-15 ore in to sell.
+        //
+        // <strong>Until task 185 the starter ore was mined at the capital</strong>, because the
+        // only starter ore — ferrite — was authored there. Since 184 each world has its own and the
+        // capital has none, so it moved home. The same days are spent on it as before, which keeps
+        // the split between the two ores, and so the supply of each, comparable with earlier runs:
+        // the change is where the starter ore is mined and sold, not how much effort it gets.
         bool atCapital = CanReachCapital(character, day);
 
-        string market = atCapital ? Sim.Capital : character.HomeBody;
-        string ore = atCapital ? Sim.Ore : character.HomeOre;
+        string ore = atCapital ? character.HomeStarterOre : character.HomeOre;
 
         int level = SkillCurve.LevelForXp(character.Xp.GetValueOrDefault("mining"));
 
@@ -174,27 +179,27 @@ public sealed class Bots(SimulationConfig config, SimWorld world)
         // miner who lists once and then hoards forever: a single stale order sat on the book while
         // the stock behind it grew without bound. That starved the ore market no matter how much
         // was mined, and it — not the game's balance — is what drove the price to zero in §5a.
-        // Raw ore is an export, so it is only ever listed at the capital.
         //
-        // The first version listed home ore on its home book, which read as the obvious thing and
-        // produced an economy with zero trades in it: the only buyers of planet-locked ore are
-        // framewrights, and framewrights are at the capital. Sellers and buyers each behaved
-        // sensibly and never once met. What a homeworld's book carries is plates and hull
-        // sections — goods made locally for local pilots — not the ore underneath them.
+        // Level-15 ore is an export, so it is only ever listed at the capital. The first version
+        // listed it on its home book, which read as the obvious thing and produced an economy with
+        // zero trades in it: the only buyers of planet-locked level-15 ore are framewrights, and
+        // framewrights are at the capital. Sellers and buyers each behaved sensibly and never once
+        // met. Starter ore is the opposite: its buyers are the refiners at home, so it is listed
+        // there (task 185).
         if (!atCapital)
         {
             return;
         }
 
-        Credits freshAsk = AskPrice(Sim.Capital, ore, character, wanted);
+        Credits freshAsk = AskPrice(character.HomeBody, ore, character, wanted);
 
         _world.PlaceOrder(
             character,
-            Sim.Capital,
+            character.HomeBody,
             OrderSide.Sell,
             ore,
             freshAsk,
-            Listable(character, Sim.Capital, freshAsk, wanted),
+            Listable(character, character.HomeBody, freshAsk, wanted),
             day);
 
         // Home ore accumulated since the last trip, carried in on the same journey.
