@@ -614,6 +614,44 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         }
 
         await _database.SaveChangesAsync(cancellationToken);
+
+        // <strong>And a deposit content no longer authors is removed (task 184).</strong> Nothing
+        // ever did this, so a deposit deleted from the file, or renamed in it, went on being served
+        // from the database for as long as the database lived: still on its old body, still
+        // gatherable, and invisible to the validator, which reads the file. When ferrite became
+        // Terra's alone, the Capital would have kept three ferrite deposits that content said were
+        // gone, breaking the planet-lock with nothing anywhere looking wrong.
+        //
+        // Safe for deposits in a way it is not for the rest of the pack: nothing refers to one but
+        // its own pools, which are respawn bookkeeping and go with it. A recipe, a quest or a station
+        // has jobs, journals and hangars hanging off it, and removing those is a different question.
+        //
+        // Only when the pack authors deposits at all, which the early return above already decides:
+        // a pack that says nothing about deposits is not a pack that says there are none.
+        HashSet<string> authored = pack.ResourceNodes
+            .Select(n => n.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        List<ResourceNode> retired = [.. existing.Values.Where(n => !authored.Contains(n.Key))];
+
+        if (retired.Count == 0)
+        {
+            return;
+        }
+
+        long[] retiredIds = [.. retired.Select(n => n.Id)];
+
+        // The pools first, and saved first. The foreign key restricts deletes, so removing a node
+        // somebody has gathered from fails while its pool still points at it.
+        List<ResourceNodeState> pools = await _database.ResourceNodeStates
+            .Where(s => retiredIds.Contains(s.ResourceNodeId))
+            .ToListAsync(cancellationToken);
+
+        _database.ResourceNodeStates.RemoveRange(pools);
+        await _database.SaveChangesAsync(cancellationToken);
+
+        _database.ResourceNodes.RemoveRange(retired);
+        await _database.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

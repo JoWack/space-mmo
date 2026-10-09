@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Content;
 using SpaceMMO.Data.Entities;
+using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Content;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Items;
@@ -446,18 +447,20 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task TheShippedContentReallyLocksTheFourMaterials()
+    public async Task TheShippedContentReallyLocksItsPlanetMaterials()
     {
         // Read from the real files, because the rule that enforces planet-locking is worthless if
         // the flag never arrives. A misspelt JSON key leaves PlanetLocked false, the validator
         // finds nothing to check, and every other test in this file still passes — the loudest
         // possible silence.
+        //
+        // <strong>It used to assert the locked items were exactly the frame's four.</strong> That
+        // was true until 9 October 2026, when each homeworld's starter ore was locked to it as well
+        // (task 184), and "planet-locked" and "goes into the frame" stopped being one set. The
+        // starter ores' flags are EveryHomeworldStartsAlikeTests' to check; this keeps the frame's.
         ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
 
-        string[] locked = [.. pack.Items.Where(i => i.PlanetLocked).Select(i => i.Key).Order()];
-
-        Assert.Equal(
-            ["ares_regolith", "grimhold_slag", "terran_ferrite", "verdant_amber"], locked);
+        HashSet<string> locked = [.. pack.Items.Where(i => i.PlanetLocked).Select(i => i.Key)];
 
         // And that each really does come from one world, since that is the fact hauling is built
         // on rather than a property of the flag.
@@ -472,13 +475,80 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
             Assert.Single(bodies);
         }
 
-        // The cross-faction recipe consumes all four, which is what makes two of them cross the
-        // line to reach any given builder (ADR-0008).
+        // The cross-faction recipe consumes only planet-locked materials, each from a different
+        // world, which is what makes two of them cross the line to reach any given builder
+        // (ADR-0008). Asserted as a property rather than as a list of keys, so this says what the
+        // frame is for and goes red when that stops being true, not when an item is renamed.
         RecipeContent frame = pack.Recipes.Single(r => r.Key == "build_alloy_frame");
 
-        string[] frameInputs = [.. frame.Inputs.Select(i => i.Item).Order()];
+        foreach (RecipeInputContent input in frame.Inputs)
+        {
+            Assert.True(
+                locked.Contains(input.Item),
+                $"The frame takes {input.Item}, which is not planet-locked, so it is not a reason "
+                + "for anybody to cross the faction line.");
+        }
 
-        Assert.Equal<IEnumerable<string>>(locked, frameInputs);
+        string[] frameWorlds = [.. frame.Inputs
+            .SelectMany(i => pack.ResourceNodes.Where(n => n.Item == i.Item).Select(n => n.Body))
+            .Distinct()
+            .Order()];
+
+        string[] homeworlds = [.. Enum.GetValues<Race>().Select(Races.HomeBodyKeyFor).Order()];
+
+        Assert.Equal(homeworlds, frameWorlds);
+    }
+
+    [Fact]
+    public async Task ADepositContentNoLongerAuthors_IsRemovedWithItsPool()
+    {
+        // Task 184. Nothing removed a deposit, so one deleted from the file -- or renamed in it --
+        // went on being served from the database, on its old body, gatherable, and invisible to the
+        // validator. The Capital's ferrite would have outlived ferrite becoming Terra's.
+        await using (SpaceMmoDbContext first = _fixture.CreateContext())
+        {
+            await new ContentLoader(first).LoadAsync(ContentRoot());
+        }
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        // Scrap, because removing one of a common material leaves a pack that still validates.
+        ResourceNodeContent retired = pack.ResourceNodes.First(n => n.Item == "scrap_alloy");
+
+        // Somebody has gathered from it, so it has a pool: the row whose foreign key refuses the
+        // delete if it is not removed first.
+        await using (SpaceMmoDbContext gathered = _fixture.CreateContext())
+        {
+            ResourceNode node = await gathered.ResourceNodes.SingleAsync(n => n.Key == retired.Key);
+
+            gathered.ResourceNodeStates.Add(
+                new ResourceNodeState { ResourceNodeId = node.Id, QuantityRemaining = 3 });
+
+            await gathered.SaveChangesAsync();
+        }
+
+        ContentPack edited = pack with
+        {
+            ResourceNodes = [.. pack.ResourceNodes.Where(n => n.Key != retired.Key)],
+        };
+
+        await using (SpaceMmoDbContext second = _fixture.CreateContext())
+        {
+            await new ContentLoader(second).ApplyAsync(edited);
+        }
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.False(
+            await verify.ResourceNodes.AnyAsync(n => n.Key == retired.Key),
+            $"{retired.Key} is no longer authored and is still in the database.");
+
+        Assert.Empty(await verify.ResourceNodeStates.ToListAsync());
+
+        // And only it: every deposit still authored is still there.
+        string[] remaining = [.. (await verify.ResourceNodes.Select(n => n.Key).ToListAsync()).Order()];
+
+        Assert.Equal(edited.ResourceNodes.Select(n => n.Key).Order(), remaining);
     }
 
     [Fact]

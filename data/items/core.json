@@ -6,18 +6,47 @@
       "name": "Scrap Alloy",
       "category": "Raw",
       "volumeM3": 0.1,
-      "$comment": "Hand-gatherable with no tool, so a brand-new character always has somewhere to start.",
+      "$comment": "Hand-gatherable with no tool, so a brand-new character always has somewhere to start. Common to every world, and the one raw material that is: Joe, 9 October 2026 (task 184). Every homeworld has it beside its outpost.",
       "$priceComment": "Whole credits per unit, like quest rewards. This is the floor that guarantees nobody is ever stuck: at zero credits a player can neither start a job nor place a sell order, since both charge up front, so ore would be unsellable exactly when it is all they own. Priced to be the worst option available -- selling to another player must always beat it, or the player market never forms. One credit against a 15 cr job fee means a few minutes of gathering unsticks you and nothing more.",
       "factionBuyPrice": 1
     },
     {
+      "$starterComment": "The four starter ores, one per homeworld and planet-locked to it (ADR-0008; Joe, 9 October 2026, task 184). Mechanically identical -- volume, price, deposit size, respawn, tool and level -- so no race's first hour is easier than another's (design-bible section 4), and materially distinct, so each world's ore is hauled rather than found everywhere. A new player is still never waiting on a market: their own world has their ore and the scrap beside it. Not the level-15 materials below, which feed the cross-faction tier.",
       "key": "ferrite_ore",
       "name": "Ferrite Ore",
       "category": "Raw",
       "volumeM3": 0.4,
-      "$comment": "Tool-gated behind crude_mining_laser.",
+      "$comment": "Terra's. Tool-gated behind crude_mining_laser. Terra keeps the familiar metal because it is the familiar world (design-bible section 4). Found on the Capital as well until 9 October 2026, when it became Terra's alone.",
       "$priceComment": "Twice scrap because it is tool-gated and slower to gather, but still a floor rather than a valuation. Twenty ore refines into four plates; if four plates ever sell for less than the 40 cr this pays, the floor has been set too high and the refining chain is pointless.",
-      "factionBuyPrice": 2
+      "factionBuyPrice": 2,
+      "planetLocked": true
+    },
+    {
+      "key": "oxide_salt",
+      "name": "Oxide Salt",
+      "category": "Raw",
+      "volumeM3": 0.4,
+      "$comment": "Ares'. Rust-red salt crust from a dry world, cut out of the desert floor. Tool-gated behind crude_mining_laser, and ferrite's equal in everything but where it is found.",
+      "factionBuyPrice": 2,
+      "planetLocked": true
+    },
+    {
+      "key": "rootstone",
+      "name": "Rootstone",
+      "category": "Raw",
+      "volumeM3": 0.4,
+      "$comment": "Verdance's. Stone the living planet has grown roots through. Not 'heartwood_amber' as design-bible section 4 first proposed, which would have been a second amber on a world that already has Luminous Amber. Tool-gated behind crude_mining_laser, and ferrite's equal in everything but where it is found.",
+      "factionBuyPrice": 2,
+      "planetLocked": true
+    },
+    {
+      "key": "blackiron_ore",
+      "name": "Blackiron Ore",
+      "category": "Raw",
+      "volumeM3": 0.4,
+      "$comment": "Grimhold's. Heavy dark iron from a heavy dark world. Not 'blackslag' as design-bible section 4 first proposed, which would have been a second slag on a world that already has Grimhold Slag. Tool-gated behind crude_mining_laser, and ferrite's equal in everything but where it is found.",
+      "factionBuyPrice": 2,
+      "planetLocked": true
     },
     {
       "key": "ferrite_plate",
@@ -27,7 +56,7 @@
       "$comment": "Denser than its inputs by design: refining should make hauling easier, not harder."
     },
     {
-      "$lockedComment": "The four planet-locked raw materials (ADR-0008). Each occurs on exactly one homeworld and nowhere else, which is what makes hauling a profession and gives the faction line something to be a line between. The starter chain above stays deliberately unlocked: scrap and ferrite are everywhere, so a new player is never waiting on a market that may have no sellers.",
+      "$lockedComment": "The four level-15 planet-locked raw materials (ADR-0008), which the cross-faction frame consumes. Each occurs on exactly one homeworld and nowhere else, which is what makes hauling a profession and gives the faction line something to be a line between. Until 9 October 2026 the starter chain above was deliberately unlocked, scrap and ferrite everywhere; since task 184 only scrap is common, and each world's starter ore is locked to it, beside the scrap a new player needs.",
       "key": "terran_ferrite",
       "name": "Terran Ferrite",
       "category": "Raw",

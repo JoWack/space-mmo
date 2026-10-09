@@ -192,7 +192,7 @@ bool FSpaceMMOAuthoringMovingRewritesOnlyTheDirectionTest::RunTest(const FString
 	FString Error;
 
 	if (!FSpaceMMOWorldDocument::SetDirection(
-		Text, TEXT("resourceNodes"), TEXT("node_capital_ferrite_a"), Moved, Written, Error))
+		Text, TEXT("resourceNodes"), TEXT("node_terra_ferrite_a"), Moved, Written, Error))
 	{
 		AddError(Error);
 
@@ -226,7 +226,7 @@ bool FSpaceMMOAuthoringMovingRewritesOnlyTheDirectionTest::RunTest(const FString
 	const FSpaceMMOAuthoredPlaceable* const Entry = After.GetPlaceables().FindByPredicate(
 		[](const FSpaceMMOAuthoredPlaceable& Candidate)
 		{
-			return Candidate.Key == TEXT("node_capital_ferrite_a");
+			return Candidate.Key == TEXT("node_terra_ferrite_a");
 		});
 
 	if (Entry == nullptr)
@@ -256,7 +256,7 @@ bool FSpaceMMOAuthoringMovingRewritesOnlyTheDirectionTest::RunTest(const FString
 
 	for (int32 Index = 0; Index < BeforeLines.Num(); ++Index)
 	{
-		if (BeforeLines[Index].Contains(TEXT("node_capital_ferrite_a")))
+		if (BeforeLines[Index].Contains(TEXT("node_terra_ferrite_a")))
 		{
 			// Scan forward to this entry's own comment, stopping at the end of the entry so a
 			// neighbour's comment can never stand in for it.
@@ -347,7 +347,7 @@ bool FSpaceMMOAuthoringRemovingLeavesValidJsonTest::RunTest(const FString& Param
 
 	const TArray<TPair<const TCHAR*, FString>> Cases =
 	{
-		{ TEXT("resourceNodes"), TEXT("node_capital_ferrite_a") },
+		{ TEXT("resourceNodes"), TEXT("node_terra_ferrite_a") },
 		{ TEXT("resourceNodes"), LastNode },
 		{ TEXT("stations"), LastStation },
 	};

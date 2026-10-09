@@ -1064,7 +1064,7 @@ struct SPACEMMOBACKEND_API FBackendResourceNode
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int64 Id = 0;
 
-	/** Stable content key, e.g. <c>node_capital_ferrite_a</c>. */
+	/** Stable content key, e.g. <c>node_terra_ferrite_a</c>. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	FString Key;
 

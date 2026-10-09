@@ -158,46 +158,9 @@
 
   "$nodeComment": "Deposits are placed by direction from the body centre, never by latitude and longitude — a lat-long pair has two singular points and a deposit at a pole is no less valid than one at the equator. No altitude: how high the ground is there is a question the terrain function already answers, and a second answer would be free to disagree with it.",
 
-  "resourceNodes": [
-    {
-      "key": "node_test_player_spawn_ferrite_a",
-      "body": "body_capital",
-      "item": "ferrite_ore",
-      "skill": "mining",
-      "requiredTool": "crude_mining_laser",
-      "$toolComment": "Mining is tool-gated by design (design bible, skills table), and the onboarding questline already teaches the order: gather scrap, craft the laser, then mine. Until this field existed the gate could not be authored, so step two of the quest could be skipped entirely and mining worked bare-handed.",
-      "requiredLevel": 1,
-      "quantityMax": 200,
-      "respawnSeconds": 1200,
-      "$comment": "On the face a character first spawning in can see, so the first deposit a new player meets is not on the far side of the world.",
-      "direction": [0.001078, 0.000080, 0.999999]
-    },
-    {
-      "key": "node_capital_ferrite_a",
-      "body": "body_capital",
-      "item": "ferrite_ore",
-      "skill": "mining",
-      "requiredTool": "crude_mining_laser",
-      "$toolComment": "Mining is tool-gated by design (design bible, skills table), and the onboarding questline already teaches the order: gather scrap, craft the laser, then mine. Until this field existed the gate could not be authored, so step two of the quest could be skipped entirely and mining worked bare-handed.",
-      "requiredLevel": 1,
-      "quantityMax": 200,
-      "respawnSeconds": 1200,
-      "$comment": "On the face a character spawns on, so the first deposit a new player meets is not on the far side of the world. It read 'the face a ship approaching from the system origin arrives at' until 24 August, which had been true and quietly stopped being so when task 120 put players on the ground at +Z: the whole starter cluster was left 31 km away, a quarter of the way round the planet, while every comment here still claimed it was close.",
-      "direction": [0.026000, 0.020000, 1.000000]
-    },
-    {
-      "key": "node_capital_ferrite_b",
-      "body": "body_capital",
-      "item": "ferrite_ore",
-      "skill": "mining",
-      "$toolComment": "Mining is tool-gated by design (design bible, skills table), and the onboarding questline already teaches the order: gather scrap, craft the laser, then mine. Until this field existed the gate could not be authored, so step two of the quest could be skipped entirely and mining worked bare-handed.",
-      "requiredTool": "crude_mining_laser",
-      "requiredLevel": 1,
-      "quantityMax": 200,
-      "respawnSeconds": 1200,
-      "direction": [0.051000, -0.015000, 1.000000]
-    },
+  "$capitalOreComment": "The Capital had three ferrite deposits until 9 October 2026: node_test_player_spawn_ferrite_a, node_capital_ferrite_a and node_capital_ferrite_b. Ferrite became Terra's alone that day (task 184), and a planet-locked material may occur on one body, so they went. --seed removes a deposit content no longer authors, together with its pool; before task 184 it never removed one, and a deposit deleted here would have gone on being served from the database.",
 
+  "resourceNodes": [
     {
       "$comment": "Scrap, and the reason the onboarding questline was unplayable: its first step asks for 8 scrap_alloy and nothing in the world produced any. Gathering rather than mining, and requiredLevel 1 with no tool, because this is the first thing a brand-new character does and every gate after it depends on getting through this one.",
       "key": "node_capital_scrap_a",
@@ -207,7 +170,7 @@
       "requiredLevel": 1,
       "quantityMax": 25,
       "respawnSeconds": 300,
-      "$directionComment": "Close to the ferrite nodes on the same face a character spawns on. A new player should not have to circumnavigate a planet to find step one, and a deposit they cannot find is indistinguishable from one that does not exist. That was written as an intention and was false for weeks -- see the comment on the first ferrite node above.",
+      "$directionComment": "On the face a character spawns on at the Capital, about 800 m from Borlash. A new player should not have to circumnavigate a planet to find step one, and a deposit they cannot find is indistinguishable from one that does not exist. That was once written as an intention and was false for weeks: until 24 August the whole starter cluster sat 31 km away, a quarter of the way round the planet, after task 120 put players on the ground at +Z. Kept on the Capital since scrap is common to every world (task 184); whether the Capital should keep any deposits at all is design-bible section 4's open question.",
       "direction": [0.014000, 0.040000, 1.000000]
     },
     {
@@ -219,6 +182,181 @@
       "quantityMax": 25,
       "respawnSeconds": 300,
       "direction": [0.005000, -0.032000, 1.000000]
+    },
+
+    {
+      "$starterComment": "Each homeworld's starter field (task 184): two scrap and two of that world's own ore, where a new character of that race can walk the intro questline to their first hull without leaving home (task 145). The same layout on all four worlds, measured from the outpost at the drawn 20 km radius: scrap 60 m out at bearings -35 and +35 degrees, ore 110 m at -15 and 125 m at +20, bearing 0 pointing away from the world's level-15 deposit so the two fields are on opposite sides of the building. Equal walks for every race. Scrap is inside the outpost's 100 m docking range; the ore is a short walk beyond it.",
+      "key": "node_terra_scrap_a",
+      "body": "body_terra",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-0.999469, 0.031706, 0.007538]
+    },
+    {
+      "key": "node_terra_scrap_b",
+      "body": "body_terra",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-0.999572, 0.028266, 0.007538]
+    },
+    {
+      "key": "node_terra_ferrite_a",
+      "body": "body_terra",
+      "item": "ferrite_ore",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "$toolComment": "Mining is tool-gated by design (design bible, skills table), and the onboarding questline already teaches the order: gather scrap, craft the laser, then mine. Until this field existed the gate could not be authored, so step two of the quest could be skipped entirely and mining worked bare-handed.",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "$comment": "Terra's ferrite, which was the Capital's until 9 October 2026 (task 184). Two deposits rather than the Capital's three, so Terra is provisioned exactly like the other three homeworlds.",
+      "direction": [-0.999496, 0.031409, 0.004683]
+    },
+    {
+      "key": "node_terra_ferrite_b",
+      "body": "body_terra",
+      "item": "ferrite_ore",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "direction": [-0.999604, 0.027850, 0.004122]
+    },
+
+    {
+      "key": "node_ares_scrap_a",
+      "body": "body_ares",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-0.998980, -0.022237, 0.039302]
+    },
+    {
+      "key": "node_ares_scrap_b",
+      "body": "body_ares",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-0.999016, -0.018895, 0.040122]
+    },
+    {
+      "key": "node_ares_oxide_salt_a",
+      "body": "body_ares",
+      "item": "oxide_salt",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "direction": [-0.998855, -0.022626, 0.042143]
+    },
+    {
+      "key": "node_ares_oxide_salt_b",
+      "body": "body_ares",
+      "item": "oxide_salt",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "direction": [-0.998865, -0.019301, 0.043535]
+    },
+
+    {
+      "key": "node_verdance_scrap_a",
+      "body": "body_verdance",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-0.999334, 0.016711, -0.032439]
+    },
+    {
+      "key": "node_verdance_scrap_b",
+      "body": "body_verdance",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-0.999386, 0.013270, -0.032439]
+    },
+    {
+      "key": "node_verdance_rootstone_a",
+      "body": "body_verdance",
+      "item": "rootstone",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "direction": [-0.999242, 0.016412, -0.035293]
+    },
+    {
+      "key": "node_verdance_rootstone_b",
+      "body": "body_verdance",
+      "item": "rootstone",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "direction": [-0.999274, 0.012851, -0.035853]
+    },
+
+    {
+      "key": "node_grimhold_scrap_a",
+      "body": "body_grimhold",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-0.999477, -0.023266, -0.022447]
+    },
+    {
+      "key": "node_grimhold_scrap_b",
+      "body": "body_grimhold",
+      "item": "scrap_alloy",
+      "skill": "gathering",
+      "requiredLevel": 1,
+      "quantityMax": 25,
+      "respawnSeconds": 300,
+      "direction": [-0.999391, -0.026706, -0.022447]
+    },
+    {
+      "key": "node_grimhold_blackiron_a",
+      "body": "body_grimhold",
+      "item": "blackiron_ore",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "direction": [-0.999402, -0.023561, -0.025301]
+    },
+    {
+      "key": "node_grimhold_blackiron_b",
+      "body": "body_grimhold",
+      "item": "blackiron_ore",
+      "skill": "mining",
+      "requiredTool": "crude_mining_laser",
+      "requiredLevel": 1,
+      "quantityMax": 200,
+      "respawnSeconds": 1200,
+      "direction": [-0.999298, -0.027121, -0.025861]
     },
 
     {
@@ -296,7 +434,7 @@
       "body": "body_capital",
       "$kindComment": "Capital, not TradingHub. It was authored as a TradingHub until 25 August, which meant StationKind.Capital was configured in DefaultGame.ini and authored on nothing -- the capital drew the same 25 m cube as every outpost, and EveryAuthoredKindHasALook could not catch it because it checks that authored kinds have a look, not that configured kinds are authored.",
       "kind": "Capital",
-      "$directionComment": "About 500 m from where a character spawns, near the starter deposits: close enough to see and walk to, far enough that a 40 m building is not standing on top of the arrival point. The first station a new player meets should not be on the far side of the world.",
+      "$directionComment": "About 500 m from where a character spawns, near the Capital's scrap: close enough to see and walk to, far enough that a 40 m building is not standing on top of the arrival point. Written when every new character began here. Once task 145 lands, a new character begins at their own homeworld's outpost, where task 184 put the starter deposits, and arrives here at the end of the questline.",
       "direction": [0.026000, 0.000000, 1.000000],
       "$dockingRangeComment": "The whole platform, 420 m, since 2 October (task 169). It was a hundred metres because how far you can dock from is how far a ship can vanish from (task 153) -- but a ship at Borlash now docks only on one of its four landing pads, whatever this says, so this governs a person on foot alone, and a pilot set down at a corner dock 370 m from the centre must still be docked when they arrive. It still does not reach the spawn point, 500 m out, which is what the hundred metres was first protecting.",
       "dockingRangeKm": 0.42,

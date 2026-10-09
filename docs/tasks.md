@@ -4337,7 +4337,7 @@ moved rather than that one. Nothing outside this file referred to the old number
 
 ## 145 — A new character starts on their race's homeworld
 
-**Pending, blocked on 184, 185 and 186.** Picked up and split on 9 October. Belongs to **M7 — a world
+**Pending, blocked on 185 and 186** (184 done 9 October). Picked up and split on 9 October. Belongs to **M7 — a world
 worth being in** for the zone, and to **M5** for the opening.
 
 **The rule is already written down and nothing implements it.** `design-bible.md` §1 gives every race
@@ -8584,9 +8584,9 @@ only walks.
 
 ## 184 — Each homeworld yields its own ore
 
-**In progress, started 9 October.** Split out of 145 the same day. Belongs to **M4**, whose line names
-planet-locked materials. **Blocks 145, 185 and 186.** The names below were **approved by Joe on 9
-October**, together with 185's plate name and 186's quest wording.
+**Done 9 October; confirmed by Joe's playtest the same day** (*"Testing passed!"*). Split out of 145 the same day. Belongs to **M4**,
+whose line names planet-locked materials. **Unblocks 185 and 186**; 145 still waits on both. The names
+below were **approved by Joe on 9 October**, together with 185's plate name and 186's quest wording.
 
 Joe, 9 October: *"Terra should keep ferrite. I think the scrap_alloy can be a common material that all
 planets share. Other specific ores, however, should be planet specific."* So the intro questline's scrap
@@ -8607,33 +8607,110 @@ at level 1, 200 a deposit, a 20-minute respawn. §4 calls this "mechanically equ
 so no race's first hour is easier than another's. Volume is held equal on purpose: the level-15 materials
 vary from 0.15 to 0.6 m³, and a starter ore that hauled lighter would be an advantage at creation.
 
-### What moves with it
+### What was done, 9 October
 
-- **`ferrite_ore` becomes planet-locked, to Terra.** `ValidatePlanetLockedMaterials` refuses a locked
-  material on a second body, so the Capital's three ferrite deposits (`node_capital_ferrite_a`, `_b` and
-  `node_test_player_spawn_ferrite_a`) move to Terra in the same change. The Capital keeps its two scrap
-  deposits, since scrap is common. That settles half of §4's open question about whether the Capital
-  keeps deposits of its own: scrap yes, ore no.
-- **Each homeworld gets two scrap deposits and two of its ore**, beside its outpost and around 145's start
-  direction, spread as the Capital's are. `SpaceMMO.Bodies.DepositsStandClearOfTheirStations` already
-  measures new nodes against their station.
-- **Deposit meshes are keyed by item** (`Meshes` in `DefaultGame.ini`). An unmapped ore draws as the
-  placeholder cylinder and is still minable (`ASpaceMMODepositActor::ApplyConfiguredMesh`), so art is not
-  a blocker.
-- **The level-15 `terran_ferrite` stays as it is.** It is a different item from Terra's starter ferrite and
-  is already authored. Both have "Ferrite" in the name, which Joe may want to revisit; nothing here depends
-  on it.
+- **Three new items and one changed.** `oxide_salt`, `rootstone` and `blackiron_ore` in
+  `data/items/core.json`, and `ferrite_ore` is now `planetLocked`. Nothing consumes the three yet:
+  refining them is 185, and counting them toward quest 3 is 186. Until both land, a character on Ares,
+  Verdance or Grimhold can mine their ore and do nothing else with it.
+- **Each homeworld has a starter field**: two scrap and two of its ore, laid out identically around its
+  outpost at the drawn 20 km radius. Scrap is 60 m out at bearings -35° and +35°; ore is 110 m out at -15°
+  and 125 m out at +20°. Bearing 0 points away from the world's level-15 deposit, so the two fields are on
+  opposite sides of the building. Every deposit is at least 57 m from its nearest neighbour and 190 m from
+  the level-15 rock. The scrap sits inside the outpost's 100 m on-foot docking range; the ore is a short
+  walk past it.
+- **The Capital lost its three ferrite deposits** (`node_test_player_spawn_ferrite_a`,
+  `node_capital_ferrite_a`, `node_capital_ferrite_b`) and kept its two scrap deposits. Terra's two
+  ferrite deposits are new keys rather than moved ones, so Terra is provisioned like the other three; a
+  third would have made the Humanoid start richer. The spawn node was a leftover from 96's capture tool
+  (task 126).
+- **145's start direction is not authored here.** It belongs to the spawn's own change. The starter
+  fields are laid out so it can go at bearing 0, between the two scrap deposits, a few tens of metres
+  from the outpost.
 
-### How it would be checked
+### Found while building: `--seed` never removed a deposit
 
-- **A pack test, not a count:** every `Races.HomeBodyKeyFor` body carries scrap and a planet-locked `Raw`
-  item that some refining recipe consumes. It is read from the shipped pack, and made red by deleting one
-  world's deposits.
-- **A wire test** with a `/world/nodes` payload captured after seeding, naming a new ore on its own body.
+`ContentLoader` upserts deposits by key and never deleted one. So the Capital's ferrite, deleted from
+`origin.json`, would have gone on being served from the database: still on the Capital, still minable,
+breaking the planet-lock where the validator, which reads the file, could not see it.
+
+**`--seed` now removes a deposit the pack no longer authors**, together with its pools
+(`ResourceNodeState`). The pools go first and are saved first, because the foreign key restricts the
+delete. Removal happens only when the pack authors deposits at all, by the early return that was already
+there. Deposits are the one kind of content where deletion is safe; the rest is **188**.
+
+### Ruled out
+
+- **Unwalkable ground under a deposit.** The walk model refuses slopes over 50°
+  (`SteepestWalkableSlopeDegrees`), and the steepest ground measured on any world, across five patches
+  each, is Grimhold's 46° (`$appearanceRanges` in `origin.json`). A sample rather than a proof, so a
+  deposit nobody can reach would still be worth a look before blaming anything else.
+- **A wire test for the new ores.** It was planned here and not added. The client's deposit parser is
+  item-agnostic: a payload with new item keys passes against any parser that passed before, so it would
+  constrain nothing. The served payload was read back instead (below).
+- **Deposit art.** `Meshes` in `DefaultGame.ini` is keyed by item. An unmapped ore draws as the placeholder
+  cylinder and is still minable (`ASpaceMMODepositActor::ApplyConfiguredMesh`), exactly as the four
+  level-15 materials already do. What each world's ore looks like is Joe's to decide.
+- **The level-15 `terran_ferrite` stays as it is.** It is a different item from Terra's starter ferrite.
+  Both have "Ferrite" in the name, which Joe may want to revisit; nothing here depends on it.
+
+### What was verified, and how
+
+Server, after a build: Domain 468, Data 206 and Api 98, all passing. Three new Data tests, and one
+rewritten.
+
+- **`EveryHomeworldStartsAlikeTests`** reads the shipped pack. Every race's homeworld has each common
+  material the main story gathers (read from the quests, so scrap today), and exactly one planet-locked
+  ore worked at level 1. Then every homeworld's start is compared with the others, not with numbers
+  written in the test: deposit count, skill, level, tool, size, respawn, the ore's volume and its price.
+  **Made red three ways:** Ares' scrap moved to the Capital fails both tests while the validator stays
+  green, which is the gap this fills. Verdance's second rootstone deposit at 300 fails the comparison and
+  prints all four worlds side by side. Ares' oxide salt at level 15 leaves Ares "0 starter ores".
+- **`ADepositContentNoLongerAuthors_IsRemovedWithItsPool`** loads the shipped pack, gives one scrap deposit a
+  pool, re-applies the pack without it, and checks the deposit and pool are gone and every other deposit
+  is still there. **Red with the prune switched off** ("node_capital_scrap_a is no longer authored and is
+  still in the database"), and **red with the pools left in place** (EF refuses the delete).
+- **`TheShippedContentReallyLocksTheFourMaterials` became `...ReallyLocksItsPlanetMaterials`.** It asserted
+  that the locked items were exactly the frame's four, which this task makes false by design. It now
+  asserts that every frame input is locked and that they come one from each race's homeworld.
+  **Red with `grimhold_slag` unlocked.**
+- **The dev database was re-seeded and read back** through a scratch API on :5081: 23 deposits, matching
+  content. Four on each homeworld plus its level-15 ones, two scrap on the Capital, and no ferrite there.
+  `node_ares_oxide_salt_a` arrives as "Oxide Salt", mining 1, crude laser, 200. The re-seed removed the
+  Capital's three ferrite deposits from Joe's dev database, with any pools they had.
+- **Client: 288 tests, `PASS`** (`scripts/tests.bat`), after a build reporting `Result: Succeeded` from
+  `UnrealEngineSource`. `SpaceMMO.Bodies.DepositsStandClearOfTheirStations` and `DepositsStandOnPlacedBodies`
+  read the new content and passed. The two authoring tests that used `node_capital_ferrite_a` as their
+  example now use `node_terra_ferrite_a`, which keeps the `$comment` after its key that the move test
+  needs.
+
+**Not verified by anything automated:** how the fields look and walk. No test sees a cylinder standing
+in for oxide salt, or whether 110 m is a comfortable walk on each world's ground.
+
+### What a playtest has to say
+
+Standalone, like the last month's playtests, so the server needs no re-cook. **Start the API after this
+change**: the prune lives in `--seed`, which has already run against the dev database.
+
+- **Land at Ares Outpost and walk out of it.** Two scrap rocks about 60 m out, and two oxide salt deposits
+  110–125 m out, drawn as placeholder cylinders, on the side away from the two regolith rocks. The
+  deposit prompt names Oxide Salt and asks for the crude laser at level 1. Verdance (Rootstone),
+  Grimhold (Blackiron Ore) and Terra (Ferrite Ore) are laid out the same way.
+- **The Capital has no ferrite** near Borlash or the spawn any more, only its two scrap deposits.
+
+How it would fail:
+- **Ferrite still on the Capital.** The database was seeded by an API older than this change, which never
+  removed a deposit. Re-seed.
+- **A world with no starter field.** Its deposits were measured against another world, or never placed:
+  the `Deposit ... placed on '...' against terrain seed` line names the world each was measured against.
+  The client should log `Placed 23 deposit(s) across 5 body/bodies`.
+- **Mining oxide salt works and quest 3 does not count it, or the refinery will not take it.** Expected
+  until 186 and 185 land; that is their work, not a fault here.
 
 ## 185 — Plate refines from any homeworld's ore
 
-**Pending, blocked on 184** for the names. Split out of 145 on 9 October. Belongs to **M4**. **Blocks 145.**
+**Pending, blocked on nothing** since 184 landed on 9 October. Split out of 145 the same day. Belongs to
+**M4**. **Blocks 145.**
 
 ADR-0008: a crafted good is one item made by four per-race recipes that consume different raw inputs. With
 scrap common, **only one intro recipe consumes a world's own material**: `refine_ferrite_plate`, 20
@@ -8659,7 +8736,8 @@ which are both shared, and need no variants until style exists (187).
 
 ## 186 — A quest step can ask for any homeworld's ore
 
-**Pending, blocked on 184.** Split out of 145 on 9 October. Belongs to **M4**. **Blocks 145.**
+**Pending, blocked on nothing** since 184 landed on 9 October. Split out of 145 the same day. Belongs to
+**M4**. **Blocks 145.**
 
 Joe, 9 October: any homeworld's ore counts toward "Mine 20 ore". A step matches an event by one target key,
 compared ordinally (`QuestProgress.cs:62`), and `intro_mine_ore` targets `ferrite_ore`.
@@ -8702,4 +8780,38 @@ touches `InventoryService` stacking and cost-basis tracking. Cheap now, expensiv
   holds. Whether a buyer can ask for a particular style is undecided.
 - **Non-stacking goods** — tools, hulls — carry style on the instance, not on a stack.
 - **Anything that shows style is interface**, and is shown to Joe before it is built.
+
+## 188 — Content removed from the pack lives on in the database
+
+*Found 9 October while building 184; not yet seen in play.* Belongs to **M7**, whose line names authoring
+world content graphically, because the authoring panel is what removes things.
+
+`ContentLoader` upserts by key and never deletes. So anything taken out of `data/`, or renamed in it, stays
+in the database exactly as it was, and is served, used and invisible to the validator, which reads the
+files. 184 met this with deposits. When ferrite became Terra's, the Capital's three ferrite deposits would
+have gone on being served from the database after the file stopped naming them, breaking the planet-lock
+with nothing looking wrong.
+
+**Deposits are fixed** (184): `--seed` removes a deposit the pack no longer authors, with its pools.
+That was safe because nothing else refers to a deposit.
+
+**Nothing else can simply be deleted**, which is why this is its own task:
+
+| Removed from content | Still in the database, and what hangs off it |
+|---|---|
+| A station | Hangars and their contents, docked characters, open orders, industry jobs, quests that dock there |
+| A recipe | Industry jobs, running and finished. A removed recipe is still listed and can still be started: `GET /industry/recipes` and `IndustryService`'s job start both read the table, not the pack |
+| A quest | Characters' journals and their progress |
+| An item | Every stack, instance, order and ledger line that holds it |
+| A body or system | Characters' home bodies, stations and deposits on it |
+
+**The authoring panel makes the station case reachable today.** `FSpaceMMOWorldDocument::RemoveEntry`
+cuts a station or a deposit out of `origin.json`, and the panel says to re-seed after every write. A
+station removed that way comes back on the next sign-in, from the database.
+
+What it needs is a retire rule rather than a delete: a column saying content no longer authors the row,
+which `/world/*` stops serving and the services refuse, leaving everything that refers to it valid. Which
+rows want it, and what a player holding a retired item sees, are design questions to settle first.
+
+**Blocked on:** nothing.
 

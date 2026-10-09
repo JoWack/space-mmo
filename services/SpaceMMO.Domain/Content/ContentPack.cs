@@ -42,9 +42,10 @@ public sealed record ItemContent(
     /// </summary>
     /// <remarks>
     /// Declared rather than inferred. "Every raw material appears on one planet" would be the
-    /// wrong rule — the starter chain is deliberately everywhere, so that a new player is never
-    /// waiting on a market that may have no sellers — and a rule that forbids the common case
-    /// would be turned off rather than obeyed.
+    /// wrong rule — scrap is deliberately everywhere (Joe, 9 October 2026, task 184), so a new
+    /// player on any world has the first thing the questline asks for — and a rule that forbids the
+    /// common case would be turned off rather than obeyed. Each world's starter ore is locked, as
+    /// are the level-15 materials the cross-faction tier consumes.
     ///
     /// Saying it out loud is also what lets the validator catch the failure that matters:
     /// planet-locked quietly becoming "mostly on one planet", which dissolves hauling as a
