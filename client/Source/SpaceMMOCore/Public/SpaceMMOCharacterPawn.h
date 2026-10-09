@@ -65,9 +65,9 @@ struct FSpaceMMOCharacterBody
 	FSoftObjectPath Mesh;
 
 	/**
-	 * How tall to draw it, in centimetres: its own height. Joe chose each race at its true height,
-	 * with the capsule and cameras every character shares (182), so this sizes the drawing only and
-	 * CharacterHeightCentimetres still sizes the collision.
+	 * How tall it is, in centimetres: its own height. It sizes the drawing (182), and since 177 the
+	 * capsule the server sweeps and the cameras' height too, so a race is as tall to a lintel as it
+	 * looks and sees from its own eyes (Joe, 5 October).
 	 */
 	UPROPERTY(EditAnywhere, Config)
 	double HeightCentimetres = 180.0;
@@ -244,6 +244,20 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
 	static double UniformScaleForHeight(double AuthoredHeightCentimetres, double TargetCentimetres);
+
+	/**
+	 * How tall this character is, in centimetres: its race's body, or CharacterHeightCentimetres before a
+	 * race is known or for one with no body (177). The capsule every sweep uses is this tall, on the server
+	 * as on the client, since both hold the replicated race.
+	 */
+	double GetBodyHeightCentimetres() const;
+
+	/**
+	 * Where the third-person camera's pivot (X) and the first-person eyes (Y) sit for a body, in centimetres
+	 * above the feet: the 160 and 165 framed for the human, scaled by the body's height over the one they
+	 * were framed for. An unusable height leaves them as framed. Pure, for the tests.
+	 */
+	static FVector2D ViewHeightsFor(double BodyCentimetres, double FramedForCentimetres);
 
 	/**
 	 * Turns one angle toward another by at most a given step, the short way round.

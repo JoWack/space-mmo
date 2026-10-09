@@ -7220,8 +7220,10 @@ in first (176).
 
 **In progress: the jump start is made, imported, playing in `ABP_Human`, and passed Joe's playtest on 4
 October (the last section below; *"Playtest looks great"*). The Martian, elf and orc men have it too, rebuilt
-on their rigs (182), but nothing plays theirs yet. The other clips are pending, and the women's jump starts
-are blocked on 175.** Belongs to **M7**. Joe, 3 October: *"record tasks for using Blender MCP to
+on their rigs (182), but nothing plays theirs. Joe, 5 October: *"I think the same jump looks fine for each
+race, I don't think we need unique jumps per race at the moment"*, so every race keeps the Humanoid man's,
+and no blueprint per race is built for it. Their own clips stay imported in case that changes. The other
+clips are pending, and the women's jump starts are blocked on 175.** Belongs to **M7**. Joe, 3 October: *"record tasks for using Blender MCP to
 generate walking, jumping, and running animations once I have the 3D models created."*
 
 **Why the human's clips are not simply reused.** They work on the human today and would not elsewhere:
@@ -7366,8 +7368,9 @@ it was given:
 found the jump stretching his hips, and a ragged hairline, scratched cuffs and a blotchy face, which were
 his normal map. Both are fixed and checked in game (the last two sections below). How dark he read at
 night was the light's (181). Since 5 October each character draws their race's man, at his true height
-(182), awaiting Joe's playtest. Still open here: the capsule, the eye height and clearance per race, the
-women's bodies, and a blueprint per race so each plays its own clips.** Belongs to **M7**. Noticed while
+(182), which passed Joe's two-client retest. Since 5 October each race also collides and sees at its own
+height (the last section below), which Joe confirmed in game on 9 October: *"the character changes are
+working as expected"*. Still open: the women's bodies, which Joe has put off. No blueprint per race is wanted (176).** Belongs to **M7**. Noticed while
 recording 174 to 176.
 
 Every character draws the same human: the pawn reads one `CharacterMesh`, one `CharacterAnimClass` and
@@ -7582,6 +7585,88 @@ not more paint on these. Two ways:
 - project the approved sheet's face onto the head, which is free and scriptable, with seams to blend at
   the sides;
 - or a paid Tripo texture pass, priced before it is run.
+
+### A capsule and cameras per race, 5 October
+
+**Joe's decisions, 5 October**, after the two-client retest passed (182):
+- **The capsule's height follows the body; its radius stays 34 cm for every race.** Width was the riskier
+  half: 144's 1.20 m rule and the door frames are about width, and nothing built has a head height under
+  2.35 m. Borlash's gates are 9 m, its posterns 7 m and its halls 7 m clear; the trading hub's door heads
+  are 3 m and more. So no greybox is re-run for this.
+- **Both cameras scale with the body's height** from the human's framing, which Joe approved as a table
+  before it was built:
+
+| Race | Body | Collides as | Third-person pivot | First-person eyes |
+|---|---|---|---|---|
+| Humanoid | 180 cm | 180 cm | 160 cm | 165 cm |
+| Martian | 215 cm | 215 cm | 191 cm | 197 cm |
+| Space Elf | 215 cm | 215 cm | 191 cm | 197 cm |
+| Space Orc | 235 cm | 235 cm | 209 cm | 215 cm |
+
+  The camera's distance and shoulder offset are unchanged, so a taller race fills a little more of the
+  frame. The first-person camera stays 20 cm forward of the feet.
+- **The women wait.** Each draws as her race's man. Their four views exist in `CharacterImages`; making
+  them is four Tripo runs (about 66 credits), then 175's rigging. Drawing her own body also needs a sex on
+  the backend's character, which it does not have, and a choice at character creation, to be mocked for
+  Joe first.
+- **No jump per race** (176): every race keeps the Humanoid man's.
+
+**How it is built:**
+- `GetBodyHeightCentimetres` is the race's `HeightCentimetres` from `RaceBodies`, or
+  `CharacterHeightCentimetres` before a race arrives. The three capsule sweeps read it: footing, climbing
+  out of a floor, and blocking. The race is replicated and the server applies it (182), so the server
+  sweeps the same capsule the client predicts with.
+- `ApplyCharacterMesh`, which runs on every machine when the race changes, puts the cameras at
+  `ViewHeightsFor(height, CharacterHeightCentimetres)`. It does that before anything that can return
+  early, so a body that fails to load still sees from its race's height.
+- The drawing log line now ends "collides as 235.0 cm; sees from 208.9 cm, 215.4 in first person".
+
+**Verified, 5 October:**
+- **`SpaceMMO.Character.EachRaceSeesFromItsOwnEyes`** spawns a pawn per race in `DefaultGame.ini`, gives it the
+  race the way the server takes it, and reads the built camera components: 160/165 cm for the human,
+  191.1/197.1 for the Martian and elf, 208.9/215.4 for the orc. Each also collides as its body's height.
+- **`SpaceMMO.Character.ATallRaceStopsAtALowBeamAHumanWalksUnder`** is the server consequence as behaviour.
+  Each race walks at a beam 1.5 m ahead, its underside 2 m above the height field under it, walked by the
+  server's input RPC through the sweeps the server runs. The human walked 8.45 m, under it. The Martian,
+  elf and orc stopped at 1.02-1.08 m, which is the beam's near face less the 34 cm radius.
+- **Seen red against the old behaviour:** with the sweeps put back on `CharacterHeightCentimetres`, every
+  race walked 8.45 m through the beam, and the test failed on the three tall races and on "some race stops
+  at it".
+- **Client suite:** 288 tests, 0 failures.
+- **One build failure on the way,** not a code fault: the new test file moved the unity-build grouping, and
+  `RemotePlayerRunsAndFacesAsTheyDo`'s local `FrameSeconds` then shadowed the flight tests' global one
+  (C4459, an error here). Renamed to `TickSeconds`.
+- **The dedicated server is re-cooked**, since the server sweeps a different capsule now.
+
+**Joe's playtest** (restart the editor; the re-cooked dedicated server for two players):
+- **Each race's camera sits at its own eyes.** Switch with `SpaceMMO.ForceBodyRace 1`, 2, 3 and 0. The orc
+  sees over things the human cannot; the human looks exactly as before.
+- **First person** (the view toggle) is at eye height for each race, not at the chest.
+- **Tall races fit everywhere built:** walk the orc through Borlash's gates, posterns and halls, and the
+  trading hub's doors. Nothing built has a head height under 2.35 m, so none should stop him.
+- **How it would fail:**
+  - **The camera unchanged after switching race:** the log's drawing line should end "sees from 208.9 cm"
+    for the orc. If it does and the view has not moved, the boom's position is being overridden somewhere
+    this did not find.
+  - **The orc stops in a doorway or under a ceiling:** a real head-height clash. The log's "Blocked by X"
+    line names what stopped him.
+  - **Another player's orc stops where yours walks:** the server's sweep and yours disagree, which means
+    the staged server is stale (`check-staged-server.ps1`).
+
+**Joe's first try, 7 October: "no characters are being identified, even after successful sign in and
+character selection".** Not this task's code, and not reproduced:
+- **What the logs say:** `ClientA.log` signed in as account 8 at 15:12:07.687 and claimed character 11
+  200 ms later. The dedicated server's `SpaceMMO.log` then has "POST /accounts/resolve-character failed
+  (401): Unauthorized", so the claim was refused and the character stayed "no race yet".
+- **That endpoint answers a bare 401 for two different reasons:** a wrong service credential, or a player
+  token it does not accept.
+- **Ruled out, the credential:** `secrets/service-secret.txt` (unchanged since 2 August) and the API's user
+  secret have the same fingerprint as the server's, `8e4f0b7f1d6b1fd4`.
+- **Ruled out, the API's rules:** with a fresh sign-in as player A, the server's exact call returned 200
+  for character 11. A bogus token, or no service header, returned 401.
+- **Ruled out, the game:** the staged server and a headless client signing in from `player-a.txt`, against
+  an API started fresh, identified the character end to end ("Put back at ...", race 0's body on both).
+- **Left:** the API process Joe was running at the time, started 10:09. Its console would have said which.
 ## 178 — Armour concepts in each world's design language, through Higgsfield
 
 **Pending, blocked on 174**, the bodies the armour is drawn on. Belongs to **M4**, whose line names

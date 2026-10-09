@@ -301,17 +301,17 @@ bool FSpaceMMORemotePlayerRunsAndFacesAsTheyDoTest::RunTest(const FString& Param
 
 	AddInfo(FString::Printf(TEXT("The copy began play with up %s."), *Copy->GetSurfaceNormal().ToCompactString()));
 
-	constexpr float FrameSeconds = 1.0f / 60.0f;
+	constexpr float TickSeconds = 1.0f / 60.0f;
 	FWalkInput Input;
 
 	// One frame of a dedicated server and one client drawing the walker, in the order they happen.
 	auto Frame = [&]()
 	{
-		World->TimeSeconds += FrameSeconds;
+		World->TimeSeconds += TickSeconds;
 		Send(*Walker, Input);
-		Walker->Tick(FrameSeconds);
+		Walker->Tick(TickSeconds);
 		Replicate(*Walker, *Copy);
-		Copy->Tick(FrameSeconds);
+		Copy->Tick(TickSeconds);
 	};
 
 	const FLeg Legs[] = {

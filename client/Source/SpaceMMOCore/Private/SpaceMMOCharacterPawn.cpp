@@ -85,6 +85,11 @@ namespace
 	/** How fast each update's jump eases out when drawing another player, and the jump taken at once. */
 	constexpr double RemoteEasePerSecond = 10.0;
 	constexpr double RemoteSnapKilometres = 0.002;
+
+	// The cameras as framed for the human, 180 cm: the third-person pivot and the first-person eyes, above
+	// the feet. A taller race's are these scaled by its height (177).
+	constexpr double ThirdPersonPivotCentimetres = 160.0;
+	constexpr double FirstPersonEyeCentimetres = 165.0;
 }
 
 FSystemCoordinate FRemoteFollower::Projected(const double Now) const
@@ -189,7 +194,7 @@ ASpaceMMOCharacterPawn::ASpaceMMOCharacterPawn()
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(CharacterRoot);
 	CameraBoom->TargetArmLength = 400.0f;
-	CameraBoom->SetRelativeLocation(FVector(0.0, 0.0, 160.0));
+	CameraBoom->SetRelativeLocation(FVector(0.0, 0.0, ThirdPersonPivotCentimetres));
 	CameraBoom->bDoCollisionTest = false;
 
 	// Follows the character's own orientation rather than the controller's, because the character's
@@ -204,7 +209,7 @@ ASpaceMMOCharacterPawn::ASpaceMMOCharacterPawn()
 
 	FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	FirstPersonCamera->SetupAttachment(CharacterRoot);
-	FirstPersonCamera->SetRelativeLocation(FVector(20.0, 0.0, 165.0));
+	FirstPersonCamera->SetRelativeLocation(FVector(20.0, 0.0, FirstPersonEyeCentimetres));
 	FirstPersonCamera->SetActive(false);
 }
 
@@ -558,7 +563,7 @@ void ASpaceMMOCharacterPawn::ResolveFooting(
 	}
 
 	const double HalfHeight =
-		FMath::Max(CollisionRadiusCentimetres, CharacterHeightCentimetres * 0.5);
+		FMath::Max(CollisionRadiusCentimetres, GetBodyHeightCentimetres() * 0.5);
 
 	const FVector Feet = Origin->ToWorldLocation(Navigation.SystemPosition);
 
@@ -803,7 +808,7 @@ void ASpaceMMOCharacterPawn::ResolveBlocking(const FSystemCoordinate& From)
 
 	// A capsule standing on the character's feet, which is where the pawn's origin is.
 	const double HalfHeight =
-		FMath::Max(CollisionRadiusCentimetres, CharacterHeightCentimetres * 0.5);
+		FMath::Max(CollisionRadiusCentimetres, GetBodyHeightCentimetres() * 0.5);
 
 	const FVector Up = SurfaceNormal.GetSafeNormal().IsNearlyZero()
 		? FVector::UpVector
@@ -1809,6 +1814,27 @@ double ASpaceMMOCharacterPawn::UniformScaleForHeight(
 	return TargetCentimetres / AuthoredHeightCentimetres;
 }
 
+double ASpaceMMOCharacterPawn::GetBodyHeightCentimetres() const
+{
+	const FSpaceMMOCharacterBody* const RaceBody = FindBody(RaceBodies, BodyRace);
+
+	return RaceBody != nullptr && RaceBody->HeightCentimetres > 0.0
+		? RaceBody->HeightCentimetres
+		: CharacterHeightCentimetres;
+}
+
+FVector2D ASpaceMMOCharacterPawn::ViewHeightsFor(const double BodyCentimetres, const double FramedForCentimetres)
+{
+	const FVector2D Framed(ThirdPersonPivotCentimetres, FirstPersonEyeCentimetres);
+
+	if (BodyCentimetres <= 0.0 || FramedForCentimetres <= UE_DOUBLE_SMALL_NUMBER)
+	{
+		return Framed;
+	}
+
+	return Framed * (BodyCentimetres / FramedForCentimetres);
+}
+
 void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 {
 	if (BodyMesh == nullptr)
@@ -1817,10 +1843,27 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 	}
 
 	// The race's body once the race is known (task 182), drawn at its own height; CharacterMesh before
-	// that, or for a race config gives no body. The collision is CharacterHeightCentimetres' either way.
+	// that, or for a race config gives no body. The capsule is the same height (177), read by every sweep
+	// from GetBodyHeightCentimetres, so it needs nothing here.
 	const FSpaceMMOCharacterBody* const RaceBody = FindBody(RaceBodies, BodyRace);
 	const FSoftObjectPath& MeshPath = RaceBody != nullptr ? RaceBody->Mesh : CharacterMesh;
-	const double DrawnHeight = RaceBody != nullptr ? RaceBody->HeightCentimetres : CharacterHeightCentimetres;
+	const double DrawnHeight = GetBodyHeightCentimetres();
+
+	// The cameras at this body's eyes (177), before anything below can return: a body that fails to load
+	// is still that race, and sees from that height.
+	const FVector2D Eyes = ViewHeightsFor(DrawnHeight, CharacterHeightCentimetres);
+
+	if (CameraBoom != nullptr)
+	{
+		CameraBoom->SetRelativeLocation(FVector(0.0, 0.0, Eyes.X));
+	}
+
+	if (FirstPersonCamera != nullptr)
+	{
+		const FVector FirstPerson = FirstPersonCamera->GetRelativeLocation();
+
+		FirstPersonCamera->SetRelativeLocation(FVector(FirstPerson.X, FirstPerson.Y, Eyes.Y));
+	}
 
 	// Said on every path, including the one that does nothing. An unset model and code that never
 	// ran produce the same evidence -- a tube -- and only one of them is somebody's mistake.
@@ -1893,14 +1936,16 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 	// silently corrected forever.
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("Character drawing as '%s': authored %.1f cm, scaled %.3f to stand %.1f cm; "
-			"rotated %s, offset %s; collides as %.1f cm."),
+			"rotated %s, offset %s; collides as %.1f cm; sees from %.1f cm, %.1f in first person."),
 		*Mesh->GetName(),
 		AuthoredHeight,
 		Scale,
 		AuthoredHeight * Scale,
 		*CharacterMeshRotation.ToCompactString(),
 		*CharacterMeshOffset.ToCompactString(),
-		CharacterHeightCentimetres);
+		GetBodyHeightCentimetres(),
+		Eyes.X,
+		Eyes.Y);
 }
 
 void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
