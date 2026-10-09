@@ -4337,7 +4337,8 @@ moved rather than that one. Nothing outside this file referred to the old number
 
 ## 145 — A new character starts on their race's homeworld
 
-**Pending.** Belongs to **M7 — a world worth being in** for the zone, and to **M5** for the opening.
+**Pending, blocked on 184, 185 and 186.** Picked up and split on 9 October. Belongs to **M7 — a world
+worth being in** for the zone, and to **M5** for the opening.
 
 **The rule is already written down and nothing implements it.** `design-bible.md` §1 gives every race
 a starting body — `body_terra`, `body_ares`, `body_verdance`, `body_grimhold` — and says "the player
@@ -4347,26 +4348,100 @@ carries it: "the starting planet, set from `Races.HomeBodyKeyFor` at creation".
 What the game does is spawn everybody at `StartingDirection` on `USpaceMMOWorldSubsystem::
 StartingPlanet()`, which is compiled in and the same for all four races.
 
-### The constraint this runs into, and it is not small
+### ~~The constraint this runs into, and it is not small~~ Gone since 157
 
-**The client renders one body, chosen by `BodyKey` in `DefaultGame.ini`** — currently
-`body_capital`. So "each race spawns on their homeworld" is not a spawn-position change: it is the
-scene following the character rather than a config file. Everything that reads `BodyKey` today
-— terrain, the deposit and station subsystems, the authoring panel — assumes one answer chosen
-before anybody signs in, and signing in is when the character's race becomes known.
+~~**The client renders one body, chosen by `BodyKey` in `DefaultGame.ini`**~~ — true when this was
+written, and **not true since 8 September**. Task 157 builds a planet for every body content places,
+and 158 places every body's deposits, so all five worlds, their stations and their ore exist in every
+world from the start. Nothing has to follow the character: the homeworld is already there. What is
+left of "the scene following the character" is moving one pawn, and that is small (below).
 
-That ordering is the whole of the work. It is the same shape as task 129: something is chosen before
-the thing that decides it has arrived.
+The ordering point survives in a smaller form: a connection gets its pawn before anybody knows its
+race, so the pawn spawns at the Capital and has to be moved once identity arrives. Task 147 already
+does exactly that for a returning character.
+
+### What it runs into instead: the questline cannot be walked at home
+
+Found 9 October, reading the content rather than the code. **A new character placed on their homeworld
+today could not finish quest 1.** `intro_gather_scrap` wants 10 `scrap_alloy` and `intro_mine_ore` 20
+`ferrite_ore`, and every deposit of both is on the Capital. Each homeworld carries one deposit, of its
+level-15 planet-locked material (`terran_ferrite`, `ares_regolith`, `verdant_amber`,
+`grimhold_slag`), which a new character can neither mine nor use.
+
+Everything else in the chain already works at a homeworld outpost, checked rather than assumed:
+- **Quests have no station requirement.** `QuestService` accepts anywhere.
+- **Industry runs at any station you are docked at.** `IndustryService` checks
+  `DockedStationId == stationId` and nothing about the station's kind.
+- **A shuttle crafted at an outpost can be summoned there.** Outposts are `TradingHub`s, which
+  `AllowsShipSummoning` refuses, but `ShipService.SummonAsync` exempts a hull already in that
+  station's hangar, and `IndustryService.ClaimJobAsync` delivers a job's output to the hangar of the
+  station the job ran at.
+- **The last quest already assumes this task.** `intro_fly_to_capital` says "Fly to the capital world
+  and dock. Everything begins there." A character who starts at the Capital finishes it standing
+  still.
+
+### Decided by Joe, 9 October
+
+- **Per-planet materials first, then the spawn.** Offered shared ore at every homeworld as a stopgap
+  and declined it. ADR-0008's planet-locked raw materials come before anybody is moved.
+- **`scrap_alloy` is common to every world.** *"I think the scrap_alloy can be a common material
+  that all planets share. Other specific ores, however, should be planet specific."* This replaces
+  design-bible §4's per-planet scrap, and the bible now says so.
+- **Terra keeps `ferrite_ore`; Ares, Verdance and Grimhold get one new ore each.** Task 184.
+- **Any homeworld's ore counts for "Mine 20 ore".** One questline for everyone, with a step that
+  accepts a family of items. Task 186.
+- **The style tag comes after this task and before armour.** Task 187.
+- **Claude proposes the three ore names, and Joe approves them.** The proposal is in 184.
+
+### The spawn, designed and not built
+
+Small, because 147 built the route. Recorded so the next session builds it rather than re-deriving
+it:
+
+1. **`/accounts/resolve-character` carries `HomeBodyId`.** It is already on the character row. The
+   client uses it only when there is no last position, which is what "new" means here.
+2. **Each race's home body gets a `startDirection` in `origin.json`**, travelling the path
+   `systemPosition` did (data → seed → `Body` → `/world/bodies` → `FBackendBody`). The validator
+   requires one on every `Races.HomeBodyKeyFor` body, beside the rule that the body exists. It is a
+   direction, never a position or an altitude, for the reason every station and deposit gives.
+3. **On identity with no last position, the controller waits, then places.** It waits for the
+   bodies to load and the planets to settle (the `IsGroundReady` gate stations and deposits wait
+   on), the way docking's resume waits for its station. It then finds the home body's planet by id
+   and stands the pawn on it through the height function. The pawn call sits beside `ResumeAt` and
+   sets the same sticky flag, so 146's first-ground placement cannot fire afterwards and move them.
+4. **Whereabouts are not recorded until that has happened.** Today `AdoptIdentity` opens the
+   recording gate at once for a character with no position. Left so, a session that ended before
+   the placement would record the Capital, and that character would start there forever.
+5. **A home body with no planet or no start direction is said out loud.** A warning naming the body;
+   the character stays at the Capital and recording starts, so the fault is visible without
+   stranding anybody.
+6. **The log says it ran:** `Started character N on 'body_ares' at ..., their home world.` A new
+   character with no such line, standing at the Capital, is a placement that never ran — which is
+   otherwise indistinguishable from one that ran with the Capital's coordinates.
+
+Connections with no identity (automated runs, `-BackendUrl=http://localhost:9`) keep spawning at the
+Capital. **Facing is not decided**: a new character arrives pointing wherever a fresh pawn points.
+Facing their outpost is one line and a feel decision, so show Joe before choosing.
+
+### Ruled out
+
+- **Writing a start position into `last_system_*` at creation.** The server cannot know the ground's
+  height (the height function is C++, ADR-0002), and a restored character is never stood on the
+  ground (147's sticky flag), so they would arrive at whatever altitude was written.
+- **Letting 146's first-ground placement do it.** It places onto the first planet to appear, which is
+  the compiled-in Capital, and it re-arms only while there is no planet at all.
+- **Moving the spawn before 184.** Joe declined it: a homeworld start with no scrap or ore at home
+  strands every new character at quest 1.
 
 ### And a starter zone, which is content rather than code
 
 Joe, 1 September: each homeworld wants a zone where new players arrive and can walk the intro
-questline to their first hull. Four of them, and today only `body_capital` has anything on it at all
-— the A-02 hub, five deposits. The other three are terrain with nothing standing on them.
-
-**Blocked on nothing, but large.** Worth splitting when it is picked up: the scene following the
-character is one job, and four starter zones is another that task 97's settlements work would
-otherwise duplicate.
+questline to their first hull. ~~Four of them, and today only `body_capital` has anything on it at
+all — the A-02 hub, five deposits. The other three are terrain with nothing standing on them.~~ Since
+157 each homeworld has an outpost and one level-15 deposit. 184 adds what the questline actually
+needs: scrap and the world's own ore beside each outpost, and the start direction among them. That
+is a working zone. A designed one, with debris, dressing and a city, is 172's, once Joe has drawn
+each world's city.
 
 ---
 
@@ -8506,4 +8581,125 @@ most updates, which is a teleport each time. The follower needs a snap that scal
 only walks.
 
 **Blocked on:** nothing.
+
+## 184 — Each homeworld yields its own ore
+
+**In progress, started 9 October.** Split out of 145 the same day. Belongs to **M4**, whose line names
+planet-locked materials. **Blocks 145, 185 and 186.** The names below were **approved by Joe on 9
+October**, together with 185's plate name and 186's quest wording.
+
+Joe, 9 October: *"Terra should keep ferrite. I think the scrap_alloy can be a common material that all
+planets share. Other specific ores, however, should be planet specific."* So the intro questline's scrap
+is found everywhere, and its ore is found on one world each: three new items, not the eight design-bible §4
+proposed.
+
+### The names, approved by Joe on 9 October
+
+| World | Key | Name | Why not design-bible §4's |
+|---|---|---|---|
+| Terra | `ferrite_ore` | Ferrite Ore | Unchanged. Already authored, and every stack and order holding it stays valid. |
+| Ares | `oxide_salt` | Oxide Salt | It is §4's, and nothing clashes with it. |
+| Verdance | `rootstone` | Rootstone | §4's `heartwood_amber` would sit beside the level-15 `verdant_amber`, "Luminous Amber": two ambers on one world. |
+| Grimhold | `blackiron_ore` | Blackiron Ore | §4's `blackslag` would sit beside the level-15 `grimhold_slag`, "Grimhold Slag": two slags. |
+
+All three are ferrite in everything but name: `Raw`, 0.4 m³, faction buy price 2, mined with the crude laser
+at level 1, 200 a deposit, a 20-minute respawn. §4 calls this "mechanically equivalent, materially distinct",
+so no race's first hour is easier than another's. Volume is held equal on purpose: the level-15 materials
+vary from 0.15 to 0.6 m³, and a starter ore that hauled lighter would be an advantage at creation.
+
+### What moves with it
+
+- **`ferrite_ore` becomes planet-locked, to Terra.** `ValidatePlanetLockedMaterials` refuses a locked
+  material on a second body, so the Capital's three ferrite deposits (`node_capital_ferrite_a`, `_b` and
+  `node_test_player_spawn_ferrite_a`) move to Terra in the same change. The Capital keeps its two scrap
+  deposits, since scrap is common. That settles half of §4's open question about whether the Capital
+  keeps deposits of its own: scrap yes, ore no.
+- **Each homeworld gets two scrap deposits and two of its ore**, beside its outpost and around 145's start
+  direction, spread as the Capital's are. `SpaceMMO.Bodies.DepositsStandClearOfTheirStations` already
+  measures new nodes against their station.
+- **Deposit meshes are keyed by item** (`Meshes` in `DefaultGame.ini`). An unmapped ore draws as the
+  placeholder cylinder and is still minable (`ASpaceMMODepositActor::ApplyConfiguredMesh`), so art is not
+  a blocker.
+- **The level-15 `terran_ferrite` stays as it is.** It is a different item from Terra's starter ferrite and
+  is already authored. Both have "Ferrite" in the name, which Joe may want to revisit; nothing here depends
+  on it.
+
+### How it would be checked
+
+- **A pack test, not a count:** every `Races.HomeBodyKeyFor` body carries scrap and a planet-locked `Raw`
+  item that some refining recipe consumes. It is read from the shipped pack, and made red by deleting one
+  world's deposits.
+- **A wire test** with a `/world/nodes` payload captured after seeding, naming a new ore on its own body.
+
+## 185 — Plate refines from any homeworld's ore
+
+**Pending, blocked on 184** for the names. Split out of 145 on 9 October. Belongs to **M4**. **Blocks 145.**
+
+ADR-0008: a crafted good is one item made by four per-race recipes that consume different raw inputs. With
+scrap common, **only one intro recipe consumes a world's own material**: `refine_ferrite_plate`, 20
+`ferrite_ore` into 4 `ferrite_plate`. The thruster, the hull section and the shuttle take plate and scrap,
+which are both shared, and need no variants until style exists (187).
+
+- **Three refining recipes beside it**, one per new ore, with the same numbers: refining 1, 60 s, 600 XP,
+  20 in and 4 out.
+- **The plate's name, approved by Joe on 9 October.** Plate refined from oxide salt is not ferrite. The
+  key stays `ferrite_plate`, because renaming a content key orphans every stack and order that holds it,
+  and the display name becomes **Structural Plate**.
+- **At least one thing assumes one recipe per output.** `TheOpeningCanBeWalkedTests.RecipeFor` does
+  `SingleOrDefault(r => r.Output == output)` and will throw on the second plate recipe. Grep for the
+  pattern rather than the symptom before authoring: the industry panel, EconSim's single
+  `RefiningRecipeKey`, and quest objectives that match on output.
+- **The walk test has never walked quest 4.** It skips every step whose objective is not `Craft`, so
+  refining was never checked. It should walk `Refine` steps, and walk the chain once per race with only
+  that race's home ore available. That turns ADR-0008's "self-sufficient within a race" from an
+  intention into a check. Make it red by deleting one world's refining recipe.
+- **EconSim models one ore.** `SimWorld.Ore` and `RefiningRecipeKey` are single constants, and
+  `SimulationConfig` lists deposits by item. ADR-0008 says EconSim "will need all four modelled before the
+  numbers can be trusted".
+
+## 186 — A quest step can ask for any homeworld's ore
+
+**Pending, blocked on 184.** Split out of 145 on 9 October. Belongs to **M4**. **Blocks 145.**
+
+Joe, 9 October: any homeworld's ore counts toward "Mine 20 ore". A step matches an event by one target key,
+compared ordinally (`QuestProgress.cs:62`), and `intro_mine_ore` targets `ferrite_ore`.
+
+- **Proposed shape: a family on the item, not a list on the step.** An item may name a `family` in content
+  (the four starter ores would be `starter_ore`), and a step may target a family instead of an item. A
+  fifth world's ore then joins the quest by being authored, without the quest being edited.
+- **Validator:** a step names an item or a family, never both. A family has at least one member, and a
+  `Gather` step's family has at least one member some deposit yields.
+- **Quest 4 needs nothing.** It targets the plate, which is shared.
+- **Wording, approved by Joe on 9 October.** Quest 3, "Mine 20 ferrite ore. Your new laser will cut
+  where bare hands cannot.", becomes "Mine 20 ore from your home world. …". Quest 4's "4 ferrite plates"
+  becomes "4 structural plates".
+- **No layout change.** The quest panel shows the step's description. `stepTargetKey` is parsed into
+  `FBackendJournalEntry::StepTargetKey` and nothing outside the tests reads it. Check that again before
+  building, because a panel that starts showing it would need a family display name, and that is
+  interface work to show Joe first.
+- **Test with the real event.** One test feeds a gather of `oxide_salt` through the quest service, the way
+  the gathering service raises it, not a hand-built event.
+
+## 187 — A style tag on crafted goods
+
+**Pending; to follow 145 and come before 178 and 179** (Joe, 9 October). Belongs to **M4**, which names
+"gear that matters".
+
+ADR-0008: crafted goods are one `item_def` with a style tag, and "`inventory_items` is currently keyed by
+`(inventory_id, item_def_id)`; it becomes `(inventory_id, item_def_id, style)`. That is a migration, and it
+touches `InventoryService` stacking and cost-basis tracking. Cheap now, expensive after players own things."
+178 already assumes it: every armour piece "comes in four styles".
+
+**Open, for whoever designs it:**
+- **What a good made only from common materials is.** Joe made scrap common on 9 October, and design-bible
+  §4's reason for per-planet scrap was this exact case: "a Terran crude tool can only look Terran if the
+  scrap it was built from remembers where it came from". The crude mining laser is 8 scrap and nothing
+  else, so it has no world to inherit from. Unstyled, the crafter's race, or the station it was made at —
+  undecided. **This is a consequence of the decision, not an argument against it.**
+- **Which input decides** when a recipe's inputs disagree, such as a thruster built from one Terran plate
+  and one Martian plate.
+- **The market.** One book across styles (ADR-0008) means an order fills with whatever style the seller
+  holds. Whether a buyer can ask for a particular style is undecided.
+- **Non-stacking goods** — tools, hulls — carry style on the instance, not on a stack.
+- **Anything that shows style is interface**, and is shown to Joe before it is built.
 

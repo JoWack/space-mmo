@@ -156,8 +156,8 @@ faucet** — see [economy-design.md](economy-design.md).
 |---|---|---|---|---|
 | 1 | `intro_gather_scrap` | Gather 10 `scrap_alloy` by hand from surface debris | Gathering; the world has resources | 500 cr, 200 `gathering` XP |
 | 2 | `intro_craft_tool` | Craft 1 `crude_mining_laser` from 8 `scrap_alloy` | Crafting; tools are made, not given | 750 cr, 300 `toolcrafting` XP |
-| 3 | `intro_mine_ore` | Mine 20 `ferrite_ore` using the crude mining laser | Tools gate gathering | 1,000 cr, 500 `mining` XP |
-| 4 | `intro_refine_plate` | Refine 20 `ferrite_ore` into 4 `ferrite_plate` | Refining; industry jobs take time | 1,250 cr, 600 `refining` XP |
+| 3 | `intro_mine_ore` | Mine 20 of the home world's ore (`ferrite_ore` on Terra; any homeworld's counts, task 186) using the crude mining laser | Tools gate gathering | 1,000 cr, 500 `mining` XP |
+| 4 | `intro_refine_plate` | Refine 20 ore into 4 `ferrite_plate`, by that ore's own recipe (task 185) | Refining; industry jobs take time | 1,250 cr, 600 `refining` XP |
 | 5 | `intro_build_hull` | Build 1 `shuttle_hull_section` from 4 `ferrite_plate` + 2 `scrap_alloy` | Manufacturing a real ship part | 2,000 cr, 900 `shipcrafting` XP |
 | 6 | `intro_assemble_ship` | Assemble `hull_shuttle` from 1 `shuttle_hull_section` + 1 `crude_thruster` | You built your own ship | 2,500 cr, 1,200 `shipcrafting` XP |
 | 7 | `intro_fly_to_capital` | Fly to `body_capital` and dock | Flight, navigation, docking | 5,000 cr |
@@ -212,7 +212,7 @@ and meant to stay so.
 | Output | Qty | Skill | Level | Job time | Inputs |
 |---|---|---|---|---|---|
 | `crude_mining_laser` | 1 | `toolcrafting` | 1 | 30 s | 8 × `scrap_alloy` |
-| `ferrite_plate` | 4 | `refining` | 1 | 60 s | 20 × `ferrite_ore` |
+| `ferrite_plate` | 4 | `refining` | 1 | 60 s | 20 × `ferrite_ore` — or 20 of any homeworld's ore, one recipe each (task 185) |
 | `crude_thruster` | 1 | `electronics` | 1 | 120 s | 2 × `ferrite_plate`, 4 × `scrap_alloy` |
 | `shuttle_hull_section` | 1 | `shipcrafting` | 1 | 300 s | 4 × `ferrite_plate`, 2 × `scrap_alloy` |
 | `hull_shuttle` | 1 | `shipcrafting` | 10 | 900 s | 1 × `shuttle_hull_section`, 1 × `crude_thruster` |
@@ -232,36 +232,47 @@ build rather than a playtest.
 
 ### Resource nodes
 
-Every homeworld yields a hand-gathered scrap and a tool-gated ore, and **each of those
-is a material that exists on that planet and nowhere else**
-([ADR-0008](adr/0008-factions-pvp-and-markets.md)). Keys below are proposed, and are
-authored as part of the per-planet material work.
+Every homeworld yields the common hand-gathered scrap and a tool-gated ore of its own,
+and **the ore is a material that exists on that planet and nowhere else**
+([ADR-0008](adr/0008-factions-pvp-and-markets.md)). Scrap is the one raw material every
+world shares (Joe, 9 October 2026). The three ore names other than ferrite were approved by
+Joe the same day, and are authored by task 184.
 
 | Body | Hand-gathered | Tool-gated ore | Qty per node | Respawn |
 |---|---|---|---|---|
-| Terra | `terra_scrap` | `ferrite_ore` | 25 / 200 | 5 / 20 min |
-| Ares | `ares_scrap` | `oxide_salt` | 25 / 200 | 5 / 20 min |
-| Verdance | `verdance_scrap` | `heartwood_amber` | 25 / 200 | 5 / 20 min |
-| Grimhold | `grimhold_scrap` | `blackslag` | 25 / 200 | 5 / 20 min |
+| Terra | `scrap_alloy` | `ferrite_ore` | 25 / 200 | 5 / 20 min |
+| Ares | `scrap_alloy` | `oxide_salt` | 25 / 200 | 5 / 20 min |
+| Verdance | `scrap_alloy` | `rootstone` | 25 / 200 | 5 / 20 min |
+| Grimhold | `scrap_alloy` | `blackiron_ore` | 25 / 200 | 5 / 20 min |
 
-**Mechanically equivalent, materially distinct.** The four sets have identical
-quantities, respawn timers and recipe roles, so no race has an economic advantage at
-creation — which was the original reason for making distributions identical, and it
-survives intact. What changed is that they are no longer the *same item*.
+**Mechanically equivalent, materially distinct.** The four ores have identical
+quantities, respawn timers and recipe roles, so no race has an economic
+advantage at creation — which was the original reason for making distributions
+identical, and it survives intact. What changed is that they are no longer the *same
+item*. Each refines into the same plate by a recipe of its own (task 185), and the
+questline's "Mine 20 ore" accepts any of them (task 186).
 
 Terra keeps `ferrite_ore` because it is the familiar world and should have the
 familiar metal. That also leaves three new ores to author rather than four.
+`heartwood_amber` and `blackslag`, proposed here before 9 October 2026, are not used:
+each would sit on the same world as a level-15 material of nearly the same name
+(`verdant_amber`, "Luminous Amber"; `grimhold_slag`, "Grimhold Slag").
 
-**Scrap is per-planet too, and that follows from a decision made elsewhere.** A
-finished item's style is inherited from the components that went into it, so a Terran
-crude tool can only look Terran if the scrap it was built from remembers where it came
-from. A single shared `scrap_alloy` would make every race's first craft identical.
+**Scrap is common, decided by Joe on 9 October 2026.** This section used to make scrap
+per-planet too, on the grounds that a finished item's style is inherited from its
+components, so "a Terran crude tool can only look Terran if the scrap it was built from
+remembers where it came from". With one shared scrap, a good made from scrap alone — the
+crude mining laser — has no world to inherit a style from. What it gets instead is an
+open question for the style tag (task 187), and it is a consequence of the decision
+rather than an argument against it.
 
-**What is actually seeded today is two ferrite nodes on the capital**, which is what the
-mining loop has been developed and tested against. The table above is the target, not
-the current state of `data/universe/origin.json`, and whether the capital keeps
-deposits of its own is an open question — a pure trade hub arguably should not have
-any.
+**What is actually seeded today is ferrite and scrap on the capital** and one level-15
+deposit per homeworld, which is what the mining loop has been developed and tested
+against. The table above is the target (tasks 184 to 186), not the current state of
+`data/universe/origin.json`. Once ferrite is planet-locked to Terra, the capital's ferrite
+moves there, since a planet-locked material may occur on only one body. Whether the
+capital keeps its scrap is still open — a pure trade hub arguably should not have any
+deposits at all — and the plan for now is that it does, since scrap is common.
 
 Scarcity no longer "begins outside the starting system" — there is no outside
 ([ADR-0007](adr/0007-one-handcrafted-system.md)). It begins at the point in the

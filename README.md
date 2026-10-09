@@ -189,7 +189,9 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   player-made item ✅, mining tool-gated ✅, skills awarded across the loop ✅, non-stacking items
   visible ✅, deposits say what they need ✅
 - **M4** — goods that move and gear that matters: items between inventories, ship holds, hauling
-  planet-locked materials by flying them, equippable tools, weapons and armour
+  planet-locked materials by flying them, each homeworld's own ore and the per-race recipes that
+  refine it, crafted goods that carry a style
+  ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md)), equippable tools, weapons and armour
 - **M5** — an interface: a real HUD instead of debug text ✅, signing in from the game rather than a
   file ✅, inventory and transfer screens ✅, a market screen ✅, menus, and the perspective and
   controls of [design-bible.md](docs/design-bible.md) §8 — camera zoom and orbit, sprint, and the
