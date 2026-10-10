@@ -8709,7 +8709,7 @@ How it would fail:
 
 ## 185 — Plate refines from any homeworld's ore
 
-**Done 9 October, headless; awaiting a playtest.** Split out of 145 the same day. Belongs to **M4**.
+**Done 9 October; confirmed by Joe's playtest** (*"Tested and working as expected"*). Split out of 145 the same day. Belongs to **M4**.
 **Blocks 145**, which now waits on 186 alone.
 
 ADR-0008: a crafted good is one item made by four per-race recipes that consume different raw inputs. With
