@@ -23,6 +23,7 @@
 *.blend filter=lfs diff=lfs merge=lfs -text
 *.3ds   filter=lfs diff=lfs merge=lfs -text
 *.dae   filter=lfs diff=lfs merge=lfs -text
+*.glb   filter=lfs diff=lfs merge=lfs -text
 
 *.png  filter=lfs diff=lfs merge=lfs -text
 *.jpg  filter=lfs diff=lfs merge=lfs -text

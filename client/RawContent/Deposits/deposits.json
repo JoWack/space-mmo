@@ -1,0 +1,119 @@
+{
+  "$comment": "Written by tools/deposits/prepare_deposits.py (task 189); read by tools/deposits/ue_import_deposits.py. Regenerate rather than edit.",
+  "deposits": [
+    {
+      "item": "ferrite_ore",
+      "name": "FerriteOre",
+      "mesh": "SM_Deposit_FerriteOre",
+      "fbx": "FerriteOre/SM_Deposit_FerriteOre.fbx",
+      "textures": {
+        "BaseColor": "FerriteOre/T_Deposit_FerriteOre_BaseColor.png",
+        "ORM": "FerriteOre/T_Deposit_FerriteOre_ORM.png",
+        "Normal": "FerriteOre/T_Deposit_FerriteOre_Normal.png"
+      },
+      "metal_low": 0.55,
+      "metal_high": 0.8,
+      "rough_min": 0.35,
+      "emissive_strength": 0.0,
+      "triangles": 9513,
+      "hull_points": 48,
+      "size_m": [
+        1.695,
+        2.0,
+        1.935
+      ]
+    },
+    {
+      "item": "scrap_alloy",
+      "name": "ScrapAlloy",
+      "mesh": "SM_Deposit_ScrapAlloy",
+      "fbx": "ScrapAlloy/SM_Deposit_ScrapAlloy.fbx",
+      "textures": {
+        "BaseColor": "ScrapAlloy/T_Deposit_ScrapAlloy_BaseColor.png",
+        "ORM": "ScrapAlloy/T_Deposit_ScrapAlloy_ORM.png",
+        "Normal": "ScrapAlloy/T_Deposit_ScrapAlloy_Normal.png"
+      },
+      "metal_low": 0.45,
+      "metal_high": 0.75,
+      "rough_min": 0.3,
+      "emissive_strength": 0.0,
+      "triangles": 9519,
+      "hull_points": 48,
+      "size_m": [
+        1.447,
+        2.0,
+        1.427
+      ]
+    },
+    {
+      "item": "oxide_salt",
+      "name": "OxideSalt",
+      "mesh": "SM_Deposit_OxideSalt",
+      "fbx": "OxideSalt/SM_Deposit_OxideSalt.fbx",
+      "textures": {
+        "BaseColor": "OxideSalt/T_Deposit_OxideSalt_BaseColor.png",
+        "ORM": "OxideSalt/T_Deposit_OxideSalt_ORM.png",
+        "Normal": "OxideSalt/T_Deposit_OxideSalt_Normal.png"
+      },
+      "metal_low": 1.0,
+      "metal_high": 1.01,
+      "rough_min": 0.3,
+      "emissive_strength": 0.0,
+      "triangles": 9504,
+      "hull_points": 48,
+      "size_m": [
+        1.782,
+        2.0,
+        2.497
+      ]
+    },
+    {
+      "item": "rootstone",
+      "name": "Rootstone",
+      "mesh": "SM_Deposit_Rootstone",
+      "fbx": "Rootstone/SM_Deposit_Rootstone.fbx",
+      "textures": {
+        "BaseColor": "Rootstone/T_Deposit_Rootstone_BaseColor.png",
+        "Emissive": "Rootstone/T_Deposit_Rootstone_Emissive.png",
+        "ORM": "Rootstone/T_Deposit_Rootstone_ORM.png",
+        "Normal": "Rootstone/T_Deposit_Rootstone_Normal.png"
+      },
+      "metal_low": 1.0,
+      "metal_high": 1.01,
+      "rough_min": 0.45,
+      "emissive_strength": 6.0,
+      "triangles": 9409,
+      "hull_points": 48,
+      "size_m": [
+        1.629,
+        2.0,
+        2.243
+      ],
+      "emissive_fraction": 0.0066
+    },
+    {
+      "item": "blackiron_ore",
+      "name": "BlackironOre",
+      "mesh": "SM_Deposit_BlackironOre",
+      "fbx": "BlackironOre/SM_Deposit_BlackironOre.fbx",
+      "textures": {
+        "BaseColor": "BlackironOre/T_Deposit_BlackironOre_BaseColor.png",
+        "Emissive": "BlackironOre/T_Deposit_BlackironOre_Emissive.png",
+        "ORM": "BlackironOre/T_Deposit_BlackironOre_ORM.png",
+        "Normal": "BlackironOre/T_Deposit_BlackironOre_Normal.png"
+      },
+      "metal_low": 1.0,
+      "metal_high": 1.01,
+      "rough_min": 0.4,
+      "emissive_strength": 6.0,
+      "triangles": 9576,
+      "hull_points": 48,
+      "size_m": [
+        1.799,
+        2.0,
+        1.709
+      ],
+      "emissive_fraction": 0.0802
+    }
+  ]
+}

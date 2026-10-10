@@ -8933,3 +8933,150 @@ rows want it, and what a player holding a retired item sees, are design question
 
 **Blocked on:** nothing.
 
+
+## 189 — Each world's deposits look like that world's ore
+
+**Done 10 October, headless; awaiting a playtest.** Belongs to **M7 — a world worth being in**, whose line covers how the
+world looks. Joe, 10 October, before 145's facing work: *"use the skills we have and higgsfield, blender
+mcp, and unreal mcp, to create models and textures of the new ores and implement them in the game? Feel
+free to re-create the ferrite and scrap too"*, with options shown before anything is built.
+
+Oxide salt, rootstone and blackiron ore drew as the engine's placeholder cylinder (184), and ferrite and
+scrap were Tripo meshes from 5 August: a generic grey boulder pile with no ore visible in it, 821
+triangles, and a melted-looking lump of scrap. All five are being made again.
+
+### Where the look came from
+
+- **The Visual Bible** (https://claude.ai/artifact/DeDk1CUhhiUHHffmuQFCDz): each world's palette by hex,
+  materials, silhouette and signature material. Grimhold is squat because it is heavy; Ares slender because
+  it is light; Verdance grown, with amber as counterpoint to cyan, never cyan alone.
+- **Joe's boards** in `D:/Documents/SpaceMMOAssets`: `MaterialsVisualBoard.png` sets the style (chunky
+  painterly resource pieces on a plain ground), and each world board's "Resource highlights" strip draws
+  its ore: Ares' oxide salt as a red-orange crystal cluster, Grimhold's blackslag as black rock.
+- **Task 174's image rules**, kept: the Visual Bible's stylised-realism anchor without its atmosphere, flat
+  shadowless light, plain light-grey ground, no text. Nano Banana Pro, 2 credits an image.
+- **What the game does with a mesh** (`FDepositPlacement`): fits it uniformly into 2 m wide by 3 m tall and
+  stands its lowest point on the ground, so export size and pivot do not matter and proportion does: a flat
+  design arrives knee-high. It needs simple collision (130).
+
+### Decided by Joe, 10 October
+
+From one sheet of three directions per material (`docs/wip/189-ore-deposits/concepts/`, git-ignored; the
+script and every prompt are beside them in `generate.py` and `log.jsonl`):
+
+| Material | Chosen | What it is |
+|---|---|---|
+| Ferrite Ore | A | Blue-grey block cluster with thick silver metal veins and nodules, rust and moss |
+| Scrap Alloy | A | A heap of torn hull plates and girders, muted teal and off-white paint |
+| Oxide Salt | C | Tall slender translucent rust-orange crystal spires on a dusty crust |
+| Rootstone | B | Jade-grey stones split by a root system, amber sap in the cracks, cyan root tips |
+| Blackiron Ore | A | A squat black boulder split by glowing ember-orange heat seams |
+
+**The meshes are Tripo H3.1 image-to-3D through Higgsfield**, from a crop of each chosen concept: 9 credits
+each at standard quality, which is all 45 credits left on the starter plan, with nothing over for a retry.
+
+**The Unreal MCP was not connected this session** (`ECONNREFUSED` at start-up), so the import goes the way
+168's did: a commandlet from code, unless Joe reconnects it.
+
+**Also decided by Joe, 10 October**, after seeing the five meshes rendered from three sides: all five go
+in as they are; **Blackiron's ember seams and Rootstone's amber sap and cyan root tips glow**; and the import
+is a commandlet from code rather than the Unreal MCP.
+
+### How it is built, regenerably
+
+1. **`tools/deposits/prepare_deposits.py`** (Blender, run through the MCP or `--background`) reads the
+   five Tripo GLBs from `client/RawContent/Deposits/Tripo/`, beside the concept crops they were made from,
+   and writes `client/RawContent/Deposits/<Name>/`: the mesh fitted into the game's 2 by 3 m box and stood
+   on its base, one 48-point `UCX_` hull, Tripo's colour, ORM and normal maps, and for the two that glow an
+   emissive map: the colour where it is painted hot, black elsewhere. Plus `deposits.json`, each
+   deposit's material settings.
+2. **`tools/deposits/ue_import_deposits.py`** (the `pythonscript` commandlet, as the characters' importer
+   is) makes `/Game/Deposits/<Name>/SM_Deposit_<Name>` with its hull, `MI_Deposit_<Name>`, and once
+   `/Game/Deposits/Shared/M_Deposit_Textured`, and checks each save on disk.
+
+**The material's job is undoing what Tripo baked.** Tripo painted the ferrite and the scrap about half
+metallic everywhere (ORM blue channel mean 0.47), stone and paint included, and left near-zero roughness
+patches on every mesh, so all five looked wet. The master floors roughness at `RoughMin` and passes
+metallic through a smoothstep from `MetalLow` to `MetalHigh`, so only the brightest metal stays metal:
+the ferrite's veins at 0.55 to 0.80, the scrap's bare steel at 0.45 to 0.75, and nothing for the salt, the
+rock and the living stone. All per instance, and tunable in the editor.
+
+**The glow is a mask made from each map's own colours**, checked on the map before it was trusted: the
+ember seams are 8% of Blackiron's texture and nothing on its stone; the sap and root tips are 0.7% of
+Rootstone's, and the brown root wood, the same hue family as the sap, is excluded by brightness and
+saturation. Rootstone's strength went from 3 to 6 after a night render showed three specks.
+
+### Found while building
+
+- **Blender renames a taken name to `.001` silently**, and Unreal pairs `UCX_<mesh>_NN` with `<mesh>` by
+  name. A second run beside a scene still holding the first run's objects exported
+  `SM_Deposit_FerriteOre.001` with a hull named for it: a hull belonging to nothing. The script now clears
+  the names first and asserts each one took.
+- **Tripo's normal maps are OpenGL's convention**; the importer flips green, as the characters' does (180).
+- **The static-mesh editor subsystem is `None` inside a commandlet**, so the import's checks read the body
+  setup directly.
+- **Nothing tested that a deposit mesh exists or is solid.** Three materials drew as the cylinder for a
+  day, and the first two meshes once had no simple collision (130). See the tests below.
+
+## 190 — The level-15 ores draw as the placeholder cylinder
+
+*Found 10 October by 189's own test on its first run.* Belongs to **M7**. **Blocked on Higgsfield credits**,
+which 189 spent to zero, or on Joe choosing another route.
+
+`terran_ferrite`, `ares_regolith`, `verdant_amber` and `grimhold_slag` (Terran Ferrite, Ferric Regolith,
+Luminous Amber, Grimhold Slag) have never had a mesh. Every homeworld has one or two of them 150 m from its
+outpost, drawn as the engine cylinder since they were authored. 189 was asked for the new starter ores,
+ferrite and scrap, and did not look past them; `SpaceMMO.Deposit.EveryDepositedItemHasAMesh` did.
+
+They are on that test's `KnownPlaceholders` list, which says why, and which fails when one of them gets a
+mesh and is not taken off it.
+
+**What carries over from 189 without work:** both scripts in `tools/deposits/` take a new entry each; the
+master material, its metal remap and the emissive mask are shared; and the Visual Bible's signature
+materials fit these closer than they fit the starter ores: heartwood amber for Verdance, the Ares board's
+oxide salt as a red crystal cluster, Grimhold's blackslag as black glassy rock. They want to read as
+**rarer and more valuable** than the starter ore beside them, so a level-15 deposit is told apart from a
+level-1 one at a glance. That is a concept question for Joe before anything is generated.
+
+### What was verified, and how
+
+- **The import reported `Result: OK`**, reading back from disk: each of the five meshes has one convex hull,
+  is the size Blender wrote it to the centimetre (169.5 by 200 by 193.5 cm for the ferrite; the oxide salt
+  the tallest at 249.7 cm), and wears its own instance.
+- **The FBX round trip was checked in Blender** before Unreal saw it: each file holds its mesh and a
+  `UCX_` hull named for it, stands on z = 0, and renders with the master material's logic as intended,
+  day and night (`docs/wip/189-ore-deposits/renders/prepared_*.png`, git-ignored).
+- **Client: 291 tests, `PASS`**, after a build reporting `Result: Succeeded` from `UnrealEngineSource`.
+  Two new, in `SpaceMMODepositMeshTests.cpp`:
+  - `SpaceMMO.Deposit.EveryDepositedItemHasAMesh` reads `origin.json` and the shipped config. **Run red
+    first**, before `DefaultGame.ini` named the new meshes: it named oxide salt, rootstone and blackiron ore
+    as drawing the cylinder, and found the four level-15 materials doing the same (190).
+  - `SpaceMMO.Deposit.EveryMeshIsSolidAndDressed` loads every configured mesh and checks simple collision
+    and a material of its own. **Not seen red**: every configured mesh has passed it, the August two
+    included, since 130 gave them hulls.
+
+**Not verified by anything automated:** how they look in the game's light, at a distance, against each
+world's ground, and whether the glow reads at night or is too much by day. Every check here is headless.
+
+### What a playtest has to say
+
+Standalone, as before. A **dedicated server needs a re-cook** before it draws them: the new assets are not
+in the staged build.
+
+- **At each outpost, walk out to the starter field.** Terra: blue-grey boulders with silver veins. Ares:
+  tall rust-orange crystal spires. Verdance: jade stone split by roots, with amber sap. Grimhold: a squat
+  black boulder with orange seams. Scrap everywhere: a heap of torn hull plates and girders, muted teal and
+  off-white.
+- **Walk into one.** You stop against it. On Rootstone you can stand under the top of the leaning root,
+  because the hull stops at 70% of its height, so the root's sweep is not an invisible wall.
+- **At night**, Grimhold's seams glow ember orange, and Rootstone's sap and root tips faintly.
+- **The level-15 rocks are still cylinders.** That is 190, not a fault here.
+
+How it would fail:
+- **A cylinder where a starter ore should be.** The client is older than this change.
+- **Purple-and-black checks, or a wet, oily look.** The material instance lost its textures, or the metal
+  remap did not apply: `EveryMeshIsSolidAndDressed` would only catch the engine default, not this.
+- **Lighting that looks inside out on the bumps.** The normal map was not flipped from OpenGL's convention.
+- **Glow too strong or too weak.** `EmissiveStrength` on `MI_Deposit_BlackironOre` and
+  `MI_Deposit_Rootstone`, 6 each; change it in the editor, and in `prepare_deposits.py` so a rebuild keeps
+  it.
