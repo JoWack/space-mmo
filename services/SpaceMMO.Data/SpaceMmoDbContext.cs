@@ -332,6 +332,7 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
         {
             entity.Property(e => e.Key).HasMaxLength(KeyLength);
             entity.Property(e => e.Name).HasMaxLength(NameLength);
+            entity.Property(e => e.Family).HasMaxLength(KeyLength);
             entity.HasIndex(e => e.Key).IsUnique();
 
             // Derived from Category; a stored copy could contradict it.

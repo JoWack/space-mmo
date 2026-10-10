@@ -11,7 +11,7 @@
       "factionBuyPrice": 1
     },
     {
-      "$starterComment": "The four starter ores, one per homeworld and planet-locked to it (ADR-0008; Joe, 9 October 2026, task 184). Mechanically identical -- volume, price, deposit size, respawn, tool and level -- so no race's first hour is easier than another's (design-bible section 4), and materially distinct, so each world's ore is hauled rather than found everywhere. A new player is still never waiting on a market: their own world has their ore and the scrap beside it. Not the level-15 materials below, which feed the cross-faction tier.",
+      "$starterComment": "The four starter ores, one per homeworld and planet-locked to it (ADR-0008; Joe, 9 October 2026, task 184). Mechanically identical -- volume, price, deposit size, respawn, tool and level -- so no race's first hour is easier than another's (design-bible section 4), and materially distinct, so each world's ore is hauled rather than found everywhere. A new player is still never waiting on a market: their own world has their ore and the scrap beside it. Not the level-15 materials below, which feed the cross-faction tier. All four are the family starter_ore, which is what quest 3 asks for, so any homeworld's ore counts toward it (task 186).",
       "key": "ferrite_ore",
       "name": "Ferrite Ore",
       "category": "Raw",
@@ -19,7 +19,8 @@
       "$comment": "Terra's. Tool-gated behind crude_mining_laser. Terra keeps the familiar metal because it is the familiar world (design-bible section 4). Found on the Capital as well until 9 October 2026, when it became Terra's alone.",
       "$priceComment": "Twice scrap because it is tool-gated and slower to gather, but still a floor rather than a valuation. Twenty ore refines into four plates; if four plates ever sell for less than the 40 cr this pays, the floor has been set too high and the refining chain is pointless.",
       "factionBuyPrice": 2,
-      "planetLocked": true
+      "planetLocked": true,
+      "family": "starter_ore"
     },
     {
       "key": "oxide_salt",
@@ -28,7 +29,8 @@
       "volumeM3": 0.4,
       "$comment": "Ares'. Rust-red salt crust from a dry world, cut out of the desert floor. Tool-gated behind crude_mining_laser, and ferrite's equal in everything but where it is found.",
       "factionBuyPrice": 2,
-      "planetLocked": true
+      "planetLocked": true,
+      "family": "starter_ore"
     },
     {
       "key": "rootstone",
@@ -37,7 +39,8 @@
       "volumeM3": 0.4,
       "$comment": "Verdance's. Stone the living planet has grown roots through. Not 'heartwood_amber' as design-bible section 4 first proposed, which would have been a second amber on a world that already has Luminous Amber. Tool-gated behind crude_mining_laser, and ferrite's equal in everything but where it is found.",
       "factionBuyPrice": 2,
-      "planetLocked": true
+      "planetLocked": true,
+      "family": "starter_ore"
     },
     {
       "key": "blackiron_ore",
@@ -46,7 +49,8 @@
       "volumeM3": 0.4,
       "$comment": "Grimhold's. Heavy dark iron from a heavy dark world. Not 'blackslag' as design-bible section 4 first proposed, which would have been a second slag on a world that already has Grimhold Slag. Tool-gated behind crude_mining_laser, and ferrite's equal in everything but where it is found.",
       "factionBuyPrice": 2,
-      "planetLocked": true
+      "planetLocked": true,
+      "family": "starter_ore"
     },
     {
       "key": "ferrite_plate",

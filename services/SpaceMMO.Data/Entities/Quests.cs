@@ -91,6 +91,12 @@ public class QuestStep
     /// </summary>
     public required string TargetKey { get; set; }
 
+    /// <summary>
+    /// Whether <see cref="TargetKey"/> names an item family rather than one item (task 186), so any
+    /// item of that family satisfies the step.
+    /// </summary>
+    public bool TargetIsFamily { get; set; }
+
     /// <summary>How many are required. One for travel, dock, and talk objectives.</summary>
     public int Quantity { get; set; }
 }

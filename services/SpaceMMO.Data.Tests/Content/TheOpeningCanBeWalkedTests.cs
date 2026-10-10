@@ -107,14 +107,14 @@ public sealed class TheOpeningCanBeWalkedTests
                     continue;
                 }
 
-                RecipeContent recipe = RecipeFor(pack, step.Target, quest.Key, home, race);
+                RecipeContent recipe = RecipeFor(pack, MadeItem(step, quest), quest.Key, home, race);
 
                 long xp = experience.GetValueOrDefault(recipe.Skill);
                 int level = SkillCurve.LevelForXp(xp);
 
                 Assert.True(
                     level >= recipe.RequiredLevel,
-                    $"'{quest.Name}' asks a {race} for {step.Target}, which needs {recipe.Skill} "
+                    $"'{quest.Name}' asks a {race} for {recipe.Output}, which needs {recipe.Skill} "
                     + $"{recipe.RequiredLevel}. By this point the questline has paid out {xp} "
                     + $"{recipe.Skill} XP, which is level {level}. Nothing earlier in the chain can "
                     + $"close the gap: check what else grants {recipe.Skill} XP and what it costs "
@@ -144,8 +144,7 @@ public sealed class TheOpeningCanBeWalkedTests
     /// with no recipe for it would leave its new players holding ore they cannot use.
     /// </para>
     /// <para>
-    /// Gather steps are not walked yet. Quest 3 still names <c>ferrite_ore</c>, which only Terra has,
-    /// until a step can accept any homeworld's ore (task 186).
+    /// Gather steps are walked by <see cref="Every_gather_in_the_opening_can_be_done_at_home"/>.
     /// </para>
     /// </remarks>
     [Theory]
@@ -166,18 +165,67 @@ public sealed class TheOpeningCanBeWalkedTests
                 }
 
                 // RecipeFor fails, naming the step, when no recipe for the target can be fed from home.
-                RecipeContent recipe = RecipeFor(pack, step.Target, quest.Key, home, race);
+                RecipeContent recipe = RecipeFor(pack, MadeItem(step, quest), quest.Key, home, race);
 
                 foreach (RecipeInputContent input in recipe.Inputs)
                 {
                     Assert.True(
                         ObtainableAt(pack, home, input.Item, []),
-                        $"'{quest.Name}' asks a {race} for {step.Target}, which takes "
+                        $"'{quest.Name}' asks a {race} for {recipe.Output}, which takes "
                         + $"{input.Quantity} {input.Item} — and nothing on {home} gathers, refines or "
                         + "crafts one.");
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Every gather step in the opening can be done from a deposit on the race's own world.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Task 186.</strong> Until a step could name a family, quest 3 asked every race for
+    /// <c>ferrite_ore</c>, which since 184 is Terra's alone, so a Martian at home could mine their own
+    /// ore all day and never advance it. A step that names a family is satisfied by any member, and
+    /// this asks whether one of those members can be gathered at home.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(EveryRace))]
+    public async Task Every_gather_in_the_opening_can_be_done_at_home(Race race)
+    {
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        string home = Races.HomeBodyKeyFor(race);
+
+        foreach (QuestContent quest in MainStoryInOrder(pack))
+        {
+            foreach (QuestStepContent step in quest.Steps.OrderBy(s => s.Ordinal))
+            {
+                if (step.Objective != ObjectiveType.Gather)
+                {
+                    continue;
+                }
+
+                string[] accepted = step.TargetFamily is string family
+                    ? [.. pack.Items.Where(i => i.Family == family).Select(i => i.Key)]
+                    : [step.Target!];
+
+                Assert.True(
+                    pack.ResourceNodes.Any(n => n.Body == home && accepted.Contains(n.Item)),
+                    $"'{quest.Name}' asks a {race} to gather {step.Target ?? step.TargetFamily}, "
+                    + $"and nothing on {home} yields {string.Join(" or ", accepted)}. A {race} "
+                    + "starting at home stops at this step.");
+            }
+        }
+    }
+
+    /// <summary>The item a craft or refine step makes. Those always name one item.</summary>
+    private static string MadeItem(QuestStepContent step, QuestContent quest)
+    {
+        Assert.True(
+            step.Target is not null,
+            $"'{quest.Name}' step {step.Ordinal} makes something and names no item to make.");
+
+        return step.Target!;
     }
 
     /// <summary>

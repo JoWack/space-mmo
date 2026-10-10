@@ -120,6 +120,7 @@ public sealed class EveryHomeworldStartsAlikeTests
             .SelectMany(q => q.Steps)
             .Where(s => s.Objective == ObjectiveType.Gather)
             .Select(s => s.Target)
+            .OfType<string>()
             .Where(target => pack.Items.Any(i => i.Key == target && !i.PlanetLocked))
             .Distinct()
             .Order(),

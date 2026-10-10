@@ -194,6 +194,9 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 // A one-way update would leave a standing bid running on an item somebody had
                 // deliberately delisted, with nothing in the file to explain why.
                 item.FactionBuyPrice = FactionPriceOf(content);
+
+                // Assigned, so taking an item out of a family in content takes it out.
+                item.Family = content.Family;
                 continue;
             }
 
@@ -205,6 +208,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 VolumeM3 = content.VolumeM3,
                 HoldCapacityM3 = content.HoldCapacityM3,
                 FactionBuyPrice = FactionPriceOf(content),
+                Family = content.Family,
             };
 
             _database.ItemDefs.Add(created);
@@ -338,7 +342,10 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                     Ordinal = step.Ordinal,
                     Description = step.Description,
                     ObjectiveType = step.Objective,
-                    TargetKey = step.Target,
+                    // One key column for both, with the flag saying which it is: the validator has
+                    // already refused a step that names both or neither (task 186).
+                    TargetKey = step.TargetFamily ?? step.Target!,
+                    TargetIsFamily = step.TargetFamily is not null,
                     Quantity = step.Quantity,
                 });
             }

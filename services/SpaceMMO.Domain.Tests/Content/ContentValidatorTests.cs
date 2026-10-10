@@ -785,9 +785,9 @@ public sealed class ContentValidatorTests
     [Fact]
     public void TheStarterChainIsDeliberatelyNotLocked()
     {
-        // Scrap and ferrite are everywhere on purpose, so a brand-new character is never waiting
-        // on a market that may have no sellers. A blanket "one planet per raw material" rule
-        // would forbid exactly the case the onboarding depends on.
+        // Scrap is everywhere on purpose, so a brand-new character on any world has the first thing
+        // the questline asks for (ferrite was too, until task 184 made it Terra's). A blanket "one
+        // planet per raw material" rule would forbid exactly the case the onboarding depends on.
         ContentPack pack = Pack(
             items: [Item("ore"), Item("plate", ItemCategory.Refined)],
             systems: [System()],
@@ -801,6 +801,76 @@ public sealed class ContentValidatorTests
             ]);
 
         Assert.False(HasError(ContentValidator.Validate(pack), "Planet-locked"));
+    }
+
+    // ── Steps that ask for a family (task 186) ───────────────────────────────
+
+    private static ContentPack FamilyPack(QuestStepContent step, bool withDeposit = true) =>
+        Pack(
+            items:
+            [
+                Item("ore") with { Family = "starter_ore" },
+                Item("plate", ItemCategory.Refined),
+            ],
+            quests: [Quest(steps: [step])],
+            systems: [System()],
+            bodies: AllHomeworlds(),
+            resourceNodes: withDeposit
+                ?
+                [
+                    new ResourceNodeContent(
+                        "node_a", "body_terra", "ore", "refining", 1, 150, 1800, [1.0, 0.0, 0.0]),
+                ]
+                : []);
+
+    [Fact]
+    public void AStepMayAskForAFamily()
+    {
+        ContentPack pack = FamilyPack(new QuestStepContent(
+            1, "Mine ore.", ObjectiveType.Gather, null, 5, TargetFamily: "starter_ore"));
+
+        Assert.False(HasError(ContentValidator.Validate(pack), "Step 1"));
+    }
+
+    [Fact]
+    public void AStepMayNotNameATargetAndAFamily()
+    {
+        // Whichever the engine read would win, which is the same reason a station may not carry a
+        // direction and a system position at once.
+        ContentPack pack = FamilyPack(new QuestStepContent(
+            1, "Mine ore.", ObjectiveType.Gather, "ore", 5, TargetFamily: "starter_ore"));
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "names both a target and a target family"));
+    }
+
+    [Fact]
+    public void AStepMustNameATargetOrAFamily()
+    {
+        ContentPack pack = FamilyPack(new QuestStepContent(
+            1, "Mine ore.", ObjectiveType.Gather, null, 5));
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "has no target"));
+    }
+
+    [Fact]
+    public void AFamilyNoItemBelongsToIsRefused()
+    {
+        // A misspelt family is a step waiting for an item that does not exist, forever.
+        ContentPack pack = FamilyPack(new QuestStepContent(
+            1, "Mine ore.", ObjectiveType.Gather, null, 5, TargetFamily: "starter_oer"));
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "which no item belongs to"));
+    }
+
+    [Fact]
+    public void AGatheredFamilyNeedsADepositOfSomeMember()
+    {
+        ContentPack pack = FamilyPack(
+            new QuestStepContent(
+                1, "Mine ore.", ObjectiveType.Gather, null, 5, TargetFamily: "starter_ore"),
+            withDeposit: false);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "no deposit yields any of ore"));
     }
 
     [Fact]

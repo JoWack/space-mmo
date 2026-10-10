@@ -51,9 +51,10 @@
       "steps": [
         {
           "ordinal": 1,
-          "description": "Mine 20 ferrite ore. Your new laser will cut where bare hands cannot.",
+          "description": "Mine 20 ore from your home world. Your new laser will cut where bare hands cannot.",
           "objective": "Gather",
-          "target": "ferrite_ore",
+          "$targetComment": "A family rather than an item since 9 October 2026 (task 186): each homeworld has its own ore, and any of the four counts. It was ferrite_ore, which since task 184 only Terra has.",
+          "targetFamily": "starter_ore",
           "quantity": 20
         }
       ]

@@ -4337,7 +4337,7 @@ moved rather than that one. Nothing outside this file referred to the old number
 
 ## 145 — A new character starts on their race's homeworld
 
-**Pending, blocked on 186** (184 and 185 done 9 October). Picked up and split on 9 October. Belongs to **M7 — a world
+**Pending, blocked on nothing** since 186 landed on 10 October (184 and 185 done 9 October). Picked up and split on 9 October. Belongs to **M7 — a world
 worth being in** for the zone, and to **M5** for the opening.
 
 **The rule is already written down and nothing implements it.** `design-bible.md` §1 gives every race
@@ -8814,27 +8814,65 @@ How it would fail:
 
 ## 186 — A quest step can ask for any homeworld's ore
 
-**Pending, blocked on nothing** since 184 landed on 9 October. Split out of 145 the same day. Belongs to
-**M4**. **Blocks 145.**
+**Done 10 October, headless; awaiting a playtest.** Split out of 145 on 9 October. Belongs to **M4**.
+**Unblocks 145.**
 
-Joe, 9 October: any homeworld's ore counts toward "Mine 20 ore". A step matches an event by one target key,
-compared ordinally (`QuestProgress.cs:62`), and `intro_mine_ore` targets `ferrite_ore`.
+Joe, 9 October: any homeworld's ore counts toward "Mine 20 ore". A step matched an event by one target
+key (`QuestProgress.Matches`), and `intro_mine_ore` targeted `ferrite_ore`, which since 184 only Terra has.
 
-- **Proposed shape: a family on the item, not a list on the step.** An item may name a `family` in content
-  (the four starter ores would be `starter_ore`), and a step may target a family instead of an item. A
-  fifth world's ore then joins the quest by being authored, without the quest being edited.
-- **Validator:** a step names an item or a family, never both. A family has at least one member, and a
-  `Gather` step's family has at least one member some deposit yields.
-- **Quest 4 needs nothing.** It targets the plate, which is shared.
-- **Wording, approved by Joe on 9 October.** Quest 3, "Mine 20 ferrite ore. Your new laser will cut
-  where bare hands cannot.", becomes "Mine 20 ore from your home world. …". Quest 4's "4 ferrite plates"
-  becomes "4 structural plates".
-- **No layout change.** The quest panel shows the step's description. `stepTargetKey` is parsed into
-  `FBackendJournalEntry::StepTargetKey` and nothing outside the tests reads it. Check that again before
-  building, because a panel that starts showing it would need a family display name, and that is
-  interface work to show Joe first.
-- **Test with the real event.** One test feeds a gather of `oxide_salt` through the quest service, the way
-  the gathering service raises it, not a hand-built event.
+### What was done
+
+- **An item may name a `family`, and a step may name a `targetFamily` instead of a `target`.** The four
+  starter ores are `starter_ore`, and quest 3 asks for it. A fifth world's ore joins the quest by being
+  authored, without the quest being edited. Stored as the step's key plus `TargetIsFamily`, and
+  `item_defs.family`: migration `ItemFamilies`.
+- **The quest service finds the family, not the gatherer.** `RecordProgressAsync` looks up the event
+  item's family once, so gathering and industry still report only what happened. A dock or travel event
+  names a station or body, finds no item, and carries no family.
+- **A family step compares against the event's family and never its key**, so an item that happened to be
+  named like a family could not satisfy it. An item step ignores the family entirely.
+- **Quest 3 reads "Mine 20 ore from your home world. Your new laser will cut where bare hands cannot."**,
+  the wording Joe approved on 9 October.
+- **The validator** refuses a step naming both a target and a family, or neither, a family no item belongs
+  to, and a gathered family no deposit yields.
+- **No client change.** The journal sends the family key as `stepTargetKey` for a family step, and the
+  client parses it and shows nothing from it. Checked again before building, as this task asked.
+
+### What was verified, and how
+
+Domain 477, Data 221, Api 98, all passing; the Api tests built to a scratch folder because Joe's API was
+running from the usual one.
+
+- **The opening is now walked in full from every world.** `Every_gather_in_the_opening_can_be_done_at_home`
+  asks, for each race, whether a deposit on its homeworld satisfies every gather step. **Run red first**,
+  against quest 3 still naming ferrite: the Martian, Space Elf and Space Orc each stopped at "Into the
+  Rock", and the Humanoid passed. With 185's craft and refine walk, every step of the opening but the last
+  flight is now checked from each world.
+- **`Gathering_an_ore_of_the_asked_family_advances_a_family_step`** mines through the real
+  `GatheringService`, so the event is the one gathering raises, with the item's key and no family. **Red
+  with the quest service's family lookup switched off**: the step stayed at zero.
+  `An_item_outside_the_family_does_not_advance_a_family_step` is its other side.
+- **`AFamilyStepArrivesAsOne_WithEveryHomeworldsOreInIt`** seeds the shipped content and reads it back: the
+  mining quest's step is stored as a family, and a member of it is mined on every race's homeworld.
+- **Domain:** four matching tests (any member, nothing outside it, not by the key, item steps ignore it)
+  and five validator tests.
+- **Seeded** the dev database from a scratch build, which applied `ItemFamilies`.
+
+**Not verified by anything automated:** a character on Ares finishing quest 3 in play.
+
+### What a playtest has to say
+
+**Restart the API first.** One started before this change does not know families, and quest 3 will not
+advance for anyone, Terra included, because its step now names `starter_ore`.
+
+- **On any homeworld, with quest 3 active, mine that world's ore.** It counts toward "Mine 20 ore from
+  your home world". On Ares it is Oxide Salt.
+- **Scrap does not count toward it.**
+
+How it would fail:
+- **Quest 3 never advances, on any world.** The API predates this change. Restart it.
+- **The API will not start, naming `ItemFamilies`.** The database has not been seeded since; `--seed`
+  applies it.
 
 ## 187 — A style tag on crafted goods
 

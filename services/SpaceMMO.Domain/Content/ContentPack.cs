@@ -35,7 +35,8 @@ public sealed record ItemContent(
     double VolumeM3,
     long? FactionBuyPrice = null,
     bool PlanetLocked = false,
-    double? HoldCapacityM3 = null)
+    double? HoldCapacityM3 = null,
+    string? Family = null)
 {
     /// <summary>
     /// Whether this material occurs on exactly one body and nowhere else (ADR-0008).
@@ -52,6 +53,16 @@ public sealed record ItemContent(
     /// profession without anything looking broken.
     /// </remarks>
     public bool PlanetLocked { get; init; } = PlanetLocked;
+
+    /// <summary>
+    /// A group of items that a quest step may ask for as one, or null (task 186).
+    /// </summary>
+    /// <remarks>
+    /// On the item rather than as a list on the step, so a fifth world's ore joins "mine 20 ore from
+    /// your home world" by being authored, without the quest being edited. The four starter ores are
+    /// <c>starter_ore</c>.
+    /// </remarks>
+    public string? Family { get; init; } = Family;
 }
 
 /// <summary>One material a recipe consumes.</summary>
@@ -70,12 +81,20 @@ public sealed record RecipeContent(
     IReadOnlyList<RecipeInputContent> Inputs);
 
 /// <summary>One objective within a quest.</summary>
+/// <param name="Target">The item, body or station the step is about. Null when the step names a
+/// family instead.</param>
+/// <param name="TargetFamily">
+/// A family of items any of which satisfies the step (task 186), in place of one item: "mine 20 ore
+/// from your home world" is one step for four races, each mining an ore the others cannot reach.
+/// Exactly one of the two is set, which the validator enforces.
+/// </param>
 public sealed record QuestStepContent(
     int Ordinal,
     string Description,
     ObjectiveType Objective,
-    string Target,
-    int Quantity);
+    string? Target,
+    int Quantity,
+    string? TargetFamily = null);
 
 /// <summary>A quest, as authored in <c>data/quests/</c>.</summary>
 /// <param name="RewardCredits">Whole credits, not minor units — content is authored in the unit

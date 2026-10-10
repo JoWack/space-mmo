@@ -144,6 +144,20 @@ public sealed class QuestService(SpaceMmoDbContext database)
 
         await using var transaction = ownTransaction;
 
+        // The family the event's item belongs to, if it is an item and has one (task 186). Looked up
+        // here, once, rather than by every service that raises an event: gathering and industry
+        // report what happened and stay ignorant of quests, and a family is a quest concern. A dock
+        // or travel event names a station or body, finds no item, and keeps no family.
+        if (objectiveEvent.TargetFamily is null)
+        {
+            string? family = await _database.ItemDefs
+                .Where(d => d.Key == objectiveEvent.TargetKey)
+                .Select(d => d.Family)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            objectiveEvent = objectiveEvent with { TargetFamily = family };
+        }
+
         // Locked so two concurrent events cannot both advance the same step from the same
         // starting progress and double-count it.
         List<CharacterQuest> active = await _database.CharacterQuests
@@ -172,7 +186,7 @@ public sealed class QuestService(SpaceMmoDbContext database)
             }
 
             var definition = new StepDefinition(
-                step.Ordinal, step.ObjectiveType, step.TargetKey, step.Quantity);
+                step.Ordinal, step.ObjectiveType, step.TargetKey, step.Quantity, step.TargetIsFamily);
 
             ProgressOutcome outcome = QuestProgress.Apply(
                 definition, characterQuest.StepProgress, objectiveEvent);

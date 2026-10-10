@@ -57,6 +57,12 @@ public class ItemDef
     /// Content restricts this to Raw items; see the validator.
     /// </remarks>
     public Credits? FactionBuyPrice { get; set; }
+
+    /// <summary>
+    /// A group a quest step may ask for as one — <c>starter_ore</c> for the four homeworld ores — or
+    /// null (task 186).
+    /// </summary>
+    public string? Family { get; set; }
 }
 
 /// <summary>A crafting recipe, loaded from <c>data/recipes/</c>.</summary>

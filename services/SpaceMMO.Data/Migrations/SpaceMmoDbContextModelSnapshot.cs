@@ -749,6 +749,11 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("faction_buy_price");
 
+                    b.Property<string>("Family")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("family");
+
                     b.Property<double?>("HoldCapacityM3")
                         .HasColumnType("double precision")
                         .HasColumnName("hold_capacity_m3");
@@ -1098,6 +1103,10 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<int>("QuestDefId")
                         .HasColumnType("integer")
                         .HasColumnName("quest_def_id");
+
+                    b.Property<bool>("TargetIsFamily")
+                        .HasColumnType("boolean")
+                        .HasColumnName("target_is_family");
 
                     b.Property<string>("TargetKey")
                         .IsRequired()

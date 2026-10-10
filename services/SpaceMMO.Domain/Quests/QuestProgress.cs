@@ -6,24 +6,34 @@ namespace SpaceMMO.Domain.Quests;
 /// <param name="Type">What kind of action it was.</param>
 /// <param name="TargetKey">What it was done to — an item, body, or station key.</param>
 /// <param name="Quantity">How many. One for travel, dock, and talk.</param>
+/// <param name="TargetFamily">
+/// The family the target item belongs to, or null (task 186). Filled in by the quest service from
+/// the item's definition, so whoever raises the event does not need to know families exist.
+/// </param>
 /// <remarks>
 /// Emitted by whoever performed the action, not by the quest system reaching into other services.
 /// The gathering and industry services return what happened; the caller forwards it here. That
 /// keeps the domain services independent of quests entirely — nothing about mining should need to
 /// know quests exist.
 /// </remarks>
-public readonly record struct ObjectiveEvent(ObjectiveType Type, string TargetKey, int Quantity);
+public readonly record struct ObjectiveEvent(
+    ObjectiveType Type, string TargetKey, int Quantity, string? TargetFamily = null);
 
 /// <summary>One step's requirements, as authored in content.</summary>
 /// <param name="Ordinal">Position in the chain, starting at 1.</param>
 /// <param name="Type">The action that satisfies it.</param>
-/// <param name="TargetKey">What the action must target.</param>
+/// <param name="TargetKey">What the action must target: an item, body or station key, or a family.</param>
 /// <param name="RequiredQuantity">How many are needed.</param>
+/// <param name="TargetIsFamily">
+/// Whether <paramref name="TargetKey"/> names a family, so any item in it counts (task 186). "Mine 20
+/// ore from your home world" is one step for four races, each mining an ore only their world has.
+/// </param>
 public readonly record struct StepDefinition(
     int Ordinal,
     ObjectiveType Type,
     string TargetKey,
-    int RequiredQuantity);
+    int RequiredQuantity,
+    bool TargetIsFamily = false);
 
 /// <summary>What an event did to a step.</summary>
 /// <param name="NewProgress">Progress after applying the event.</param>
@@ -56,10 +66,16 @@ public static class QuestProgress
     /// than display text, and a step silently failing to match because of casing would be a
     /// miserable content bug to track down — better that it never matches at all and is noticed
     /// immediately.
+    ///
+    /// A family step compares against the event's family and never its key, so an item that happened
+    /// to share a key with a family name could not satisfy it by accident.
     /// </remarks>
     public static bool Matches(StepDefinition step, ObjectiveEvent objectiveEvent) =>
         step.Type == objectiveEvent.Type
-        && string.Equals(step.TargetKey, objectiveEvent.TargetKey, StringComparison.Ordinal);
+        && string.Equals(
+            step.TargetKey,
+            step.TargetIsFamily ? objectiveEvent.TargetFamily : objectiveEvent.TargetKey,
+            StringComparison.Ordinal);
 
     /// <summary>
     /// Applies an event to a step's current progress.

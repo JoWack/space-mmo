@@ -639,11 +639,11 @@ public static class ContentValidator
                 errors.Add(new ContentError("quest", quest.Key, "Cooldown must be positive."));
             }
 
-            ValidateQuestSteps(quest, errors);
+            ValidateQuestSteps(quest, pack, errors);
         }
     }
 
-    private static void ValidateQuestSteps(QuestContent quest, List<ContentError> errors)
+    private static void ValidateQuestSteps(QuestContent quest, ContentPack pack, List<ContentError> errors)
     {
         if (quest.Steps.Count == 0)
         {
@@ -677,11 +677,7 @@ public static class ContentValidator
                     "quest", quest.Key, $"Step {step.Ordinal} quantity must be positive."));
             }
 
-            if (string.IsNullOrWhiteSpace(step.Target))
-            {
-                errors.Add(new ContentError(
-                    "quest", quest.Key, $"Step {step.Ordinal} has no target."));
-            }
+            ValidateStepTarget(quest, step, pack, errors);
 
             if (string.IsNullOrWhiteSpace(step.Description))
             {
@@ -701,6 +697,75 @@ public static class ContentValidator
                     quest.Key,
                     $"Step {step.Ordinal} is a {step.Objective} objective, which must have quantity 1."));
             }
+        }
+    }
+
+    /// <summary>
+    /// Checks a step names exactly one target, and that a family it names can be satisfied.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A target or a family, never both and never neither (task 186).</strong> Both would mean
+    /// whichever the engine happens to read wins, the same reason a station may not carry a
+    /// direction and a system position at once.
+    /// </para>
+    /// <para>
+    /// A family must have members, or the step is waiting for an item that does not exist. A gather
+    /// step's family must have a member some deposit yields, or it is waiting for one nobody can
+    /// pick up. Both read as a quest that never advances and says nothing.
+    /// </para>
+    /// </remarks>
+    private static void ValidateStepTarget(
+        QuestContent quest, QuestStepContent step, ContentPack pack, List<ContentError> errors)
+    {
+        bool hasTarget = !string.IsNullOrWhiteSpace(step.Target);
+        bool hasFamily = !string.IsNullOrWhiteSpace(step.TargetFamily);
+
+        if (!hasTarget && !hasFamily)
+        {
+            errors.Add(new ContentError(
+                "quest", quest.Key, $"Step {step.Ordinal} has no target."));
+
+            return;
+        }
+
+        if (hasTarget && hasFamily)
+        {
+            errors.Add(new ContentError(
+                "quest",
+                quest.Key,
+                $"Step {step.Ordinal} names both a target and a target family; it must name one."));
+
+            return;
+        }
+
+        if (!hasFamily)
+        {
+            return;
+        }
+
+        string[] members = [.. pack.Items
+            .Where(i => string.Equals(i.Family, step.TargetFamily, StringComparison.Ordinal))
+            .Select(i => i.Key)];
+
+        if (members.Length == 0)
+        {
+            errors.Add(new ContentError(
+                "quest",
+                quest.Key,
+                $"Step {step.Ordinal} asks for family '{step.TargetFamily}', which no item belongs to."));
+
+            return;
+        }
+
+        if (step.Objective == ObjectiveType.Gather
+            && !pack.ResourceNodes.Any(n => members.Contains(n.Item)))
+        {
+            errors.Add(new ContentError(
+                "quest",
+                quest.Key,
+                $"Step {step.Ordinal} asks to gather family '{step.TargetFamily}', and no deposit "
+                + $"yields any of {string.Join(", ", members)}."));
         }
     }
 

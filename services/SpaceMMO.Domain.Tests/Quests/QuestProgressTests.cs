@@ -28,6 +28,49 @@ public sealed class QuestProgressTests
         Assert.False(QuestProgress.Matches(GatherScrap(), Gathered("ferrite_ore")));
     }
 
+    // ── Families (task 186) ──────────────────────────────────────────────────
+
+    private static StepDefinition MineAnyOre() =>
+        new(1, ObjectiveType.Gather, "starter_ore", 20, TargetIsFamily: true);
+
+    [Fact]
+    public void AFamilyStep_MatchesAnyMember()
+    {
+        // "Mine 20 ore from your home world": a Martian mines oxide salt, an orc blackiron ore.
+        Assert.True(QuestProgress.Matches(
+            MineAnyOre(), new ObjectiveEvent(ObjectiveType.Gather, "oxide_salt", 5, "starter_ore")));
+        Assert.True(QuestProgress.Matches(
+            MineAnyOre(), new ObjectiveEvent(ObjectiveType.Gather, "blackiron_ore", 5, "starter_ore")));
+    }
+
+    [Fact]
+    public void AFamilyStep_DoesNotMatchAnItemOutsideIt()
+    {
+        Assert.False(QuestProgress.Matches(MineAnyOre(), Gathered("scrap_alloy")));
+        Assert.False(QuestProgress.Matches(
+            MineAnyOre(), new ObjectiveEvent(ObjectiveType.Gather, "terran_ferrite", 5, "rare_ore")));
+    }
+
+    [Fact]
+    public void AFamilyStep_IsNotSatisfiedByAnItemNamedLikeTheFamily()
+    {
+        // Compared against the event's family, never its key, so an item that happened to share a
+        // key with a family name could not satisfy the step by accident.
+        Assert.False(QuestProgress.Matches(MineAnyOre(), Gathered("starter_ore")));
+    }
+
+    [Fact]
+    public void AnItemStep_IgnoresTheEventsFamily()
+    {
+        // The reverse: a step naming ferrite is about ferrite, whatever family the event carries.
+        var mineFerrite = new StepDefinition(1, ObjectiveType.Gather, "ferrite_ore", 20);
+
+        Assert.False(QuestProgress.Matches(
+            mineFerrite, new ObjectiveEvent(ObjectiveType.Gather, "oxide_salt", 5, "starter_ore")));
+        Assert.True(QuestProgress.Matches(
+            mineFerrite, new ObjectiveEvent(ObjectiveType.Gather, "ferrite_ore", 5, "starter_ore")));
+    }
+
     [Fact]
     public void DoesNotMatch_ADifferentObjectiveType()
     {

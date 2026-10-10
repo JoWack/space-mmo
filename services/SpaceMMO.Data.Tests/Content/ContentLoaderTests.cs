@@ -500,6 +500,47 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AFamilyStepArrivesAsOne_WithEveryHomeworldsOreInIt()
+    {
+        // Task 186, read from the real files and the database they seed. A misspelt "targetFamily"
+        // would load as a step with no target, and a misspelt "family" would leave the step waiting
+        // for an empty family; either way the validator's view of the file and the engine's view of
+        // the row would disagree, and a quest would sit at zero while the player mined.
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            await new ContentLoader(context).LoadAsync(ContentRoot());
+        }
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        QuestStepContent authored = pack.Quests
+            .SelectMany(q => q.Steps)
+            .Single(s => s.TargetFamily is not null);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        QuestStep stored = await verify.QuestSteps.SingleAsync(s => s.TargetIsFamily);
+
+        Assert.Equal(authored.TargetFamily, stored.TargetKey);
+
+        string[] members = [.. await verify.ItemDefs
+            .Where(i => i.Family == stored.TargetKey)
+            .Select(i => i.Key)
+            .ToListAsync()];
+
+        // Every race can satisfy it from home: one member of the family is on each homeworld.
+        foreach (Race race in Enum.GetValues<Race>())
+        {
+            string home = Races.HomeBodyKeyFor(race);
+
+            Assert.True(
+                await verify.ResourceNodes.AnyAsync(
+                    n => n.Body!.Key == home && members.Contains(n.ItemDef!.Key)),
+                $"No member of '{stored.TargetKey}' ({string.Join(", ", members)}) is mined on {home}.");
+        }
+    }
+
+    [Fact]
     public async Task ADepositContentNoLongerAuthors_IsRemovedWithItsPool()
     {
         // Task 184. Nothing removed a deposit, so one deleted from the file -- or renamed in it --

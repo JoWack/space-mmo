@@ -148,6 +148,59 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Gathering_an_ore_of_the_asked_family_advances_a_family_step()
+    {
+        // Task 186. "Mine 20 ore from your home world" names the family starter_ore, and each race
+        // mines a different member of it. The gathering service raises the event with the item's key
+        // and knows nothing of families; the quest service has to find the family itself, or every
+        // family step would wait forever while the player mined exactly what it asked for.
+        await SetFamilyAsync(_oreId, "starter_ore");
+        await AcceptAsync("mine_any_ore", ObjectiveType.Gather, "starter_ore", 20, targetIsFamily: true);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        GatherResult result = await new GatheringService(context)
+            .GatherAsync(_characterId, _nodeId);
+
+        Assert.True(result.Quantity > 0);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        CharacterQuest quest = await verify.CharacterQuests
+            .SingleAsync(q => q.QuestDef!.Key == "mine_any_ore");
+
+        Assert.Equal(result.Quantity, quest.StepProgress);
+    }
+
+    [Fact]
+    public async Task An_item_outside_the_family_does_not_advance_a_family_step()
+    {
+        // The ore here belongs to no family. A rule that treated "no family" as "any" would advance.
+        await AcceptAsync("mine_any_ore", ObjectiveType.Gather, "starter_ore", 20, targetIsFamily: true);
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        await new GatheringService(context).GatherAsync(_characterId, _nodeId);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        CharacterQuest quest = await verify.CharacterQuests
+            .SingleAsync(q => q.QuestDef!.Key == "mine_any_ore");
+
+        Assert.Equal(0, quest.StepProgress);
+    }
+
+    private async Task SetFamilyAsync(int itemDefId, string family)
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        ItemDef item = await context.ItemDefs.SingleAsync(i => i.Id == itemDefId);
+        item.Family = family;
+
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task Gathering_something_else_advances_nothing()
     {
         await AcceptAsync("mine_ore", ObjectiveType.Gather, "scrap_alloy", 5);
@@ -215,7 +268,7 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     private async Task AcceptAsync(
-        string key, ObjectiveType objective, string target, int quantity)
+        string key, ObjectiveType objective, string target, int quantity, bool targetIsFamily = false)
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
@@ -236,6 +289,7 @@ public sealed class QuestWiringTests(DatabaseFixture fixture) : IAsyncLifetime
             Ordinal = 1,
             ObjectiveType = objective,
             TargetKey = target,
+            TargetIsFamily = targetIsFamily,
             Quantity = quantity,
             Description = key,
         });
