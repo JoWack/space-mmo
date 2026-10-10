@@ -4337,7 +4337,7 @@ moved rather than that one. Nothing outside this file referred to the old number
 
 ## 145 — A new character starts on their race's homeworld
 
-**Done 10 October, headless; awaiting a playtest.** Its parts 184, 185 and 186 landed 9 and 10 October.
+**Done 10 October; confirmed by Joe's playtest the same day** (*"all works great"*). Its parts 184, 185 and 186 landed 9 and 10 October.
 Picked up and split on 9 October. Belongs to **M7 — a world worth being in** for the zone, and to **M5**
 for the opening.
 
@@ -8888,8 +8888,8 @@ How it would fail:
 
 ## 186 — A quest step can ask for any homeworld's ore
 
-**Done 10 October, headless; its playtest waits for a new character.** Joe, 10 October: he has no
-character on quest 3, and will test it when he next starts one and walks the opening. Split out of 145 on
+**Done 10 October; confirmed by Joe's playtest the same day**, with a new character walking the opening
+from their homeworld after 145 landed. Split out of 145 on
 9 October. Belongs to **M4**. **Unblocks 145.**
 
 Joe, 9 October: any homeworld's ore counts toward "Mine 20 ore". A step matched an event by one target
@@ -9009,7 +9009,7 @@ rows want it, and what a player holding a retired item sees, are design question
 
 ## 189 — Each world's deposits look like that world's ore
 
-**Done 10 October, headless; its playtest comes after 145** (Joe, 10 October). Belongs to **M7 — a world worth being in**, whose line covers how the
+**Done 10 October; confirmed by Joe's playtest the same day, after 145's.** Belongs to **M7 — a world worth being in**, whose line covers how the
 world looks. Joe, 10 October, before 145's facing work: *"use the skills we have and higgsfield, blender
 mcp, and unreal mcp, to create models and textures of the new ores and implement them in the game? Feel
 free to re-create the ferrite and scrap too"*, with options shown before anything is built.
