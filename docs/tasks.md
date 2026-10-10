@@ -4337,8 +4337,9 @@ moved rather than that one. Nothing outside this file referred to the old number
 
 ## 145 — A new character starts on their race's homeworld
 
-**Pending, blocked on nothing** since 186 landed on 10 October (184 and 185 done 9 October). Picked up and split on 9 October. Belongs to **M7 — a world
-worth being in** for the zone, and to **M5** for the opening.
+**Done 10 October, headless; awaiting a playtest.** Its parts 184, 185 and 186 landed 9 and 10 October.
+Picked up and split on 9 October. Belongs to **M7 — a world worth being in** for the zone, and to **M5**
+for the opening.
 
 **The rule is already written down and nothing implements it.** `design-bible.md` §1 gives every race
 a starting body — `body_terra`, `body_ares`, `body_verdance`, `body_grimhold` — and says "the player
@@ -4393,10 +4394,9 @@ Everything else in the chain already works at a homeworld outpost, checked rathe
 - **The style tag comes after this task and before armour.** Task 187.
 - **Claude proposes the three ore names, and Joe approves them.** The proposal is in 184.
 
-### The spawn, designed and not built
+### The spawn, as designed on 9 October and built on the 10th
 
-Small, because 147 built the route. Recorded so the next session builds it rather than re-deriving
-it:
+Small, because 147 built the route. Built as designed, with what differed recorded in the next section:
 
 1. **`/accounts/resolve-character` carries `HomeBodyId`.** It is already on the character row. The
    client uses it only when there is no last position, which is what "new" means here.
@@ -4415,14 +4415,87 @@ it:
 5. **A home body with no planet or no start direction is said out loud.** A warning naming the body;
    the character stays at the Capital and recording starts, so the fault is visible without
    stranding anybody.
-6. **The log says it ran:** `Started character N on 'body_ares' at ..., their home world.` A new
-   character with no such line, standing at the Capital, is a placement that never ran — which is
+6. **The log says it ran:** `Started on 'body_ares' at ... km, facing ... km.` from the pawn, after the
+   controller's `Character N has never been anywhere; waiting to stand them on home body M.` A new
+   character with the second line and not the first is a placement that never ran — which is
    otherwise indistinguishable from one that ran with the Capital's coordinates.
 
 Connections with no identity (automated runs, `-BackendUrl=http://localhost:9`) keep spawning at the
 Capital. **Facing is not decided**: a new character arrives pointing wherever a fresh pawn points.
 ~~Facing their outpost is one line and a feel decision, so show Joe before choosing.~~ **Decided by Joe,
 10 October: a new character arrives facing their outpost.**
+
+### What was built, 10 October
+
+- **Each homeworld's start is 35 m from its outpost**, at the bearing 184's starter field is laid out
+  around, between its two scrap deposits and 37 m from the nearest of them. Authored as `startDirection`
+  on the four race bodies; the Capital has none, being nobody's home. Migration `BodyStartDirection`.
+- **`ASpaceMMOCharacterPawn::StartAt`** stands the character on the height function at the start, against
+  the terrain the planet wears, sets 147's sticky flag so the first-ground placement cannot move them
+  afterwards, and turns them toward the outpost's ground position. A zero direction is refused, having
+  moved nothing.
+- **`ASpaceMMOPlayerController::TryStartAtHome`**, on a quarter-second timer from `AdoptIdentity`, waits for
+  the pawn and for `IsGroundReady`, then finds the home planet through `PlanetsByBody` and the outpost from
+  the stations data. Both deposit-subsystem helpers became public for it rather than being copied: a
+  second answer to "which planet" is task 157's whole subject. Anything it cannot do -- no such body, no
+  start, no planet, not on foot -- is a warning naming it, and the character stays at the spawn.
+
+### Found while building: a server's turn never reached the player
+
+**The facing would have worked in standalone and silently not on a dedicated server.** Since 165 the
+owning client takes the server's facing once, when the pawn begins, and from then on sends its own every
+frame for the server to adopt. A new character is stood at home seconds after the pawn begins, so the
+client had already taken the spawn's facing; its next input would have turned the character back, and
+it would never have seen the turn at all.
+
+**A facing epoch** now rides in the net state and in the input. The server bumps it when it turns a
+character on purpose; the client takes the server's facing again when it sees a new one; and the server
+ignores a facing sent from an older one, which is the client's facing from before it saw the turn. Any
+later server-side turn gets the same treatment without further work.
+
+### What was verified, and how
+
+Server: Domain 479, Data 222, Api 99. Client: 297 tests, `PASS`, after a build reporting `Result:
+Succeeded` from `UnrealEngineSource`.
+
+- **`SpaceMMO.HomeStart.StandsOnTheGroundFacingTheOutpost`** stands a pawn on the test world's planet at an
+  off-axis start with an outpost 35 m away: on the start, within 3 m of the height function's ground, and
+  facing the outpost along the ground. **Red with the facing switched off** (cosine -0.52).
+- **`ServerFacingSurvivesTheClient`**: a client facing sent from the old epoch is ignored and one from the
+  new epoch taken. **Red with the epoch check removed.**
+- **`RefusesNoDirection`** and **`FacingToward`**, the pure edges.
+- **`StartsArriveFromTheWire`** parses a `/world/bodies` payload captured after seeding on 10 October: four
+  homeworlds with starts, each component its own value, and the Capital's nulls read as no start.
+  **`HomeBodyArrivesWithIdentity`** reads `homeBodyId`, and reads its absence as no home.
+- **Server:** the validator refuses a home body without a start (**red** with Ares' removed from the
+  shipped content: `TheShippedContent_IsValid` and the loader test both failed naming it), and a zero one;
+  the loader stores each start's components; resolve-character returns the row's home body.
+- **Seeded and read back** from a scratch API: migration `BodyStartDirection` applied, and
+  `/world/bodies` serves the four starts.
+
+**Not verified by anything automated:** the whole thing in play. Nothing here creates a character and
+watches them arrive; the controller's wait has no test of its own, and its log lines are the evidence.
+
+### What a playtest has to say
+
+**Restart the API first**: one started before this change sends no home body, and new characters then
+stay at the Capital, as before. A **dedicated server needs a re-cook**; standalone does not.
+
+- **Create a character of each race.** Each arrives on their own world, standing 35 m from the outpost
+  and facing it, with the starter field's scrap to either side: Terra, Ares, Verdance, Grimhold for Humanoid,
+  Martian, Space Elf and Space Orc. The log says `waiting to stand them on home body N`, then
+  `Started on 'body_...' ... facing ...`.
+- **Quit and come back.** They return where they quit (147), not to the start again.
+- **The opening, end to end from home**, when Joe next walks it: scrap, the laser, the world's own ore
+  (186), plate (185), the hull, the shuttle, and the flight to the Capital that quest 7 asks for.
+
+How it would fail:
+- **A new character at the Capital, with no `waiting to stand them` line.** The API sent no home body:
+  it predates this change.
+- **The `waiting` line and no `Started on` line.** The ground never became ready, or one of the named
+  warnings says why: no such body, no start, no planet.
+- **Arriving facing away from the outpost on a dedicated server, then snapping round, or not.** The
+  epoch: the client is older than the server, or the other way round.
 
 ### Ruled out
 
@@ -8936,7 +9009,7 @@ rows want it, and what a player holding a retired item sees, are design question
 
 ## 189 — Each world's deposits look like that world's ore
 
-**Done 10 October, headless; awaiting a playtest.** Belongs to **M7 — a world worth being in**, whose line covers how the
+**Done 10 October, headless; its playtest comes after 145** (Joe, 10 October). Belongs to **M7 — a world worth being in**, whose line covers how the
 world looks. Joe, 10 October, before 145's facing work: *"use the skills we have and higgsfield, blender
 mcp, and unreal mcp, to create models and textures of the new ores and implement them in the game? Feel
 free to re-create the ferrite and scrap too"*, with options shown before anything is built.

@@ -19,6 +19,11 @@ namespace SpaceMMO.Api.Endpoints;
 /// before anything is placed on it (task 129), and a pad arriving with the stations would put every
 /// deposit and station near it on the unlevelled ground first.
 /// </param>
+/// <param name="StartX">
+/// Where a new character of this body's race first stands, as a direction from its centre, or null
+/// for a body that is nobody's home (task 145). Sent with the body because the game server stands the
+/// character on the ground there with the height function, which needs the planet the body draws.
+/// </param>
 public sealed record BodyResponse(
     int Id,
     string Key,
@@ -38,7 +43,10 @@ public sealed record BodyResponse(
     long? TerrainSeed,
     double? MaxElevationKm,
     double? BaseFrequency,
-    IReadOnlyList<TerrainPadResponse> TerrainPads);
+    IReadOnlyList<TerrainPadResponse> TerrainPads,
+    double? StartX,
+    double? StartY,
+    double? StartZ);
 
 /// <summary>
 /// One levelled patch of a body's ground, centred on the station that levels it.
@@ -248,7 +256,10 @@ public static class WorldEndpoints
                         s.PadFlatRadiusKm!.Value,
                         s.PadBlendKm!.Value,
                         s.PadElevationKm!.Value))
-                    .ToList()))
+                    .ToList(),
+                b.StartX,
+                b.StartY,
+                b.StartZ))
             .ToListAsync(cancellation);
 
         return Results.Ok(bodies);

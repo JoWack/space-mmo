@@ -277,6 +277,33 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EveryHomeBodysStart_ReachesTheDatabase()
+    {
+        // Task 145: where a new character first stands travels data/ -> seed -> Postgres -> API ->
+        // game server. This is the seed half, read against the shipped content, and each component
+        // separately so a loader writing one axis three times fails.
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            await new ContentLoader(context).LoadAsync(ContentRoot());
+        }
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        foreach (Race race in Enum.GetValues<Race>())
+        {
+            BodyContent authored = pack.Bodies.Single(b => b.Key == Races.HomeBodyKeyFor(race));
+            Body stored = await verify.Bodies.SingleAsync(b => b.Key == authored.Key);
+
+            Assert.NotNull(authored.StartDirection);
+            Assert.Equal(authored.StartDirection![0], stored.StartX);
+            Assert.Equal(authored.StartDirection[1], stored.StartY);
+            Assert.Equal(authored.StartDirection[2], stored.StartZ);
+        }
+    }
+
+    [Fact]
     public async Task RemovingABodyPosition_ClearsIt()
     {
         // The same reason a removed palette has to clear: seeding is how content is corrected, and

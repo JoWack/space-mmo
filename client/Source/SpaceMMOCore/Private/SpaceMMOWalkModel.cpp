@@ -351,20 +351,24 @@ bool FCharacterWalkModel::ClimbsOutOnto(
 }
 
 FWalkInput FCharacterWalkModel::ForServer(
-	const FWalkInput& Input, const FWalkState& State, const bool bFacingIsOurs)
+	const FWalkInput& Input, const FWalkState& State, const bool bFacingIsOurs, const uint8 FacingEpoch)
 {
 	FWalkInput Sent = Input;
 
 	Sent.Turn = 0.0;
 	Sent.Facing = State.Rotation;
 	Sent.bHasFacing = bFacingIsOurs;
+	Sent.FacingEpoch = FacingEpoch;
 
 	return Sent;
 }
 
-void FCharacterWalkModel::AdoptClientFacing(FWalkState& State, FWalkInput& Input)
+void FCharacterWalkModel::AdoptClientFacing(
+	FWalkState& State, FWalkInput& Input, const uint8 ServerFacingEpoch)
 {
-	if (!Input.bHasFacing)
+	// A facing turned from one the server has since replaced is the old way round, not the player's
+	// choice: taking it would undo the server's turn before the client had seen it (task 145).
+	if (!Input.bHasFacing || Input.FacingEpoch != ServerFacingEpoch)
 	{
 		return;
 	}
@@ -373,4 +377,24 @@ void FCharacterWalkModel::AdoptClientFacing(FWalkState& State, FWalkInput& Input
 	// the same function the client aligned it to.
 	State.Rotation = Input.Facing;
 	Input.Turn = 0.0;
+}
+
+FQuat FCharacterWalkModel::FacingToward(const FVector& Up, const FVector& Toward, const FQuat& Fallback)
+{
+	const FVector Normal = Up.GetSafeNormal();
+
+	if (Normal.IsNearlyZero())
+	{
+		return Fallback;
+	}
+
+	const FVector Along = Toward - (Normal * FVector::DotProduct(Toward, Normal));
+
+	if (Along.IsNearlyZero())
+	{
+		return Fallback;
+	}
+
+	// X forward and Z up, the frame AlignToSurface builds, so the two agree about which way is ahead.
+	return FRotationMatrix::MakeFromZX(Normal, Along.GetSafeNormal()).ToQuat();
 }

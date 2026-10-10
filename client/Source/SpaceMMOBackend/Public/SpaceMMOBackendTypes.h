@@ -790,6 +790,13 @@ struct SPACEMMOBACKEND_API FBackendResolvedCharacter
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	bool bLastSeenFlying = false;
+
+	/**
+	 * The character's home world, or 0 (task 145). A character with no last position is stood on it,
+	 * at that body's start, rather than left wherever the connection spawned.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 HomeBodyId = 0;
 };
 
 /**
@@ -898,6 +905,16 @@ struct SPACEMMOBACKEND_API FBackendBody
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	FVector SystemPositionKilometres = FVector::ZeroVector;
+
+	/**
+	 * Where a new character of this body's race first stands, as a direction from its centre, and
+	 * whether content says (task 145). Unset for a body that is nobody's home, the Capital among them.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bHasStart = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FVector StartDirection = FVector::ZeroVector;
 
 	/**
 	 * What this body's ground looks like, and whether anybody has said.

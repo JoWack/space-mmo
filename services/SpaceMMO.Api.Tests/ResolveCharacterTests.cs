@@ -132,6 +132,31 @@ public sealed class ResolveCharacterTests(ApiDatabaseFixture fixture) : IAsyncLi
     }
 
     [Fact]
+    public async Task It_names_the_characters_home_world()
+    {
+        // Task 145. The game server stands a character who has never been anywhere on their home
+        // world, and this is the one call where it learns which. Compared with the row rather than a
+        // literal, since which body is whose home is content's business.
+        int expected;
+
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            expected = context.Characters.Single(c => c.Id == _ownedCharacterId).HomeBodyId;
+        }
+
+        HttpResponseMessage response =
+            await ResolveAsync(ApiFactory.TestServiceSecret, _ownerToken, _ownedCharacterId);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        ResolvedCharacter resolved =
+            (await response.Content.ReadFromJsonAsync<ResolvedCharacter>())!;
+
+        Assert.NotEqual(0, expected);
+        Assert.Equal(expected, resolved.HomeBodyId);
+    }
+
+    [Fact]
     public async Task It_says_where_the_character_is_docked()
     {
         // Task 114. A character who quit while docked used to come back at a default spawn while

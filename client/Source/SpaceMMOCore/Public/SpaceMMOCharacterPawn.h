@@ -44,6 +44,10 @@ struct FCharacterNetState
 
 	UPROPERTY()
 	double ServerTimeSeconds = 0.0;
+
+	/** Bumped when the server turns the character on purpose; see FWalkInput::FacingEpoch. */
+	UPROPERTY()
+	uint8 FacingEpoch = 0;
 };
 
 /**
@@ -154,6 +158,22 @@ public:
 	 * whatever the height field says is under them, which is not the same thing as where they were.
 	 */
 	void ResumeAt(const FSystemCoordinate& Where);
+
+	/**
+	 * Stands a new character on a planet, at a direction from its centre, facing a point (task 145).
+	 *
+	 * <strong>Placed by the height function</strong>, the same one ground contact uses, against the
+	 * terrain the planet is wearing now -- so the caller must wait until planets have their real shape,
+	 * or the character is stood on ground that then moves (129). Stops the first-planet placement the
+	 * way ResumeAt does, so it cannot fire afterwards and move them.
+	 *
+	 * Faces FaceTowardKilometres, a system position, when given: server-side, by bumping the facing
+	 * epoch so the owning client takes the new facing rather than sending back its old one.
+	 *
+	 * @return False, having moved nothing, when the direction names no point on the sphere.
+	 */
+	bool StartAt(
+		const class ASpaceMMOPlanetActor& Planet, const FVector& Direction, const FVector* FaceTowardKilometres);
 
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
 	bool IsOnGround() const { return bOnGround; }
@@ -803,6 +823,12 @@ protected:
 
 	/** Whether this client has taken the server's facing yet; until then it sends none of its own. */
 	bool bTookServerFacing = false;
+
+	/** The server's: how many times it has turned this character on purpose (task 145). */
+	uint8 FacingEpoch = 0;
+
+	/** The client's: the latest of those it has taken. */
+	uint8 SeenFacingEpoch = 0;
 
 	FVector SurfaceNormal = FVector::UpVector;
 

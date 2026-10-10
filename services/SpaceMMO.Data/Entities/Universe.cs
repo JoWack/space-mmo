@@ -93,6 +93,17 @@ public class Body
     public double? SystemZ { get; set; }
 
     /// <summary>
+    /// Where on this body a new character of its race first stands, as a direction from its centre,
+    /// or null for a body that is nobody's home (task 145). Never a position or an altitude: the
+    /// terrain function answers how high the ground is there.
+    /// </summary>
+    public double? StartX { get; set; }
+
+    public double? StartY { get; set; }
+
+    public double? StartZ { get; set; }
+
+    /// <summary>
     /// What this body's ground looks like, or null if nobody has painted it yet.
     /// </summary>
     /// <remarks>

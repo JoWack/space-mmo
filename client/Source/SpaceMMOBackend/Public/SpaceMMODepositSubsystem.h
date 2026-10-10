@@ -35,6 +35,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Deposit")
 	int32 GetPlacedCount() const { return PlacedDeposits.Num(); }
 
+	/**
+	 * The planet standing in for each loaded body, by body id.
+	 *
+	 * One lookup shared by stations, deposits and a new character's start (145), because the first two
+	 * used to answer "which planet" differently -- stations by this map, deposits by a configured scene
+	 * body -- and a second copy of the lookup is a second chance to read a different planet's radius.
+	 * A body content has not placed has no planet and no entry, which is what a caller checks for.
+	 */
+	TMap<int32, const class ASpaceMMOPlanetActor*> PlanetsByBody(
+		const class USpaceMMOBackendClient& Backend) const;
+
+	/**
+	 * Whether the three things placement waits for have all arrived: bodies, planets built from them,
+	 * and the planets reshaped to their authored terrain. Public since 145, whose start waits on the
+	 * same gate: a character stood on a planet before it is reshaped stands on ground that then moves.
+	 */
+	bool IsGroundReady() const;
+
 private:
 	/**
 	 * Gives a character pawn the ability to gather, as it appears in the world.
@@ -117,19 +135,6 @@ private:
 	 */
 	void PlaceStations();
 
-	/**
-	 * The planet standing in for each loaded body, by body id.
-	 *
-	 * One lookup shared by stations and deposits, because the two used to answer "which planet"
-	 * differently -- stations by this map, deposits by a configured scene body -- and a second
-	 * copy of the lookup is a second chance to read a different planet's radius. A body content has
-	 * not placed has no planet and no entry, which is what a caller checks for.
-	 */
-	TMap<int32, const class ASpaceMMOPlanetActor*> PlanetsByBody(
-		const class USpaceMMOBackendClient& Backend) const;
-
-	/** Whether the three things placement waits for have all arrived. */
-	bool IsGroundReady() const;
 
 	UPROPERTY()
 	TArray<TObjectPtr<class ASpaceMMODepositActor>> PlacedDeposits;

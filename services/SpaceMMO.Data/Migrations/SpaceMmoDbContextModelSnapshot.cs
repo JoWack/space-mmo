@@ -134,6 +134,18 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("star_system_id");
 
+                    b.Property<double?>("StartX")
+                        .HasColumnType("double precision")
+                        .HasColumnName("start_x");
+
+                    b.Property<double?>("StartY")
+                        .HasColumnType("double precision")
+                        .HasColumnName("start_y");
+
+                    b.Property<double?>("StartZ")
+                        .HasColumnType("double precision")
+                        .HasColumnName("start_z");
+
                     b.Property<double?>("SystemX")
                         .HasColumnType("double precision")
                         .HasColumnName("system_x");

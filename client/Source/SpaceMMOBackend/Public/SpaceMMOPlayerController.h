@@ -430,6 +430,22 @@ public:
 	 */
 	bool bPlacedForThisSession = false;
 
+	/**
+	 * A new character's home world, while they wait to be stood on it (task 145).
+	 *
+	 * Set when identity arrives with no last position: such a character has never been anywhere, so
+	 * they belong at their race's start rather than wherever the connection spawned. Cleared once they
+	 * are placed, or once it is clear they cannot be -- and either way bPlacedForThisSession opens, so
+	 * the whereabouts write starts. Until then it stays shut, or a session that ended early would
+	 * record the Capital and the character would start there for good.
+	 */
+	int32 AwaitingHomeBodyId = 0;
+
+	FTimerHandle HomeStartTimer;
+
+	/** How often to look for the home planet while waiting, in seconds. */
+	static constexpr float HomeStartPollSeconds = 0.25f;
+
 
 	/**
 	 * Renders a whole number with thousands separators, e.g. 1234567 as "1,234,567".
@@ -626,6 +642,15 @@ private:
 	 * standing in the air where their ship used to be.
 	 */
 	void RestoreWhereabouts();
+
+	/**
+	 * Stands a new character at their home world's start, facing its outpost, once the ground is
+	 * ready (task 145). Polled from a timer until it has, or has given up and said why.
+	 */
+	void TryStartAtHome();
+
+	/** Stops waiting for the home planet and opens the whereabouts write, placed or not. */
+	void FinishHomeStart();
 
 	/**
 	 * Tells the backend where this player is now.

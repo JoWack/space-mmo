@@ -57,6 +57,19 @@ struct SPACEMMOCORE_API FWalkInput
 	UPROPERTY()
 	bool bHasFacing = false;
 
+	/**
+	 * Which of the server's deliberate facings this client's facing was turned from (task 145).
+	 *
+	 * The client takes the server's facing once, when a pawn begins; after that every facing the
+	 * server holds came from this client a moment ago. A server that turns a character later -- a new
+	 * one stood at their outpost, facing it, seconds after spawning -- bumps an epoch instead, the
+	 * client takes the facing again when it sees the new one, and the server ignores facings sent from
+	 * an older one. Without it the client's next input put the character back the way it was, and the
+	 * client never saw the turn at all.
+	 */
+	UPROPERTY()
+	uint8 FacingEpoch = 0;
+
 	/** Clamps every axis into range, for the same reason ship input is clamped: clients lie. */
 	FWalkInput Sanitised() const
 	{
@@ -71,6 +84,7 @@ struct SPACEMMOCORE_API FWalkInput
 		Result.bHasFacing =
 			bHasFacing && !Facing.ContainsNaN() && Facing.SizeSquared() > UE_KINDA_SMALL_NUMBER;
 		Result.Facing = Result.bHasFacing ? Facing.GetNormalized() : FQuat::Identity;
+		Result.FacingEpoch = FacingEpoch;
 
 		return Result;
 	}
@@ -190,10 +204,24 @@ public:
 	 *                      sending its own would overwrite one the server chose deliberately --
 	 *                      stepping out of a ship facing its nose, say.
 	 */
-	static FWalkInput ForServer(const FWalkInput& Input, const FWalkState& State, bool bFacingIsOurs);
+	static FWalkInput ForServer(
+		const FWalkInput& Input, const FWalkState& State, bool bFacingIsOurs, uint8 FacingEpoch = 0);
 
-	/** The server's half: the client's facing becomes the character's, and no turn is re-applied. */
-	static void AdoptClientFacing(FWalkState& State, FWalkInput& Input);
+	/**
+	 * The server's half: the client's facing becomes the character's, and no turn is re-applied.
+	 *
+	 * Only a facing turned from the server's latest deliberate one: see FWalkInput::FacingEpoch.
+	 */
+	static void AdoptClientFacing(FWalkState& State, FWalkInput& Input, uint8 ServerFacingEpoch = 0);
+
+	/**
+	 * A facing that stands on Up and looks along the ground toward Toward (task 145).
+	 *
+	 * Toward is a direction, not a point: whatever of it lies along Up is dropped, because a character
+	 * turns about the ground, not toward the sky. Returns Fallback when nothing is left of it -- a
+	 * target straight overhead or underfoot names no way to face.
+	 */
+	static FQuat FacingToward(const FVector& Up, const FVector& Toward, const FQuat& Fallback);
 
 	/** How far the character moves this step, in kilometres, ready to add to a system position. */
 	static FVector PositionDeltaKilometres(const FWalkState& State, double DeltaSeconds);

@@ -530,6 +530,11 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         body.SystemX = content.SystemPosition is { Length: 3 } p ? p[0] : null;
         body.SystemY = content.SystemPosition is { Length: 3 } p2 ? p2[1] : null;
         body.SystemZ = content.SystemPosition is { Length: 3 } p3 ? p3[2] : null;
+
+        // The same for where its new characters start (task 145): cleared when content stops saying.
+        body.StartX = content.StartDirection is { Length: 3 } s ? s[0] : null;
+        body.StartY = content.StartDirection is { Length: 3 } s2 ? s2[1] : null;
+        body.StartZ = content.StartDirection is { Length: 3 } s3 ? s3[2] : null;
     }
 
     /// <summary>

@@ -1319,6 +1319,15 @@ bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(
 	// populated on one branch is one more thing to be wrong about later.
 	Object->TryGetBoolField(TEXT("lastSeenFlying"), OutResolved.bLastSeenFlying);
 
+	// Task 145. Absent or zero both mean "no home to go to", and the caller then leaves the character
+	// where they spawned, which is what happened before this field existed.
+	int64 Home = 0;
+
+	if (ReadInt64(Object, TEXT("homeBodyId"), Home))
+	{
+		OutResolved.HomeBodyId = static_cast<int32>(Home);
+	}
+
 	return true;
 }
 
@@ -1451,6 +1460,25 @@ bool FSpaceMMOBackendProtocol::ParseBodies(const FString& Json, TArray<FBackendB
 			if (Body.bHasSystemPosition)
 			{
 				Body.SystemPositionKilometres = FVector(X, Y, Z);
+			}
+		}
+
+		// Where its new characters start (task 145): all three or none, for the same reason, and a
+		// zero direction is no direction.
+		{
+			double X = 0.0;
+			double Y = 0.0;
+			double Z = 0.0;
+
+			Body.bHasStart =
+				Object->TryGetNumberField(TEXT("startX"), X)
+				&& Object->TryGetNumberField(TEXT("startY"), Y)
+				&& Object->TryGetNumberField(TEXT("startZ"), Z)
+				&& !FVector(X, Y, Z).IsNearlyZero();
+
+			if (Body.bHasStart)
+			{
+				Body.StartDirection = FVector(X, Y, Z);
 			}
 		}
 

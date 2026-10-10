@@ -424,6 +424,37 @@ public sealed class ContentValidatorTests
     }
 
     [Fact]
+    public void EveryHomeBodySaysWhereItsNewCharactersStart()
+    {
+        // Task 145. Without one, a new Martian stays wherever the connection first spawned them --
+        // the Capital -- and nothing anywhere says why.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies:
+            [
+                .. AllHomeworlds().Where(b => b.Key != "body_ares"),
+                Body("body_ares"),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Martian's home body has no startDirection"));
+    }
+
+    [Fact]
+    public void AStartDirectionNamesAPointOnTheSphere()
+    {
+        // All zeros normalises to NaN: a character placed nowhere.
+        ContentPack pack = Pack(
+            systems: [System()],
+            bodies:
+            [
+                .. AllHomeworlds().Where(b => b.Key != "body_ares"),
+                Body("body_ares", startDirection: [0.0, 0.0, 0.0]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Start direction must be three components"));
+    }
+
+    [Fact]
     public void AFullUniverseValidates()
     {
         Assert.Empty(ContentValidator.Validate(Pack(
@@ -936,9 +967,10 @@ public sealed class ContentValidatorTests
         string key,
         string system = "system_origin",
         double radiusKm = 637.1,
-        double[]? systemPosition = null) =>
+        double[]? systemPosition = null,
+        double[]? startDirection = null) =>
         new(key, key, system, BodyKind.Planet, SecurityLevel.Secure, radiusKm,
-            SystemPosition: systemPosition);
+            SystemPosition: systemPosition, StartDirection: startDirection);
 
     private static StationContent Station(string key, string? body) =>
         new(key, key, "system_origin", body, StationKind.TradingHub);
@@ -954,5 +986,5 @@ public sealed class ContentValidatorTests
 
     /// <summary>The four starting bodies every race needs, so a test can add one more problem.</summary>
     private static IReadOnlyList<BodyContent> AllHomeworlds() =>
-        [.. Enum.GetValues<Race>().Select(r => Body(Races.HomeBodyKeyFor(r)))];
+        [.. Enum.GetValues<Race>().Select(r => Body(Races.HomeBodyKeyFor(r), startDirection: [0.0, 0.0, 1.0]))];
 }

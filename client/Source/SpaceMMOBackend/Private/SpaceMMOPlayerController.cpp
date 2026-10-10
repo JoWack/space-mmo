@@ -27,6 +27,7 @@
 #include "SpaceMMODepositPrompt.h"
 #include "SpaceMMOGatheringComponent.h"
 #include "SpaceMMOCrosshair.h"
+#include "SpaceMMODepositSubsystem.h"
 #include "SpaceMMOOnFootReadout.h"
 #include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMOPlanetActor.h"
@@ -1826,12 +1827,34 @@ void ASpaceMMOPlayerController::AdoptIdentity(const FBackendResolvedCharacter& R
 	ResumePositionKilometres = Resolved.LastPositionKilometres;
 	bResumeFlying = Resolved.bLastSeenFlying;
 
-	// Nothing to put back, so nothing is waiting: the spawn is where they belong, and the periodic
-	// write may start recording it. Without this a brand new character would never be recorded at
-	// all, because the guard below would stay shut for the whole session.
+	// Nothing to put back: a new character, who belongs at their race's start on their home world
+	// (task 145) rather than at the Capital, where every connection's pawn first spawns. Polled,
+	// because the planet arrives over HTTP and identity races it; server-side, as every placement is.
+	//
+	// With no home to go to -- a server too old to send one, or no authority here -- the spawn is where
+	// they belong, as before 145, and the periodic write may start at once. Without that a character
+	// with nowhere to go would never be recorded at all, because the guard below would stay shut.
 	if (!bHasResumePosition)
 	{
-		bPlacedForThisSession = true;
+		if (HasAuthority() && Resolved.HomeBodyId != 0)
+		{
+			AwaitingHomeBodyId = Resolved.HomeBodyId;
+
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().SetTimer(
+					HomeStartTimer, this, &ASpaceMMOPlayerController::TryStartAtHome,
+					HomeStartPollSeconds, true);
+			}
+
+			UE_LOG(LogSpaceMMOBackend, Log,
+				TEXT("Character %d has never been anywhere; waiting to stand them on home body %d."),
+				Resolved.CharacterId, Resolved.HomeBodyId);
+		}
+		else
+		{
+			bPlacedForThisSession = true;
+		}
 	}
 
 	// Server-side only. A dedicated server runs this for every connection; a listen or standalone
@@ -2286,6 +2309,99 @@ void ASpaceMMOPlayerController::RestoreWhereabouts()
 	UE_LOG(LogSpaceMMOBackend, Log,
 		TEXT("Character %d quit while flying and resumes flying, at %s."),
 		CharacterId, *Where.ToString());
+}
+
+void ASpaceMMOPlayerController::TryStartAtHome()
+{
+	if (AwaitingHomeBodyId == 0 || !HasAuthority())
+	{
+		FinishHomeStart();
+
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	USpaceMMOBackendClient* Client = Backend();
+	const USpaceMMODepositSubsystem* Deposits =
+		World != nullptr ? World->GetSubsystem<USpaceMMODepositSubsystem>() : nullptr;
+
+	// The pawn may not exist yet -- identity can arrive first -- and the planets must have their real
+	// shape, or the character is stood on ground that then moves (129). Both are waits, not failures.
+	ASpaceMMOCharacterPawn* OnFoot = Cast<ASpaceMMOCharacterPawn>(GetPawn());
+
+	if (GetPawn() == nullptr || Client == nullptr || Deposits == nullptr || !Deposits->IsGroundReady())
+	{
+		return;
+	}
+
+	const int32 HomeId = AwaitingHomeBodyId;
+
+	// Everything below decides, so the wait ends whatever it decides.
+	FinishHomeStart();
+
+	if (OnFoot == nullptr)
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Character %d is new but not on foot (%s); left where they are."),
+			CharacterId, *GetNameSafe(GetPawn()));
+
+		return;
+	}
+
+	const FBackendBody* Home = Client->GetBodies().FindByPredicate(
+		[HomeId](const FBackendBody& Body) { return Body.Id == HomeId; });
+
+	if (Home == nullptr || !Home->bHasStart)
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Character %d's home body %d %s; left at the spawn. Give it a startDirection in "
+				"origin.json and re-seed."),
+			CharacterId, HomeId, Home == nullptr ? TEXT("is not a body the server sent") : TEXT("has no start"));
+
+		return;
+	}
+
+	const ASpaceMMOPlanetActor* const* Planet = Deposits->PlanetsByBody(*Client).Find(HomeId);
+
+	if (Planet == nullptr || *Planet == nullptr)
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Character %d's home '%s' has no planet in the world; left at the spawn."),
+			CharacterId, *Home->Key);
+
+		return;
+	}
+
+	// Facing the home world's outpost (Joe, 10 October): its ground position, by the height function,
+	// from the station's own direction. Read from the data rather than a placed actor, so it does not
+	// wait on stations as well. A home with no station leaves the facing alone.
+	const FBackendStation* Outpost = Client->GetStations().FindByPredicate(
+		[HomeId](const FBackendStation& Station)
+		{
+			return Station.bPlaced && Station.bOnBody && Station.BodyId == HomeId;
+		});
+
+	FVector OutpostKilometres = FVector::ZeroVector;
+
+	if (Outpost != nullptr)
+	{
+		OutpostKilometres = FPlanetTerrain::SurfacePosition(
+			(*Planet)->GetPlanetConfig(), (*Planet)->GetTerrainConfig(),
+			Outpost->Direction.GetSafeNormal()).Kilometres;
+	}
+
+	OnFoot->StartAt(**Planet, Home->StartDirection, Outpost != nullptr ? &OutpostKilometres : nullptr);
+}
+
+void ASpaceMMOPlayerController::FinishHomeStart()
+{
+	AwaitingHomeBodyId = 0;
+	bPlacedForThisSession = true;
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(HomeStartTimer);
+	}
 }
 
 void ASpaceMMOPlayerController::RecordWhereabouts()

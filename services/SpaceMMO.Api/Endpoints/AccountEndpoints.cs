@@ -29,6 +29,10 @@ public sealed record ResolveCharacterRequest(string Token, int CharacterId);
 /// <param name="LastSeenFlying">
 /// Whether they were flying when it did. Meaningless without a position, and false there.
 /// </param>
+/// <param name="HomeBodyId">
+/// The character's home world (task 145). The game server stands a character with no last position on
+/// it, at that body's start direction; one that has been somewhere goes back there instead.
+/// </param>
 /// <remarks>
 /// The whereabouts ride along for the reason the docked station does, one step further: this is the
 /// request a connecting server already makes, and where to put somebody is needed at exactly this
@@ -43,7 +47,8 @@ public sealed record ResolvedCharacter(
     double? LastSystemX,
     double? LastSystemY,
     double? LastSystemZ,
-    bool LastSeenFlying);
+    bool LastSeenFlying,
+    int HomeBodyId);
 
 /// <summary>
 /// Account registration and login.
@@ -127,7 +132,8 @@ public static class AccountEndpoints
                 character.LastSystemX,
                 character.LastSystemY,
                 character.LastSystemZ,
-                character.LastSeenFlying));
+                character.LastSeenFlying,
+                character.HomeBodyId));
     }
 
     private static async Task<IResult> RegisterAsync(

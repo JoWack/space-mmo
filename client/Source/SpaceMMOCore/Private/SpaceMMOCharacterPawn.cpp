@@ -1008,6 +1008,7 @@ void ASpaceMMOCharacterPawn::PublishNetState()
 	NetState.Velocity = WalkState.Velocity;
 	NetState.Rotation = WalkState.Rotation;
 	NetState.bOnGround = bOnGround;
+	NetState.FacingEpoch = FacingEpoch;
 
 	const UWorld* World = GetWorld();
 
@@ -1038,10 +1039,15 @@ void ASpaceMMOCharacterPawn::ReconcileWithServer(const double DeltaSeconds)
 	// facing the server chose -- stepping out of a ship towards its nose -- is the one the client
 	// starts turning from; and only once, because after that every facing the server has came from
 	// this client a moment ago, and taking it back would undo the turn made since.
-	if (!bTookServerFacing)
+	//
+	// And again whenever the server has turned the character since (task 145): a new one is stood at
+	// their outpost, facing it, seconds after the pawn began, and the client would otherwise never see
+	// that turn.
+	if (!bTookServerFacing || NetState.FacingEpoch != SeenFacingEpoch)
 	{
 		WalkState.Rotation = NetState.Rotation;
 		bTookServerFacing = true;
+		SeenFacingEpoch = NetState.FacingEpoch;
 	}
 
 	Navigation.SystemPosition = FShipFlightModel::ReconcilePosition(
@@ -1209,7 +1215,7 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 		// client but itself, and turns from its input as before.
 		if (!IsLocallyControlled())
 		{
-			FCharacterWalkModel::AdoptClientFacing(WalkState, PendingInput);
+			FCharacterWalkModel::AdoptClientFacing(WalkState, PendingInput, FacingEpoch);
 		}
 
 		SimulateStep(DeltaSeconds);
@@ -1219,7 +1225,7 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 	{
 		SimulateStep(DeltaSeconds);
 		ServerSendWalkInput(
-			FCharacterWalkModel::ForServer(PendingInput, WalkState, bTookServerFacing));
+			FCharacterWalkModel::ForServer(PendingInput, WalkState, bTookServerFacing, SeenFacingEpoch));
 		ReconcileWithServer(DeltaSeconds);
 	}
 	else
@@ -1422,6 +1428,58 @@ void ASpaceMMOCharacterPawn::ResumeAt(const FSystemCoordinate& Where)
 	UE_LOG(LogSpaceMMO, Log,
 		TEXT("Put back at %s, where the world last saw this character."),
 		*Where.ToString());
+}
+
+bool ASpaceMMOCharacterPawn::StartAt(
+	const ASpaceMMOPlanetActor& Planet, const FVector& Direction, const FVector* FaceTowardKilometres)
+{
+	const FVector Up = Direction.GetSafeNormal();
+
+	if (Up.IsNearlyZero())
+	{
+		UE_LOG(LogSpaceMMO, Warning,
+			TEXT("Not started on '%s': the start direction %s names no point on the planet."),
+			*Planet.BodyKey, *Direction.ToString());
+
+		return false;
+	}
+
+	// As ResumeAt, and for its reason: the first-planet placement must not fire afterwards.
+	bResumedFromRecord = true;
+	bAwaitingFirstGround = false;
+	WalkState.Velocity = FVector::ZeroVector;
+
+	const FPlanetConfig PlanetConfig = Planet.GetPlanetConfig();
+
+	const FVector Ground =
+		FPlanetTerrain::SurfacePosition(PlanetConfig, Planet.GetTerrainConfig(), Up).Kilometres
+		+ (Up * StandingHeightKilometres);
+
+	if (FaceTowardKilometres != nullptr)
+	{
+		// Up from the planet's centre rather than the slope underfoot: which way the outpost lies is
+		// a question about the sphere, and SetSystemPosition then lays this facing onto the ground.
+		WalkState.Rotation =
+			FCharacterWalkModel::FacingToward(Up, *FaceTowardKilometres - Ground, WalkState.Rotation);
+
+		// So the owning client takes it, and the server stops taking the client's old one.
+		++FacingEpoch;
+	}
+
+	SetSystemPosition(FSystemCoordinate(Ground));
+
+	// The one line that says a new character went home. A new character with no such line, standing
+	// at the Capital, is a start that never ran -- otherwise indistinguishable from one that ran with
+	// the Capital's coordinates.
+	UE_LOG(LogSpaceMMO, Log,
+		TEXT("Started on '%s' at %s km%s."),
+		*Planet.BodyKey,
+		*Navigation.SystemPosition.ToString(),
+		FaceTowardKilometres != nullptr
+			? *FString::Printf(TEXT(", facing %s km"), *FaceTowardKilometres->ToString())
+			: TEXT(", facing wherever it was"));
+
+	return true;
 }
 
 void ASpaceMMOCharacterPawn::RequestEmbark()

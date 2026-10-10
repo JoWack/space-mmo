@@ -174,7 +174,8 @@ public sealed record BodyContent(
     double RadiusKm,
     BodyAppearanceContent? Appearance = null,
     BodyTerrainContent? Terrain = null,
-    double[]? SystemPosition = null);
+    double[]? SystemPosition = null,
+    double[]? StartDirection = null);
 
 /// <summary>
 /// The shape of a body's ground, as authored in <c>data/universe/</c>.

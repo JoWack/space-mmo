@@ -139,6 +139,16 @@ public static class ContentValidator
                 errors.Add(new ContentError(
                     "body", body.Key, "System position must be three components."));
             }
+
+            // Where a new character of this world's race first stands (task 145). A direction, like
+            // a station's and a deposit's, so a zero one names no point on the sphere at all.
+            if (body.StartDirection is not null
+                && (body.StartDirection is not { Length: 3 }
+                    || body.StartDirection.All(c => c == 0.0)))
+            {
+                errors.Add(new ContentError(
+                    "body", body.Key, "Start direction must be three components, not all zero."));
+            }
         }
 
         ValidateBodiesAreNotStacked(pack, errors);
@@ -180,6 +190,19 @@ public static class ContentValidator
                     "body",
                     required,
                     $"Missing starting body for {race}; characters of that race cannot be created."));
+
+                continue;
+            }
+
+            // Task 145: a new character is put here, and without it they would stay wherever the
+            // connection first spawned them -- the Capital -- with nothing saying why.
+            if (pack.Bodies.Single(b => b.Key == required).StartDirection is null)
+            {
+                errors.Add(new ContentError(
+                    "body",
+                    required,
+                    $"{race}'s home body has no startDirection; new characters of that race have "
+                    + "nowhere to start."));
             }
         }
     }
