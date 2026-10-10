@@ -4421,7 +4421,8 @@ it:
 
 Connections with no identity (automated runs, `-BackendUrl=http://localhost:9`) keep spawning at the
 Capital. **Facing is not decided**: a new character arrives pointing wherever a fresh pawn points.
-Facing their outpost is one line and a feel decision, so show Joe before choosing.
+~~Facing their outpost is one line and a feel decision, so show Joe before choosing.~~ **Decided by Joe,
+10 October: a new character arrives facing their outpost.**
 
 ### Ruled out
 
@@ -8814,8 +8815,9 @@ How it would fail:
 
 ## 186 — A quest step can ask for any homeworld's ore
 
-**Done 10 October, headless; awaiting a playtest.** Split out of 145 on 9 October. Belongs to **M4**.
-**Unblocks 145.**
+**Done 10 October, headless; its playtest waits for a new character.** Joe, 10 October: he has no
+character on quest 3, and will test it when he next starts one and walks the opening. Split out of 145 on
+9 October. Belongs to **M4**. **Unblocks 145.**
 
 Joe, 9 October: any homeworld's ore counts toward "Mine 20 ore". A step matched an event by one target
 key (`QuestProgress.Matches`), and `intro_mine_ore` targeted `ferrite_ore`, which since 184 only Terra has.
