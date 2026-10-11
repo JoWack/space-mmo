@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Market;
 
 namespace SpaceMMO.Data.Market;
@@ -26,6 +27,10 @@ public sealed class InsufficientFundsException(int characterId, Credits required
 /// <param name="LimitPrice">Worst acceptable unit price.</param>
 /// <param name="Quantity">Units sought.</param>
 /// <param name="GoodForDays">How long the remainder rests before expiring.</param>
+/// <param name="Style">
+/// For a sell order, which style of the goods to sell (task 187); null sells the style held most
+/// of. Ignored for a buy order, which takes whatever style the sellers hold (ADR-0008: one book).
+/// </param>
 public readonly record struct PlaceOrderRequest(
     int CharacterId,
     int StationId,
@@ -33,7 +38,8 @@ public readonly record struct PlaceOrderRequest(
     OrderSide Side,
     Credits LimitPrice,
     int Quantity,
-    int GoodForDays = 30);
+    int GoodForDays = 30,
+    ItemStyle? Style = null);
 
 /// <summary>The outcome of placing an order.</summary>
 /// <param name="OrderId">
@@ -145,16 +151,24 @@ public sealed class MarketService(SpaceMmoDbContext database)
         }
 
         Credits reservedCostBasis = Credits.Zero;
+        ItemStyle? sellStyle = null;
 
         if (request.Side == OrderSide.Sell)
         {
-            await TopUpFromPocketsAsync(request, hangar, cancellationToken);
+            Inventory? pockets = await PocketsIfDockedAsync(request, cancellationToken);
+
+            sellStyle = await DecideSellStyleAsync(request, hangar, pockets, cancellationToken);
+
+            if (pockets is not null)
+            {
+                await TopUpFromPocketsAsync(request, pockets, hangar, sellStyle.Value, cancellationToken);
+            }
 
             // Throws if the seller does not hold the goods, before anything else is written. The
             // returned cost basis travels with the reservation so that cancelling puts the goods
             // back at what they originally cost rather than at zero.
             reservedCostBasis = await _inventories.RemoveAsync(
-                hangar.Id, request.ItemDefId, request.Quantity, cancellationToken);
+                hangar.Id, request.ItemDefId, request.Quantity, sellStyle.Value, cancellationToken);
         }
 
         List<MarketOrder> candidates = await LoadAndLockCandidatesAsync(request, cancellationToken);
@@ -181,6 +195,7 @@ public sealed class MarketService(SpaceMmoDbContext database)
             EscrowedCredits = escrowRequired,
             ReservedQuantity = request.Side == OrderSide.Sell ? request.Quantity : 0,
             ReservedCostBasis = reservedCostBasis,
+            Style = sellStyle,
             PlacedAt = now,
             ExpiresAt = now.AddDays(request.GoodForDays),
         };
@@ -236,6 +251,10 @@ public sealed class MarketService(SpaceMmoDbContext database)
             sellOrder.ReservedQuantity -= fill.Quantity;
             sellOrder.ReservedCostBasis -= soldCostBasis;
 
+            // The buyer receives what the seller put up, whatever style that is (task 187). Every
+            // sell order has one; the column's check constraint says so.
+            ItemStyle soldStyle = sellOrder.Style ?? ItemStyle.Common;
+
             var trade = new Trade
             {
                 BuyOrderId = buyOrder.Id,
@@ -248,6 +267,7 @@ public sealed class MarketService(SpaceMmoDbContext database)
                 Quantity = fill.Quantity,
                 Price = fill.Price,
                 SalesTax = settlement.SalesTax,
+                Style = soldStyle,
                 ExecutedAt = now,
             };
 
@@ -279,6 +299,7 @@ public sealed class MarketService(SpaceMmoDbContext database)
                 request.ItemDefId,
                 fill.Quantity,
                 settlement.EscrowConsumed,
+                soldStyle,
                 cancellationToken);
         }
 
@@ -350,6 +371,7 @@ public sealed class MarketService(SpaceMmoDbContext database)
                 order.ItemDefId,
                 order.ReservedQuantity,
                 order.ReservedCostBasis,
+                order.Style ?? ItemStyle.Common,
                 cancellationToken);
 
             order.ReservedQuantity = 0;
@@ -422,36 +444,27 @@ public sealed class MarketService(SpaceMmoDbContext database)
     /// would be one way too many.
     /// </para>
     /// <para>
-    /// <strong>Only while docked here.</strong> Otherwise selling at a station a character is
-    /// nowhere near would reach into their pockets across the system.
+    /// Only the style being sold moves (task 187). The caller passes the pockets only when the
+    /// seller is docked here: see <see cref="PocketsIfDockedAsync"/>.
     /// </para>
     /// </remarks>
     private async Task TopUpFromPocketsAsync(
-        PlaceOrderRequest request, Inventory hangar, CancellationToken cancellationToken)
+        PlaceOrderRequest request,
+        Inventory carried,
+        Inventory hangar,
+        ItemStyle style,
+        CancellationToken cancellationToken)
     {
-        int? dockedStationId = await _database.Characters
-            .Where(c => c.Id == request.CharacterId)
-            .Select(c => c.DockedStationId)
-            .SingleAsync(cancellationToken);
-
-        if (dockedStationId != request.StationId)
-        {
-            return;
-        }
-
-        int alreadyHere = await _inventories.QuantityOfAsync(
-            hangar.Id, request.ItemDefId, cancellationToken);
+        int alreadyHere = (await _inventories.QuantitiesByStyleAsync(
+            hangar.Id, request.ItemDefId, cancellationToken)).GetValueOrDefault(style);
 
         if (alreadyHere >= request.Quantity)
         {
             return;
         }
 
-        Inventory carried = await _inventories.GetOrCreateCarriedAsync(
-            request.CharacterId, cancellationToken);
-
-        int carrying = await _inventories.QuantityOfAsync(
-            carried.Id, request.ItemDefId, cancellationToken);
+        int carrying = (await _inventories.QuantitiesByStyleAsync(
+            carried.Id, request.ItemDefId, cancellationToken)).GetValueOrDefault(style);
 
         // Whatever closes the gap, or everything carried if that is not enough. Falling short is
         // not an error here: the removal below reports it, and reports it against the goods
@@ -465,13 +478,82 @@ public sealed class MarketService(SpaceMmoDbContext database)
 
         // Through TransferAsync so the cost basis travels with the goods (task 99).
         await _inventories.TransferAsync(
-            carried.Id, hangar.Id, request.ItemDefId, moving, cancellationToken);
+            carried.Id, hangar.Id, request.ItemDefId, moving, style, cancellationToken);
 
         // Flushed before the removal reads it back. AddAsync and RemoveAsync mutate tracked
         // entities and leave saving to the caller, while the removal finds its stack with a
         // database query -- so a hangar that held none of this would have a row visible only in
         // the change tracker, and the sale would fail for want of goods in the same transaction.
         await _database.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// The seller's pockets, if they are docked at the order's station; null otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <strong>Only while docked here.</strong> Otherwise selling at a station a character is nowhere
+    /// near would reach into their pockets across the system.
+    /// </remarks>
+    private async Task<Inventory?> PocketsIfDockedAsync(
+        PlaceOrderRequest request, CancellationToken cancellationToken)
+    {
+        int? dockedStationId = await _database.Characters
+            .Where(c => c.Id == request.CharacterId)
+            .Select(c => c.DockedStationId)
+            .SingleAsync(cancellationToken);
+
+        return dockedStationId == request.StationId
+            ? await _inventories.GetOrCreateCarriedAsync(request.CharacterId, cancellationToken)
+            : null;
+    }
+
+    /// <summary>
+    /// Which stack a sell order takes its goods from (task 187).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The seller's pick, or the style they hold most of here and in their pockets. A raw material
+    /// has one stack, Common, whatever its world.
+    /// </para>
+    /// <para>
+    /// A pick they hold none of is kept, not corrected: the removal refuses it and names the
+    /// shortfall, rather than listing goods they did not ask to sell.
+    /// </para>
+    /// </remarks>
+    private async Task<ItemStyle> DecideSellStyleAsync(
+        PlaceOrderRequest request,
+        Inventory hangar,
+        Inventory? pockets,
+        CancellationToken cancellationToken)
+    {
+        ItemCategory category = await _database.ItemDefs
+            .Where(d => d.Id == request.ItemDefId)
+            .Select(d => d.Category)
+            .SingleAsync(cancellationToken);
+
+        if (category == ItemCategory.Raw)
+        {
+            return ItemStyle.Common;
+        }
+
+        if (request.Style is { } picked)
+        {
+            return picked;
+        }
+
+        Dictionary<ItemStyle, int> held = await _inventories.QuantitiesByStyleAsync(
+            hangar.Id, request.ItemDefId, cancellationToken);
+
+        if (pockets is not null)
+        {
+            foreach ((ItemStyle style, int quantity) in await _inventories.QuantitiesByStyleAsync(
+                pockets.Id, request.ItemDefId, cancellationToken))
+            {
+                held[style] = held.GetValueOrDefault(style) + quantity;
+            }
+        }
+
+        return ItemStyles.MostHeld(held) ?? ItemStyle.Common;
     }
 
     /// <summary>

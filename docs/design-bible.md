@@ -262,9 +262,11 @@ each would sit on the same world as a level-15 material of nearly the same name
 per-planet too, on the grounds that a finished item's style is inherited from its
 components, so "a Terran crude tool can only look Terran if the scrap it was built from
 remembers where it came from". With one shared scrap, a good made from scrap alone — the
-crude mining laser — has no world to inherit a style from. What it gets instead is an
-open question for the style tag (task 187), and it is a consequence of the decision
-rather than an argument against it.
+crude mining laser — has no world to inherit a style from. Joe settled what it gets on
+10 October 2026 (task 187): **Common**, a fifth style shared by everything made from shared
+materials alone — "only good manufactured from racial-specific materials have that racial
+style". A crafted good takes the style of its recipe's main input, so ferrite makes Terran
+plate and Terran plate makes a Terran thruster, whoever is doing the making.
 
 **What is actually seeded today is ferrite and scrap on the capital** and one level-15
 deposit per homeworld, which is what the mining loop has been developed and tested

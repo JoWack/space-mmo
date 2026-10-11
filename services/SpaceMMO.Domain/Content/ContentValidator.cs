@@ -478,6 +478,8 @@ public static class ContentValidator
                     "item", item.Key, $"Volume must be positive, got {item.VolumeM3}."));
             }
 
+            ValidateItemStyle(item, pack, errors);
+
             if (item.FactionBuyPrice is not { } price)
             {
                 continue;
@@ -505,6 +507,110 @@ public static class ContentValidator
         }
     }
 
+    /// <summary>
+    /// A raw material's style is its world's, and only a raw material authors one (task 187).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Only raw materials.</strong> A crafted good's style is decided when it is made, by what
+    /// went into it; one authored on the item would be a second answer nothing reads.
+    /// </para>
+    /// <para>
+    /// <strong>Held to the planet, both ways.</strong> A styled material must be locked to the home
+    /// world its style names, or Terran plate could be refined from something found on Grimhold. And
+    /// a material locked to a homeworld must carry that world's style, or a fifth world's ore
+    /// authored without one would make Common goods with nothing looking wrong.
+    /// </para>
+    /// </remarks>
+    private static void ValidateItemStyle(ItemContent item, ContentPack pack, List<ContentError> errors)
+    {
+        if (item.Category != ItemCategory.Raw)
+        {
+            if (item.Style != ItemStyle.Common)
+            {
+                errors.Add(new ContentError(
+                    "item",
+                    item.Key,
+                    $"Only Raw items author a style; a {item.Category}'s comes from what it is made of."));
+            }
+
+            return;
+        }
+
+        string[] bodies = pack.ResourceNodes
+            .Where(n => n.Item == item.Key)
+            .Select(n => n.Body)
+            .Distinct()
+            .ToArray();
+
+        // The planet-lock rule reports a locked material on several bodies or none; there is no one
+        // world to compare against until that is fixed.
+        ItemStyle? world = item.PlanetLocked && bodies.Length == 1
+            ? ItemStyles.ForBody(bodies[0])
+            : null;
+
+        if (item.Style != ItemStyle.Common && !item.PlanetLocked)
+        {
+            errors.Add(new ContentError(
+                "item",
+                item.Key,
+                $"Styled {item.Style}, but not planet-locked; a style belongs to one world's material."));
+        }
+        else if (world is { } expected && expected != item.Style)
+        {
+            errors.Add(new ContentError(
+                "item",
+                item.Key,
+                expected == ItemStyle.Common
+                    ? $"Styled {item.Style}, but found only on '{bodies[0]}', which is nobody's homeworld."
+                    : $"Found only on '{bodies[0]}', so its style must be {expected}, not {item.Style}."));
+        }
+    }
+
+    /// <summary>
+    /// A recipe's main input must be one of its inputs, and cannot be left out by accident.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The accident is the expensive case. A recipe with one input that can carry a style and no main
+    /// input makes Common goods from Terran materials, which looks like nothing at all until somebody
+    /// wonders why their plate has no tag. With two or more, leaving it out is a decision — the alloy
+    /// frame takes four worlds' ore and belongs to none of them — so it is the author's to make.
+    /// </para>
+    /// <para>
+    /// "Can carry a style": a styled raw material, or anything crafted, since crafted goods take a
+    /// style when they are made.
+    /// </para>
+    /// </remarks>
+    private static void ValidateMainInput(
+        RecipeContent recipe, Dictionary<string, ItemContent> items, List<ContentError> errors)
+    {
+        if (recipe.MainInput is string main)
+        {
+            if (!recipe.Inputs.Any(i => string.Equals(i.Item, main, StringComparison.Ordinal)))
+            {
+                errors.Add(new ContentError(
+                    "recipe", recipe.Key, $"Main input '{main}' is not one of its inputs."));
+            }
+
+            return;
+        }
+
+        string[] styled = [.. recipe.Inputs
+            .Where(i => items.TryGetValue(i.Item, out ItemContent? item)
+                && (item.Category != ItemCategory.Raw || item.Style != ItemStyle.Common))
+            .Select(i => i.Item)];
+
+        if (styled.Length == 1)
+        {
+            errors.Add(new ContentError(
+                "recipe",
+                recipe.Key,
+                $"'{styled[0]}' is its only input that carries a style, but it is not named as the "
+                + "main input; everything it makes would be Common."));
+        }
+    }
+
     private static void ValidateRecipes(
         ContentPack pack,
         HashSet<string> skillKeys,
@@ -512,8 +618,18 @@ public static class ContentValidator
         HashSet<string> toolKeys,
         List<ContentError> errors)
     {
+        // First of each key: a duplicate is reported by CollectKeys, and must not throw here.
+        var items = new Dictionary<string, ItemContent>(StringComparer.Ordinal);
+
+        foreach (ItemContent item in pack.Items)
+        {
+            items.TryAdd(item.Key, item);
+        }
+
         foreach (RecipeContent recipe in pack.Recipes)
         {
+            ValidateMainInput(recipe, items, errors);
+
             if (!itemKeys.Contains(recipe.Output))
             {
                 errors.Add(new ContentError(

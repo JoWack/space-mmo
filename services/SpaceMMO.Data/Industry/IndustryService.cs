@@ -105,11 +105,17 @@ public sealed class IndustryService(SpaceMmoDbContext database)
     /// <exception cref="MissingToolException">If a required tool is not owned.</exception>
     /// <exception cref="InsufficientItemsException">If materials are short.</exception>
     /// <exception cref="InsufficientFundsException">If the fee cannot be paid.</exception>
+    /// <param name="mainInputStyle">
+    /// Which style of the recipe's main input to make it from, and so the output's style (task 187).
+    /// Null takes the style held most of. Ignored for a recipe without a main input, and for a raw
+    /// main input, whose style is its world's.
+    /// </param>
     public async Task<StartJobResult> StartJobAsync(
         int characterId,
         int recipeId,
         int stationId,
         int runs,
+        ItemStyle? mainInputStyle = null,
         CancellationToken cancellationToken = default)
     {
         if (runs <= 0)
@@ -127,6 +133,7 @@ public sealed class IndustryService(SpaceMmoDbContext database)
         Recipe recipe = await _database.Recipes
             .Include(r => r.Inputs)
             .Include(r => r.Skill)
+            .Include(r => r.MainInputItemDef)
             .SingleAsync(r => r.Id == recipeId, cancellationToken);
 
         int level = await SkillLevelAsync(characterId, recipe.SkillId, cancellationToken);
@@ -163,36 +170,33 @@ public sealed class IndustryService(SpaceMmoDbContext database)
         //
         // Through TransferAsync so the cost basis travels with the material (task 99). Material
         // that arrived as though it had cost nothing pays nothing when it is lost (ADR-0006).
-        if (character.DockedStationId == stationId)
-        {
-            Inventory carried = await _inventories.GetOrCreateCarriedAsync(
-                characterId, cancellationToken);
+        bool docked = character.DockedStationId == stationId;
 
+        Inventory? carried = docked
+            ? await _inventories.GetOrCreateCarriedAsync(characterId, cancellationToken)
+            : null;
+
+        // Decided before anything moves, from the hangar and the pockets together: they are what
+        // a player standing here means by "what I have" (task 187).
+        MainInputDraw draw = await DecideMainInputAsync(
+            recipe, hangar, carried, mainInputStyle, cancellationToken);
+
+        if (carried is not null)
+        {
             foreach (RecipeInput input in recipe.Inputs)
             {
-                int needed = input.Quantity * runs;
+                // The main input tops up in its one style; the rest in any, the output's first, as
+                // they will be consumed.
+                bool isMain = input.ItemDefId == recipe.MainInputItemDefId;
 
-                int alreadyHere = await _inventories.QuantityOfAsync(
-                    hangar.Id, input.ItemDefId, cancellationToken);
-
-                if (alreadyHere >= needed)
-                {
-                    continue;
-                }
-
-                int carrying = await _inventories.QuantityOfAsync(
-                    carried.Id, input.ItemDefId, cancellationToken);
-
-                // Whatever closes the gap, or everything carried if that is not enough. Falling
-                // short here is not an error: the consumption below reports it, and it reports it
-                // against the material actually missing rather than against a transfer.
-                int moving = Math.Min(needed - alreadyHere, carrying);
-
-                if (moving > 0)
-                {
-                    await _inventories.TransferAsync(
-                        carried.Id, hangar.Id, input.ItemDefId, moving, cancellationToken);
-                }
+                await TopUpAsync(
+                    carried,
+                    hangar,
+                    input.ItemDefId,
+                    input.Quantity * runs,
+                    isMain ? draw.StackStyle : null,
+                    draw.OutputStyle,
+                    cancellationToken);
             }
 
             // Flushed before anything reads it back.
@@ -219,17 +223,28 @@ public sealed class IndustryService(SpaceMmoDbContext database)
         {
             int quantity = input.Quantity * runs;
 
-            Credits cost = await _inventories.RemoveAsync(
-                hangar.Id, input.ItemDefId, quantity, cancellationToken);
+            // The main input from its one style, so the output's style is true of all of it. The
+            // rest from any, the output's first: a Terran shuttle takes Terran thrusters while there
+            // are any (task 187).
+            IReadOnlyList<(ItemStyle Style, int Quantity, Credits Cost)> drawn =
+                input.ItemDefId == recipe.MainInputItemDefId
+                    ? [(draw.StackStyle, quantity, await _inventories.RemoveAsync(
+                        hangar.Id, input.ItemDefId, quantity, draw.StackStyle, cancellationToken))]
+                    : await _inventories.RemoveAnyStyleAsync(
+                        hangar.Id, input.ItemDefId, quantity, draw.OutputStyle, cancellationToken);
 
-            inputCostBasis += cost;
-
-            consumed.Add(new IndustryJobInput
+            foreach ((ItemStyle style, int taken, Credits cost) in drawn)
             {
-                ItemDefId = input.ItemDefId,
-                Quantity = quantity,
-                CostBasis = cost,
-            });
+                inputCostBasis += cost;
+
+                consumed.Add(new IndustryJobInput
+                {
+                    ItemDefId = input.ItemDefId,
+                    Style = style,
+                    Quantity = taken,
+                    CostBasis = cost,
+                });
+            }
         }
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -246,6 +261,7 @@ public sealed class IndustryService(SpaceMmoDbContext database)
             CompletesAt = now.AddSeconds(totalSeconds),
             FeePaid = fee,
             InputCostBasis = inputCostBasis,
+            OutputStyle = draw.OutputStyle,
         };
 
         _database.IndustryJobs.Add(job);
@@ -313,7 +329,8 @@ public sealed class IndustryService(SpaceMmoDbContext database)
         if (category.IsStackable())
         {
             await _inventories.AddAsync(
-                hangar.Id, recipe.OutputItemDefId, quantity, outputCost, cancellationToken);
+                hangar.Id, recipe.OutputItemDefId, quantity, outputCost, job.OutputStyle,
+                cancellationToken);
         }
         else
         {
@@ -329,6 +346,7 @@ public sealed class IndustryService(SpaceMmoDbContext database)
                     ItemDefId = recipe.OutputItemDefId,
                     InventoryId = hangar.Id,
                     Condition = 100,
+                    Style = job.OutputStyle,
 
                     // The rounding remainder goes to the first unit so the instances sum back to
                     // exactly what the job cost.
@@ -438,8 +456,9 @@ public sealed class IndustryService(SpaceMmoDbContext database)
             // cancel-and-restart cycle cannot launder cost basis away.
             Credits share = ShareOf(input.CostBasis, refunded, input.Quantity);
 
+            // Back to the stack it came from: Terran plate refunds as Terran plate (task 187).
             await _inventories.AddAsync(
-                hangar.Id, input.ItemDefId, refunded, share, cancellationToken);
+                hangar.Id, input.ItemDefId, refunded, share, input.Style, cancellationToken);
         }
 
         job.State = IndustryJobState.Cancelled;
@@ -460,6 +479,128 @@ public sealed class IndustryService(SpaceMmoDbContext database)
                     && j.State == IndustryJobState.Running
                     && j.Recipe!.SkillId == skillId,
                 cancellationToken);
+
+    // ── Style ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// How a job draws its main input, and the style that gives its output (task 187).
+    /// </summary>
+    /// <param name="StackStyle">The stack the main input comes from: Common for a raw material.</param>
+    /// <param name="OutputStyle">The style the job's output will have.</param>
+    private readonly record struct MainInputDraw(ItemStyle StackStyle, ItemStyle OutputStyle);
+
+    /// <summary>
+    /// Decides which style of the main input a job uses, and so its output's style.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A raw main input decides by itself:</strong> ferrite ore is Terran wherever it is, so
+    /// plate refined from it is Terran whatever was asked for.
+    /// </para>
+    /// <para>
+    /// <strong>A crafted one is the player's pick</strong>, or the style held most of when they did
+    /// not pick. A pick they hold none of is not corrected to one they do: the consumption refuses it,
+    /// naming the shortfall, rather than quietly making something they did not ask for.
+    /// </para>
+    /// </remarks>
+    private async Task<MainInputDraw> DecideMainInputAsync(
+        Recipe recipe,
+        Inventory hangar,
+        Inventory? carried,
+        ItemStyle? requested,
+        CancellationToken cancellationToken)
+    {
+        if (recipe.MainInputItemDef is not { } main)
+        {
+            return new MainInputDraw(ItemStyle.Common, ItemStyles.ForOutput(null));
+        }
+
+        if (main.Category == ItemCategory.Raw)
+        {
+            return new MainInputDraw(ItemStyle.Common, ItemStyles.ForOutput(main.Style));
+        }
+
+        ItemStyle? style = requested;
+
+        if (style is null)
+        {
+            Dictionary<ItemStyle, int> held = await _inventories.QuantitiesByStyleAsync(
+                hangar.Id, main.Id, cancellationToken);
+
+            if (carried is not null)
+            {
+                foreach ((ItemStyle carriedStyle, int quantity) in await _inventories
+                    .QuantitiesByStyleAsync(carried.Id, main.Id, cancellationToken))
+                {
+                    held[carriedStyle] = held.GetValueOrDefault(carriedStyle) + quantity;
+                }
+            }
+
+            style = ItemStyles.MostHeld(held);
+        }
+
+        // Nothing held at all: Common, and the consumption reports the shortfall.
+        ItemStyle chosen = style ?? ItemStyle.Common;
+
+        return new MainInputDraw(chosen, ItemStyles.ForOutput(chosen));
+    }
+
+    /// <summary>
+    /// Moves what is missing from the hangar across from the pockets, in one style or any.
+    /// </summary>
+    /// <param name="style">The one style to move, or null for any.</param>
+    /// <param name="preferred">With any style, which to move first.</param>
+    private async Task TopUpAsync(
+        Inventory carried,
+        Inventory hangar,
+        int itemDefId,
+        int needed,
+        ItemStyle? style,
+        ItemStyle preferred,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<ItemStyle, int> here = await _inventories.QuantitiesByStyleAsync(
+            hangar.Id, itemDefId, cancellationToken);
+
+        int alreadyHere = style is { } one ? here.GetValueOrDefault(one) : here.Values.Sum();
+
+        if (alreadyHere >= needed)
+        {
+            return;
+        }
+
+        Dictionary<ItemStyle, int> carrying = await _inventories.QuantitiesByStyleAsync(
+            carried.Id, itemDefId, cancellationToken);
+
+        IEnumerable<ItemStyle> order = style is { } only
+            ? [only]
+            : ItemStyles.DrawOrder(carrying, preferred);
+
+        // Whatever closes the gap, or everything carried if that is not enough. Falling short here
+        // is not an error: the consumption reports it, against the material actually missing rather
+        // than against a transfer.
+        int gap = needed - alreadyHere;
+
+        foreach (ItemStyle from in order)
+        {
+            int moving = Math.Min(gap, carrying.GetValueOrDefault(from));
+
+            if (moving <= 0)
+            {
+                continue;
+            }
+
+            await _inventories.TransferAsync(
+                carried.Id, hangar.Id, itemDefId, moving, from, cancellationToken);
+
+            gap -= moving;
+
+            if (gap == 0)
+            {
+                break;
+            }
+        }
+    }
 
     // ── Gates ────────────────────────────────────────────────────────────────
 

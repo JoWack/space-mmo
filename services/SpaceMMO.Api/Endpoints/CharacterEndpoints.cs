@@ -14,8 +14,16 @@ namespace SpaceMMO.Api.Endpoints;
 public sealed record CreateCharacterRequest(string Name, Race Race);
 
 /// <summary>Moving a quantity of a stackable item between two of one character's containers.</summary>
+/// <param name="Style">
+/// Which stack to move (task 187): the style the client shows on the row. For a raw material that is
+/// its world's, and it finds the one stack there is. Common when omitted.
+/// </param>
 public sealed record TransferRequest(
-    long FromInventoryId, long ToInventoryId, int ItemDefId, int Quantity);
+    long FromInventoryId,
+    long ToInventoryId,
+    int ItemDefId,
+    int Quantity,
+    ItemStyle Style = ItemStyle.Common);
 
 /// <summary>Moving one non-stackable item, which carries its own condition and value.</summary>
 public sealed record TransferInstanceRequest(long ItemInstanceId, long ToInventoryId);
@@ -99,7 +107,13 @@ public sealed record InventoryItemResponse(
     int Quantity,
     long? FactionBuyPriceMinorUnits,
     InventoryKind Kind,
-    int? StationId);
+    int? StationId,
+
+    /// <summary>
+    /// Which world's look these goods have (task 187): the stack's for a crafted good, the item's
+    /// for a raw material, whose stacks carry none. What the tag on the row shows.
+    /// </summary>
+    ItemStyle Style = ItemStyle.Common);
 
 /// <summary>
 /// One item that does not stack — a tool, a weapon, a hull — with the state that makes it itself.
@@ -133,7 +147,10 @@ public sealed record ItemInstanceResponse(
     /// one that has been put away, and the panel refused to summon the second because it read the
     /// first.
     /// </remarks>
-    bool Deployed = false);
+    bool Deployed = false,
+
+    /// <summary>Which world's look this item has, decided when it was made (task 187).</summary>
+    ItemStyle Style = ItemStyle.Common);
 
 /// <summary>
 /// Everything a character owns, in the two shapes owning something can take.
@@ -410,7 +427,8 @@ public static class CharacterEndpoints
                     ? ii.ItemDef.FactionBuyPrice!.Value.MinorUnits
                     : null,
                 ii.Inventory!.Kind,
-                ii.Inventory.StationId))
+                ii.Inventory.StationId,
+                ii.ItemDef.Category == ItemCategory.Raw ? ii.ItemDef.Style : ii.Style))
             .ToListAsync(cancellation);
 
         // Destroyed instances keep their rows so history survives them (ADR-0006), and must not
@@ -438,7 +456,8 @@ public static class CharacterEndpoints
 
                 // Projected rather than read off IsDeployed, because this runs in the database and
                 // an expression-bodied property on the entity has no SQL translation.
-                i.DeployedSystemX != null))
+                i.DeployedSystemX != null,
+                i.Style))
             .ToListAsync(cancellation);
 
         // Every container, not only the ones holding something. Transfer is addressed by inventory
@@ -497,6 +516,7 @@ public static class CharacterEndpoints
                 request.ToInventoryId,
                 request.ItemDefId,
                 request.Quantity,
+                request.Style,
                 cancellation);
 
             await database.SaveChangesAsync(cancellation);

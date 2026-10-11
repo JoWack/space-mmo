@@ -8972,6 +8972,95 @@ touches `InventoryService` stacking and cost-basis tracking. Cheap now, expensiv
 - **Non-stacking goods** — tools, hulls — carry style on the instance, not on a stack.
 - **Anything that shows style is interface**, and is shown to Joe before it is built.
 
+### Decided by Joe, 10 October
+
+Asked as the four questions above plus the interface, with the code read first. What the code said going
+in: **industry is the only thing that creates a crafted good** (quests reward no items), so style is
+decided in one place, at claim; **raw ores already belong to one world** by being distinct items, so a
+raw item's world is a property of its content, not of a stack; and **a sell order holds its goods out
+of the seller's stack**, so an order has to remember their style or a cancel hands back the wrong one.
+
+- **Five styles: Common, Terran, Martian, Verdant, Grimhold.** Named for the worlds, as the Visual Bible
+  and 178 name them. *"Goods made from common materials should all have the same style - only good
+  manufactured from racial-specific materials have that racial style."* So the crude mining laser,
+  made of scrap alone, is Common.
+- **The main input decides, and the player picks.** Each recipe names one main input (the plate, for the
+  thruster) and the output takes its style. The whole of the main input is drawn from one style; the
+  player picks which when starting the job if they hold more than one. The other inputs are any style.
+- **A recipe with no main input makes Common goods.** That is the alloy frame, built from all four
+  worlds' level-15 ores, and so the freighter whose main input it is. 178's fusion style for high tiers
+  can replace it later. *Claude's reading of Joe's rule, said to him on the 10th.*
+- **Crafted stacks that exist before this are Common.** Nothing recorded what they were made from.
+- **The market: a seller names the style, a buyer takes any.** One book, as ADR-0008 says. A buyer
+  asking for a style is left for later.
+- **Interface, approved as mocked:**
+  - **A coloured tag after the name**, `[TER]` `[MAR]` `[VER]` `[GRM]`, on inventory, hangar, industry
+    and market rows. **Ores carry their world's tag**; **Common shows none**, like scrap.
+  - **Colours:** TER `#7FB8D8` (Terra's sky blue), MAR `#D0583A` (oxide pushed red), VER `#8FF0D0`
+    (bioluminescent jade), GRM `#D2691E` (ember). Ares' oxide and Grimhold's ember are both orange in the
+    Visual Bible, so Verdance gives up amber for jade to keep four hues apart.
+  - **Industry:** the main input's line carries `◂ ▸` when more than one style of it is held, and
+    the held count and "most you can make" follow the pick. The Start bar and the job row show the
+    output's tag.
+
+    ```
+    RECIPES
+      ▸ Crude Thruster
+          Structural Plate [TER] ◂ ▸    12 / 2
+          Scrap Alloy                     40 / 4
+      [ Start Crude Thruster [TER] ×1 ]
+    JOBS
+      Crude Thruster [TER] ×1     1m 20s  ███░░
+    ```
+  - **Market:** dragging a stack sells that stack's style; the Sell button with several styles held
+    shows `◂ ▸` in the prompt. Sell orders show their tag, buy orders "any style".
+
+### The server, built 10 October
+
+**`ItemStyle`** (`SpaceMMO.Domain/Items/ItemStyle.cs`): Common 0, Terran 1, Martian 2, Verdant 3,
+Grimhold 4, crossing the wire as the number. `ItemStyles` holds the pure rules: a race's style, a body's,
+an output's (`ForOutput`: the main input's, or Common), and `DrawOrder`, which stacks a draw takes from
+first (a preferred style, then the largest stack, ties in style order so a hangar always draws the same way).
+
+**Content.** The eight planet-locked materials author `"style"`; scrap does not. Recipes author
+`"mainInput"`: the four refines name their ore, the thruster and the hull section the plate, the shuttle
+the section, the freighter the frame. The laser and the alloy frame name none, so they are Common. The
+validator refuses a style on anything but a raw material, a styled material that is not locked to the
+homeworld its style names, **a material locked to a homeworld that does not carry that world's style**
+(the forgotten fifth ore), a main input that is not an input, and **a recipe whose only style-carrying
+input is not named as its main one** (Terran plate in, Common thrusters out). Two or more may go unnamed,
+deliberately: that is the frame.
+
+**Where style lives** (migration `ItemStyles`; every new column defaults to `'Common'`, not EF's `''`):
+- `item_defs.style`: a raw material's world. **A raw material's stacks are always Common**, normalised
+  inside `InventoryService`, so a client naming ferrite ore "Terran" finds the one stack, and re-authoring
+  an ore's style strands nothing.
+- `inventory_items.style`, **in the primary key** with inventory and item, as ADR-0008 said.
+- `item_instances.style`, `industry_jobs.output_style` (decided at start), `industry_job_inputs.style` (in
+  its key, so a cancel refunds each input to the stack it came from), `market_orders.style` (a sell order's
+  goods; null for a buy, enforced by `ck_market_orders_style_matches_side`), `trades.style`, and
+  `recipes.main_input_item_def_id`.
+
+**Industry** decides at start, from the hangar and the pockets together: a raw main input's world, or the
+player's pick, or the style held most of. The main input is drawn from that one style only; **a pick held
+none of is refused, not corrected**, and so is a main input that only adds up across two styles. Other
+inputs are drawn in `DrawOrder` with the output's style first. **Market:** a sell order takes the style
+picked (or held most of), the buyer receives it, the trade records it, and a cancel returns it.
+
+**API:** `style` on inventory stacks (the item's world for a raw material) and instances, on
+`/industry/jobs` (`outputStyle`), on `/market/my-orders` (null for a buy); `mainInputKey` on recipes; and
+`style` / `mainInputStyle` accepted by transfer, sell and job start.
+
+**Verified:** domain 505, data 242, API 100, all passing. Every rule was **broken on purpose and seen to
+fail its test**: output ignoring the job's style, cancel ignoring the input's, other inputs ignoring the
+output's, the pick ignored, a buyer or a cancelled seller getting Common, raw stacks not normalised, the
+validator's homeworld and single-input rules, and the API reporting a raw stack's own Common. The
+integration tests (`SpaceMMO.Data.Tests/Industry/ItemStyleTests.cs`) load the shipped pack and walk
+each race from its own ore to a shuttle in its own style.
+
+**Not yet:** the client. Nothing shows a tag and nothing sends a style, so until it lands a sell or a
+job start takes the style held most of, and two styles of plate read as two identical rows.
+
 ## 188 — Content removed from the pack lives on in the database
 
 *Found 9 October while building 184; not yet seen in play.* Belongs to **M7**, whose line names authoring

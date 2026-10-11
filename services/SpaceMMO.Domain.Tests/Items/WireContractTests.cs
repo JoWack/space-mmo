@@ -13,8 +13,9 @@ namespace SpaceMMO.Domain.Tests.Items;
 /// matches the wrong rows and shows the player nothing, which is how a market UI once shipped with
 /// a hangar filter that only ever matched ship holds.
 ///
-/// Renumbering any of these means editing EBackendInventoryKind or EBackendOrderSide in
-/// client/Source/SpaceMMOBackend/Public/SpaceMMOBackendTypes.h in the same commit.
+/// Renumbering any of these means editing EBackendInventoryKind, EBackendOrderSide or
+/// EBackendItemStyle in client/Source/SpaceMMOBackend/Public/SpaceMMOBackendTypes.h in the same
+/// commit.
 /// </remarks>
 public sealed class WireContractTests
 {
@@ -30,4 +31,13 @@ public sealed class WireContractTests
     [InlineData(OrderSide.Sell, 1)]
     public void OrderSideKeepsItsWireValue(OrderSide side, int expected) =>
         Assert.Equal(expected, (int)side);
+
+    [Theory]
+    [InlineData(ItemStyle.Common, 0)]
+    [InlineData(ItemStyle.Terran, 1)]
+    [InlineData(ItemStyle.Martian, 2)]
+    [InlineData(ItemStyle.Verdant, 3)]
+    [InlineData(ItemStyle.Grimhold, 4)]
+    public void ItemStyleKeepsItsWireValue(ItemStyle style, int expected) =>
+        Assert.Equal(expected, (int)style);
 }

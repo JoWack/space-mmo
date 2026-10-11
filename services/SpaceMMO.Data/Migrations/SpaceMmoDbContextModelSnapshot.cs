@@ -509,6 +509,12 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("input_cost_basis");
 
+                    b.Property<string>("OutputStyle")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("output_style");
+
                     b.Property<int>("RecipeId")
                         .HasColumnType("integer")
                         .HasColumnName("recipe_id");
@@ -567,6 +573,11 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("item_def_id");
 
+                    b.Property<string>("Style")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("style");
+
                     b.Property<long>("CostBasis")
                         .HasColumnType("bigint")
                         .HasColumnName("cost_basis");
@@ -575,7 +586,7 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
 
-                    b.HasKey("IndustryJobId", "ItemDefId")
+                    b.HasKey("IndustryJobId", "ItemDefId", "Style")
                         .HasName("pk_industry_job_inputs");
 
                     b.HasIndex("ItemDefId")
@@ -720,6 +731,11 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("item_def_id");
 
+                    b.Property<string>("Style")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("style");
+
                     b.Property<long>("CostBasis")
                         .HasColumnType("bigint")
                         .HasColumnName("cost_basis");
@@ -728,7 +744,7 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
 
-                    b.HasKey("InventoryId", "ItemDefId")
+                    b.HasKey("InventoryId", "ItemDefId", "Style")
                         .HasName("pk_inventory_items");
 
                     b.HasIndex("ItemDefId")
@@ -781,6 +797,12 @@ namespace SpaceMMO.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)")
                         .HasColumnName("name");
+
+                    b.Property<string>("Style")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("style");
 
                     b.Property<double>("VolumeM3")
                         .HasColumnType("double precision")
@@ -843,6 +865,12 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<int>("ItemDefId")
                         .HasColumnType("integer")
                         .HasColumnName("item_def_id");
+
+                    b.Property<string>("Style")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("style");
 
                     b.HasKey("Id")
                         .HasName("pk_item_instances");
@@ -971,6 +999,11 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("station_id");
 
+                    b.Property<string>("Style")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("style");
+
                     b.HasKey("Id")
                         .HasName("pk_market_orders");
 
@@ -1001,6 +1034,8 @@ namespace SpaceMMO.Data.Migrations
                             t.HasCheckConstraint("ck_market_orders_quantity_remaining_in_range", "quantity_remaining >= 0 AND quantity_remaining <= quantity_original");
 
                             t.HasCheckConstraint("ck_market_orders_reserved_non_negative", "reserved_quantity >= 0");
+
+                            t.HasCheckConstraint("ck_market_orders_style_matches_side", "(side = 'Buy' AND style IS NULL) OR (side = 'Sell' AND style IS NOT NULL)");
                         });
                 });
 
@@ -1160,6 +1195,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("key");
 
+                    b.Property<int?>("MainInputItemDefId")
+                        .HasColumnType("integer")
+                        .HasColumnName("main_input_item_def_id");
+
                     b.Property<int>("OutputItemDefId")
                         .HasColumnType("integer")
                         .HasColumnName("output_item_def_id");
@@ -1190,6 +1229,9 @@ namespace SpaceMMO.Data.Migrations
                     b.HasIndex("Key")
                         .IsUnique()
                         .HasDatabaseName("ix_recipes_key");
+
+                    b.HasIndex("MainInputItemDefId")
+                        .HasDatabaseName("ix_recipes_main_input_item_def_id");
 
                     b.HasIndex("OutputItemDefId")
                         .HasDatabaseName("ix_recipes_output_item_def_id");
@@ -1626,6 +1668,12 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("station_id");
 
+                    b.Property<string>("Style")
+                        .IsRequired()
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("style");
+
                     b.HasKey("Id")
                         .HasName("pk_trades");
 
@@ -1996,6 +2044,12 @@ namespace SpaceMMO.Data.Migrations
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.Recipe", b =>
                 {
+                    b.HasOne("SpaceMMO.Data.Entities.ItemDef", "MainInputItemDef")
+                        .WithMany()
+                        .HasForeignKey("MainInputItemDefId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_recipes_item_defs_main_input_item_def_id");
+
                     b.HasOne("SpaceMMO.Data.Entities.ItemDef", "OutputItemDef")
                         .WithMany()
                         .HasForeignKey("OutputItemDefId")
@@ -2015,6 +2069,8 @@ namespace SpaceMMO.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_recipes_skills_skill_id");
+
+                    b.Navigation("MainInputItemDef");
 
                     b.Navigation("OutputItemDef");
 

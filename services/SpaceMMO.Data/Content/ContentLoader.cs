@@ -197,6 +197,10 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
 
                 // Assigned, so taking an item out of a family in content takes it out.
                 item.Family = content.Family;
+
+                // Assigned, like the rest. Only a raw material's style lives here, and its stacks
+                // carry none of their own, so changing it re-styles every stack with nothing to move.
+                item.Style = content.Style;
                 continue;
             }
 
@@ -209,6 +213,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 HoldCapacityM3 = content.HoldCapacityM3,
                 FactionBuyPrice = FactionPriceOf(content),
                 Family = content.Family,
+                Style = content.Style,
             };
 
             _database.ItemDefs.Add(created);
@@ -246,6 +251,8 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             recipe.XpPerRun = content.XpPerRun;
             recipe.RequiredToolItemDefId =
                 content.RequiredTool is string tool ? itemIds[tool] : null;
+            recipe.MainInputItemDefId =
+                content.MainInput is string main ? itemIds[main] : null;
         }
 
         await _database.SaveChangesAsync(cancellationToken);

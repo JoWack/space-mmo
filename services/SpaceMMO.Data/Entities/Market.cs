@@ -1,5 +1,6 @@
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Industry;
+using SpaceMMO.Domain.Items;
 
 namespace SpaceMMO.Data.Entities;
 
@@ -84,6 +85,21 @@ public class MarketOrder
     /// </remarks>
     public Credits ReservedCostBasis { get; set; }
 
+    /// <summary>
+    /// The style of the goods a sell order holds, or null for a buy order, which takes any (task 187).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One book across styles (ADR-0008): matching never reads this. It is here because the goods
+    /// left the seller's stack at placement, and a cancel or a fill has to know which stack they came
+    /// from and what the buyer is receiving.
+    /// </para>
+    /// <para>
+    /// The stack's style, so <see cref="ItemStyle.Common"/> for a raw material whatever its world.
+    /// </para>
+    /// </remarks>
+    public ItemStyle? Style { get; set; }
+
     public DateTimeOffset PlacedAt { get; set; }
 
     /// <summary>
@@ -130,6 +146,9 @@ public class Trade
     /// <summary>Tax taken from the seller's proceeds. The main volumetric credit sink.</summary>
     public Credits SalesTax { get; set; }
 
+    /// <summary>The style of the goods that changed hands: the sell order's (task 187).</summary>
+    public ItemStyle Style { get; set; }
+
     public DateTimeOffset ExecutedAt { get; set; }
 }
 
@@ -174,6 +193,15 @@ public class IndustryJob
     public Credits InputCostBasis { get; set; }
 
     /// <summary>
+    /// The style its output will have, decided at start from the main input (task 187).
+    /// </summary>
+    /// <remarks>
+    /// Decided at start rather than at claim, because the inputs are consumed at start and the
+    /// recipe may be re-authored in between.
+    /// </remarks>
+    public ItemStyle OutputStyle { get; set; }
+
+    /// <summary>
     /// Exactly what this job consumed, recorded at start.
     /// </summary>
     /// <remarks>
@@ -194,6 +222,12 @@ public class IndustryJobInput
     public int ItemDefId { get; set; }
 
     public ItemDef? ItemDef { get; set; }
+
+    /// <summary>
+    /// The style of the stack these units came from (task 187), so a cancel returns them to it. One
+    /// input drawn from two styles is two rows.
+    /// </summary>
+    public ItemStyle Style { get; set; }
 
     /// <summary>Units taken, already multiplied by the run count.</summary>
     public int Quantity { get; set; }

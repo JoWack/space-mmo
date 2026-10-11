@@ -63,6 +63,17 @@ public class ItemDef
     /// null (task 186).
     /// </summary>
     public string? Family { get; set; }
+
+    /// <summary>
+    /// The world a raw material belongs to, and so the style of what is made from it (task 187).
+    /// <see cref="ItemStyle.Common"/> for everything else.
+    /// </summary>
+    /// <remarks>
+    /// A raw material's style is the item's, because each world's ore is already a different item
+    /// (ADR-0008); its stacks never carry one of their own. A crafted good's style is the stack's or
+    /// the instance's, decided when it was made.
+    /// </remarks>
+    public ItemStyle Style { get; set; }
 }
 
 /// <summary>A crafting recipe, loaded from <c>data/recipes/</c>.</summary>
@@ -103,6 +114,16 @@ public class Recipe
     public int? RequiredToolItemDefId { get; set; }
 
     public ItemDef? RequiredToolItemDef { get; set; }
+
+    /// <summary>
+    /// The input whose style the output takes, or null for a recipe that makes Common goods (task 187).
+    /// </summary>
+    /// <remarks>
+    /// The whole of it is drawn from one style, which the player picks when starting the job.
+    /// </remarks>
+    public int? MainInputItemDefId { get; set; }
+
+    public ItemDef? MainInputItemDef { get; set; }
 
     public ICollection<RecipeInput> Inputs { get; } = [];
 }
@@ -175,6 +196,17 @@ public class InventoryItem
     public int Quantity { get; set; }
 
     /// <summary>
+    /// Which world's look these goods have (task 187). Part of the key: one inventory holds Terran
+    /// plate and Martian plate as two stacks.
+    /// </summary>
+    /// <remarks>
+    /// Always <see cref="ItemStyle.Common"/> for a raw material, whose world is the item's own
+    /// (<see cref="ItemDef.Style"/>). So a raw material still has one stack per inventory, and
+    /// re-authoring an ore's style never strands a stack under the old one.
+    /// </remarks>
+    public ItemStyle Style { get; set; }
+
+    /// <summary>
     /// What this whole stack actually cost its owner.
     /// </summary>
     /// <remarks>
@@ -223,6 +255,11 @@ public class ItemInstance
     /// unused one (ADR-0006).
     /// </remarks>
     public int Condition { get; set; }
+
+    /// <summary>
+    /// Which world's look this item has, decided when it was made (task 187).
+    /// </summary>
+    public ItemStyle Style { get; set; }
 
     /// <summary>
     /// What this instance actually cost — input material value if crafted, price paid if

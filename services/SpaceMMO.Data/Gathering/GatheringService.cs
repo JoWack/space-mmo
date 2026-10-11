@@ -194,7 +194,7 @@ public sealed class GatheringService(SpaceMmoDbContext database)
         // what makes a hull built from self-gathered ore cost only its manufacturing fees
         // (ADR-0006).
         await _inventories.AddAsync(
-            carried.Id, node.ItemDefId, quantity, Credits.Zero, cancellationToken);
+            carried.Id, node.ItemDefId, quantity, Credits.Zero, cancellationToken: cancellationToken);
 
         long xp = quantity * GatheringYield.XpPerUnit;
         await AwardXpAsync(characterId, node.SkillId, xp, cancellationToken);

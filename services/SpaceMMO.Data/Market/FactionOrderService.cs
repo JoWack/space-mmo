@@ -123,7 +123,9 @@ public sealed class FactionOrderService(SpaceMmoDbContext database)
 
         // Removed first: if the hangar is short this throws before any credits are created, which
         // is the correct direction for the failure to point.
-        await _inventories.RemoveAsync(hangar.Id, itemDefId, affordable, cancellationToken);
+        // Raw material only, so its one stack: a faction buys ore, not a style of it.
+        await _inventories.RemoveAsync(
+            hangar.Id, itemDefId, affordable, cancellationToken: cancellationToken);
 
         await RecordGrantAsync(characterId, gross, now, cancellationToken);
 

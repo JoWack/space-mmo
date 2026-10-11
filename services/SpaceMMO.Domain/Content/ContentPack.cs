@@ -36,7 +36,8 @@ public sealed record ItemContent(
     long? FactionBuyPrice = null,
     bool PlanetLocked = false,
     double? HoldCapacityM3 = null,
-    string? Family = null)
+    string? Family = null,
+    ItemStyle Style = ItemStyle.Common)
 {
     /// <summary>
     /// Whether this material occurs on exactly one body and nowhere else (ADR-0008).
@@ -63,12 +64,26 @@ public sealed record ItemContent(
     /// <c>starter_ore</c>.
     /// </remarks>
     public string? Family { get; init; } = Family;
+
+    /// <summary>
+    /// The world a raw material belongs to, and so the style of anything made from it (task 187).
+    /// </summary>
+    /// <remarks>
+    /// Authored on raw materials only: a crafted good's style is decided when it is made, by what it
+    /// was made from, and is a property of the stack rather than of the item. The validator holds a
+    /// styled material to the planet it is locked to, so the two cannot drift apart.
+    /// </remarks>
+    public ItemStyle Style { get; init; } = Style;
 }
 
 /// <summary>One material a recipe consumes.</summary>
 public sealed record RecipeInputContent(string Item, int Quantity);
 
 /// <summary>A recipe, as authored in <c>data/recipes/</c>.</summary>
+/// <param name="MainInput">
+/// The input whose style the output takes (task 187), or null for a recipe whose output is Common:
+/// one made from shared materials only, or from several worlds' with none in charge.
+/// </param>
 public sealed record RecipeContent(
     string Key,
     string Output,
@@ -78,7 +93,8 @@ public sealed record RecipeContent(
     int JobSeconds,
     long XpPerRun,
     string? RequiredTool,
-    IReadOnlyList<RecipeInputContent> Inputs);
+    IReadOnlyList<RecipeInputContent> Inputs,
+    string? MainInput = null);
 
 /// <summary>One objective within a quest.</summary>
 /// <param name="Target">The item, body or station the step is about. Null when the step names a

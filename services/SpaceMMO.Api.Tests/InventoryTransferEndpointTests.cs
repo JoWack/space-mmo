@@ -230,7 +230,75 @@ public sealed class InventoryTransferEndpointTests(ApiDatabaseFixture fixture)
         Assert.Contains($"\"inventoryId\":{_hangarId}", body, StringComparison.Ordinal);
     }
 
-    private async Task<HttpResponseMessage> TransferAsync(long from, long to, int quantity)
+    [Fact]
+    public async Task Style_crosses_the_wire_as_a_number_and_a_transfer_moves_that_style()
+    {
+        // Task 187, end to end through JSON: the client reads "style" as the number EBackendItemStyle
+        // mirrors, and sends back the number it read. A raw material reports its world even though
+        // its stack carries none, because that is what its tag shows.
+        await using (SpaceMmoDbContext seed = _fixture.CreateContext())
+        {
+            var ore = new ItemDef
+            {
+                Key = "ferrite_ore",
+                Name = "Ferrite Ore",
+                Category = ItemCategory.Raw,
+                VolumeM3 = 0.4,
+                Style = ItemStyle.Terran,
+            };
+
+            seed.ItemDefs.Add(ore);
+            await seed.SaveChangesAsync();
+
+            seed.InventoryItems.AddRange(
+                new InventoryItem
+                {
+                    InventoryId = _hangarId, ItemDefId = _itemDefId, Style = ItemStyle.Martian,
+                    Quantity = 6, CostBasis = Credits.Zero,
+                },
+                new InventoryItem
+                {
+                    InventoryId = _hangarId, ItemDefId = ore.Id, Quantity = 9, CostBasis = Credits.Zero,
+                });
+
+            await seed.SaveChangesAsync();
+        }
+
+        using var read = new HttpRequestMessage(
+            HttpMethod.Get, new Uri($"/characters/{_characterId}/inventory", UriKind.Relative));
+
+        read.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
+
+        HttpResponseMessage response = await _client.SendAsync(read);
+
+        using System.Text.Json.JsonDocument body =
+            (await response.Content.ReadFromJsonAsync<System.Text.Json.JsonDocument>())!;
+
+        var styles = body.RootElement.GetProperty("stacks").EnumerateArray()
+            .Select(s => (Name: s.GetProperty("name").GetString(), Quantity: s.GetProperty("quantity").GetInt32(),
+                Style: s.GetProperty("style").GetInt32()))
+            .ToList();
+
+        Assert.Contains(("Ferrite Plate", 40, (int)ItemStyle.Common), styles);
+        Assert.Contains(("Ferrite Plate", 6, (int)ItemStyle.Martian), styles);
+        Assert.Contains(("Ferrite Ore", 9, (int)ItemStyle.Terran), styles);
+
+        await DockAsync(_stationId);
+
+        HttpResponseMessage moved = await TransferAsync(_hangarId, _holdId, 6, (int)ItemStyle.Martian);
+
+        Assert.Equal(HttpStatusCode.OK, moved.StatusCode);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        InventoryItem inHold = verify.InventoryItems.Single(i => i.InventoryId == _holdId);
+
+        Assert.Equal(ItemStyle.Martian, inHold.Style);
+        Assert.Equal(6, inHold.Quantity);
+        Assert.Equal(40, verify.InventoryItems.Single(i => i.InventoryId == _hangarId && i.ItemDefId == _itemDefId).Quantity);
+    }
+
+    private async Task<HttpResponseMessage> TransferAsync(long from, long to, int quantity, int style = 0)
     {
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
@@ -242,6 +310,7 @@ public sealed class InventoryTransferEndpointTests(ApiDatabaseFixture fixture)
                 toInventoryId = to,
                 itemDefId = _itemDefId,
                 quantity,
+                style,
             }),
         };
 

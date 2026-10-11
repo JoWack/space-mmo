@@ -116,6 +116,10 @@ public sealed class InventoryService(SpaceMmoDbContext database)
     /// the price paid for bought material. Feeds the acquisition value of anything crafted from
     /// them (ADR-0006).
     /// </param>
+    /// <param name="style">
+    /// Which stack they join (task 187). Ignored for a raw material, whose world is its item's and
+    /// whose stacks carry none; so Common, the default, is right for everything gathered.
+    /// </param>
     /// <exception cref="ArgumentOutOfRangeException">If quantity is not positive or cost is negative.</exception>
     /// <exception cref="InvalidOperationException">If the item is not stackable.</exception>
     public async Task AddAsync(
@@ -123,6 +127,7 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         int itemDefId,
         int quantity,
         Credits cost,
+        ItemStyle style = ItemStyle.Common,
         CancellationToken cancellationToken = default)
     {
         GuardQuantity(quantity);
@@ -132,12 +137,15 @@ public sealed class InventoryService(SpaceMmoDbContext database)
             throw new ArgumentOutOfRangeException(nameof(cost), cost, "Cost cannot be negative.");
         }
 
-        await GuardStackableAsync(itemDefId, cancellationToken);
+        ItemCategory category = await GuardStackableAsync(itemDefId, cancellationToken);
         await GuardRoomAsync(inventoryId, itemDefId, quantity, cancellationToken);
+
+        style = StackStyle(category, style);
 
         InventoryItem? stack = await _database.InventoryItems
             .FirstOrDefaultAsync(
-                i => i.InventoryId == inventoryId && i.ItemDefId == itemDefId, cancellationToken);
+                i => i.InventoryId == inventoryId && i.ItemDefId == itemDefId && i.Style == style,
+                cancellationToken);
 
         if (stack is null)
         {
@@ -145,6 +153,7 @@ public sealed class InventoryService(SpaceMmoDbContext database)
             {
                 InventoryId = inventoryId,
                 ItemDefId = itemDefId,
+                Style = style,
                 Quantity = quantity,
                 CostBasis = cost,
             });
@@ -175,16 +184,26 @@ public sealed class InventoryService(SpaceMmoDbContext database)
     /// stack.
     /// </para>
     /// </remarks>
+    /// <param name="style">
+    /// Which stack to take from (task 187). Ignored for a raw material, which has one.
+    /// </param>
     /// <exception cref="ArgumentOutOfRangeException">If quantity is not positive.</exception>
-    /// <exception cref="InsufficientItemsException">If the inventory holds too few.</exception>
+    /// <exception cref="InsufficientItemsException">If the inventory holds too few of that style.</exception>
     public async Task<Credits> RemoveAsync(
-        long inventoryId, int itemDefId, int quantity, CancellationToken cancellationToken = default)
+        long inventoryId,
+        int itemDefId,
+        int quantity,
+        ItemStyle style = ItemStyle.Common,
+        CancellationToken cancellationToken = default)
     {
         GuardQuantity(quantity);
 
+        style = await StackStyleAsync(itemDefId, style, cancellationToken);
+
         InventoryItem? stack = await _database.InventoryItems
             .FirstOrDefaultAsync(
-                i => i.InventoryId == inventoryId && i.ItemDefId == itemDefId, cancellationToken);
+                i => i.InventoryId == inventoryId && i.ItemDefId == itemDefId && i.Style == style,
+                cancellationToken);
 
         int available = stack?.Quantity ?? 0;
 
@@ -212,13 +231,75 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         return removed;
     }
 
-    /// <summary>How many of an item an inventory holds. Zero if it holds none.</summary>
+    /// <summary>How many of an item an inventory holds, in every style. Zero if it holds none.</summary>
     public async Task<int> QuantityOfAsync(
         long inventoryId, int itemDefId, CancellationToken cancellationToken = default) =>
         await _database.InventoryItems
             .Where(i => i.InventoryId == inventoryId && i.ItemDefId == itemDefId)
-            .Select(i => i.Quantity)
-            .FirstOrDefaultAsync(cancellationToken);
+            .SumAsync(i => i.Quantity, cancellationToken);
+
+    /// <summary>
+    /// How many of an item an inventory holds in each style it holds any of (task 187).
+    /// </summary>
+    /// <remarks>
+    /// The stack's style, so a raw material is always counted as Common: its world is the item's.
+    /// </remarks>
+    public async Task<Dictionary<ItemStyle, int>> QuantitiesByStyleAsync(
+        long inventoryId, int itemDefId, CancellationToken cancellationToken = default) =>
+        await _database.InventoryItems
+            .Where(i => i.InventoryId == inventoryId && i.ItemDefId == itemDefId)
+            .ToDictionaryAsync(i => i.Style, i => i.Quantity, cancellationToken);
+
+    /// <summary>
+    /// Removes a quantity drawn from whichever styles are held, in <see cref="ItemStyles.DrawOrder"/>.
+    /// </summary>
+    /// <param name="preferred">The style to draw from first, if any is held.</param>
+    /// <returns>What came from each style and what it cost, one entry per stack drawn from.</returns>
+    /// <remarks>
+    /// For a material whose style does not matter to the caller: an industry job's ordinary inputs,
+    /// where the main input alone decides the output's style (task 187). Checked against the total
+    /// before anything is taken, so a shortfall removes nothing and names the whole amount missing.
+    /// </remarks>
+    /// <exception cref="InsufficientItemsException">If the inventory holds too few in all styles together.</exception>
+    public async Task<IReadOnlyList<(ItemStyle Style, int Quantity, Credits Cost)>> RemoveAnyStyleAsync(
+        long inventoryId,
+        int itemDefId,
+        int quantity,
+        ItemStyle? preferred,
+        CancellationToken cancellationToken = default)
+    {
+        GuardQuantity(quantity);
+
+        Dictionary<ItemStyle, int> held =
+            await QuantitiesByStyleAsync(inventoryId, itemDefId, cancellationToken);
+
+        int available = held.Values.Sum();
+
+        if (available < quantity)
+        {
+            throw new InsufficientItemsException(itemDefId, quantity, available);
+        }
+
+        var drawn = new List<(ItemStyle, int, Credits)>();
+        int remaining = quantity;
+
+        foreach (ItemStyle style in ItemStyles.DrawOrder(held, preferred))
+        {
+            int taking = Math.Min(remaining, held[style]);
+
+            Credits cost = await RemoveAsync(inventoryId, itemDefId, taking, style, cancellationToken);
+
+            drawn.Add((style, taking, cost));
+            remaining -= taking;
+
+            if (remaining == 0)
+            {
+                break;
+            }
+        }
+
+        return drawn;
+    }
 
     /// <summary>
     /// Moves a quantity of a stackable item from one of a character's inventories to another.
@@ -241,21 +322,24 @@ public sealed class InventoryService(SpaceMmoDbContext database)
     /// <exception cref="InventoryTransferException">
     /// If the two inventories are the same, either is unknown, or they belong to different people.
     /// </exception>
-    /// <exception cref="InsufficientItemsException">If the source holds too few.</exception>
+    /// <exception cref="InsufficientItemsException">If the source holds too few of that style.</exception>
     public async Task TransferAsync(
         long fromInventoryId,
         long toInventoryId,
         int itemDefId,
         int quantity,
+        ItemStyle style = ItemStyle.Common,
         CancellationToken cancellationToken = default)
     {
         GuardQuantity(quantity);
 
         await GuardSameOwnerAsync(fromInventoryId, toInventoryId, cancellationToken);
 
-        Credits moved = await RemoveAsync(fromInventoryId, itemDefId, quantity, cancellationToken);
+        Credits moved = await RemoveAsync(
+            fromInventoryId, itemDefId, quantity, style, cancellationToken);
 
-        await AddAsync(toInventoryId, itemDefId, quantity, moved, cancellationToken);
+        // Style travels with the goods as cost basis does: moving Terran plate makes Terran plate.
+        await AddAsync(toInventoryId, itemDefId, quantity, moved, style, cancellationToken);
     }
 
     /// <summary>
@@ -714,7 +798,7 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         }
     }
 
-    private async Task GuardStackableAsync(int itemDefId, CancellationToken cancellationToken)
+    private async Task<ItemCategory> GuardStackableAsync(int itemDefId, CancellationToken cancellationToken)
     {
         ItemCategory category = await _database.ItemDefs
             .Where(d => d.Id == itemDefId)
@@ -727,5 +811,34 @@ public sealed class InventoryService(SpaceMmoDbContext database)
                 $"Item {itemDefId} is {category}, which is tracked per instance rather than as a "
                 + "stack. Use item instances instead.");
         }
+
+        return category;
+    }
+
+    /// <summary>
+    /// The style a stack of this item is keyed by: Common for a raw material, the given one otherwise.
+    /// </summary>
+    /// <remarks>
+    /// A raw material's world is its item's (task 187), so a caller may name it -- the client sends
+    /// the style it shows, which for ferrite ore is Terran -- and still find the one stack there is.
+    /// Normalised here rather than at each caller, so none of them can split an ore into two stacks.
+    /// </remarks>
+    private static ItemStyle StackStyle(ItemCategory category, ItemStyle style) =>
+        category == ItemCategory.Raw ? ItemStyle.Common : style;
+
+    private async Task<ItemStyle> StackStyleAsync(
+        int itemDefId, ItemStyle style, CancellationToken cancellationToken)
+    {
+        if (style == ItemStyle.Common)
+        {
+            return style;
+        }
+
+        ItemCategory category = await _database.ItemDefs
+            .Where(d => d.Id == itemDefId)
+            .Select(d => d.Category)
+            .SingleAsync(cancellationToken);
+
+        return StackStyle(category, style);
     }
 }

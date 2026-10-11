@@ -960,6 +960,137 @@ public sealed class ContentValidatorTests
         Assert.True(HasError(errors, fragment), $"Expected an error mentioning '{fragment}'.");
     }
 
+    // ── Style (task 187) ─────────────────────────────────────────────────────
+
+    /// <summary>A pack with one material deposited on one body, and the four homeworlds.</summary>
+    private static ContentPack OneMaterialOn(ItemContent material, string body, params BodyContent[] extraBodies) =>
+        Pack(
+            items: [material, Item("plate", ItemCategory.Refined)],
+            systems: [System()],
+            bodies: [.. AllHomeworlds(), .. extraBodies],
+            resourceNodes:
+            [
+                new ResourceNodeContent(
+                    "node_a", body, material.Key, "refining", 1, 150, 1800, [1.0, 0.0, 0.0]),
+            ]);
+
+    [Fact]
+    public void AMaterialLockedToAHomeworldMustCarryThatWorldsStyle()
+    {
+        // The forgotten case: a fifth world's ore authored without a style makes Common goods, and
+        // nothing about the world looks wrong while it does.
+        ContentPack pack = OneMaterialOn(Item("slag", planetLocked: true), "body_grimhold");
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "its style must be Grimhold"));
+    }
+
+    [Fact]
+    public void AMaterialStyledForAnotherWorldIsRefused()
+    {
+        ContentPack pack = OneMaterialOn(
+            Item("slag", planetLocked: true) with { Style = ItemStyle.Terran }, "body_grimhold");
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "its style must be Grimhold, not Terran"));
+    }
+
+    [Fact]
+    public void AMaterialStyledForItsOwnWorldIsAccepted()
+    {
+        ContentPack pack = OneMaterialOn(
+            Item("slag", planetLocked: true) with { Style = ItemStyle.Grimhold }, "body_grimhold");
+
+        Assert.False(HasError(ContentValidator.Validate(pack), "style"));
+    }
+
+    [Fact]
+    public void AStyleOnAMaterialFoundEverywhereIsRefused()
+    {
+        // Scrap is on every world; a style on it would say one world made what all of them make.
+        ContentPack pack = OneMaterialOn(
+            Item("scrap") with { Style = ItemStyle.Terran }, "body_terra");
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "not planet-locked"));
+    }
+
+    [Fact]
+    public void AStyleOnAMaterialFromNobodysHomeworldIsRefused()
+    {
+        ContentPack pack = OneMaterialOn(
+            Item("dust", planetLocked: true) with { Style = ItemStyle.Martian },
+            "body_capital",
+            Body("body_capital", systemPosition: [5.0, 0.0, 0.0]));
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "nobody's homeworld"));
+    }
+
+    [Fact]
+    public void OnlyRawMaterialsAuthorAStyle()
+    {
+        // A crafted good's style is decided when it is made. One authored on the item is a second
+        // answer that nothing reads.
+        ContentPack pack = Pack(
+            items: [Item("ore"), Item("plate", ItemCategory.Refined) with { Style = ItemStyle.Verdant }]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Only Raw items author a style"));
+    }
+
+    [Fact]
+    public void AMainInputMustBeOneOfTheRecipesInputs()
+    {
+        ContentPack pack = Pack(recipes: [Recipe() with { MainInput = "plate" }]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "is not one of its inputs"));
+    }
+
+    [Fact]
+    public void ARecipeWithOneStyledInputMustNameItAsTheMainInput()
+    {
+        // The accident: Terran plate going in and Common thrusters coming out.
+        ContentPack pack = Pack(
+            items: [Item("ore"), Item("plate", ItemCategory.Refined), Item("thruster", ItemCategory.Component)],
+            recipes:
+            [
+                Recipe(output: "thruster", inputs: [new RecipeInputContent("plate", 2), new RecipeInputContent("ore", 4)]),
+            ]);
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "'plate' is its only input that carries a style"));
+    }
+
+    [Fact]
+    public void ARecipeNamingItsStyledInputIsAccepted()
+    {
+        ContentPack pack = Pack(
+            items: [Item("ore"), Item("plate", ItemCategory.Refined), Item("thruster", ItemCategory.Component)],
+            recipes:
+            [
+                Recipe(output: "thruster", inputs: [new RecipeInputContent("plate", 2), new RecipeInputContent("ore", 4)])
+                    with { MainInput = "plate" },
+            ]);
+
+        Assert.Empty(ContentValidator.Validate(pack));
+    }
+
+    [Fact]
+    public void ARecipeOfSeveralStyledInputsMayNameNone()
+    {
+        // The alloy frame: four worlds' ore with none in charge, deliberately Common. A rule that
+        // forced a main input here would force a false answer.
+        ContentPack pack = Pack(
+            items:
+            [
+                Item("ore"),
+                Item("plate", ItemCategory.Refined),
+                Item("hull", ItemCategory.Component),
+                Item("frame", ItemCategory.Component),
+            ],
+            recipes:
+            [
+                Recipe(output: "frame", inputs: [new RecipeInputContent("plate", 2), new RecipeInputContent("hull", 1)]),
+            ]);
+
+        Assert.False(HasError(ContentValidator.Validate(pack), "carries a style"));
+    }
+
     private static StarSystemContent System(string key = "system_origin") =>
         new(key, "Origin", 0, 0, 0, 42, SecurityLevel.Secure);
 

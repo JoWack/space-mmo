@@ -11,6 +11,10 @@ using SpaceMMO.Domain.Market;
 
 namespace SpaceMMO.Api.Endpoints;
 
+/// <param name="Style">
+/// For a sell order, which style of the goods to sell (task 187): the dragged stack's, or the
+/// prompt's pick. Null sells the style held most of. Ignored for a buy order, which takes any.
+/// </param>
 public sealed record PlaceOrderBody(
     int CharacterId,
     int StationId,
@@ -18,7 +22,8 @@ public sealed record PlaceOrderBody(
     OrderSide Side,
     long LimitPriceMinorUnits,
     int Quantity,
-    int GoodForDays = 30);
+    int GoodForDays = 30,
+    ItemStyle? Style = null);
 
 public sealed record CancelOrderBody(int CharacterId, long OrderId);
 
@@ -89,6 +94,10 @@ public sealed record BookEntryResponse(
 /// <param name="EscrowedMinorUnits">Credits locked against it. Zero for a sell order.</param>
 /// <param name="ReservedQuantity">Goods held against it. Zero for a buy order.</param>
 /// <param name="ExpiresAt">When it lapses on its own.</param>
+/// <param name="Style">
+/// For a sell order, the style of the goods it holds, as the inventory shows them: a raw material's
+/// world. Null for a buy order, which takes any (task 187).
+/// </param>
 public sealed record MyOrderResponse(
     long OrderId,
     int StationId,
@@ -100,7 +109,8 @@ public sealed record MyOrderResponse(
     int QuantityRemaining,
     long EscrowedMinorUnits,
     int ReservedQuantity,
-    DateTimeOffset ExpiresAt);
+    DateTimeOffset ExpiresAt,
+    ItemStyle? Style = null);
 
 public sealed record MarketListingResponse(
     int ItemDefId,
@@ -282,7 +292,8 @@ public static class MarketEndpoints
             body.Side,
             Credits.FromMinorUnits(body.LimitPriceMinorUnits),
             body.Quantity,
-            body.GoodForDays);
+            body.GoodForDays,
+            body.Style);
 
         try
         {
@@ -368,7 +379,10 @@ public static class MarketEndpoints
                 o.QuantityRemaining,
                 o.EscrowedCredits.MinorUnits,
                 o.ReservedQuantity,
-                o.ExpiresAt))
+                o.ExpiresAt,
+                o.Side == OrderSide.Buy
+                    ? null
+                    : o.ItemDef.Category == ItemCategory.Raw ? o.ItemDef.Style : o.Style))
             .ToListAsync(cancellation);
 
         return Results.Ok(orders);

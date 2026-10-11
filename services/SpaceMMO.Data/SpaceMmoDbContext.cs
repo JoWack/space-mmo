@@ -351,6 +351,7 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
             entity.HasOne(e => e.OutputItemDef).WithMany().HasForeignKey(e => e.OutputItemDefId);
             entity.HasOne(e => e.Skill).WithMany().HasForeignKey(e => e.SkillId);
             entity.HasOne(e => e.RequiredToolItemDef).WithMany().HasForeignKey(e => e.RequiredToolItemDefId);
+            entity.HasOne(e => e.MainInputItemDef).WithMany().HasForeignKey(e => e.MainInputItemDefId);
 
             entity.ToTable(t =>
             {
@@ -401,7 +402,9 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
         modelBuilder.Entity<InventoryItem>(entity =>
         {
-            entity.HasKey(e => new { e.InventoryId, e.ItemDefId });
+            // Style is in the key (ADR-0008, task 187): Terran and Martian plate in one hangar are
+            // two stacks with two cost bases.
+            entity.HasKey(e => new { e.InventoryId, e.ItemDefId, e.Style });
 
             entity.HasOne(e => e.Inventory)
                 .WithMany(i => i.StackedItems)
@@ -485,6 +488,12 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
                     "ck_market_orders_escrow_matches_side",
                     "(side = 'Buy' AND reserved_quantity = 0) OR "
                     + "(side = 'Sell' AND escrowed_credits = 0)");
+
+                // A sell order holds goods of one style and a buy order takes any (task 187). A
+                // sell order with none would leave a cancel nowhere to return its goods to.
+                t.HasCheckConstraint(
+                    "ck_market_orders_style_matches_side",
+                    "(side = 'Buy' AND style IS NULL) OR (side = 'Sell' AND style IS NOT NULL)");
             });
         });
 
@@ -526,7 +535,7 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
         modelBuilder.Entity<IndustryJobInput>(entity =>
         {
-            entity.HasKey(e => new { e.IndustryJobId, e.ItemDefId });
+            entity.HasKey(e => new { e.IndustryJobId, e.ItemDefId, e.Style });
 
             entity.HasOne(e => e.IndustryJob)
                 .WithMany(j => j.Inputs)

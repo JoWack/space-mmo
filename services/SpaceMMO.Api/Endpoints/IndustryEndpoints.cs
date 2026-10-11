@@ -6,10 +6,16 @@ using SpaceMMO.Data.Industry;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Data.Market;
 using SpaceMMO.Domain.Industry;
+using SpaceMMO.Domain.Items;
 
 namespace SpaceMMO.Api.Endpoints;
 
-public sealed record StartJobRequest(int CharacterId, int RecipeId, int StationId, int Runs);
+/// <param name="MainInputStyle">
+/// Which style of the recipe's main input to make it from (task 187), as the industry panel's picker
+/// chose. Null takes the style held most of.
+/// </param>
+public sealed record StartJobRequest(
+    int CharacterId, int RecipeId, int StationId, int Runs, ItemStyle? MainInputStyle = null);
 
 public sealed record ClaimJobRequest(int CharacterId, long JobId);
 
@@ -41,7 +47,13 @@ public sealed record RecipeResponse(
     int? RequiredToolItemDefId,
     string? RequiredToolKey,
     string? RequiredToolName,
-    IReadOnlyList<RecipeInputResponse> Inputs);
+    IReadOnlyList<RecipeInputResponse> Inputs,
+
+    /// <summary>
+    /// The input whose style the output takes, or null for a recipe that makes Common goods
+    /// (task 187). The one input the industry panel offers a style picker on.
+    /// </summary>
+    string? MainInputKey = null);
 
 /// <summary>
 /// A job in progress, as the server sees it.
@@ -64,7 +76,10 @@ public sealed record IndustryJobResponse(
     DateTimeOffset StartedAt,
     DateTimeOffset CompletesAt,
     bool IsClaimable,
-    int SecondsRemaining);
+    int SecondsRemaining,
+
+    /// <summary>The style the output will have, decided when the job started (task 187).</summary>
+    ItemStyle OutputStyle = ItemStyle.Common);
 
 /// <summary>
 /// Time-gated manufacturing jobs.
@@ -99,6 +114,7 @@ public static class IndustryEndpoints
             .Include(r => r.OutputItemDef)
             .Include(r => r.Skill)
             .Include(r => r.RequiredToolItemDef)
+            .Include(r => r.MainInputItemDef)
             .Include(r => r.Inputs)
             .ThenInclude(i => i.ItemDef)
             .OrderBy(r => r.Key)
@@ -125,7 +141,8 @@ public static class IndustryEndpoints
                     .OrderBy(i => i.ItemDef!.Key)
                     .Select(i => new RecipeInputResponse(
                         i.ItemDefId, i.ItemDef!.Key, i.ItemDef.Name, i.Quantity))
-                    .ToList()))
+                    .ToList(),
+                r.MainInputItemDef?.Key))
             .ToList());
     }
 
@@ -178,7 +195,8 @@ public static class IndustryEndpoints
 
                 // Floored at zero rather than allowed to go negative, and rounded up so a job with
                 // 200 ms left reads as "1 s" instead of "0 s" while still refusing to be claimed.
-                (int)Math.Max(0, Math.Ceiling((j.CompletesAt - now).TotalSeconds))))
+                (int)Math.Max(0, Math.Ceiling((j.CompletesAt - now).TotalSeconds)),
+                j.OutputStyle))
             .ToList());
     }
 
@@ -208,7 +226,12 @@ public static class IndustryEndpoints
         try
         {
             StartJobResult result = await industry.StartJobAsync(
-                request.CharacterId, request.RecipeId, request.StationId, request.Runs, cancellation);
+                request.CharacterId,
+                request.RecipeId,
+                request.StationId,
+                request.Runs,
+                request.MainInputStyle,
+                cancellation);
 
             return Results.Ok(result);
         }
