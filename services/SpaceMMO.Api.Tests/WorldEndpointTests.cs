@@ -238,6 +238,37 @@ public sealed class WorldEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifet
         Assert.All(stations, s => Assert.True(s.DockingRangeKm > 0.0));
     }
 
+    [Fact]
+    public async Task A_retired_station_is_listed_with_no_position_and_levels_no_ground()
+    {
+        // Task 188: still named, so a hangar there reads as somewhere, but drawn by nobody, spawned by
+        // no game server and refused for docking, as any unplaced station is.
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            Station ground = context.Stations.Single(s => s.Key == "station_test_ground");
+            ground.PadFlatRadiusKm = 0.42;
+            ground.PadBlendKm = 0.15;
+            ground.PadElevationKm = 0.172;
+            ground.RetiredAt = DateTimeOffset.UtcNow;
+
+            await context.SaveChangesAsync();
+        }
+
+        StationResponse[] stations = (await _client.GetFromJsonAsync<StationResponse[]>("/world/stations"))!;
+
+        StationResponse retired = stations.Single(s => s.Key == "station_test_ground");
+
+        Assert.Null(retired.DirectionX);
+        Assert.Null(retired.DirectionY);
+        Assert.Null(retired.DirectionZ);
+        Assert.Null(retired.SystemX);
+        Assert.False(string.IsNullOrEmpty(retired.Name));
+
+        BodyResponse[] bodies = (await _client.GetFromJsonAsync<BodyResponse[]>("/world/bodies"))!;
+
+        Assert.Empty(bodies.Single(b => b.Id == _bodyId).TerrainPads);
+    }
+
     private async Task<ResourceNodeResponse[]> GetNodesAsync()
     {
         // Deliberately no token, like the bodies: the dedicated server places the world's ore

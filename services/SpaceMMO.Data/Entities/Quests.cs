@@ -6,7 +6,7 @@ namespace SpaceMMO.Data.Entities;
 /// <summary>
 /// A quest definition, loaded from <c>data/quests/</c>.
 /// </summary>
-public class QuestDef
+public class QuestDef : IRetirableContent
 {
     public int Id { get; set; }
 
@@ -64,6 +64,16 @@ public class QuestDef
     /// </para>
     /// </remarks>
     public bool RequiresTurnIn { get; set; }
+
+    /// <summary>
+    /// When content stopped naming this quest, or null while it still does (task 188).
+    /// </summary>
+    /// <remarks>
+    /// Retired rather than deleted: journals and the progress in them still refer to it and stay
+    /// valid. Nobody can accept it, and it is not offered; one already under way can still be
+    /// finished. Authoring the key again clears it.
+    /// </remarks>
+    public DateTimeOffset? RetiredAt { get; set; }
 
     public ICollection<QuestStep> Steps { get; } = [];
 }

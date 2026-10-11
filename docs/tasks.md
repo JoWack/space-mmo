@@ -9130,6 +9130,7 @@ How it would fail:
 
 ## 188 — Content removed from the pack lives on in the database
 
+**Built 11 October for stations, recipes, quests and items; bodies and systems are not covered (below).**
 *Found 9 October while building 184; not yet seen in play.* Belongs to **M7**, whose line names authoring
 world content graphically, because the authoring panel is what removes things.
 
@@ -9161,6 +9162,51 @@ which `/world/*` stops serving and the services refuse, leaving everything that 
 rows want it, and what a player holding a retired item sees, are design questions to settle first.
 
 **Blocked on:** nothing.
+
+### Decided by Joe, 11 October
+
+- **Retire, never delete.** `--seed` marks a station, recipe, quest or item the pack no longer names as
+  retired. Nothing new starts from it (no docking, no job start, no accepting, and it is not served), and
+  everything that already refers to it stays valid: stacks, jobs, journals, orders. Authoring the key
+  again brings it back. Offered against refusing to seed and making the author fix it by hand.
+- **Goods already held of a retired item keep working**: moved, sold to players, used as inputs. Only new
+  supply stops. Offered against freezing them, which would have needed a "retired" marker on rows.
+
+### Built, 11 October
+
+**`retired_at`** on `stations`, `recipes`, `quest_defs` and `item_defs` (migration `RetiredContent`),
+through `IRetirableContent`. `ContentLoader.ApplyRetirement` sets it on every row of a kind the pack no
+longer names, keeps the first time on a second seed, and clears it when the key is authored again. **Only
+for a kind the pack authors at all**, as deposits already were: a pack silent about stations is not a pack
+saying there are none.
+
+What retiring stops, by kind:
+
+| Kind | Stops | Still works |
+|---|---|---|
+| Station | Docking (refused as unplaced), summoning a ship there, its ground pad. `/world/stations` lists it **with no position**, so nothing draws or spawns it and a hangar there keeps its name | Its hangars and their goods, a character already docked there, orders, jobs, stowing a ship |
+| Recipe | Listing in `/industry/recipes`; starting a job (409, `retired`) | Running jobs: claim and cancel |
+| Quest | Being offered; accepting (409, `retired`) | One under way: its journal row, steps and progress |
+| Item | Nothing: there is no supply left to stop, since the pack can name nothing that makes it | Every stack and instance: moved, sold, used. Still in the market catalogue, so holders can sell |
+
+**Serving a retired station without a position is Claude's reading** of "not served": it is gone from the
+world, but "HANGAR — 12" is what the inventory would otherwise call goods still sitting there.
+
+**Not covered: bodies and systems**, the last row of the table above. Retiring a body would strand
+characters whose home it is, and the validator already refuses a pack missing any homeworld; it wants
+its own decision if a non-home body is ever removed.
+
+**Verified:** data 249 (7 new in `Content/RetiredContentTests.cs`, seeding the shipped pack and then
+re-seeding it with a station, a recipe, an item and a quest taken out), API 102 (2 new: the station
+served without a position or a pad, the recipe not offered), domain 505. Every rule was broken on
+purpose and failed its own test: nothing retired, silence retiring everything, a second seed
+re-stamping, docking, job start and accepting ignoring retirement, the recipe still listed, the station
+keeping its position, its pad still levelling. **The dev database is migrated and seeded**; nothing in
+it was stale, so nothing was retired.
+
+**Not verified in play.** To see it: with the editor's authoring panel, remove Deepdock and re-seed.
+It should be gone from the sky and refuse docking, while any hangar there still shows in the inventory
+under its name. Put it back and re-seed, and it returns.
 
 
 ## 189 — Each world's deposits look like that world's ore

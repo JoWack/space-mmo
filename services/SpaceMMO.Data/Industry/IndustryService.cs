@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SpaceMMO.Data.Content;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Progression;
 using SpaceMMO.Data.Inventories;
@@ -105,6 +106,7 @@ public sealed class IndustryService(SpaceMmoDbContext database)
     /// <exception cref="MissingToolException">If a required tool is not owned.</exception>
     /// <exception cref="InsufficientItemsException">If materials are short.</exception>
     /// <exception cref="InsufficientFundsException">If the fee cannot be paid.</exception>
+    /// <exception cref="ContentRetiredException">If the pack no longer names the recipe (task 188).</exception>
     /// <param name="mainInputStyle">
     /// Which style of the recipe's main input to make it from, and so the output's style (task 187).
     /// Null takes the style held most of. Ignored for a recipe without a main input, and for a raw
@@ -135,6 +137,13 @@ public sealed class IndustryService(SpaceMmoDbContext database)
             .Include(r => r.Skill)
             .Include(r => r.MainInputItemDef)
             .SingleAsync(r => r.Id == recipeId, cancellationToken);
+
+        // Before any gate, so the answer is about the recipe rather than about the player: no skill,
+        // tool or material would ever let them start it again.
+        if (recipe.RetiredAt is not null)
+        {
+            throw new ContentRetiredException("recipe", recipe.Key);
+        }
 
         int level = await SkillLevelAsync(characterId, recipe.SkillId, cancellationToken);
 

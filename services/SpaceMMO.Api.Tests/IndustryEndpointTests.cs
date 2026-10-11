@@ -73,6 +73,21 @@ public sealed class IndustryEndpointTests(ApiDatabaseFixture fixture) : IAsyncLi
     }
 
     [Fact]
+    public async Task A_retired_recipe_is_not_offered()
+    {
+        // Task 188: content stopped naming it, so the panel must not list something Start will refuse.
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            context.Recipes.Single(r => r.Key == "refine_test_plate").RetiredAt = DateTimeOffset.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        RecipeResponse[] recipes = (await _client.GetFromJsonAsync<RecipeResponse[]>("/industry/recipes"))!;
+
+        Assert.DoesNotContain(recipes, r => r.Key == "refine_test_plate");
+    }
+
+    [Fact]
     public async Task A_recipe_carries_the_keys_a_client_needs_and_not_only_ids()
     {
         RecipeResponse recipe = Assert.Single(

@@ -10,7 +10,7 @@ namespace SpaceMMO.Data.Entities;
 /// Per the locked scope decision, designs are fixed and players own the entire supply. So
 /// rows here are content, never player-created.
 /// </remarks>
-public class ItemDef
+public class ItemDef : IRetirableContent
 {
     public int Id { get; set; }
 
@@ -74,10 +74,21 @@ public class ItemDef
     /// the instance's, decided when it was made.
     /// </remarks>
     public ItemStyle Style { get; set; }
+
+    /// <summary>
+    /// When content stopped naming this item, or null while it still does (task 188).
+    /// </summary>
+    /// <remarks>
+    /// Retired rather than deleted: stacks, instances, orders and ledger lines still refer to it
+    /// and stay valid. Goods already held keep working -- moved, sold, used as inputs -- and only
+    /// new supply stops, since no recipe or deposit in the pack can make one (Joe, 11 October).
+    /// Authoring the key again clears it.
+    /// </remarks>
+    public DateTimeOffset? RetiredAt { get; set; }
 }
 
 /// <summary>A crafting recipe, loaded from <c>data/recipes/</c>.</summary>
-public class Recipe
+public class Recipe : IRetirableContent
 {
     public int Id { get; set; }
 
@@ -124,6 +135,16 @@ public class Recipe
     public int? MainInputItemDefId { get; set; }
 
     public ItemDef? MainInputItemDef { get; set; }
+
+    /// <summary>
+    /// When content stopped naming this recipe, or null while it still does (task 188).
+    /// </summary>
+    /// <remarks>
+    /// Retired rather than deleted: jobs, running and finished, still refer to it and stay valid.
+    /// It is not listed and no job can start from it; a running one can still be claimed or
+    /// cancelled. Authoring the key again clears it.
+    /// </remarks>
+    public DateTimeOffset? RetiredAt { get; set; }
 
     public ICollection<RecipeInput> Inputs { get; } = [];
 }

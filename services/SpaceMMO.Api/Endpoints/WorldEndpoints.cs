@@ -195,6 +195,11 @@ public static class WorldEndpoints
     /// the ones attached to no body at all, and a route keyed by body could never return those.
     /// A station with no position is still listed: the client draws nothing for it and docking
     /// refuses it, which is a station visibly missing rather than one silently absent.
+    /// <para>
+    /// <strong>A retired station is served that way</strong> (task 188): listed, so a hangar there
+    /// still has a name, but with no position, so nothing draws it, the game server spawns nothing for
+    /// it, and docking refuses it as it refuses any unplaced station.
+    /// </para>
     /// </remarks>
     private static async Task<IResult> StationsAsync(
         SpaceMmoDbContext database, CancellationToken cancellation)
@@ -208,12 +213,12 @@ public static class WorldEndpoints
                 s.StarSystemId,
                 s.BodyId,
                 s.Kind.ToString(),
-                s.DirectionX,
-                s.DirectionY,
-                s.DirectionZ,
-                s.SystemX,
-                s.SystemY,
-                s.SystemZ,
+                s.RetiredAt == null ? s.DirectionX : null,
+                s.RetiredAt == null ? s.DirectionY : null,
+                s.RetiredAt == null ? s.DirectionZ : null,
+                s.RetiredAt == null ? s.SystemX : null,
+                s.RetiredAt == null ? s.SystemY : null,
+                s.RetiredAt == null ? s.SystemZ : null,
                 s.DockingRangeKilometres))
             .ToListAsync(cancellation);
 
@@ -245,8 +250,10 @@ public static class WorldEndpoints
                 b.MaxElevationKm,
                 b.BaseFrequency,
                 b.Stations
+                    // A retired station levels nothing: nothing stands there any more (task 188).
                     .Where(s => s.PadFlatRadiusKm != null && s.PadBlendKm != null && s.PadElevationKm != null
-                        && s.DirectionX != null && s.DirectionY != null && s.DirectionZ != null)
+                        && s.DirectionX != null && s.DirectionY != null && s.DirectionZ != null
+                        && s.RetiredAt == null)
                     .OrderBy(s => s.Key)
                     .Select(s => new TerrainPadResponse(
                         s.Key,

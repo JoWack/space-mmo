@@ -21,10 +21,11 @@ namespace SpaceMMO.Data.Content;
 /// a data edit and a restart rather than a deploy.
 /// </para>
 /// <para>
-/// Content is never deleted, only added or updated. An item definition that vanished from the
-/// files would still be referenced by player inventories, and removing it would orphan real
-/// possessions — retiring content needs a deliberate migration, not a silent side effect of
-/// editing a file.
+/// Content is never deleted, only added, updated or retired. An item definition that vanished from
+/// the files would still be referenced by player inventories, and removing it would orphan real
+/// possessions. So a station, recipe, quest or item the pack stops naming is marked retired instead
+/// (task 188): nothing new starts from it, and everything already referring to it stays valid.
+/// Deposits are the exception, and are removed, because nothing refers to one but its own pools.
 /// </para>
 /// </remarks>
 public sealed class ContentLoader(SpaceMmoDbContext database)
@@ -220,6 +221,8 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             existing[content.Key] = created;
         }
 
+        ApplyRetirement(existing.Values, pack.Items.Select(i => i.Key));
+
         await _database.SaveChangesAsync(cancellationToken);
 
         return existing.ToDictionary(e => e.Key, e => e.Value.Id, StringComparer.Ordinal);
@@ -254,6 +257,8 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             recipe.MainInputItemDefId =
                 content.MainInput is string main ? itemIds[main] : null;
         }
+
+        ApplyRetirement(existing.Values, pack.Recipes.Select(r => r.Key));
 
         await _database.SaveChangesAsync(cancellationToken);
 
@@ -313,10 +318,9 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             // a value in exactly one place.
             quest.RequiresTurnIn = content.TurnInRequired;
 
-            // Resolved here rather than at the record, so "the content did not say" is turned into
-            // a value in exactly one place.
-
         }
+
+        ApplyRetirement(existing.Values, pack.Quests.Select(q => q.Key));
 
         await _database.SaveChangesAsync(cancellationToken);
 
@@ -521,7 +525,47 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             _database.Stations.Add(created);
         }
 
+        ApplyRetirement(existing.Values, pack.Stations.Select(s => s.Key));
+
         await _database.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Retires what the pack no longer names and brings back what it names again (task 188).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Retired, not deleted</strong>, because players' things hang off every one of these:
+    /// hangars off a station, jobs off a recipe, journals off a quest, stacks off an item. A station
+    /// cut out of <c>origin.json</c> by the authoring panel used to come back on the next sign-in,
+    /// served from the database as if nothing had happened.
+    /// </para>
+    /// <para>
+    /// <strong>Only when the pack authors that kind at all</strong>, as with deposits: a pack that
+    /// says nothing about stations is not a pack that says there are none, and the content tests load
+    /// packs of one kind at a time.
+    /// </para>
+    /// <para>
+    /// The first retirement's time is kept, so the column says when content stopped naming a row,
+    /// not when it was last seeded.
+    /// </para>
+    /// </remarks>
+    private static void ApplyRetirement<T>(IEnumerable<T> rows, IEnumerable<string> authoredKeys)
+        where T : IRetirableContent
+    {
+        var authored = authoredKeys.ToHashSet(StringComparer.Ordinal);
+
+        if (authored.Count == 0)
+        {
+            return;
+        }
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        foreach (T row in rows)
+        {
+            row.RetiredAt = authored.Contains(row.Key) ? null : row.RetiredAt ?? now;
+        }
     }
 
     /// <summary>

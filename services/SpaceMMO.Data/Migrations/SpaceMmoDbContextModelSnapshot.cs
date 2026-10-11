@@ -798,6 +798,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
+                    b.Property<DateTimeOffset?>("RetiredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retired_at");
+
                     b.Property<string>("Style")
                         .IsRequired()
                         .HasMaxLength(48)
@@ -1083,6 +1087,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("requires_turn_in");
 
+                    b.Property<DateTimeOffset?>("RetiredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retired_at");
+
                     b.Property<long>("RewardCredits")
                         .HasColumnType("bigint")
                         .HasColumnName("reward_credits");
@@ -1214,6 +1222,10 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<int?>("RequiredToolItemDefId")
                         .HasColumnType("integer")
                         .HasColumnName("required_tool_item_def_id");
+
+                    b.Property<DateTimeOffset?>("RetiredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retired_at");
 
                     b.Property<int>("SkillId")
                         .HasColumnType("integer")
@@ -1582,6 +1594,10 @@ namespace SpaceMMO.Data.Migrations
                     b.Property<double?>("PadFlatRadiusKm")
                         .HasColumnType("double precision")
                         .HasColumnName("pad_flat_radius_km");
+
+                    b.Property<DateTimeOffset?>("RetiredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retired_at");
 
                     b.Property<int>("StarSystemId")
                         .HasColumnType("integer")

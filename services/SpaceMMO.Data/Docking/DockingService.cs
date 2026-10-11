@@ -60,7 +60,8 @@ public sealed class DockingService(SpaceMmoDbContext database, InventoryService 
         // because "nowhere" compares equal to wherever the caller says they are.
         bool placed = station.DirectionX is not null || station.SystemX is not null;
 
-        if (!placed)
+        // A retired station is unplaced to everyone else (task 188), and is refused the same way.
+        if (!placed || station.RetiredAt is not null)
         {
             throw new UnknownStationException(stationId);
         }

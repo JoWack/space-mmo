@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using SpaceMMO.Data.Content;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Progression;
 using SpaceMMO.Domain.Economy;
@@ -73,6 +74,13 @@ public sealed class QuestService(SpaceMmoDbContext database)
         QuestDef quest = await _database.QuestDefs
             .Include(q => q.PrerequisiteQuestDef)
             .SingleAsync(q => q.Key == questKey, cancellationToken);
+
+        // Nobody starts a quest the pack no longer names (task 188). One already under way is not
+        // touched: its journal entry and progress stay, and it can still be finished.
+        if (quest.RetiredAt is not null)
+        {
+            throw new ContentRetiredException("quest", quest.Key);
+        }
 
         await GuardPrerequisiteAsync(characterId, quest, cancellationToken);
 

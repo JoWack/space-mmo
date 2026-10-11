@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Data;
+using SpaceMMO.Data.Content;
 using SpaceMMO.Data.Quests;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Quests;
@@ -110,6 +111,11 @@ public static class QuestEndpoints
         catch (QuestOnCooldownException ex)
         {
             return Results.Conflict(new { error = ex.Message, reason = "on_cooldown" });
+        }
+        catch (ContentRetiredException ex)
+        {
+            // Before the catch-all below, which would call a retired quest one that does not exist.
+            return Results.Conflict(new { error = ex.Message, reason = "retired" });
         }
         catch (InvalidOperationException)
         {
@@ -253,6 +259,7 @@ public static class QuestEndpoints
             .ToListAsync(cancellation);
 
         var offered = await database.QuestDefs
+            .Where(q => q.RetiredAt == null)
             .Where(q => !underway.Contains(q.Id))
             .Where(q => !completed.Contains(q.Id) || q.CooldownSeconds != null)
             .Where(q => q.PrerequisiteQuestDefId == null

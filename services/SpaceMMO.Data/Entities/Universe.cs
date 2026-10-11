@@ -143,7 +143,7 @@ public class Body
 }
 
 /// <summary>A station: trading hub, spaceport, housing, or the capital hub.</summary>
-public class Station
+public class Station : IRetirableContent
 {
     public int Id { get; set; }
 
@@ -169,6 +169,16 @@ public class Station
     public Body? Body { get; set; }
 
     public StationKind Kind { get; set; }
+
+    /// <summary>
+    /// When content stopped naming this station, or null while it still does (task 188).
+    /// </summary>
+    /// <remarks>
+    /// Retired rather than deleted: hangars and their goods, docked characters, orders and jobs
+    /// still refer to it and stay valid. It is served without a position, so it is not drawn, and
+    /// nobody can dock at it or summon a ship there. Authoring the key again clears it.
+    /// </remarks>
+    public DateTimeOffset? RetiredAt { get; set; }
 
     /// <summary>
     /// Where the station is, expressed the way its location allows.

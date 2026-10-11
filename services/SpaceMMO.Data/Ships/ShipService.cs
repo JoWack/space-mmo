@@ -75,6 +75,13 @@ public sealed class ShipService(SpaceMmoDbContext database)
             throw new ShipSummonException($"No station {stationId}.");
         }
 
+        // Undrawn and undockable (task 188), so a ship summoned here would stand beside nothing. Said
+        // as a summon failure, which the Ships tab already shows in words.
+        if (station.RetiredAt is not null)
+        {
+            throw new ShipSummonException($"{station.Name} is no longer there to summon a ship to.");
+        }
+
         ItemInstance? hull = await _database.ItemInstances
             .Include(i => i.ItemDef)
             .Include(i => i.Inventory)

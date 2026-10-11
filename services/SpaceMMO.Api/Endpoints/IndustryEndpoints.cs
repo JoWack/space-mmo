@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Data;
+using SpaceMMO.Data.Content;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Industry;
 using SpaceMMO.Data.Inventories;
@@ -115,7 +116,10 @@ public static class IndustryEndpoints
         SpaceMmoDbContext database,
         CancellationToken cancellation)
     {
+        // Retired recipes are not offered (task 188); a job already running from one still shows in
+        // /industry/jobs, which reads the job and not this catalogue.
         List<Recipe> recipes = await database.Recipes
+            .Where(r => r.RetiredAt == null)
             .Include(r => r.OutputItemDef)
             .Include(r => r.Skill)
             .Include(r => r.RequiredToolItemDef)
@@ -259,6 +263,10 @@ public static class IndustryEndpoints
         catch (InsufficientFundsException ex)
         {
             return Results.Conflict(new { error = ex.Message, reason = "insufficient_funds" });
+        }
+        catch (ContentRetiredException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = "retired" });
         }
     }
 
