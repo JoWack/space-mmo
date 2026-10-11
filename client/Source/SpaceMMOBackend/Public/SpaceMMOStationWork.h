@@ -19,6 +19,18 @@ struct SPACEMMOBACKEND_API FSpaceMMORecipeInputText
 	int32 Held = 0;
 	int32 Needed = 0;
 
+	/**
+	 * Whether this is the recipe's main input, whose style the output takes (task 187). Its count is of
+	 * the picked style only, because the whole of it comes from one style.
+	 */
+	bool bMain = false;
+
+	/** The main input's style: the picked one, or a raw material's world. Common otherwise, and untagged. */
+	EBackendItemStyle Style = EBackendItemStyle::Common;
+
+	/** Whether more than one style of the main input is held here, so the line offers ◂ ▸. */
+	bool bCanPick = false;
+
 	bool IsShort() const { return Held < Needed; }
 };
 
@@ -53,6 +65,16 @@ struct SPACEMMOBACKEND_API FSpaceMMOJobRowText
 
 	/** "Ferrite Plate ×6": everything the job makes. */
 	FString Title;
+
+	/**
+	 * The title in two parts, "Ferrite Plate" and "×6", so the style tag goes between them as Joe
+	 * approved on 10 October: "Crude Thruster [TER] ×1" (task 187).
+	 */
+	FString Name;
+	FString Count;
+
+	/** The style the output will have. */
+	EBackendItemStyle Style = EBackendItemStyle::Common;
 
 	bool bReady = false;
 
@@ -109,8 +131,18 @@ struct SPACEMMOBACKEND_API FSpaceMMOStartBarText
 	/** Whether the note is a shortfall, for colouring it. */
 	bool bShort = false;
 
-	/** "Start Ferrite Plate ×6". */
+	/** "Start Ferrite Plate [TER] ×6". */
 	FString Label;
+
+	/**
+	 * Which style of the main input Start makes it from (task 187): the pick if it is held here, otherwise
+	 * the style held most of. Unset when the recipe has no main input or none of a crafted one is held,
+	 * which leaves the choice to the server.
+	 */
+	TOptional<EBackendItemStyle> MainInputStyle;
+
+	/** The style the output will have, for the label's tag. */
+	EBackendItemStyle OutputStyle = EBackendItemStyle::Common;
 };
 
 /**
@@ -140,8 +172,39 @@ struct SPACEMMOBACKEND_API FSpaceMMOStationWork
 	 */
 	static int32 HeldHere(const TArray<FBackendInventoryItem>& Inventory, const FString& ItemKey, int32 StationId);
 
-	/** How many runs of a recipe the hangar here can supply: the scarcest input decides. */
-	static int32 MostRuns(const FBackendRecipe& Recipe, const TArray<FBackendInventoryItem>& Inventory, int32 StationId);
+	/** What this station's hangar holds of an item in one style. */
+	static int32 HeldHere(
+		const TArray<FBackendInventoryItem>& Inventory, const FString& ItemKey, int32 StationId, EBackendItemStyle Style);
+
+	/** The styles of an item this station's hangar holds any of, in style order. */
+	static TArray<EBackendItemStyle> StylesHeldHere(
+		const TArray<FBackendInventoryItem>& Inventory, const FString& ItemKey, int32 StationId);
+
+	/**
+	 * Which style of a recipe's main input a job here would be made from (task 187), as the server
+	 * decides it: a raw material's world; else the pick, if any of it is held here; else the style held
+	 * most of, ties in style order. Unset for a recipe without a main input, or a crafted one none of
+	 * which is held.
+	 */
+	static TOptional<EBackendItemStyle> MainInputStyle(
+		const FBackendRecipe& Recipe,
+		const TArray<FBackendInventoryItem>& Inventory,
+		int32 StationId,
+		TOptional<EBackendItemStyle> Picked);
+
+	/** The next style along from the current one among those held, wrapping: what ◂ (-1) and ▸ (+1) pick. */
+	static TOptional<EBackendItemStyle> StepStyle(
+		const TArray<EBackendItemStyle>& Held, TOptional<EBackendItemStyle> Current, int32 Direction);
+
+	/**
+	 * How many runs of a recipe the hangar here can supply: the scarcest input decides. The main input
+	 * counts in its one style only, since a job never makes it up from two.
+	 */
+	static int32 MostRuns(
+		const FBackendRecipe& Recipe,
+		const TArray<FBackendInventoryItem>& Inventory,
+		int32 StationId,
+		TOptional<EBackendItemStyle> Picked = TOptional<EBackendItemStyle>());
 
 	/** The selection, kept inside the catalogue. INDEX_NONE when it is empty. */
 	static int32 ClampSelection(int32 Selected, int32 RecipeCount);
@@ -151,14 +214,16 @@ struct SPACEMMOBACKEND_API FSpaceMMOStationWork
 		const TArray<FBackendInventoryItem>& Inventory,
 		int32 StationId,
 		int32 Selected,
-		int32 Runs);
+		int32 Runs,
+		TOptional<EBackendItemStyle> PickedMainStyle = TOptional<EBackendItemStyle>());
 
 	static FSpaceMMOStartBarText BuildStartBar(
 		const TArray<FBackendRecipe>& Recipes,
 		const TArray<FBackendInventoryItem>& Inventory,
 		int32 StationId,
 		int32 Selected,
-		int32 Runs);
+		int32 Runs,
+		TOptional<EBackendItemStyle> PickedMainStyle = TOptional<EBackendItemStyle>());
 
 	static TArray<FSpaceMMOJobRowText> BuildJobRows(
 		const TArray<FBackendIndustryJob>& Jobs, const TArray<FBackendRecipe>& Recipes);
@@ -183,6 +248,13 @@ protected:
 	virtual SpaceMMO::Style::ERowLook Look() const override;
 	virtual void StyleTexts(SpaceMMO::Style::ERowLook InLook) override;
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override;
+
+	/** The main input's ◂ and ▸ (task 187). */
+	UFUNCTION()
+	void PickPreviousStyle();
+
+	UFUNCTION()
+	void PickNextStyle();
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> TitleText;
@@ -226,6 +298,13 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> StatusText;
+
+	/** The output's style tag and the count after it (task 187). Built by SpaceMMOBuildMenus. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> StyleTagText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> CountText;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UButton> ClaimButton;

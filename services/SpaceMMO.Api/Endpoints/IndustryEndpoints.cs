@@ -21,7 +21,12 @@ public sealed record ClaimJobRequest(int CharacterId, long JobId);
 
 public sealed record CancelJobRequest(int CharacterId, long JobId);
 
-public sealed record RecipeInputResponse(int ItemDefId, string ItemKey, string Name, int Quantity);
+/// <param name="Style">
+/// A raw material's world (task 187), so the industry panel can tag a refine's ore before any is
+/// held. Common for anything crafted, whose style is the stack's and not the item's.
+/// </param>
+public sealed record RecipeInputResponse(
+    int ItemDefId, string ItemKey, string Name, int Quantity, ItemStyle Style = ItemStyle.Common);
 
 /// <summary>
 /// One recipe, with everything a client needs to decide whether it can be run.
@@ -140,7 +145,7 @@ public static class IndustryEndpoints
                 r.Inputs
                     .OrderBy(i => i.ItemDef!.Key)
                     .Select(i => new RecipeInputResponse(
-                        i.ItemDefId, i.ItemDef!.Key, i.ItemDef.Name, i.Quantity))
+                        i.ItemDefId, i.ItemDef!.Key, i.ItemDef.Name, i.Quantity, i.ItemDef.Style))
                     .ToList(),
                 r.MainInputItemDef?.Key))
             .ToList());

@@ -293,6 +293,12 @@ public:
 	/** Changes how many runs Start makes, within one and what this station's hangar can supply. */
 	void StepRuns(int32 Delta);
 
+	/**
+	 * Steps which style of the selected recipe's main input Start makes it from, among the styles this
+	 * station's hangar holds (task 187).
+	 */
+	void StepMainInputStyle(int32 Direction);
+
 	/** Starts the selected recipe at the chosen count, at the station the player is docked at. */
 	void StartSelectedJob();
 
@@ -737,6 +743,13 @@ private:
 
 	/** Which recipe is selected on the Industry tab. Clamped on use, so it survives the list being re-fetched. */
 	int32 SelectedRecipeIndex = 0;
+
+	/**
+	 * The style picked for the selected recipe's main input, or unset for the style held most of
+	 * (task 187). Kept as a wish rather than a fact: a pick no longer held falls back to the default on
+	 * the next build, and comes back if the goods do.
+	 */
+	TOptional<EBackendItemStyle> PickedMainStyle;
 
 #if !UE_BUILD_SHIPPING
 	/** SpaceMMOLookPanels Flight: show the flight HUD on foot, over sample figures (task 173). */

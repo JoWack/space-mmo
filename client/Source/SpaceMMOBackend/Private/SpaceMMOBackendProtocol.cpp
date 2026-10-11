@@ -145,6 +145,12 @@ bool FSpaceMMOBackendProtocol::ParseMyOrders(
 			Order.ReservedQuantity = static_cast<int32>(Scratch);
 		}
 
+		// Null for a buy order, which takes any style; left Common, and the row says "any style" by side.
+		if (ReadInt64(Object, TEXT("style"), Scratch))
+		{
+			Order.Style = ToEnum(Scratch, EBackendItemStyle::Common, 4);
+		}
+
 		OutOrders.Add(Order);
 	}
 
@@ -238,7 +244,8 @@ FString FSpaceMMOBackendProtocol::MakeTransferBody(
 	const int64 FromInventoryId,
 	const int64 ToInventoryId,
 	const int32 ItemDefId,
-	const int32 Quantity)
+	const int32 Quantity,
+	const EBackendItemStyle Style)
 {
 	FString Output;
 
@@ -249,6 +256,10 @@ FString FSpaceMMOBackendProtocol::MakeTransferBody(
 	Writer->WriteValue(TEXT("toInventoryId"), ToInventoryId);
 	Writer->WriteValue(TEXT("itemDefId"), ItemDefId);
 	Writer->WriteValue(TEXT("quantity"), Quantity);
+
+	// Which stack (task 187). Sent as the row shows it, a raw material's world included: the server
+	// finds a raw material's one stack whatever is named.
+	Writer->WriteValue(TEXT("style"), static_cast<int32>(Style));
 	Writer->WriteObjectEnd();
 	Writer->Close();
 
@@ -633,6 +644,12 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 			Item.StationId = static_cast<int32>(Where);
 		}
 
+		// Absent from a server older than task 187, which knew no styles: Common, shown untagged.
+		if (ReadInt64(Object, TEXT("style"), Where))
+		{
+			Item.Style = ToEnum(Where, EBackendItemStyle::Common, 4);
+		}
+
 		OutItems.Add(Item);
 	}
 
@@ -690,6 +707,11 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 			}
 
 			Object->TryGetBoolField(TEXT("deployed"), Instance.bDeployed);
+
+			if (ReadInt64(Object, TEXT("style"), Number))
+			{
+				Instance.Style = ToEnum(Number, EBackendItemStyle::Common, 4);
+			}
 
 			OutInstances.Add(Instance);
 		}
@@ -772,6 +794,9 @@ bool FSpaceMMOBackendProtocol::ParseRecipes(
 		// Absent when the recipe needs no tool, which is the ordinary case rather than an error.
 		Object->TryGetStringField(TEXT("requiredToolName"), Recipe.RequiredToolName);
 
+		// Null for a recipe that makes Common goods (task 187), which leaves it empty.
+		Object->TryGetStringField(TEXT("mainInputKey"), Recipe.MainInputKey);
+
 		int64 Scratch = 0;
 
 		if (ReadInt64(Object, TEXT("id"), Scratch))
@@ -821,6 +846,11 @@ bool FSpaceMMOBackendProtocol::ParseRecipes(
 				if (ReadInt64(InputObject, TEXT("quantity"), Scratch))
 				{
 					Input.Quantity = static_cast<int32>(Scratch);
+				}
+
+				if (ReadInt64(InputObject, TEXT("style"), Scratch))
+				{
+					Input.Style = ToEnum(Scratch, EBackendItemStyle::Common, 4);
 				}
 
 				Recipe.Inputs.Add(Input);
@@ -886,6 +916,11 @@ bool FSpaceMMOBackendProtocol::ParseIndustryJobs(
 		if (ReadInt64(Object, TEXT("secondsRemaining"), Scratch))
 		{
 			Job.SecondsRemaining = static_cast<int32>(Scratch);
+		}
+
+		if (ReadInt64(Object, TEXT("outputStyle"), Scratch))
+		{
+			Job.OutputStyle = ToEnum(Scratch, EBackendItemStyle::Common, 4);
 		}
 
 		OutJobs.Add(Job);
@@ -1044,17 +1079,24 @@ FString FSpaceMMOBackendProtocol::MakePlaceOrderBody(
 	const int32 ItemDefId,
 	const EBackendOrderSide Side,
 	const int64 LimitPriceMinorUnits,
-	const int32 Quantity)
+	const int32 Quantity,
+	const TOptional<EBackendItemStyle> Style)
 {
+	// A buy order names no style: it takes whatever the sellers hold (ADR-0008, one book).
+	const FString StylePart = Side == EBackendOrderSide::Sell && Style.IsSet()
+		? FString::Printf(TEXT(",\"style\":%d"), static_cast<int32>(Style.GetValue()))
+		: FString();
+
 	return FString::Printf(
 		TEXT("{\"characterId\":%d,\"stationId\":%d,\"itemDefId\":%d,\"side\":%d,")
-		TEXT("\"limitPriceMinorUnits\":%lld,\"quantity\":%d}"),
+		TEXT("\"limitPriceMinorUnits\":%lld,\"quantity\":%d%s}"),
 		CharacterId,
 		StationId,
 		ItemDefId,
 		static_cast<int32>(Side),
 		LimitPriceMinorUnits,
-		Quantity);
+		Quantity,
+		*StylePart);
 }
 
 FString FSpaceMMOBackendProtocol::MakeAcceptQuestBody(
@@ -1065,11 +1107,19 @@ FString FSpaceMMOBackendProtocol::MakeAcceptQuestBody(
 }
 
 FString FSpaceMMOBackendProtocol::MakeStartJobBody(
-	const int32 CharacterId, const int32 RecipeId, const int32 StationId, const int32 Runs)
+	const int32 CharacterId,
+	const int32 RecipeId,
+	const int32 StationId,
+	const int32 Runs,
+	const TOptional<EBackendItemStyle> MainInputStyle)
 {
+	const FString StylePart = MainInputStyle.IsSet()
+		? FString::Printf(TEXT(",\"mainInputStyle\":%d"), static_cast<int32>(MainInputStyle.GetValue()))
+		: FString();
+
 	return FString::Printf(
-		TEXT("{\"characterId\":%d,\"recipeId\":%d,\"stationId\":%d,\"runs\":%d}"),
-		CharacterId, RecipeId, StationId, Runs);
+		TEXT("{\"characterId\":%d,\"recipeId\":%d,\"stationId\":%d,\"runs\":%d%s}"),
+		CharacterId, RecipeId, StationId, Runs, *StylePart);
 }
 
 FString FSpaceMMOBackendProtocol::MakeClaimJobBody(const int32 CharacterId, const int64 JobId)

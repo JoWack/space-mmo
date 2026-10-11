@@ -424,9 +424,10 @@ void ASpaceMMOPlayerController::StartSelectedJob()
 
 	// The count as the bar shows it: clamped by the same builder, so Start makes what its label says.
 	const FSpaceMMOStartBarText Bar = FSpaceMMOStationWork::BuildStartBar(
-		Available, Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns);
+		Available, Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns, PickedMainStyle);
 
-	Client->StartJob(CharacterId, Available[SelectedRecipeIndex].Id, Station, Bar.Runs);
+	// The style the bar resolved, so Start makes what its tag says (task 187).
+	Client->StartJobInStyle(CharacterId, Available[SelectedRecipeIndex].Id, Station, Bar.Runs, Bar.MainInputStyle);
 }
 
 FString ASpaceMMOPlayerController::DockedStationName() const
@@ -469,16 +470,17 @@ void ASpaceMMOPlayerController::GetStationWork(
 	const int32 Station = DockedStationId();
 
 	OutRecipes = FSpaceMMOStationWork::BuildRecipeRows(
-		Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns);
+		Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns, PickedMainStyle);
 
 	OutStartBar = FSpaceMMOStationWork::BuildStartBar(
-		Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns);
+		Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, SelectedRuns, PickedMainStyle);
 
 	// The inputs line follows the count the bar settled on, not the one asked for, so the two agree.
 	if (OutStartBar.Runs != SelectedRuns)
 	{
 		OutRecipes = FSpaceMMOStationWork::BuildRecipeRows(
-			Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, OutStartBar.Runs);
+			Client->GetRecipes(), Client->GetInventory(), Station, SelectedRecipeIndex, OutStartBar.Runs,
+			PickedMainStyle);
 	}
 
 	OutJobs = FSpaceMMOStationWork::BuildJobRows(Client->GetJobs(), Client->GetRecipes());
@@ -498,8 +500,28 @@ void ASpaceMMOPlayerController::SelectRecipe(const int32 Index)
 
 	SelectedRecipeIndex = Clamped;
 
-	// A count chosen for one recipe means nothing for another.
+	// A count chosen for one recipe means nothing for another, and nor does a style picked for its input.
 	SelectedRuns = 1;
+	PickedMainStyle.Reset();
+}
+
+void ASpaceMMOPlayerController::StepMainInputStyle(const int32 Direction)
+{
+	const USpaceMMOBackendClient* Client = Backend();
+
+	if (Client == nullptr || !Client->GetRecipes().IsValidIndex(SelectedRecipeIndex))
+	{
+		return;
+	}
+
+	const FBackendRecipe& Recipe = Client->GetRecipes()[SelectedRecipeIndex];
+	const int32 Station = DockedStationId();
+
+	// Stepped from what the panel shows now, not from the last pick, which may no longer be held.
+	PickedMainStyle = FSpaceMMOStationWork::StepStyle(
+		FSpaceMMOStationWork::StylesHeldHere(Client->GetInventory(), Recipe.MainInputKey, Station),
+		FSpaceMMOStationWork::MainInputStyle(Recipe, Client->GetInventory(), Station, PickedMainStyle),
+		Direction);
 }
 
 void ASpaceMMOPlayerController::StepRuns(const int32 Delta)
@@ -512,7 +534,8 @@ void ASpaceMMOPlayerController::StepRuns(const int32 Delta)
 	}
 
 	const FSpaceMMOStartBarText Bar = FSpaceMMOStationWork::BuildStartBar(
-		Client->GetRecipes(), Client->GetInventory(), DockedStationId(), SelectedRecipeIndex, SelectedRuns);
+		Client->GetRecipes(), Client->GetInventory(), DockedStationId(), SelectedRecipeIndex, SelectedRuns,
+		PickedMainStyle);
 
 	SelectedRuns = FMath::Clamp(Bar.Runs + Delta, 1, FMath::Max(Bar.MostRuns, 1));
 }

@@ -3,9 +3,11 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "SpaceMMOBackendProtocol.h"
+#include "SpaceMMOItemStyleTag.h"
 #include "SpaceMMOStationOverlay.h"
 
 FString FSpaceMMOStationWork::Duration(const int32 Seconds)
@@ -41,17 +43,148 @@ int32 FSpaceMMOStationWork::HeldHere(
 	return Held;
 }
 
+int32 FSpaceMMOStationWork::HeldHere(
+	const TArray<FBackendInventoryItem>& Inventory,
+	const FString& ItemKey,
+	const int32 StationId,
+	const EBackendItemStyle Style)
+{
+	int32 Held = 0;
+
+	for (const FBackendInventoryItem& Item : Inventory)
+	{
+		if (Item.ItemKey == ItemKey && Item.Style == Style && Item.Kind == EBackendInventoryKind::StationHangar
+			&& Item.StationId == StationId)
+		{
+			Held += Item.Quantity;
+		}
+	}
+
+	return Held;
+}
+
+TArray<EBackendItemStyle> FSpaceMMOStationWork::StylesHeldHere(
+	const TArray<FBackendInventoryItem>& Inventory, const FString& ItemKey, const int32 StationId)
+{
+	TArray<EBackendItemStyle> Styles;
+
+	for (const FBackendInventoryItem& Item : Inventory)
+	{
+		if (Item.ItemKey == ItemKey && Item.Quantity > 0 && Item.Kind == EBackendInventoryKind::StationHangar
+			&& Item.StationId == StationId)
+		{
+			Styles.AddUnique(Item.Style);
+		}
+	}
+
+	Styles.Sort();
+
+	return Styles;
+}
+
+namespace SpaceMMOStationWorkStyles
+{
+	/** The recipe's main input, or null for a recipe that makes Common goods. */
+	const FBackendRecipeInput* MainInput(const FBackendRecipe& Recipe)
+	{
+		return Recipe.MainInputKey.IsEmpty()
+			? nullptr
+			: Recipe.Inputs.FindByPredicate(
+				[&Recipe](const FBackendRecipeInput& Input) { return Input.ItemKey == Recipe.MainInputKey; });
+	}
+}
+
+TOptional<EBackendItemStyle> FSpaceMMOStationWork::MainInputStyle(
+	const FBackendRecipe& Recipe,
+	const TArray<FBackendInventoryItem>& Inventory,
+	const int32 StationId,
+	const TOptional<EBackendItemStyle> Picked)
+{
+	const FBackendRecipeInput* Main = SpaceMMOStationWorkStyles::MainInput(Recipe);
+
+	if (Main == nullptr)
+	{
+		return TOptional<EBackendItemStyle>();
+	}
+
+	// A raw material has one world, whatever is picked: ferrite ore makes Terran plate.
+	if (Main->Style != EBackendItemStyle::Common)
+	{
+		return Main->Style;
+	}
+
+	const TArray<EBackendItemStyle> Held = StylesHeldHere(Inventory, Main->ItemKey, StationId);
+
+	if (Picked.IsSet() && Held.Contains(Picked.GetValue()))
+	{
+		return Picked;
+	}
+
+	// The server's own default (ItemStyles.MostHeld): the largest stack, ties in style order, which is
+	// the order Held is already in.
+	TOptional<EBackendItemStyle> Most;
+	int32 MostHeld = 0;
+
+	for (const EBackendItemStyle Style : Held)
+	{
+		const int32 Count = HeldHere(Inventory, Main->ItemKey, StationId, Style);
+
+		if (Count > MostHeld)
+		{
+			Most = Style;
+			MostHeld = Count;
+		}
+	}
+
+	return Most;
+}
+
+TOptional<EBackendItemStyle> FSpaceMMOStationWork::StepStyle(
+	const TArray<EBackendItemStyle>& Held, const TOptional<EBackendItemStyle> Current, const int32 Direction)
+{
+	if (Held.Num() == 0)
+	{
+		return Current;
+	}
+
+	const int32 At = Current.IsSet() ? Held.IndexOfByKey(Current.GetValue()) : INDEX_NONE;
+
+	if (At == INDEX_NONE)
+	{
+		return Held[0];
+	}
+
+	const int32 Step = Direction < 0 ? -1 : 1;
+
+	return Held[(At + Step + Held.Num()) % Held.Num()];
+}
+
 int32 FSpaceMMOStationWork::MostRuns(
-	const FBackendRecipe& Recipe, const TArray<FBackendInventoryItem>& Inventory, const int32 StationId)
+	const FBackendRecipe& Recipe,
+	const TArray<FBackendInventoryItem>& Inventory,
+	const int32 StationId,
+	const TOptional<EBackendItemStyle> Picked)
 {
 	int32 Most = MaxRuns;
 
+	const TOptional<EBackendItemStyle> MainStyle = MainInputStyle(Recipe, Inventory, StationId, Picked);
+
 	for (const FBackendRecipeInput& Input : Recipe.Inputs)
 	{
-		if (Input.Quantity > 0)
+		if (Input.Quantity <= 0)
 		{
-			Most = FMath::Min(Most, HeldHere(Inventory, Input.ItemKey, StationId) / Input.Quantity);
+			continue;
 		}
+
+		// The main input in its one style, since a job never makes it up from two (task 187); none held
+		// of a crafted one is none at all.
+		const bool bMain = !Recipe.MainInputKey.IsEmpty() && Input.ItemKey == Recipe.MainInputKey;
+
+		const int32 Held = !bMain
+			? HeldHere(Inventory, Input.ItemKey, StationId)
+			: MainStyle.IsSet() ? HeldHere(Inventory, Input.ItemKey, StationId, MainStyle.GetValue()) : 0;
+
+		Most = FMath::Min(Most, Held / Input.Quantity);
 	}
 
 	return Most;
@@ -69,7 +202,8 @@ TArray<FSpaceMMORecipeRowText> FSpaceMMOStationWork::BuildRecipeRows(
 	const TArray<FBackendInventoryItem>& Inventory,
 	const int32 StationId,
 	const int32 Selected,
-	const int32 Runs)
+	const int32 Runs,
+	const TOptional<EBackendItemStyle> PickedMainStyle)
 {
 	TArray<FSpaceMMORecipeRowText> Rows;
 
@@ -123,6 +257,9 @@ TArray<FSpaceMMORecipeRowText> FSpaceMMOStationWork::BuildRecipeRows(
 		// a panel that has to be read at a glance.
 		if (Row.bSelected)
 		{
+			const TOptional<EBackendItemStyle> MainStyle =
+				MainInputStyle(Recipe, Inventory, StationId, PickedMainStyle);
+
 			for (const FBackendRecipeInput& Input : Recipe.Inputs)
 			{
 				FSpaceMMORecipeInputText Line;
@@ -130,6 +267,16 @@ TArray<FSpaceMMORecipeRowText> FSpaceMMOStationWork::BuildRecipeRows(
 				Line.Name = Input.Name;
 				Line.Held = HeldHere(Inventory, Input.ItemKey, StationId);
 				Line.Needed = Input.Quantity * Count;
+
+				// The main input names its style and counts only that style, since the whole of it comes
+				// from one (task 187). Offered ◂ ▸ only where there is a choice to make.
+				if (!Recipe.MainInputKey.IsEmpty() && Input.ItemKey == Recipe.MainInputKey)
+				{
+					Line.bMain = true;
+					Line.Style = MainStyle.Get(EBackendItemStyle::Common);
+					Line.Held = MainStyle.IsSet() ? HeldHere(Inventory, Input.ItemKey, StationId, Line.Style) : 0;
+					Line.bCanPick = StylesHeldHere(Inventory, Input.ItemKey, StationId).Num() > 1;
+				}
 
 				Row.Inputs.Add(Line);
 			}
@@ -150,7 +297,8 @@ FSpaceMMOStartBarText FSpaceMMOStationWork::BuildStartBar(
 	const TArray<FBackendInventoryItem>& Inventory,
 	const int32 StationId,
 	const int32 Selected,
-	const int32 Runs)
+	const int32 Runs,
+	const TOptional<EBackendItemStyle> PickedMainStyle)
 {
 	FSpaceMMOStartBarText Bar;
 
@@ -164,13 +312,22 @@ FSpaceMMOStartBarText FSpaceMMOStationWork::BuildStartBar(
 	const FBackendRecipe& Recipe = Recipes[Chosen];
 
 	Bar.bHasRecipe = true;
-	Bar.MostRuns = MostRuns(Recipe, Inventory, StationId);
+	Bar.MostRuns = MostRuns(Recipe, Inventory, StationId, PickedMainStyle);
+	Bar.MainInputStyle = MainInputStyle(Recipe, Inventory, StationId, PickedMainStyle);
+	Bar.OutputStyle = Bar.MainInputStyle.Get(EBackendItemStyle::Common);
 
 	// Capped by what is held, but never below one: with nothing to make, the count stays at one and
 	// Start still asks the server, whose refusal says what is missing better than a dead button would.
 	Bar.Runs = FMath::Clamp(Runs, 1, FMath::Max(Bar.MostRuns, 1));
 
-	Bar.Label = FString::Printf(TEXT("Start %s ×%d"), *Recipe.OutputName, Recipe.OutputQuantity * Bar.Runs);
+	// The output's tag in the label, as Joe approved: "Start Crude Thruster [TER] ×1". Plain, in the
+	// button's own colour: a button's label is one text.
+	const FString Tag = SpaceMMO::ItemStyleTag::IsShown(Bar.OutputStyle)
+		? TEXT(" ") + SpaceMMO::ItemStyleTag::Text(Bar.OutputStyle)
+		: FString();
+
+	Bar.Label = FString::Printf(
+		TEXT("Start %s%s ×%d"), *Recipe.OutputName, *Tag, Recipe.OutputQuantity * Bar.Runs);
 
 	if (Bar.MostRuns > 0)
 	{
@@ -186,7 +343,15 @@ FSpaceMMOStartBarText FSpaceMMOStationWork::BuildStartBar(
 
 	for (const FBackendRecipeInput& Input : Recipe.Inputs)
 	{
-		if (HeldHere(Inventory, Input.ItemKey, StationId) < Input.Quantity)
+		const bool bMain = !Recipe.MainInputKey.IsEmpty() && Input.ItemKey == Recipe.MainInputKey;
+
+		const int32 Held = !bMain
+			? HeldHere(Inventory, Input.ItemKey, StationId)
+			: Bar.MainInputStyle.IsSet()
+				? HeldHere(Inventory, Input.ItemKey, StationId, Bar.MainInputStyle.GetValue())
+				: 0;
+
+		if (Held < Input.Quantity)
 		{
 			Short.Add(Input.Name);
 		}
@@ -212,6 +377,9 @@ TArray<FSpaceMMOJobRowText> FSpaceMMOStationWork::BuildJobRows(
 
 		Row.JobId = Job.Id;
 		Row.Title = FString::Printf(TEXT("%s ×%d"), *Job.OutputName, Job.OutputQuantityTotal);
+		Row.Name = Job.OutputName;
+		Row.Count = FString::Printf(TEXT("×%d"), Job.OutputQuantityTotal);
+		Row.Style = Job.OutputStyle;
 		Row.bReady = Job.bIsClaimable;
 
 		if (!Row.bReady)
@@ -348,33 +516,95 @@ void USpaceMMORecipeRow::SetRow(const FSpaceMMORecipeRowText& InRow)
 	{
 		InputsBox->ClearChildren();
 
-		TArray<FString> Parts;
-
-		for (const FSpaceMMORecipeInputText& Input : Row.Inputs)
-		{
-			Parts.Add(FString::Printf(TEXT("%s %d/%d"), *Input.Name, Input.Held, Input.Needed));
-		}
-
-		if (!Row.Tool.IsEmpty())
-		{
-			Parts.Add(Row.Tool);
-		}
-
-		for (int32 Index = 0; Index < Parts.Num(); ++Index)
+		auto Note = [this](const FString& Words, const bool bShort)
 		{
 			UTextBlock* Part = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-			Part->SetText(FText::FromString(Parts[Index]));
-
-			const bool bShort = Row.Inputs.IsValidIndex(Index) && Row.Inputs[Index].IsShort();
+			Part->SetText(FText::FromString(Words));
 
 			SpaceMMO::PanelLook::Apply(Part, SpaceMMO::Style::ETextRole::Note,
 				bShort ? TOptional<FLinearColor>(SpaceMMO::Style::ErrorRed()) : TOptional<FLinearColor>());
 
-			// The gaps are the wrap box's own; it wraps onto a further line when the row is full.
-			InputsBox->AddChild(Part);
+			return Part;
+		};
+
+		bool bPicker = false;
+
+		for (const FSpaceMMORecipeInputText& Input : Row.Inputs)
+		{
+			const FString Count = FString::Printf(TEXT("%d/%d"), Input.Held, Input.Needed);
+
+			// The main input, laid out as Joe approved on 10 October (task 187): its name, its style tag,
+			// ◂ ▸ when more than one style is held here, then the count of that style.
+			if (Input.bMain && (SpaceMMO::ItemStyleTag::IsShown(Input.Style) || Input.bCanPick))
+			{
+				UHorizontalBox* Line = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+
+				auto Add = [Line](UWidget* Part, const float Before)
+				{
+					UHorizontalBoxSlot* At = Line->AddChildToHorizontalBox(Part);
+					At->SetVerticalAlignment(VAlign_Center);
+					At->SetPadding(FMargin(Before, 0.0f, 0.0f, 0.0f));
+				};
+
+				Add(Note(Input.Name, Input.IsShort()), 0.0f);
+
+				UTextBlock* Tag = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+				SpaceMMO::ItemStyleTag::Apply(Tag, Input.Style);
+				Add(Tag, 8.0f);
+
+				if (Input.bCanPick)
+				{
+					bPicker = true;
+
+					auto Arrow = [this](const TCHAR* Glyph, const bool bNext)
+					{
+						UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+						Button->SetStyle(SpaceMMO::Style::StepperButtonStyle());
+
+						UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+						Label->SetText(FText::FromString(Glyph));
+						SpaceMMO::PanelLook::Apply(Label, SpaceMMO::Style::ETextRole::Note);
+						Button->AddChild(Label);
+
+						// Built anew with every rebuild of the row, so there is no earlier binding to collide with.
+						if (bNext)
+						{
+							Button->OnClicked.AddUniqueDynamic(this, &USpaceMMORecipeRow::PickNextStyle);
+						}
+						else
+						{
+							Button->OnClicked.AddUniqueDynamic(this, &USpaceMMORecipeRow::PickPreviousStyle);
+						}
+
+						return Button;
+					};
+
+					Add(Arrow(TEXT("◂"), false), 8.0f);
+					Add(Arrow(TEXT("▸"), true), 2.0f);
+				}
+
+				Add(Note(Count, Input.IsShort()), 10.0f);
+
+				// The gaps are the wrap box's own; it wraps onto a further line when the row is full.
+				InputsBox->AddChild(Line);
+
+				continue;
+			}
+
+			InputsBox->AddChild(Note(FString::Printf(TEXT("%s %s"), *Input.Name, *Count), Input.IsShort()));
 		}
 
-		SpaceMMOStationWorkRows::Show(InputsBox, Parts.Num() > 0, ESlateVisibility::HitTestInvisible);
+		if (!Row.Tool.IsEmpty())
+		{
+			InputsBox->AddChild(Note(Row.Tool, false));
+		}
+
+		const bool bAny = Row.Inputs.Num() > 0 || !Row.Tool.IsEmpty();
+
+		// Hit-testable only with a picker in it: otherwise the inputs line is words, and a click on it
+		// should select the recipe like a click anywhere else on the row.
+		SpaceMMOStationWorkRows::Show(InputsBox, bAny,
+			bPicker ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::HitTestInvisible);
 	}
 
 	RequestRestyle();
@@ -392,6 +622,22 @@ void USpaceMMORecipeRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
 	PanelLook::Apply(TitleText, Style::ETextRole::Body);
 	PanelLook::ApplyFigure(TimeText, Style::ETextRole::Figure, 110.0f);
 	PanelLook::ApplyFigure(SkillText, Style::ETextRole::Figure, 190.0f);
+}
+
+void USpaceMMORecipeRow::PickPreviousStyle()
+{
+	if (USpaceMMOStationOverlay* Overlay = OwningOverlay.Get())
+	{
+		Overlay->StepMainInputStyle(-1);
+	}
+}
+
+void USpaceMMORecipeRow::PickNextStyle()
+{
+	if (USpaceMMOStationOverlay* Overlay = OwningOverlay.Get())
+	{
+		Overlay->StepMainInputStyle(1);
+	}
 }
 
 FReply USpaceMMORecipeRow::NativeOnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event)
@@ -430,7 +676,20 @@ void USpaceMMOJobRow::SetRow(const FSpaceMMOJobRowText& InRow)
 {
 	Row = InRow;
 
-	SpaceMMOStationWorkRows::SetText(TitleText, Row.Title);
+	// Name, tag, count when the Blueprint has the parts for it (task 187); the whole title otherwise, so a
+	// row built before them still says what the job makes.
+	if (CountText != nullptr)
+	{
+		SpaceMMOStationWorkRows::SetText(TitleText, Row.Name);
+		SpaceMMOStationWorkRows::SetText(CountText, Row.Count);
+	}
+	else
+	{
+		SpaceMMOStationWorkRows::SetText(TitleText, Row.Title);
+	}
+
+	SpaceMMO::ItemStyleTag::Apply(StyleTagText, Row.Style);
+
 	SpaceMMOStationWorkRows::SetText(StatusText, Row.bReady ? FString(TEXT("Ready")) : Row.Remaining);
 	SpaceMMOStationWorkRows::SetText(ClaimText, TEXT("Claim"));
 
@@ -450,6 +709,10 @@ void USpaceMMOJobRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
 	using namespace SpaceMMO;
 
 	PanelLook::Apply(TitleText, Style::ETextRole::Body);
+	PanelLook::Apply(CountText, Style::ETextRole::Body);
+
+	// Restyled with the row, so the tag keeps its world's colour over the row's own text colour.
+	ItemStyleTag::Apply(StyleTagText, Row.Style);
 
 	if (Row.bReady)
 	{

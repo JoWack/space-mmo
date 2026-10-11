@@ -9,6 +9,7 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOBackendProtocol.h"
 #include "SpaceMMOInventoryScreen.h"
+#include "SpaceMMOItemStyleTag.h"
 #include "SpaceMMOPlayerController.h"
 #include "SpaceMMOShipPawn.h"
 
@@ -346,6 +347,29 @@ void USpaceMMOMyOrderRow::SetRow(const FSpaceMMOMyOrderRowText& InRow)
 	RequestRestyle();
 }
 
+namespace SpaceMMOMyOrderStyle
+{
+	/** A sell's tag, or "any style" in a note's grey on a buy: the arrangement Joe approved (task 187). */
+	void Apply(UTextBlock* Tag, const FSpaceMMOMyOrderRowText& Row)
+	{
+		if (Tag == nullptr)
+		{
+			return;
+		}
+
+		if (!Row.bAnyStyle)
+		{
+			SpaceMMO::ItemStyleTag::Apply(Tag, Row.Style);
+
+			return;
+		}
+
+		Tag->SetText(FText::FromString(TEXT("any style")));
+		SpaceMMO::PanelLook::Apply(Tag, SpaceMMO::Style::ETextRole::Note);
+		Tag->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+}
+
 SpaceMMO::Style::ERowLook USpaceMMOMyOrderRow::Look() const
 {
 	return Super::Look();
@@ -364,6 +388,8 @@ void USpaceMMOMyOrderRow::StyleTexts(const SpaceMMO::Style::ERowLook InLook)
 	// out -- in white, not red: it is not an error.
 	PanelLook::Apply(StationText, Style::ETextRole::Note,
 		bElsewhere ? TOptional<FLinearColor>(Style::TextPrimary()) : TOptional<FLinearColor>());
+
+	SpaceMMOMyOrderStyle::Apply(StyleTagText, Row);
 }
 
 void USpaceMMOMyOrderRow::Cancel()
@@ -391,6 +417,10 @@ TArray<FSpaceMMOMyOrderRowText> USpaceMMOStationOverlay::BuildMyOrderRows(
 		Row.Side = Order.Side == EBackendOrderSide::Sell ? TEXT("SELL") : TEXT("BUY");
 		Row.Item = Order.ItemName;
 
+		// A sell holds goods of one style; a buy takes whatever the sellers hold (ADR-0008, task 187).
+		Row.bAnyStyle = Order.Side == EBackendOrderSide::Buy;
+		Row.Style = Row.bAnyStyle ? EBackendItemStyle::Common : Order.Style;
+
 		Row.Quantity = ASpaceMMOPlayerController::GroupDigits(Order.QuantityRemaining);
 
 		Row.Price = FString::Printf(
@@ -406,6 +436,84 @@ TArray<FSpaceMMOMyOrderRowText> USpaceMMOStationOverlay::BuildMyOrderRows(
 	}
 
 	return Rows;
+}
+
+TArray<EBackendItemStyle> USpaceMMOStationOverlay::SellableStyles(
+	const TArray<FBackendInventoryItem>& Inventory, const int32 ItemDefId, const int32 StationId)
+{
+	TArray<EBackendItemStyle> Styles;
+
+	for (int32 Each = static_cast<int32>(EBackendItemStyle::Common); Each <= static_cast<int32>(EBackendItemStyle::Grimhold);
+		 ++Each)
+	{
+		const EBackendItemStyle Style = static_cast<EBackendItemStyle>(Each);
+
+		if (SellableQuantity(Inventory, ItemDefId, StationId, Style) > 0)
+		{
+			Styles.Add(Style);
+		}
+	}
+
+	return Styles;
+}
+
+int32 USpaceMMOStationOverlay::SellableQuantity(
+	const TArray<FBackendInventoryItem>& Inventory,
+	const int32 ItemDefId,
+	const int32 StationId,
+	const EBackendItemStyle Style)
+{
+	int32 Held = 0;
+
+	for (const FBackendInventoryItem& Stack : Inventory)
+	{
+		if (Stack.ItemDefId != ItemDefId || Stack.Style != Style)
+		{
+			continue;
+		}
+
+		// Pockets travel with the character, so they count wherever they are docked. A hold or another
+		// station's hangar does not: the server would not reach into either.
+		const bool bInThisHangar = Stack.Kind == EBackendInventoryKind::StationHangar && Stack.StationId == StationId;
+		const bool bInPockets = Stack.Kind == EBackendInventoryKind::CharacterCarried;
+
+		if (bInThisHangar || bInPockets)
+		{
+			Held += Stack.Quantity;
+		}
+	}
+
+	return Held;
+}
+
+TOptional<EBackendItemStyle> USpaceMMOStationOverlay::OpeningSellStyle(
+	const TArray<FBackendInventoryItem>& Inventory,
+	const int32 ItemDefId,
+	const int32 StationId,
+	const TOptional<EBackendItemStyle> Dragged)
+{
+	if (Dragged.IsSet())
+	{
+		return Dragged;
+	}
+
+	TOptional<EBackendItemStyle> Most;
+	int32 MostHeld = 0;
+
+	// In style order, and only a larger stack takes over, so ties go to the earlier style as the
+	// server's ItemStyles.MostHeld does.
+	for (const EBackendItemStyle Style : SellableStyles(Inventory, ItemDefId, StationId))
+	{
+		const int32 Held = SellableQuantity(Inventory, ItemDefId, StationId, Style);
+
+		if (Held > MostHeld)
+		{
+			Most = Style;
+			MostHeld = Held;
+		}
+	}
+
+	return Most;
 }
 
 FString USpaceMMOStationOverlay::BuildMyOrdersFooter(const TArray<FBackendMyOrder>& Orders)
@@ -618,9 +726,10 @@ bool USpaceMMOStationOverlay::NativeOnDrop(
 
 	// The same two steps a player would take by hand: pick the item, then open the sell prompt --
 	// which is where the price is decided, because a drop says what and how many but never at what.
+	// The dragged stack's style comes with it: dragging Martian plate sells Martian plate (task 187).
 	SelectMarketItem(Drag->Line.ItemDefId);
 
-	OpenOrderPrompt(true, Drag->Line.Quantity);
+	OpenOrderPrompt(true, Drag->Line.Quantity, Drag->Line.Style);
 
 	return true;
 }
@@ -631,7 +740,8 @@ void USpaceMMOStationOverlay::BeginOrder(const bool bSell)
 	OpenOrderPrompt(bSell, 0);
 }
 
-void USpaceMMOStationOverlay::OpenOrderPrompt(const bool bSell, const int32 StartingQuantity)
+void USpaceMMOStationOverlay::OpenOrderPrompt(
+	const bool bSell, const int32 StartingQuantity, const TOptional<EBackendItemStyle> Style)
 {
 	const USpaceMMOBackendClient* Client = MarketClient();
 
@@ -659,25 +769,27 @@ void USpaceMMOStationOverlay::OpenOrderPrompt(const bool bSell, const int32 Star
 
 	const int32 Station = Controller != nullptr ? Controller->DockedStationId() : 0;
 
-	for (const FBackendInventoryItem& Stack : Client->GetInventory())
+	// A sell takes one style of the goods, so what it can back is that style's (task 187). A buy takes
+	// any style and backs itself with credits, so it counts everything, as it always did.
+	const TArray<EBackendItemStyle> Styles = SellableStyles(Client->GetInventory(), SelectedItemDefId, Station);
+
+	PendingOrderStyle = bSell
+		? OpeningSellStyle(Client->GetInventory(), SelectedItemDefId, Station, Style)
+		: TOptional<EBackendItemStyle>();
+
+	if (PendingOrderStyle.IsSet())
 	{
-		if (Stack.ItemDefId != SelectedItemDefId)
+		Held = SellableQuantity(Client->GetInventory(), SelectedItemDefId, Station, PendingOrderStyle.GetValue());
+	}
+	else
+	{
+		for (const EBackendItemStyle Each : Styles)
 		{
-			continue;
-		}
-
-		const bool bInThisHangar =
-			Stack.Kind == EBackendInventoryKind::StationHangar && Stack.StationId == Station;
-
-		// Pockets travel with the character, so they count wherever they are docked. A hold or
-		// another station's hangar does not: the server would not reach into either.
-		const bool bInPockets = Stack.Kind == EBackendInventoryKind::CharacterCarried;
-
-		if (bInThisHangar || bInPockets)
-		{
-			Held += Stack.Quantity;
+			Held += SellableQuantity(Client->GetInventory(), SelectedItemDefId, Station, Each);
 		}
 	}
+
+	ShowPromptStyle(bSell, Styles.Num());
 
 	PendingOrderItemDefId = SelectedItemDefId;
 
@@ -709,6 +821,60 @@ void USpaceMMOStationOverlay::OpenOrderPrompt(const bool bSell, const int32 Star
 void USpaceMMOStationOverlay::CancelOrder()
 {
 	PendingOrderItemDefId = 0;
+	PendingOrderStyle.Reset();
+
+	ShowPromptStyle(false, 0);
+}
+
+void USpaceMMOStationOverlay::StepPromptStyle(const int32 Direction)
+{
+	const USpaceMMOBackendClient* Client = MarketClient();
+
+	const ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer());
+
+	// A sell prompt only: a buy has no style to step through.
+	if (Client == nullptr || Controller == nullptr || PendingOrderItemDefId == 0 || !PendingOrderStyle.IsSet())
+	{
+		return;
+	}
+
+	const TOptional<EBackendItemStyle> Next = FSpaceMMOStationWork::StepStyle(
+		SellableStyles(Client->GetInventory(), PendingOrderItemDefId, Controller->DockedStationId()),
+		PendingOrderStyle,
+		Direction);
+
+	// Asked again rather than adjusted: the amount the prompt offers is that style's, and the prompt's
+	// graph is the Blueprint's, so the one way to tell it is the way it was told the first time.
+	OpenOrderPrompt(true, 0, Next);
+}
+
+void USpaceMMOStationOverlay::ShowPromptStyle(const bool bSell, const int32 StylesHeld)
+{
+	const bool bShown = bSell && PendingOrderStyle.IsSet()
+		&& (SpaceMMO::ItemStyleTag::IsShown(PendingOrderStyle.GetValue()) || StylesHeld > 1);
+
+	if (PromptStyleBox != nullptr)
+	{
+		PromptStyleBox->SetVisibility(bShown ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	}
+
+	SpaceMMO::ItemStyleTag::Apply(PromptStyleTag, PendingOrderStyle.Get(EBackendItemStyle::Common));
+
+	// Common held beside a world's style still needs saying, or the line would be two arrows and no tag.
+	if (PromptStyleTag != nullptr && bShown && !SpaceMMO::ItemStyleTag::IsShown(PendingOrderStyle.GetValue()))
+	{
+		PromptStyleTag->SetText(FText::FromString(TEXT("common")));
+		SpaceMMO::PanelLook::Apply(PromptStyleTag, SpaceMMO::Style::ETextRole::Note);
+		PromptStyleTag->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
+
+	for (UButton* Arrow : {PromptStylePrevious.Get(), PromptStyleNext.Get()})
+	{
+		if (Arrow != nullptr)
+		{
+			Arrow->SetVisibility(bShown && StylesHeld > 1 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		}
+	}
 }
 
 FString USpaceMMOStationOverlay::CreditsText(const int64 MinorUnits)
@@ -751,6 +917,7 @@ void USpaceMMOStationOverlay::ConfirmOrder(
 	const bool bSell, const int64 PriceMinorUnits, const int32 Quantity)
 {
 	const int32 ItemDefId = PendingOrderItemDefId;
+	const TOptional<EBackendItemStyle> Style = PendingOrderStyle;
 
 	// Cleared first, so a prompt that somehow answers twice cannot place two orders.
 	CancelOrder();
@@ -770,13 +937,15 @@ void USpaceMMOStationOverlay::ConfirmOrder(
 	// refused after the player had already been told it was placed.
 	const int64 Price = FMath::Max(PriceMinorUnits, 1LL);
 
-	Client->PlaceOrder(
+	// The style the prompt showed, so the order sells what its tag said (task 187).
+	Client->PlaceOrderInStyle(
 		Controller->GetCharacterId(),
 		Controller->DockedStationId(),
 		ItemDefId,
 		bSell ? EBackendOrderSide::Sell : EBackendOrderSide::Buy,
 		Price,
-		Quantity);
+		Quantity,
+		bSell ? Style : TOptional<EBackendItemStyle>());
 
 	Controller->ShowTransientMessage(
 		FString::Printf(
@@ -826,6 +995,29 @@ void USpaceMMOStationOverlay::NativeConstruct()
 	{
 		StartButton->OnClicked.AddUniqueDynamic(this, &USpaceMMOStationOverlay::StartSelected);
 	}
+
+	if (PromptStylePrevious != nullptr)
+	{
+		PromptStylePrevious->OnClicked.AddUniqueDynamic(this, &USpaceMMOStationOverlay::PreviousPromptStyle);
+	}
+
+	if (PromptStyleNext != nullptr)
+	{
+		PromptStyleNext->OnClicked.AddUniqueDynamic(this, &USpaceMMOStationOverlay::NextPromptStyle);
+	}
+
+	// Hidden until a sell prompt has a style to show.
+	ShowPromptStyle(false, 0);
+}
+
+void USpaceMMOStationOverlay::PreviousPromptStyle()
+{
+	StepPromptStyle(-1);
+}
+
+void USpaceMMOStationOverlay::NextPromptStyle()
+{
+	StepPromptStyle(1);
 }
 
 void USpaceMMOStationOverlay::FillStationWork(const ASpaceMMOPlayerController& Controller)
@@ -866,7 +1058,10 @@ void USpaceMMOStationOverlay::FillStationWork(const ASpaceMMOPlayerController& C
 
 			for (const FSpaceMMORecipeInputText& Input : Row.Inputs)
 			{
-				Signature += FString::Printf(TEXT("%s%d/%d"), *Input.Name, Input.Held, Input.Needed);
+				// The style and whether it can be picked are part of what the line says (task 187): a pick
+				// that leaves the counts unchanged must still redraw the tag.
+				Signature += FString::Printf(TEXT("%s%d/%d%s%d%s"), *Input.Name, Input.Held, Input.Needed,
+					Input.bMain ? TEXT("m") : TEXT(""), static_cast<int32>(Input.Style), Input.bCanPick ? TEXT("p") : TEXT(""));
 			}
 
 			Signature += TEXT("|");
@@ -876,8 +1071,8 @@ void USpaceMMOStationOverlay::FillStationWork(const ASpaceMMOPlayerController& C
 
 		for (const FSpaceMMOJobRowText& Row : Jobs)
 		{
-			Signature += FString::Printf(TEXT("%lld%s%s%d|"), Row.JobId, *Row.Remaining, Row.bReady ? TEXT("R") : TEXT(""),
-				FMath::RoundToInt(Row.Progress * 100.0f));
+			Signature += FString::Printf(TEXT("%lld%s%s%d%d|"), Row.JobId, *Row.Remaining, Row.bReady ? TEXT("R") : TEXT(""),
+				FMath::RoundToInt(Row.Progress * 100.0f), static_cast<int32>(Row.Style));
 		}
 
 		if (Signature != IndustrySignature)
@@ -1038,6 +1233,14 @@ void USpaceMMOStationOverlay::SelectRecipe(const int32 Index)
 	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
 	{
 		Controller->SelectRecipe(Index);
+	}
+}
+
+void USpaceMMOStationOverlay::StepMainInputStyle(const int32 Direction)
+{
+	if (ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(GetOwningPlayer()))
+	{
+		Controller->StepMainInputStyle(Direction);
 	}
 }
 
@@ -1286,7 +1489,8 @@ void USpaceMMOStationOverlay::NativeTick(const FGeometry& Geometry, const float 
 
 			for (const FSpaceMMOMyOrderRowText& Row : Rows)
 			{
-				Signature += Row.Side + Row.Item + Row.Quantity + Row.Price + Row.Station + TEXT("|");
+				Signature += Row.Side + Row.Item + Row.Quantity + Row.Price + Row.Station
+					+ FString::FromInt(static_cast<int32>(Row.Style)) + TEXT("|");
 			}
 
 			if (Signature != MyOrdersSignature)

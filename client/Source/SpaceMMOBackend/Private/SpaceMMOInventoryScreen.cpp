@@ -5,6 +5,7 @@
 #include "Engine/GameInstance.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMOItemStyleTag.h"
 #include "SpaceMMOPlayerController.h"
 
 namespace
@@ -56,6 +57,8 @@ void USpaceMMOInventoryRow::SetLine(const FSpaceMMOInventoryLine& InLine)
 
 	Set(LabelText, Line.Label);
 	Set(AmountText, Line.Amount);
+
+	SpaceMMO::ItemStyleTag::Apply(StyleTagText, Line.Style);
 
 	bIsHeading = Line.bIsHeading;
 	bReachable = Line.bReachable;
@@ -233,6 +236,7 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 		Line.InventoryId = Stack.InventoryId;
 		Line.ItemDefId = Stack.ItemDefId;
 		Line.Quantity = Stack.Quantity;
+		Line.Style = Stack.Style;
 
 		Group.Lines.Add(Line);
 	}
@@ -249,6 +253,7 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 		Line.InventoryId = Instance.InventoryId;
 		Line.InstanceId = Instance.Id;
 		Line.Quantity = 1;
+		Line.Style = Instance.Style;
 
 		Group.Lines.Add(Line);
 	}
@@ -270,10 +275,16 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 	{
 		// Sorted here rather than trusted from the response: JSON array order is whatever the query
 		// returned, and a list that reorders itself between refreshes is unreadable precisely when
-		// it is being watched. Condition breaks ties so two of the same tool can be told apart.
+		// it is being watched. Style breaks ties first, so Terran plate always sits above Martian plate
+		// (task 187), then condition, so two of the same tool can be told apart.
 		Group.Lines.Sort([](const FSpaceMMOInventoryLine& A, const FSpaceMMOInventoryLine& B)
 		{
-			return A.Label != B.Label ? A.Label < B.Label : A.Amount < B.Amount;
+			if (A.Label != B.Label)
+			{
+				return A.Label < B.Label;
+			}
+
+			return A.Style != B.Style ? A.Style < B.Style : A.Amount < B.Amount;
 		});
 
 		FSpaceMMOInventoryLine Heading;
@@ -472,6 +483,7 @@ void USpaceMMOInventoryScreen::ConfirmQuantity(const int32 Quantity)
 		Destination,
 		Source.ItemDefId,
 		Moving,
+		Source.Style,
 		OnFailure);
 
 	Controller->ShowTransientMessage(

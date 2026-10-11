@@ -264,6 +264,14 @@ struct SPACEMMOBACKEND_API FSpaceMMOMyOrderRowText
 	/** Whether it rests somewhere other than here, for marking the row. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bElsewhere = false;
+
+	/** A sell order's goods' style, for its tag (task 187). Common, and untagged, on a buy. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	EBackendItemStyle Style = EBackendItemStyle::Common;
+
+	/** True on a buy order, which takes any style and says so where a sell's tag would be. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bAnyStyle = false;
 };
 
 /** One owned hull's widget. Its own, because each row carries a summon. */
@@ -349,6 +357,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> StationText;
+
+	/** The sell's style tag, or "any style" on a buy (task 187). Added by SpaceMMOStylePanels. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StyleTagText;
 
 private:
 	FSpaceMMOMyOrderRowText Row;
@@ -469,6 +481,28 @@ public:
 	static FString BuildMyOrdersFooter(const TArray<FBackendMyOrder>& Orders);
 
 	/**
+	 * The styles of an item a sell here could take its goods from (task 187): this station's hangar and
+	 * the player's pockets, which the server tops up from, in style order. What the prompt's ◂ ▸ step
+	 * through.
+	 */
+	static TArray<EBackendItemStyle> SellableStyles(
+		const TArray<FBackendInventoryItem>& Inventory, int32 ItemDefId, int32 StationId);
+
+	/** How much of one style of an item a sell here could take: this hangar and the pockets. */
+	static int32 SellableQuantity(
+		const TArray<FBackendInventoryItem>& Inventory, int32 ItemDefId, int32 StationId, EBackendItemStyle Style);
+
+	/**
+	 * Which style a sell prompt opens on: the dragged stack's, or else the style held most of here, ties
+	 * in style order -- the server's own default. Unset when none is held.
+	 */
+	static TOptional<EBackendItemStyle> OpeningSellStyle(
+		const TArray<FBackendInventoryItem>& Inventory,
+		int32 ItemDefId,
+		int32 StationId,
+		TOptional<EBackendItemStyle> Dragged);
+
+	/**
 	 * Words the book. Pure, static and tested without a widget or a server.
 	 *
 	 * Asks cheapest first and bids richest first: each side leads with the price nearest the spread,
@@ -510,6 +544,9 @@ public:
 
 	/** Industry and Quests, from their rows' clicks and buttons. Each forwards to the controller. */
 	void SelectRecipe(int32 Index);
+
+	/** The selected recipe's main input's ◂ (-1) and ▸ (+1): which style to make it from (task 187). */
+	void StepMainInputStyle(int32 Direction);
 	void ClaimJob(int64 JobId);
 	void HandInQuest(const FString& QuestKey, const FString& QuestName);
 	void AcceptQuest(const FString& QuestKey);
@@ -743,7 +780,29 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> StartText;
 
+	/**
+	 * The order prompt's style line (task 187): the tag of the goods a sell takes, with ◂ ▸ when more
+	 * than one style is held. Hidden on a buy, which takes any. Added by SpaceMMOStylePanels.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UWidget> PromptStyleBox;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> PromptStyleTag;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UButton> PromptStylePrevious;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UButton> PromptStyleNext;
+
 	virtual void NativeConstruct() override;
+
+	UFUNCTION()
+	void PreviousPromptStyle();
+
+	UFUNCTION()
+	void NextPromptStyle();
 
 	UFUNCTION()
 	void FewerRuns();
@@ -755,8 +814,18 @@ protected:
 	void StartSelected();
 
 private:
-	/** Opens the order prompt, starting on a given amount, or on everything when that is zero. */
-	void OpenOrderPrompt(bool bSell, int32 StartingQuantity);
+	/**
+	 * Opens the order prompt, starting on a given amount, or on everything when that is zero. A sell
+	 * opens on the given style -- the dragged stack's -- or the style held most of (task 187).
+	 */
+	void OpenOrderPrompt(
+		bool bSell, int32 StartingQuantity, TOptional<EBackendItemStyle> Style = TOptional<EBackendItemStyle>());
+
+	/** Moves the sell prompt to the next or previous style held, and asks again with its amounts. */
+	void StepPromptStyle(int32 Direction);
+
+	/** Shows the prompt's style line for the order waiting on it. */
+	void ShowPromptStyle(bool bSell, int32 StylesHeld);
 
 	/** The backend subsystem, or null. */
 	class USpaceMMOBackendClient* MarketClient() const;
@@ -803,6 +872,9 @@ private:
 
 	/** The order waiting on a price and an amount. */
 	int32 PendingOrderItemDefId = 0;
+
+	/** The style of the goods a waiting sell takes (task 187). Unset on a buy, or when none is held. */
+	TOptional<EBackendItemStyle> PendingOrderStyle;
 
 	/**
 	 * Which station the catalogue was asked for, or 0.

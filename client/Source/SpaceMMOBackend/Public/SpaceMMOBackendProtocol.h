@@ -95,14 +95,20 @@ public:
 	/** Parses one station's order book for one item. */
 	static bool ParseBook(const FString& Json, TArray<FBackendBookEntry>& OutEntries);
 
-	/** JSON body for placing an order. Prices are minor units, never a decimal. */
+	/**
+	 * JSON body for placing an order. Prices are minor units, never a decimal.
+	 *
+	 * A sell order may name the style of the goods it sells (task 187); unset, the server sells the style
+	 * held most of. A buy order takes any and never sends one.
+	 */
 	static FString MakePlaceOrderBody(
 		int32 CharacterId,
 		int32 StationId,
 		int32 ItemDefId,
 		EBackendOrderSide Side,
 		int64 LimitPriceMinorUnits,
-		int32 Quantity);
+		int32 Quantity,
+		TOptional<EBackendItemStyle> Style = TOptional<EBackendItemStyle>());
 
 	/** Parses the quest journal, including each quest's active step. */
 	static bool ParseJournal(const FString& Json, TArray<FBackendJournalEntry>& OutEntries);
@@ -113,12 +119,24 @@ public:
 	/** JSON body for accepting a quest. */
 	static FString MakeAcceptQuestBody(int32 CharacterId, const FString& QuestKey);
 
-	/** JSON body for starting a job. */
-	static FString MakeStartJobBody(int32 CharacterId, int32 RecipeId, int32 StationId, int32 Runs);
+	/**
+	 * JSON body for starting a job, with the style of the main input to make it from when the panel's
+	 * picker chose one (task 187). Unset leaves the server to take the style held most of.
+	 */
+	static FString MakeStartJobBody(
+		int32 CharacterId,
+		int32 RecipeId,
+		int32 StationId,
+		int32 Runs,
+		TOptional<EBackendItemStyle> MainInputStyle = TOptional<EBackendItemStyle>());
 
-	/** Moving a quantity of a stackable item between two of one character's containers. */
+	/** Moving a quantity of a stackable item, of one style, between two of one character's containers. */
 	static FString MakeTransferBody(
-		int64 FromInventoryId, int64 ToInventoryId, int32 ItemDefId, int32 Quantity);
+		int64 FromInventoryId,
+		int64 ToInventoryId,
+		int32 ItemDefId,
+		int32 Quantity,
+		EBackendItemStyle Style = EBackendItemStyle::Common);
 
 	/**
 	 * Moving one non-stackable item.

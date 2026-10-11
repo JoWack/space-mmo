@@ -621,7 +621,14 @@ namespace SpaceMMOBuildMenus
 		UHorizontalBox* Top = B.Make<UHorizontalBox>(TEXT("TopLine"));
 		AddV(Body, Top);
 
-		AddH(Top, B.Text(TEXT("TitleText"), TEXT("Ferrite Plate ×2"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), true);
+		// Name, style tag, count, as Joe approved on 10 October: "Crude Thruster [TER] ×1" (task 187). The
+		// spacer takes the spare width the title used to, so the status and Claim stay at the right.
+		AddH(Top, B.Text(TEXT("TitleText"), TEXT("Structural Plate"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), false);
+		AddH(Top, B.Text(TEXT("StyleTagText"), TEXT("[TER]"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), false,
+			FMargin(10, 0, 0, 0));
+		AddH(Top, B.Text(TEXT("CountText"), TEXT("×4"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), false,
+			FMargin(10, 0, 0, 0));
+		AddH(Top, B.Make<USpacer>(TEXT("TitleGap")), true);
 		AddH(Top, B.Text(TEXT("StatusText"), TEXT("1 m 20 s"), 19.0f, TextSecondary, TEXT("Regular"), 0, true), false);
 		AddH(Top, SmallButton(B, TEXT("ClaimButton"), TEXT("ClaimText"), TEXT("Claim")), false, FMargin(16, 0, 0, 0));
 

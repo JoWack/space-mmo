@@ -8951,7 +8951,7 @@ How it would fail:
 
 ## 187 — A style tag on crafted goods
 
-**Pending; to follow 145 and come before 178 and 179** (Joe, 9 October). Belongs to **M4**, which names
+**Built 10 October; waiting on Joe's playtest.** Asked for after 145 and before 178 and 179 (Joe, 9 October). Belongs to **M4**, which names
 "gear that matters".
 
 ADR-0008: crafted goods are one `item_def` with a style tag, and "`inventory_items` is currently keyed by
@@ -9058,8 +9058,75 @@ validator's homeworld and single-input rules, and the API reporting a raw stack'
 integration tests (`SpaceMMO.Data.Tests/Industry/ItemStyleTests.cs`) load the shipped pack and walk
 each race from its own ore to a shuttle in its own style.
 
-**Not yet:** the client. Nothing shows a tag and nothing sends a style, so until it lands a sell or a
-job start takes the style held most of, and two styles of plate read as two identical rows.
+### The client, built 10 October
+
+- **Wire.** `EBackendItemStyle` mirrors the server's numbers (pinned by `WireContractTests`). Stacks,
+  instances, jobs (`outputStyle`), my orders, recipes (`mainInputKey`) and recipe inputs (`style`, a raw
+  material's world, so a refine is tagged before any ore is held: one more field on
+  `/industry/recipes`) are read; transfers, sells and job starts send it. A sell or job start with no
+  style chosen sends none and the server takes the style held most of; taking a bid off the book does that.
+- **The tag** (`SpaceMMOItemStyleTag`): `[TER]` `[MAR]` `[VER]` `[GRM]` in the approved colours, nothing
+  for Common. Inventory rows show it in a column before the amount; job rows read "Crude Thruster [TER] ×1";
+  my orders show it before the quantity, or "any style" on a buy; the Start button's label carries it
+  as plain text, because a button's label is one text.
+- **Industry picker.** The selected recipe's main input reads "Structural Plate [MAR] ◂ ▸ 6/2" when
+  more than one style is in this hangar; its count and "most you can make" are of that style only. The pick
+  lives on the controller, is reset by choosing another recipe, and falls back to the style held most of
+  when it is no longer held. Start sends the style the bar resolved.
+- **Market picker.** A dragged stack opens the sell prompt on its own style; the Sell button opens on the
+  style held most of here and in the pockets. `◂ ▸` beside the title step through what is held and ask
+  the prompt again with that style's amount, which also resets the typed price.
+- **Widget parts** come from the commandlets, as the rest of the panels do: `SpaceMMOStylePanels` adds
+  `StyleTagText` to `WBP_InventoryRow` and `WBP_MyOrderRow` and the prompt's `PromptStyleBox`;
+  `SpaceMMOBuildMenus -Rebuild=WBP_JobRow` rebuilds the job row with `StyleTagText` and `CountText`.
+
+**Shown to no one yet, so not built:** a tag on the Ships tab's hulls, and the style of each ask on the
+book. A buyer cannot see which style an ask holds before taking it, which is what "a buyer takes any"
+means today; whether the book should say is Joe's call.
+
+### What was verified, and how
+
+- **Client: 305 tests, `PASS`**, after a build reporting `Result: Succeeded` from `UnrealEngineSource`.
+  Eight new in `SpaceMMOItemStyleTests.cpp`, built on `/industry/recipes` **as the seeded API answered it**.
+  Three were seen red against three planted faults (the stack's style not parsed, the pick ignored, the
+  dragged style ignored), each failing only its own test.
+- **The first "restored" run lied.** The faults were planted by copying files aside and moved back with
+  `mv`, which kept the copies' older timestamps, so the next build said `Target is up to date`, compiled
+  nothing, and the old faulty binary failed the same three tests. Touching the files fixed it. A build's
+  `Succeeded` says nothing about *what* it built; read the compile lines.
+- **Widgets:** `SpaceMMOBuildMenus -Rebuild=WBP_JobRow` (7 bound parts, 0 problems) and
+  `SpaceMMOStylePanels` (0 problems), checked by each asset's timestamp moving. `SpaceMMOStylePanels` also
+  re-saved four unrelated assets with changes (deposit prompt, both readouts, login screen); they were
+  reverted, not committed, and are not explained.
+- **API 100, data 242, domain 505**, unchanged since the server commit apart from the recipe input's
+  style. **The dev database is migrated and seeded** (`ItemStyles`). **The dedicated server was rebuilt and
+  re-cooked**: `SpaceMMOServer`, `UnrealPak` and `ShaderCompileWorker` each `Result: Succeeded`, then
+  `BuildCookRun` `BUILD SUCCESSFUL`.
+
+**Not verified by anything automated:** anything drawn. No test renders a row, so every look below is
+for the playtest.
+
+### What a playtest has to say
+
+**Restart the API first**; one started before today knows no styles. Existing crafted goods are Common.
+
+- **Inventory (`I`)**: ores carry their world's tag ("Ferrite Ore [TER]"); scrap, the laser and any plate
+  made before today carry none. Refine plate at home: it arrives tagged with your world.
+- **Industry**: select the thruster holding two styles of plate in this hangar. The plate line reads
+  "Structural Plate [TER] ◂ ▸ 2/2"; ◂ ▸ change the tag and the count, Start's label follows
+  ("Start Crude Thruster [MAR] ×1"), and the job row reads "Crude Thruster [MAR] ×1". The thruster that
+  comes out is that style, and only that style of plate was used.
+- **Market**: drag a Martian stack onto the market: the prompt's title line shows [MAR]. Sell with the
+  button holding two styles: ◂ ▸ beside the title step between them and the amount follows. My Orders
+  shows the sell's tag, and "any style" on a buy.
+
+How it would fail:
+- **The arrows draw as empty boxes.** The font lacks ◂ ▸; swap the glyphs.
+- **No tags anywhere, and two identical "Structural Plate" rows.** The API predates today, or the client
+  binary does. Restart the API; check the build.
+- **Tags on rows, but no ◂ ▸ on the sell prompt.** `PromptStyleBox` did not land where the title is; the
+  commandlet logged where it looked.
+- **Picking a style in the sell prompt clears the typed price.** Expected: the prompt is asked again.
 
 ## 188 — Content removed from the pack lives on in the database
 

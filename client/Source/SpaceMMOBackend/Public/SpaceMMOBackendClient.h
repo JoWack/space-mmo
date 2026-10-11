@@ -376,6 +376,13 @@ public:
 	void StartJob(int32 CharacterId, int32 RecipeId, int32 StationId, int32 Runs);
 
 	/**
+	 * Starts a job making its main input from one style, as the industry panel's picker chose (task 187).
+	 * Unset leaves the server to take the style held most of, which is what StartJob does.
+	 */
+	void StartJobInStyle(
+		int32 CharacterId, int32 RecipeId, int32 StationId, int32 Runs, TOptional<EBackendItemStyle> MainInputStyle);
+
+	/**
 	 * Moves goods between two of this character's own containers.
 	 *
 	 * <strong>Every rule lives on the server.</strong> Ownership of both containers, presence at any
@@ -393,6 +400,7 @@ public:
 		int64 ToInventoryId,
 		int32 ItemDefId,
 		int32 Quantity,
+		EBackendItemStyle Style,
 		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
 
 	/** Moves one non-stackable item. It carries its own condition, so it moves whole. */
@@ -451,6 +459,19 @@ public:
 		EBackendOrderSide Side,
 		int64 LimitPriceMinorUnits,
 		int32 Quantity);
+
+	/**
+	 * Places a sell order for one style of the goods, as the order prompt chose (task 187). Unset, or on
+	 * a buy, it is PlaceOrder: the server sells the style held most of, and a buy takes any.
+	 */
+	void PlaceOrderInStyle(
+		int32 CharacterId,
+		int32 StationId,
+		int32 ItemDefId,
+		EBackendOrderSide Side,
+		int64 LimitPriceMinorUnits,
+		int32 Quantity,
+		TOptional<EBackendItemStyle> Style);
 
 	/**
 	 * Loads every order this character has resting, at every station.

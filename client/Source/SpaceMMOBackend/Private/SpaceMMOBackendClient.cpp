@@ -787,6 +787,7 @@ void USpaceMMOBackendClient::TransferStack(
 	const int64 ToInventoryId,
 	const int32 ItemDefId,
 	const int32 Quantity,
+	const EBackendItemStyle Style,
 	TFunction<void(const FBackendFailure&)> OnFailure)
 {
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
@@ -795,7 +796,7 @@ void USpaceMMOBackendClient::TransferStack(
 		TEXT("POST"),
 		FString::Printf(TEXT("/characters/%d/inventory/transfer"), CharacterId),
 		FSpaceMMOBackendProtocol::MakeTransferBody(
-			FromInventoryId, ToInventoryId, ItemDefId, Quantity),
+			FromInventoryId, ToInventoryId, ItemDefId, Quantity, Style),
 		true,
 		[WeakThis, CharacterId](const FString&)
 		{
@@ -838,12 +839,22 @@ void USpaceMMOBackendClient::TransferInstance(
 void USpaceMMOBackendClient::StartJob(
 	const int32 CharacterId, const int32 RecipeId, const int32 StationId, const int32 Runs)
 {
+	StartJobInStyle(CharacterId, RecipeId, StationId, Runs, TOptional<EBackendItemStyle>());
+}
+
+void USpaceMMOBackendClient::StartJobInStyle(
+	const int32 CharacterId,
+	const int32 RecipeId,
+	const int32 StationId,
+	const int32 Runs,
+	const TOptional<EBackendItemStyle> MainInputStyle)
+{
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
 
 	Send(
 		TEXT("POST"),
 		TEXT("/industry/jobs"),
-		FSpaceMMOBackendProtocol::MakeStartJobBody(CharacterId, RecipeId, StationId, Runs),
+		FSpaceMMOBackendProtocol::MakeStartJobBody(CharacterId, RecipeId, StationId, Runs, MainInputStyle),
 		true,
 		[WeakThis, CharacterId](const FString&)
 		{
@@ -1014,13 +1025,26 @@ void USpaceMMOBackendClient::PlaceOrder(
 	const int64 LimitPriceMinorUnits,
 	const int32 Quantity)
 {
+	PlaceOrderInStyle(
+		CharacterId, StationId, ItemDefId, Side, LimitPriceMinorUnits, Quantity, TOptional<EBackendItemStyle>());
+}
+
+void USpaceMMOBackendClient::PlaceOrderInStyle(
+	const int32 CharacterId,
+	const int32 StationId,
+	const int32 ItemDefId,
+	const EBackendOrderSide Side,
+	const int64 LimitPriceMinorUnits,
+	const int32 Quantity,
+	const TOptional<EBackendItemStyle> Style)
+{
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
 
 	Send(
 		TEXT("POST"),
 		TEXT("/market/orders"),
 		FSpaceMMOBackendProtocol::MakePlaceOrderBody(
-			CharacterId, StationId, ItemDefId, Side, LimitPriceMinorUnits, Quantity),
+			CharacterId, StationId, ItemDefId, Side, LimitPriceMinorUnits, Quantity, Style),
 		true,
 		[WeakThis, CharacterId, StationId, ItemDefId, Side](const FString&)
 		{

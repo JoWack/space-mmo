@@ -270,6 +270,23 @@ enum class EBackendInventoryKind : uint8
 };
 
 /**
+ * Which world's look a good has, mirroring ItemStyle on the server (task 187).
+ *
+ * Crafted goods take the style of their recipe's main input; a raw material's is its world's; anything
+ * made from shared materials alone is Common, which shows no tag. The numbers are the wire contract,
+ * pinned by the server's WireContractTests.
+ */
+UENUM(BlueprintType)
+enum class EBackendItemStyle : uint8
+{
+	Common = 0,
+	Terran = 1,
+	Martian = 2,
+	Verdant = 3,
+	Grimhold = 4,
+};
+
+/**
  * One container a character owns, whether or not anything is in it.
  *
  * Listed separately from contents because contents cannot describe an empty container, and a
@@ -337,6 +354,13 @@ struct SPACEMMOBACKEND_API FBackendInventoryItem
 	/** Which station holds it, or zero for anything not at one. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 StationId = 0;
+
+	/**
+	 * Which world's look these goods have (task 187). Part of what a stack is: one container holds
+	 * Terran and Martian plate as two stacks. For a raw material, the world it comes from.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendItemStyle Style = EBackendItemStyle::Common;
 };
 
 /**
@@ -545,6 +569,10 @@ struct SPACEMMOBACKEND_API FBackendMyOrder
 	/** Goods held against it. Zero for a buy order. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
 	int32 ReservedQuantity = 0;
+
+	/** A sell order's goods' style (task 187). A buy order takes any, and leaves this Common. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Market")
+	EBackendItemStyle Style = EBackendItemStyle::Common;
 };
 
 /** One material a recipe consumes, per run. */
@@ -564,6 +592,10 @@ struct SPACEMMOBACKEND_API FBackendRecipeInput
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 Quantity = 0;
+
+	/** A raw material's world, so a refine's ore is tagged before any is held. Common for anything crafted. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendItemStyle Style = EBackendItemStyle::Common;
 };
 
 /**
@@ -612,6 +644,13 @@ struct SPACEMMOBACKEND_API FBackendRecipe
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	TArray<FBackendRecipeInput> Inputs;
+
+	/**
+	 * The input whose style the output takes, or empty for a recipe that makes Common goods (task 187).
+	 * The one input the industry panel offers a style picker on.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString MainInputKey;
 };
 
 /**
@@ -647,6 +686,10 @@ struct SPACEMMOBACKEND_API FBackendIndustryJob
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	int32 SecondsRemaining = 0;
+
+	/** The style the output will have, decided when the job started (task 187). */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendItemStyle OutputStyle = EBackendItemStyle::Common;
 };
 
 /**
@@ -1060,6 +1103,10 @@ struct SPACEMMOBACKEND_API FBackendItemInstance
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	EBackendItemCategory Category = EBackendItemCategory::Raw;
+
+	/** Which world's look it has, decided when it was made (task 187). */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendItemStyle Style = EBackendItemStyle::Common;
 };
 
 /**

@@ -52,6 +52,13 @@ struct SPACEMMOBACKEND_API FSpaceMMOInventoryLine
 	bool bIsHeading = false;
 
 	/**
+	 * Which world's look the goods have (task 187): the tag after the name, and which stack a move or a
+	 * sale takes from. Common on a heading, and on anything made from shared materials.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	EBackendItemStyle Style = EBackendItemStyle::Common;
+
+	/**
 	 * Whether these goods can actually be reached from where the player is.
 	 *
 	 * False for a hangar at a station they are not docked at. Those are listed and dimmed rather
@@ -149,6 +156,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UTextBlock> AmountText;
+
+	/** The coloured style tag after the name (task 187). Added by SpaceMMOStylePanels. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StyleTagText;
 
 private:
 	FSpaceMMOInventoryLine Line;

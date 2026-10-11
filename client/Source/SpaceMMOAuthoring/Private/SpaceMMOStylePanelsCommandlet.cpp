@@ -544,6 +544,160 @@ namespace SpaceMMOStylePanels
 		}
 	}
 
+	/**
+	 * A style tag after a part of a row (task 187): the coloured [TER] the row fills in at run time. Made
+	 * once, right after the part in its horizontal box, so it sits between the name and the figures.
+	 */
+	void TagAfter(FEdit& E, UWidget* Part, const TCHAR* Name, const float MinWidth)
+	{
+		bool bHad = false;
+		UTextBlock* Tag = E.Make<UTextBlock>(Name, true, &bHad);
+
+		if (!bHad)
+		{
+			UHorizontalBox* Row = Part != nullptr ? Cast<UHorizontalBox>(Part->GetParent()) : nullptr;
+
+			if (Row == nullptr)
+			{
+				UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Panels: %s: nowhere to put %s; its name is not in a horizontal box."),
+					*E.Blueprint->GetName(), Name);
+
+				++E.Problems;
+
+				return;
+			}
+
+			Row->InsertChildAt(Row->GetChildIndex(Part) + 1, Tag);
+		}
+
+		if (UHorizontalBoxSlot* At = Cast<UHorizontalBoxSlot>(Tag->Slot))
+		{
+			At->SetSize(FSlateChildSize(ESlateSizeRule::Automatic));
+			At->SetPadding(FMargin(12.0f, 0.0f, 16.0f, 0.0f));
+			At->SetVerticalAlignment(VAlign_Center);
+		}
+
+		// Empty in the designer: the row writes it, and a Common good shows none.
+		Tag->SetText(FText::GetEmpty());
+		Text(Tag, ETextRole::Note);
+		Tag->SetMinDesiredWidth(MinWidth);
+	}
+
+	/**
+	 * The order prompt's style line (task 187): the tag of the goods a sell takes, then ◂ ▸, on the
+	 * title's line as Joe approved -- "SELL Structural Plate [TER] ◂ ▸". The overlay shows it on a sell
+	 * and fills it in; the prompt's graph is untouched.
+	 */
+	void PromptStyleLine(FEdit& E)
+	{
+		UTextBlock* Title = E.Need<UTextBlock>(TEXT("TitleText"));
+
+		if (Title == nullptr)
+		{
+			return;
+		}
+
+		bool bHad = false;
+		UHorizontalBox* Box = E.Make<UHorizontalBox>(TEXT("PromptStyleBox"), true, &bHad);
+
+		if (!bHad)
+		{
+			UPanelWidget* Parent = Title->GetParent();
+
+			if (UHorizontalBox* Line = Cast<UHorizontalBox>(Parent))
+			{
+				Line->InsertChildAt(Line->GetChildIndex(Title) + 1, Box);
+			}
+			else if (UVerticalBox* Column = Cast<UVerticalBox>(Parent))
+			{
+				// The title stands alone in a column: it moves into a line of its own where it stood,
+				// keeping its place's padding and alignment, and the style box goes beside it.
+				const UVerticalBoxSlot* Was = Cast<UVerticalBoxSlot>(Title->Slot);
+				const FMargin Padding = Was != nullptr ? Was->GetPadding() : FMargin();
+				const EHorizontalAlignment H = Was != nullptr ? Was->GetHorizontalAlignment() : HAlign_Fill;
+				const EVerticalAlignment V = Was != nullptr ? Was->GetVerticalAlignment() : VAlign_Fill;
+				const int32 Index = Column->GetChildIndex(Title);
+
+				UHorizontalBox* TitleLine = E.Make<UHorizontalBox>(TEXT("PromptTitleLine"), false);
+
+				Column->RemoveChild(Title);
+
+				if (UVerticalBoxSlot* Now = Cast<UVerticalBoxSlot>(Column->InsertChildAt(Index, TitleLine)))
+				{
+					Now->SetPadding(Padding);
+					Now->SetHorizontalAlignment(H);
+					Now->SetVerticalAlignment(V);
+				}
+
+				TitleLine->AddChildToHorizontalBox(Title)->SetVerticalAlignment(VAlign_Center);
+				TitleLine->AddChildToHorizontalBox(Box);
+			}
+			else
+			{
+				UE_LOG(LogSpaceMMOAuthoring, Error,
+					TEXT("Panels: the order prompt's TitleText is in a %s; the style line needs a horizontal or vertical box."),
+					Parent != nullptr ? *Parent->GetClass()->GetName() : TEXT("nothing"));
+
+				++E.Problems;
+
+				return;
+			}
+
+			UTextBlock* Tag = E.Make<UTextBlock>(TEXT("PromptStyleTag"), true);
+			Box->AddChildToHorizontalBox(Tag);
+
+			auto Arrow = [&E, Box](const TCHAR* Name, const TCHAR* LabelName, const TCHAR* Glyph)
+			{
+				UButton* Made = E.Make<UButton>(Name, true);
+				UTextBlock* Label = E.Make<UTextBlock>(LabelName, false);
+				Label->SetText(FText::FromString(Glyph));
+				Made->SetContent(Label);
+				Box->AddChildToHorizontalBox(Made);
+			};
+
+			Arrow(TEXT("PromptStylePrevious"), TEXT("PromptStylePreviousText"), TEXT("◂"));
+			Arrow(TEXT("PromptStyleNext"), TEXT("PromptStyleNextText"), TEXT("▸"));
+		}
+
+		if (UHorizontalBoxSlot* At = Cast<UHorizontalBoxSlot>(Box->Slot))
+		{
+			At->SetVerticalAlignment(VAlign_Center);
+			At->SetPadding(FMargin(14.0f, 0.0f, 0.0f, 0.0f));
+		}
+
+		Slots(Box, FMargin(0.0f, 0.0f, 6.0f, 0.0f));
+
+		for (int32 Index = 0; Index < Box->GetChildrenCount(); ++Index)
+		{
+			if (UHorizontalBoxSlot* At = Cast<UHorizontalBoxSlot>(Box->GetChildAt(Index)->Slot))
+			{
+				At->SetVerticalAlignment(VAlign_Center);
+			}
+		}
+
+		if (UTextBlock* Tag = E.Find<UTextBlock>(TEXT("PromptStyleTag")))
+		{
+			Tag->SetText(FText::GetEmpty());
+			Text(Tag, ETextRole::Note);
+		}
+
+		for (const TCHAR* Name : {TEXT("PromptStylePrevious"), TEXT("PromptStyleNext")})
+		{
+			if (UButton* Made = E.Find<UButton>(Name))
+			{
+				Made->SetStyle(StepperButtonStyle());
+
+				if (UTextBlock* Label = Cast<UTextBlock>(Made->GetChildAt(0)))
+				{
+					Text(Label, ETextRole::Note);
+				}
+			}
+		}
+
+		// Hidden in the designer: the overlay shows it on a sell that has a style to show.
+		Box->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
 	// ------------------------------------------------------------------------------------------------
 	// Each Blueprint
 
@@ -594,6 +748,9 @@ namespace SpaceMMOStylePanels
 
 		Text(E.Need<UTextBlock>(TEXT("LabelText")), ETextRole::Body);
 		Figure(E.Need<UTextBlock>(TEXT("AmountText")), ETextRole::Figure, 120.0f);
+
+		// A column of tags between the name and the amount (task 187), as Joe approved on 10 October.
+		TagAfter(E, E.Find<UWidget>(TEXT("LabelText")), TEXT("StyleTagText"), 64.0f);
 	}
 
 	void MarketRow(FEdit& E)
@@ -658,6 +815,9 @@ namespace SpaceMMOStylePanels
 		Text(E.Find<UTextBlock>(TEXT("TextBlock_610")), ETextRole::Note);
 		Text(E.Need<UTextBlock>(TEXT("StationText")), ETextRole::Note);
 		Button(E.Need<UButton>(TEXT("CancelButton")), false, true);
+
+		// The sell's style tag, or "any style" on a buy (task 187), wide enough for the words.
+		TagAfter(E, E.Find<UWidget>(TEXT("ItemText")), TEXT("StyleTagText"), 100.0f);
 	}
 
 	void TextRow(FEdit& E)
@@ -972,6 +1132,8 @@ namespace SpaceMMOStylePanels
 		Field(E.Find<UEditableTextBox>(TEXT("PriceInput")));
 		Button(E.Find<UButton>(TEXT("MatchMarketButton")), false, true);
 		Button(E.Find<UButton>(TEXT("GuaranteedButton")), false, true);
+
+		PromptStyleLine(E);
 	}
 
 	/**
@@ -1743,18 +1905,19 @@ int32 USpaceMMOStylePanelsCommandlet::Main(const FString& Params)
 	using namespace SpaceMMOStylePanels;
 
 	const FTarget Targets[] = {
-		{TEXT("/Game/UI/WBP_InventoryRow"), &InventoryRow, {TEXT("RowFrame")}},
+		{TEXT("/Game/UI/WBP_InventoryRow"), &InventoryRow, {TEXT("RowFrame"), TEXT("StyleTagText")}},
 		{TEXT("/Game/UI/WBP_MarketRow"), &MarketRow, {TEXT("RowFrame")}},
 		{TEXT("/Game/UI/WBP_BookRow"), &BookRow, {TEXT("RowFrame")}},
 		{TEXT("/Game/UI/WBP_ShipRow"), &ShipRow, {TEXT("RowFrame")}},
-		{TEXT("/Game/UI/WBP_MyOrderRow"), &MyOrderRow, {TEXT("RowFrame")}},
+		{TEXT("/Game/UI/WBP_MyOrderRow"), &MyOrderRow, {TEXT("RowFrame"), TEXT("StyleTagText")}},
 		{TEXT("/Game/UI/WBP_TextRow"), &TextRow, {}},
 		{TEXT("/Game/UI/WBP_SkillRow"), &SkillRow, {TEXT("RowFrame")}},
 		{TEXT("/Game/UI/WBP_SkillsScreen"), &SkillsScreen, {TEXT("WorldDim")}},
 		{TEXT("/Game/UI/WBP_InventoryScreen"), &InventoryScreen, {TEXT("WorldDim"), TEXT("PanelRoot")}},
 		{TEXT("/Game/UI/WBP_StationOverlay"), &StationOverlay,
 			{TEXT("WorldDim"), TEXT("PanelRoot"), TEXT("MarketTabFrame"), TEXT("ShipsTabFrame"), TEXT("MarketTabText"),
-				TEXT("ShipsTabText"), TEXT("StartBar"), TEXT("StartButton"), TEXT("RunsText")},
+				TEXT("ShipsTabText"), TEXT("StartBar"), TEXT("StartButton"), TEXT("RunsText"), TEXT("PromptStyleBox"),
+				TEXT("PromptStyleTag"), TEXT("PromptStylePrevious"), TEXT("PromptStyleNext")},
 			&StationOverlayDefaults},
 		{TEXT("/Game/UI/WBP_FlightReadout"), &FlightReadout, {TEXT("ReadoutCard"), TEXT("ProximityChip"), TEXT("ReadoutRule")}},
 		{TEXT("/Game/UI/WBP_OnFootReadout"), &OnFootReadout, {TEXT("ReadoutCard"), TEXT("CreditsLine"), TEXT("ReadoutRule")}},
