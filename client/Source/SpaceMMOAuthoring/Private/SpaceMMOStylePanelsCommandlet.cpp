@@ -18,6 +18,7 @@
 #include "Components/ScrollBox.h"
 #include "Components/ScrollBoxSlot.h"
 #include "Components/SizeBox.h"
+#include "Components/Spacer.h"
 #include "Components/Slider.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -818,6 +819,35 @@ namespace SpaceMMOStylePanels
 
 		// The sell's style tag, or "any style" on a buy (task 187), wide enough for the words.
 		TagAfter(E, E.Find<UWidget>(TEXT("ItemText")), TEXT("StyleTagText"), 100.0f);
+
+		// Right after the name, as approved: "SELL Structural Plate [TER]". The tag first went after a
+		// name that filled the spare width, and the name's share came out narrower than its words, so a
+		// long name ran under a tag sitting at the same place on every row (Joe's capture, 11 October).
+		// So the name takes its own width and a spacer after the tag takes the rest; the quantity, price
+		// and cancel columns keep their widths and stay under their headings.
+		Column(E.Find<UWidget>(TEXT("ItemText")), false);
+
+		if (UTextBlock* Tag = E.Find<UTextBlock>(TEXT("StyleTagText")))
+		{
+			bool bHadGap = false;
+			USpacer* Gap = E.Make<USpacer>(TEXT("ItemGap"), false, &bHadGap);
+
+			if (!bHadGap)
+			{
+				if (UHorizontalBox* Row = Cast<UHorizontalBox>(Tag->GetParent()))
+				{
+					Row->InsertChildAt(Row->GetChildIndex(Tag) + 1, Gap);
+				}
+				else
+				{
+					UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Panels: the order row's tag is not in a horizontal box."));
+
+					++E.Problems;
+				}
+			}
+
+			Column(Gap, true);
+		}
 	}
 
 	void TextRow(FEdit& E)

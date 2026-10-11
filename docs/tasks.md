@@ -9128,6 +9128,16 @@ How it would fail:
   commandlet logged where it looked.
 - **Picking a style in the sell prompt clears the typed price.** Expected: the prompt is asked again.
 
+### Joe's first look, 11 October
+
+**Inventory tags: "look great".** **My Orders: the tag sat over long names**: "any style" across
+"Ferric Regolith", "[TER]" across "Ferrite Ore", at the same x on every row. The tag had gone after a
+name that filled the spare width, and the name's share of the row came out narrower than its words.
+Now the name takes its own width, the tag follows it, and a spacer after the tag takes the rest, so
+quantity, price and Cancel keep their columns (`SpaceMMOStylePanels`, `MyOrderRow`). Checked only as far
+as the saved asset holding the new `ItemGap` spacer: nothing headless can measure a laid-out row, so the
+look is the playtest's. **Still to say:** the industry picker and the sell prompt.
+
 ## 188 — Content removed from the pack lives on in the database
 
 **Built 11 October for stations, recipes, quests and items; bodies and systems are not covered (below).**
