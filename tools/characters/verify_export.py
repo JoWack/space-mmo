@@ -4,13 +4,19 @@ Read a character's exported FBX back in a clean Blender and check it is what Unr
 (175, 182): what the export says, not what the scene that made it says.
 
     blender --factory-startup --background --python-exit-code 1 --python tools/characters/verify_export.py -- \
-        --fbx client/RawContent/Characters/NAME/NAME.fbx --height M
+        --fbx client/RawContent/Characters/NAME/NAME.fbx --height M [--fps 30] [--loop-speed M_PER_S --planted N]
 
   * every bone is a bone SK_Mannequin has, so importing adds nothing to the shared skeleton (125 once added
     face bones that way);
   * the height is --height to the millimetre, and every vertex group is a bone;
   * the clip's root, the armature object, does not move, and the pelvis's height range is printed: the clip
     importer checks it (SpaceMMOImportClipsCommandlet's PelvisMinCm and PelvisMaxCm).
+With --loop-speed, for an in-place cycle such as the sprint (191): its last frame is its first, so it loops, and
+each ball of the foot, while on the ground, slides back at that speed within 5% over N frame-to-frame steps in all
+(176's check that matters, read off the file Unreal will import rather than the scene that made it). Halfway
+between those keys it must not sink more than 1.5 cm below them: an engine interpolates the joints' rotations
+there, not the foot's path, and at 30 keys a second the Humanoid man's sprint sank 4.4 cm (191). --fps is the rate
+the clip must be keyed at: 30 for every clip but the sprints, which are 60 for that reason.
 Prints VERIFY lines and a Result; exits 1 on any failure.
 """
 
@@ -29,6 +35,54 @@ ring_01_l ring_01_r ring_02_l ring_02_r ring_03_l ring_03_r ring_metacarpal_l ri
 spine_03 spine_04 spine_05 thigh_l thigh_r thigh_twist_01_l thigh_twist_01_r thigh_twist_02_l thigh_twist_02_r thumb_01_l
 thumb_01_r thumb_02_l thumb_02_r thumb_03_l thumb_03_r upperarm_l upperarm_r upperarm_twist_01_l upperarm_twist_01_r
 upperarm_twist_02_l upperarm_twist_02_r""".split())
+
+
+def loop_and_slide(arm, f0, f1, speed, planted_expected, fps, say, fail):
+    """The loop closes, each planted ball slides back at `speed` m/s, and halfway between planted keys it does not
+    sink into the ground."""
+    sc = bpy.context.scene
+    deform = [b for b in arm.pose.bones if b.bone.use_deform]
+    balls = {"ball_l": [], "ball_r": []}
+    first = last = None
+    for f in range(f0, f1 + 1):
+        sc.frame_set(f)
+        mats = np.array([np.array(arm.matrix_world @ b.matrix) for b in deform])
+        first = mats if first is None else first
+        last = mats
+        for name in balls:
+            balls[name].append(np.array(arm.matrix_world @ arm.pose.bones[name].head))
+    gap = float(np.abs(first[:, :3, 3] - last[:, :3, 3]).max())
+    say("loop: the last frame's bones are %.4f m from the first's" % gap)
+    if gap > 0.001:
+        fail("the clip does not loop: its last frame is %.4f m from its first" % gap)
+    steps = []
+    for name, track in balls.items():
+        b = np.array(track)
+        low = b[:, 2].min()
+        down = [i for i in range(len(b)) if b[i][2] - low < 0.002]
+        for i, j in zip(down, down[1:]):
+            if j == i + 1:
+                d = b[j] - b[i]
+                steps.append((name, f0 + i, float(np.hypot(d[0], d[1])) * fps))
+    bad = [s for s in steps if abs(s[2] - speed) > 0.05 * speed]
+    say("planted: %d steps, sliding %.2f to %.2f m/s (expected %d at %.2f)"
+        % (len(steps), min(s[2] for s in steps) if steps else 0, max(s[2] for s in steps) if steps else 0,
+           planted_expected, speed))
+    if len(steps) != planted_expected or bad:
+        fail("planted feet: %d steps (expected %d), off speed: %s" % (len(steps), planted_expected, bad[:4]))
+    # Halfway between each pair of planted keys, where the file's interpolation puts the ball rather than the IK.
+    sag, worst = 0.0, None
+    for name, frame, _ in steps:
+        planted_z = float(np.array(balls[name])[frame - f0][2])
+        sc.frame_set(frame, subframe=0.5)
+        sank = planted_z - float((arm.matrix_world @ arm.pose.bones[name].head).z)
+        if sank > sag:
+            sag, worst = sank, (name, frame)
+    sc.frame_set(f0)
+    say("planted: halfway between keys the ball sinks at most %.2f cm below them (%s, after frame %s)"
+        % (100 * sag, worst[0] if worst else "-", worst[1] if worst else "-"))
+    if sag > 0.015:
+        fail("a planted ball sinks %.2f cm into the ground between keys: key the clip faster" % (100 * sag))
 
 
 def main():
@@ -80,10 +134,14 @@ def main():
             % (f0, f1, f1 - f0 + 1, sc.render.fps, drift, 100 * min(pelvis), 100 * max(pelvis)))
         if drift > 1e-4:
             fail("the root moves %.4f m" % drift)
-        if sc.render.fps / sc.render.fps_base != 30:
-            # Clips are authored at 30 a second (176). The Martian's first export was at Blender's default 24,
-            # which plays his jump start a third slower (182).
-            fail("the clip is at %s fps, not 30" % (sc.render.fps / sc.render.fps_base))
+        fps = float(argv[argv.index("--fps") + 1]) if "--fps" in argv else 30.0
+        if sc.render.fps / sc.render.fps_base != fps:
+            # Clips are authored at 30 a second (176), the sprints at 60 (191). The Martian's first export was at
+            # Blender's default 24, which plays his jump start a third slower (182).
+            fail("the clip is at %s fps, not %s" % (sc.render.fps / sc.render.fps_base, fps))
+        if "--loop-speed" in argv:
+            loop_and_slide(arm, f0, f1, float(argv[argv.index("--loop-speed") + 1]),
+                           int(argv[argv.index("--planted") + 1]), fps, say, fail)
     say("%d problem(s). Result: %s" % (len(problems), "OK" if not problems else "FAILED"))
     if problems:
         sys.exit(1)

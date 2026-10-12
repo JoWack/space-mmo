@@ -98,9 +98,7 @@ FWalkState FCharacterWalkModel::Step(
 	// the instant they leave the ground decelerates mid-jump, and a jump that travels less far the
 	// faster you were going is the sort of thing that feels broken without being explicable. Air
 	// control is already a quarter of ground acceleration, so this changes very little up there.
-	const double TopSpeed = Clean.bSprint
-		? Config.WalkSpeed * FMath::Max(1.0, Config.SprintMultiplier)
-		: Config.WalkSpeed;
+	const double TopSpeed = Config.TopSpeed(Clean.bSprint);
 
 	const FVector Wanted =
 		((Forward * Clean.Move.X) + (Right * Clean.Move.Y)).GetClampedToMaxSize(1.0)

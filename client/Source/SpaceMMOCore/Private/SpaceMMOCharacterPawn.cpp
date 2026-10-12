@@ -343,6 +343,11 @@ const FSpaceMMOCharacterBody* ASpaceMMOCharacterPawn::FindBody(
 	return Bodies.FindByPredicate([Race](const FSpaceMMOCharacterBody& Body) { return Body.Race == Race; });
 }
 
+FSoftClassPath ASpaceMMOCharacterPawn::AnimClassFor(const FSpaceMMOCharacterBody* const Body, const FSoftClassPath& Default)
+{
+	return Body != nullptr && !Body->AnimClass.IsNull() ? Body->AnimClass : Default;
+}
+
 void ASpaceMMOCharacterPawn::ResolveSurface()
 {
 	UWorld* World = GetWorld();
@@ -1907,6 +1912,10 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 	const FSoftObjectPath& MeshPath = RaceBody != nullptr ? RaceBody->Mesh : CharacterMesh;
 	const double DrawnHeight = GetBodyHeightCentimetres();
 
+	// Its own blueprint, for a sprint made on its own legs (191). Chosen here, where the body is, so another
+	// player's copy takes it from the replicated race exactly as their own client does.
+	const FSoftClassPath AnimClassPath = AnimClassFor(RaceBody, CharacterAnimClass);
+
 	// The cameras at this body's eyes (177), before anything below can return: a body that fails to load
 	// is still that race, and sees from that height.
 	const FVector2D Eyes = ViewHeightsFor(DrawnHeight, CharacterHeightCentimetres);
@@ -1932,7 +1941,7 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 			: BodyRace == INDEX_NONE ? TEXT("no race yet")
 			: *FString::Printf(TEXT("race %d has no body configured"), BodyRace),
 		IsLocallyControlled() ? TEXT("this player's") : HasAuthority() ? TEXT("the server's copy") : TEXT("another player's"),
-		CharacterAnimClass.IsNull() ? TEXT("<unset>") : *CharacterAnimClass.ToString());
+		AnimClassPath.IsNull() ? TEXT("<unset>") : *AnimClassPath.ToString());
 
 	if (MeshPath.IsNull())
 	{
@@ -1970,9 +1979,9 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 		Body->SetVisibility(false);
 	}
 
-	if (!CharacterAnimClass.IsNull())
+	if (!AnimClassPath.IsNull())
 	{
-		UClass* const AnimClass = CharacterAnimClass.TryLoadClass<UAnimInstance>();
+		UClass* const AnimClass = AnimClassPath.TryLoadClass<UAnimInstance>();
 
 		if (AnimClass == nullptr)
 		{
@@ -1980,7 +1989,7 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 			// working state on the way to an animated one -- but not one to arrive at silently.
 			UE_LOG(LogSpaceMMO, Warning,
 				TEXT("Animation blueprint '%s' did not load; '%s' stands in its bind pose."),
-				*CharacterAnimClass.ToString(), *Mesh->GetName());
+				*AnimClassPath.ToString(), *Mesh->GetName());
 		}
 		else
 		{

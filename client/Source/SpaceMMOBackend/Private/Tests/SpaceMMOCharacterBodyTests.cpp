@@ -1,3 +1,4 @@
+#include "Animation/AnimInstance.h"
 #include "Animation/Skeleton.h"
 #include "Engine/SkeletalMesh.h"
 #include "Misc/AutomationTest.h"
@@ -76,6 +77,19 @@ bool FSpaceMMOEveryRaceHasABodyTest::RunTest(const FString& Parameters)
 		TestTrue(FString::Printf(TEXT("%s's body measures %.1f cm and config draws it at %.1f"),
 				*Race.Name, Authored, Body->HeightCentimetres),
 			FMath::Abs(Authored - Body->HeightCentimetres) < 1.0);
+
+		// Its own blueprint (191), resolved the way the pawn resolves it, and ABP_Human or a child of it: a
+		// blueprint that is neither has none of the state machine, the jump or the walk.
+		const FSoftClassPath Default = GetDefault<ASpaceMMOCharacterPawn>()->GetDefaultAnimClass();
+		UClass* const Plays = ASpaceMMOCharacterPawn::AnimClassFor(Body, Default).TryLoadClass<UAnimInstance>();
+		UClass* const Human = Default.TryLoadClass<UAnimInstance>();
+
+		if (TestNotNull(FString::Printf(TEXT("%s's animation blueprint loads"), *Race.Name), Plays)
+			&& TestNotNull(TEXT("CharacterAnimClass loads"), Human))
+		{
+			TestTrue(FString::Printf(TEXT("%s's %s is ABP_Human or a child of it"), *Race.Name, *Plays->GetName()),
+				Plays->IsChildOf(Human));
+		}
 	}
 
 	return true;
@@ -109,6 +123,20 @@ bool FSpaceMMORaceWithoutABodyTest::RunTest(const FString& Parameters)
 
 	TestTrue(TEXT("Race 1 finds race 1's body, wherever it is listed"),
 		Martian != nullptr && Martian->HeightCentimetres == 215.0);
+
+	// Its blueprint (191): the body's own when it names one, and CharacterAnimClass otherwise -- before a race,
+	// for a race with no body, and for a body that names none.
+	const FSoftClassPath Default(TEXT("/Game/Characters/Human/ABP_Human.ABP_Human_C"));
+	const FSoftClassPath Own(TEXT("/Game/Characters/Martian/ABP_MartianMale.ABP_MartianMale_C"));
+	FSpaceMMOCharacterBody Named = MartianBody;
+	Named.AnimClass = Own;
+
+	TestEqual(TEXT("No body plays CharacterAnimClass"),
+		ASpaceMMOCharacterPawn::AnimClassFor(nullptr, Default).ToString(), Default.ToString());
+	TestEqual(TEXT("A body naming no blueprint plays CharacterAnimClass"),
+		ASpaceMMOCharacterPawn::AnimClassFor(&MartianBody, Default).ToString(), Default.ToString());
+	TestEqual(TEXT("A body naming one plays it"),
+		ASpaceMMOCharacterPawn::AnimClassFor(&Named, Default).ToString(), Own.ToString());
 
 	return true;
 }

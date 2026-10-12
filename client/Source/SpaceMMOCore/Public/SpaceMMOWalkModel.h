@@ -135,6 +135,17 @@ struct SPACEMMOCORE_API FWalkConfig
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
 	double SprintMultiplier = 1.8;
+
+	/**
+	 * The speed the model accelerates toward, centimetres per second: WalkSpeed, or WalkSpeed times
+	 * SprintMultiplier while sprinting, never less than WalkSpeed (136). Each race's sprint clip sits in
+	 * its speed blend space at this value (191), read from here by the importer, so the clip's feet and
+	 * the character's ground speed are one number rather than two that can drift.
+	 */
+	double TopSpeed(const bool bSprint) const
+	{
+		return bSprint ? WalkSpeed * FMath::Max(1.0, SprintMultiplier) : WalkSpeed;
+	}
 };
 
 /**

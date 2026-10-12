@@ -7,7 +7,9 @@
 
 /**
  * Brings animation clips made in Blender onto the skeleton every character shares, and points the
- * animation blueprint at them (tasks 175 and 176). The first is the Humanoid man's jump start.
+ * animation blueprint at them (tasks 175 and 176). The first is the Humanoid man's jump start. Since
+ * task 191 it also gives ABP_Human's speed blend space a sprint sample, at the speed the walk model
+ * sprints at, and each other race a child of ABP_Human whose only change is that sample's clip.
  *
  *   UnrealEditor-Cmd.exe client/SpaceMMO.uproject "-run=SpaceMMOAuthoring.SpaceMMOImportClips"
  *

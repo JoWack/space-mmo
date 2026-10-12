@@ -7404,7 +7404,7 @@ must beat. For the elves it may be enough.
   4.2 m/s up), not the clip. Every world has Earth's gravity today — the compiled-in planet config sets
   981 and `origin.json` has no gravity field — but the bible gives Ares light gravity and Grimhold
   heavy, and a falling loop survives that where a fixed-length jump would not.
-- **Sprint has no clip of its own today, for the human either.** The blend space tops out at the 6 m/s
+- **Sprint had no clip of its own, for the human either, until 191 gave every race one.** The blend space tops out at the 6 m/s
   run (125's spec, not measured in game), so a sprinting character plays the run at run cadence while
   moving 1.8 times as fast, and its feet slide. 136 recorded that "the animation needs nothing", which
   is true of what plays and not of how it looks. A sprint sample at 10.8 m/s fixes it for every race.
@@ -9365,3 +9365,225 @@ How it would fail:
 - **Glow too strong or too weak.** `EmissiveStrength` on `MI_Deposit_BlackironOre` and
   `MI_Deposit_Rootstone`, 6 each; change it in the editor, and in `prepare_deposits.py` so a rebuild keeps
   it.
+
+## 191 — A sprint clip for every race, through the Blender MCP
+
+**Built 11 October, awaiting Joe's playtest:** a sprint per race, made in Blender through the MCP, played in game by
+each race's own child of `ABP_Human`, measured on the walker and on another player's copy. Belongs to **M7**,
+beside 176, whose table already had a sprint row with no clip behind it. Joe, 11 October: *"use Blender MCP to add a sprinting animation to all of the characters
+and implement it in the game."*
+
+**What was already there.** Sprint itself is 136's: hold Left Shift on foot, a ceiling of `WalkSpeed` ×
+`SprintMultiplier`, 6 × 1.8 = 10.8 m/s, carried to the server in `FWalkInput::bSprint`. What it lacks is a
+clip. The speed blend space every race plays (`BS_Human_Speed`: idle, walk, the library's jog at 6 m/s) tops
+out at the jog, so a sprinting character plays the jog at jog cadence and its feet slide (176).
+
+**Decided by Joe, 11 October**, each the option recommended to him:
+- **The controls stay as 136 built them:** hold Left Shift, on foot only (Shift is boost in the ship).
+- **The speed stays 10.8 m/s.** No gameplay or server rule changes; the clips are authored to it.
+- **One clip per race, each on its own rig.** The jump is shared because it has no planted foot (176). A
+  sprint has one: the same clip played on a taller body swings longer legs through the same angles, so its
+  feet would slide faster than the ground by the leg-length ratio, about 33% on the Martian, 25% on the elf
+  and 18% on the orc (root heights over the Humanoid man's, 182). This needs a child of `ABP_Human` per race
+  that swaps only the speed blend space; every race keeps the Humanoid man's jump (176).
+- **Renders before import:** side and front, key poses and a looping video per race, for Joe's yes before
+  anything goes into Unreal.
+
+### What the library's clips do, measured 11 October
+
+Read on the Humanoid man through Unreal's AnimPose API, retargeted as the game plays them, with root motion in
+the pose so a planted foot shows as standing still:
+- **`anim_Jog_Loop_Fwd` holds two strides in its 32 frames** (1.067 s): the left ball of the foot down at about
+  frames 16-19 and 0-3, the right at 8-12 and 24-27. A blend space keeps its samples at the same fraction of
+  their length, so **each sprint clip holds two strides too**, with the left foot landing at the start and
+  halfway, the right at a quarter and three quarters. One stride against the jog's two would cross the legs in
+  every blend between run and sprint.
+- **The jog's root travels 3.64 m/s, and the game plays it at 6.** The walk's travels 1.27 m/s and is played at
+  2. Both slide today, by 39% and 37%: 176's table assumed they matched. Not this task's to change, and not
+  touched; recorded here because it is the same check, failed by clips nobody had measured.
+
+### The clips, made in Blender 11 October
+
+`rig_character.py` gained `sprint(name)`, `sprint_measure(name)`, `sprint_preview(name, out_dir)` and
+`rest_on_jump()`, run on each body's saved rig through the MCP, its parameters per body in `GAITS`. Every frame
+is keyed, the last equal to the first, the root still. Timing is designed in thirtieths of a second and keyed at
+60 a second (*Keyed at 60*, below):
+
+| Body | Stride | Contact | Keys | Character (176) |
+|---|---|---|---|---|
+| `HumanoidMale` | 0.47 s | 0.067 s | 57 | the baseline: lean 12°, arms driving past the hips |
+| `MartianMale` | 0.60 s | 0.100 s | 73 | long and light: a slower stride on longer legs, little bob |
+| `SpaceElfMale` | 0.53 s | 0.067 s | 65 | upright: lean 6°, the heel kicked highest |
+| `SpaceOrcMale` | 0.53 s | 0.067 s | 65 | heavy: lean 14°, hips lower, feet apart, arms round his chest |
+
+- **A planted foot is placed by its ball**, which slides back at exactly 10.8 m/s while down. Contact time is
+  bounded by reach: two frames sweep the ball 0.72 m under the hip and three 1.08 m. The Martian's first try
+  landed 0.30 m (scaled) ahead and left 0.68 m of the sweep behind him, past his reach at toe-off (1.03 of his
+  leg, and 8 of 12 planted steps landed); landing 0.40 ahead centres it.
+- **A swinging leg is placed by its joints**: the thigh's angle, the knee's fold and the ankle's angle against
+  the shin, splined from the pose it leaves to the one it lands in, through the heel coming through folded and
+  the knee driven high. See Joe's first look, below, for why.
+- **The arms swing in the chest's own plane**, each opposite its leg, with a loose fist. Two faults found by
+  looking: the elbow first bent in the plane of the arm's rest bend, which took the A-pose's outward hang with it
+  and put the front hand up beside the head like a wave; and the chest's "forward" was taken as its local -Y,
+  which runs along a bone, so the arms twisted backward instead of coming in. The orc's arms hang 40° out at rest
+  and his fists swung 0.8-0.9 m from his midline against a 0.37 m torso until brought 18° in.
+- **The knee's pole follows the foot in these rigs** (Auto-Rig Pro's `pole_parent` 1). With the heel kicked up
+  behind, the pole went with it and the knee bent backward. The sprint keys it to 0, the root; `rest_on_jump()`
+  puts it back, so the jump start is exactly as before.
+
+**Joe's first look: "No, rethink ... the feet and legs are all warped looking, doesn't look natural in most of
+the images."** Measured on the Humanoid man before changing anything: the ankle, 76° between shin and foot at
+rest, reached **149°** as the knee drove through, the foot bent up toward the shin some 70° past neutral where a
+real one stops near 20; the knee folded to **151°** at the heel kick, past where linear blend skinning holds the
+back of a knee; and the boot bent **47°** at the toes on toe-off. The swing had been authored as a path for the
+ball of the foot, with its pitch set against the ground, and nothing ever looked at the shin. Rebuilt as joint
+angles, and `sprint_measure` now holds every frame to `LIMITS`:
+
+| Body | Knee fold max | Ankle down / up of rest | Boot bend | Knee out of plane |
+|---|---|---|---|---|
+| `HumanoidMale` | 122.2° | 25.1° / 14.7° | 17.0° | 0.07 |
+| `MartianMale` | 112.6° | 25.0° / 19.6° | 16.3° | 0.01 |
+| `SpaceElfMale` | 124.3° | 25.3° / 12.5° | 22.7° | 0.07 |
+| `SpaceOrcMale` | 108.3° | 27.2° / 20.8° | 0 | 0.19 |
+
+Limits: knee 130°, ankle 50° down and 22° up, boot 32°, knee 0.25 out of the leg's plane; the final clips'
+figures. The orc's first rebuild had his ankle 22.9° up at mid-stance; his hips were raised 1.5 cm for it. **Joe's second look: "Yes,
+import all four."** Renders and videos: `Blender/Characters/<body>_renders/<body>_sprint_keyposes.png` and
+`_sprint_preview.mp4`, the video running over a floor moving back at 10.8 m/s so a planted foot should stand
+still on its squares; copies in `docs/wip/191-sprint/` (git-ignored).
+
+**Exported** as `client/RawContent/Characters/<body>/<body>_Sprint.fbx`, the body and this clip alone, with
+175's settings, and **read back in a clean Blender** by `verify_export.py --fps 60 --loop-speed 10.8 --planted N`,
+new for this: 71 bones, all `SK_Mannequin`'s; the height exact; the root still; the last frame within 0.1 mm of
+the first; every planted step sliding at 10.80 m/s (16 for each body but the Martian's 24); and halfway between
+keys no planted ball more than 1.01 cm below them (below). Pelvis ranges for the clip importer: Humanoid
+83.0-88.0 cm, Martian 108.5-111.7, elf 105.4-109.9, orc 97.2-104.3.
+
+### Into Unreal, 11 October
+
+**`SpaceMMOImportClips` imports the four sprints** (`anim_<body>_Sprint`, beside each body), each row now with its
+own key rate, and **sets every clip's retarget source to the body it was made on** itself; it was
+`ue_import_character.py`'s job, whose `AUTHORED_ON` still lists every such clip and sets the same source. Its
+`Save` now checks the file on disk was written by the run, the 177 lesson the Python importer already had.
+
+**`ABP_Human`'s speed blend space is not `BS_Human_Speed`.** The first run found nothing in the blueprint playing
+that asset and stopped. Read off the asset registry and the blueprint's own bytes: the blend space is embedded, an
+`AnimGraphNode_BlendSpaceGraph`, each sample a small graph holding a sequence player, and `BS_Human_Speed`
+is referenced by nothing. A child blueprint cannot swap an embedded blend space (the engine implements asset
+overrides only for asset players: `AnimBlueprintCompiler.cpp`, `OnOverrideAssets`), but it can swap a sequence
+player. So, built the way the editor builds it (`UBlendSpace::AddSample`, then the node's `AddGraph` at the same
+index; `ReplaceGraph` and `RemoveGraph` check for an open blueprint editor and would crash a commandlet):
+- `ABP_Human`'s blend space gained a sample at **10.80 m/s, `TopSpeed(true)` read from the walk config**, whose
+  player plays the Humanoid man's sprint. It also plays before a race is known, which draws him.
+- **`ABP_MartianMale`, `ABP_SpaceElfMale`, `ABP_SpaceOrcMale`**, children of `ABP_Human` made through the editor's
+  own factory, each with one parent asset override: that sprint sample's player, playing its body's sprint. Joe
+  approved "a child that swaps only the speed blend space"; this swaps less, and every other part of each race's
+  animation is `ABP_Human`'s, the Humanoid man's jump included (176).
+- A re-run finds the sprint sample and repoints it rather than adding another: run three times, the third
+  idempotent.
+
+`Result: OK`, read back after compiling: *"ABP_Human's speed blend space plays 0.00 anim_Idle, 2.00
+anim_Walk_Fwd_Loop_L, 6.00 anim_Jog_Loop_Fwd, 10.80 anim_HumanoidMale_Sprint"*, and for each child *"overrides
+the sprint sample with anim_<body>_Sprint, and its class plays anim_<body>_Sprint there"*, the second half read off
+the compiled class's node rather than the override list. Each sprint: 57, 73, 65, 65 keys at 60 a second, root
+still, pelvis as Blender read it, retarget source its body.
+
+- **The Martian, elf and orc jump starts came out with new bytes**, the same on two runs, the Humanoid man's
+  identical to before. The only change in how they are imported is that the importer now sets their retarget source
+  itself, reference pose included, so theirs evidently lacked it. Nothing plays them (176); committed rather than
+  left for the next run to rewrite.
+- `BS_Human_Speed` is left as it was: an orphan, and not this task's to delete.
+
+**The game:** `FSpaceMMOCharacterBody::AnimClass` in `RaceBodies`, one per race; `AnimClassFor(Body, Default)`, the
+lookup the pawn and the tests share; `ApplyCharacterMesh` sets it with the mesh, on every machine, so another
+player's copy takes it from the replicated race (182). The log's drawing line names the blueprint. Nothing new
+crosses the wire: the sprint itself was already replicated (136), and a copy's ground speed was made right by 182.
+`FWalkConfig::TopSpeed(bSprint)` is the one sprint speed, used by the walk model and by the importer.
+
+### Keyed at 60, because the game showed a foot sinking
+
+**The test's first run passed the elf and orc and found no planted step at all on the Humanoid man or the
+Martian.** Zero steps rather than slow ones, so it printed where each ball was drawn instead of guessing: the
+Humanoid man's planted ball sat at 3.5 cm on every key and at 1.4 and **-0.9 cm** on the frames between them. A
+ball 4.4 cm into the ground, mid-stride. Blender solves the planted foot with IK on a straight line at every frame;
+Unreal interpolates each joint's rotation between keys, and with the ball travelling 36 cm between keys a
+thirtieth of a second apart, it swings through an arc below that line. Nothing measured in Blender could see it,
+because everything there was measured on whole frames.
+- `verify_export.py` now samples the exported file halfway between planted keys and fails a sag over 1.5 cm. Run
+  against the 30-key Humanoid export it read **4.40 cm** and failed, the game's own number.
+- **Keyed at 60** (`SPRINT_FPS`), the same poses. Martian 1.01 cm, elf 0.52, orc 0.53; the Humanoid man still
+  1.90, because he pushed off on a locked knee (0.3°), the ankle then riding the whole leg's length round the hip.
+  Landing him 0.38 ahead instead of 0.30 (trials 0.34, 0.36 and 0.38, each exported and measured) pushes off on a
+  37° knee and sinks **0.74 cm**. His key poses and video were re-rendered.
+- The test draws at 120 frames a second now: drawn at 60, every frame lands on a key and the sag cannot be seen.
+
+### What was verified, and how
+
+- **Builds:** `SpaceMMOEditor`, `Result: Succeeded` from `UnrealEngineSource`, compiling the pawn, the walk model,
+  the importer and both test files; rebuilt after every edit, and once more to confirm "Target is up to date"
+  before trusting a run.
+- **`SpaceMMO.Character.EachRaceSprintsOnItsOwnFeet`** (new, `SpaceMMOSprintTests.cpp`). For each race in
+  `RaceBodies`: a walker on the Capital sprints through the server's input RPC and another player's copy is handed
+  the walker's replicated state and race (`BodyRace` and its notify). Both bodies' blueprints run for two seconds,
+  then the balls of their feet are read off the evaluated pose for a second and a half:
+
+  | Race | Plays | Walker sprints | Planted feet slide (walker / copy) | Sink below standing |
+  |---|---|---|---|---|
+  | 0 | `ABP_Human` | 1080.0 cm/s | 1073.9 / 1073.9 | 0.74 cm |
+  | 1 | `ABP_MartianMale` | 1080.0 | 1074.5 / 1074.5 | 1.01 |
+  | 2 | `ABP_SpaceElfMale` | 1080.0 | 1075.1 / 1075.1 | 0.52 |
+  | 3 | `ABP_SpaceOrcMale` | 1080.0 | 1075.1 / 1075.1 | 0.53 |
+
+  Within 176's 5% (they are within 0.6%), and under a 1.5 cm sink. The sinks are `verify_export.py`'s numbers to
+  the hundredth, measured independently. **The control,** the Humanoid man's sprint played on the Martian, slides
+  at 1409.4 cm/s, +30.5%: the measurement tells one body's clip from another's.
+- **Seen red for the reason it exists:** with `AnimClassFor` returning `CharacterAnimClass` for every race, the
+  shared clip Joe chose against, the Martian's feet slid at 1409.6 cm/s, the elf's 1336.2 and the orc's 1279.6,
+  +30.5%, +23.7% and +18.5% against the leg-length ratios predicted when he chose (33, 25, 18%), and the orc's sank
+  2.59 cm. `ARaceWithoutABodyDrawsTheDefault`'s new lookup assertion failed too. Restored, rebuilt, green.
+- **`SpaceMMO.Walk.SprintIsWalkSpeedTimesTheMultiplier`** (new): `TopSpeed` is 600 walking and 1080 sprinting,
+  never under a walk, and the model settles at it. **`EveryRaceTheServerSendsHasABody`** now also loads each race's
+  blueprint through `AnimClassFor`, from the API's own race list, and checks it is `ABP_Human` or a child.
+- **Client suite: `PASS: 307 tests, 0 failures`.**
+- **The dedicated server is re-cooked**, since the pawn's code changed: `SpaceMMOServer` `Result: Succeeded`,
+  compiling the pawn and walk model; `UnrealPak` and `ShaderCompileWorker` up to date; the cook made 654 packages,
+  `ExitCode=0`. The four sprints and four blueprints are in the server's IoStore container (`UnrealPak <utoc>
+  -List`), and `check-staged-server.ps1` passes.
+
+**Not verified by anything automated:** how it looks in motion on screen. No headless run renders. In particular
+the blend from run to sprint and back (about a sixth of a second each way at this acceleration), a jump taken
+from a sprint, and how another player's sprint reads at a distance.
+
+**Found, not changed:** the library's jog and walk slide (39% and 37%, above). Every race's run skates today, and
+will look worse beside a sprint that does not.
+
+### What a playtest has to say
+
+**Restart the editor first**: `ABP_Human` and the clips changed under it. For two players, the re-cooked dedicated
+server and `join.bat a` / `b`.
+
+- **Each race sprints on its own legs.** Hold Left Shift while running forward. `SpaceMMO.ForceBodyRace 0`, 1, 2 and
+  3 show the Humanoid man, the Martian, the elf and the orc; -1 gives your own race back.
+  - Humanoid: a strong lean, arms driving past the hips, the heel folding up behind. Martian: a long, light
+    stride, a slower turnover. Elf: upright, the heel kicked highest. Orc: lower and heavier, fists swinging round
+    his chest.
+  - **The feet stay put on the ground while planted.** Watch a foot against the ground texture at full sprint: it
+    should not skate forward or back. The run beside it does skate (the library's jog, 39% too slow), which is not
+    this task's.
+- **Run to sprint and back**: press and release Shift while running. The blend lasts about a sixth of a second each
+  way, and the legs should not cross or stutter in it: both clips land the left foot at the start and halfway.
+- **Jump from a sprint**: the Humanoid man's jump start, on every race (176), with no pop from the sprint into it.
+- **Two players**: the other player's sprint plays on their race's body, with their feet as planted as on their own
+  screen.
+- **How it would fail:**
+  - **A sprint that looks like the run, only faster:** the client is older than the assets (restart the editor),
+    or the log's drawing line, "animation as '...'", does not name `ABP_<body>_C` for that race.
+  - **The Martian, elf or orc skating while the Humanoid man does not:** that race is playing `ABP_Human`, the
+    Humanoid man's clip on its longer legs (the test measured exactly this as 18-31% too fast). Same log line.
+  - **Feet dipping into the ground mid-stride:** more than the 0.5-1 cm measured. The test would have failed at
+    1.5 cm, so this would be new.
+  - **Legs crossing or stuttering between run and sprint:** the jog and the sprint out of step.
+  - **The other player's sprint wrong and your own right:** the staged server is older than this
+    (`check-staged-server.ps1`), or their race did not reach you (182's "race N's body" lines).
+  - **A character standing in its bind pose:** its blueprint did not load; the log says so by name.

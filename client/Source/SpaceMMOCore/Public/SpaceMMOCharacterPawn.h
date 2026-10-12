@@ -75,6 +75,14 @@ struct FSpaceMMOCharacterBody
 	 */
 	UPROPERTY(EditAnywhere, Config)
 	double HeightCentimetres = 180.0;
+
+	/**
+	 * The animation blueprint this body plays (task 191), or unset for CharacterAnimClass. Each race's is
+	 * ABP_Human or a child of it whose only change is the clip its sprint sample plays, for one authored on
+	 * this body: a planted foot slides at the speed the body moves only on the legs the clip was made for.
+	 */
+	UPROPERTY(EditAnywhere, Config)
+	FSoftClassPath AnimClass;
 };
 
 /**
@@ -249,6 +257,18 @@ public:
 
 	/** The body config gives a race, or null, which draws CharacterMesh. Pure, for the tests. */
 	static const FSpaceMMOCharacterBody* FindBody(const TArray<FSpaceMMOCharacterBody>& Bodies, int32 Race);
+
+	/**
+	 * The animation blueprint a body plays (task 191): its own, or Default -- CharacterAnimClass -- for no
+	 * body or a body that names none. Pure, for the tests, which resolve every race through it.
+	 */
+	static FSoftClassPath AnimClassFor(const FSpaceMMOCharacterBody* Body, const FSoftClassPath& Default);
+
+	/** CharacterAnimClass, the blueprint before a race is known, for the tests to resolve through AnimClassFor. */
+	const FSoftClassPath& GetDefaultAnimClass() const { return CharacterAnimClass; }
+
+	/** How this character moves, for the clip importer to place the sprint at the speed it runs (191). */
+	const FWalkConfig& GetWalkConfig() const { return WalkConfig; }
 
 	/** The bodies config names, for the tests to measure. */
 	const TArray<FSpaceMMOCharacterBody>& GetRaceBodies() const { return RaceBodies; }
@@ -694,8 +714,9 @@ protected:
 
 	/**
 	 * A body per race (task 182), drawn in place of CharacterMesh once the character's race is known.
-	 * Every one is on SK_Mannequin, so CharacterAnimClass plays on all of them. A race with no body here
-	 * draws CharacterMesh, and says so.
+	 * Every one is on SK_Mannequin, so CharacterAnimClass would play on all of them; each names its own
+	 * child of it instead, for its own sprint (191). A race with no body here draws CharacterMesh, and
+	 * says so.
 	 */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
 	TArray<FSpaceMMOCharacterBody> RaceBodies;

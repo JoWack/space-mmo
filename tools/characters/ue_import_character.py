@@ -61,11 +61,16 @@ FLAT_NORMAL_FOR = {"HumanoidMale", "MartianMale", "SpaceElfMale", "SpaceOrcMale"
 # A clip made at this body's proportions was scaled twice: the Humanoid man's thigh twist bones sat 30.2 cm
 # down the thigh instead of 20.9 and spine_01 22.9 cm above the pelvis instead of 9.2, which Joe saw as his
 # hips stretching in the jump (177).
+# The clip importer (SpaceMMOImportClipsCommandlet) sets the same source itself since 191, from its own table.
 AUTHORED_ON = {
-    "HumanoidMale": ["/Game/Characters/Humanoid/anim_HumanoidMale_JumpStart"],
-    "MartianMale": ["/Game/Characters/Martian/anim_MartianMale_JumpStart"],
-    "SpaceElfMale": ["/Game/Characters/SpaceElf/anim_SpaceElfMale_JumpStart"],
-    "SpaceOrcMale": ["/Game/Characters/SpaceOrc/anim_SpaceOrcMale_JumpStart"],
+    "HumanoidMale": ["/Game/Characters/Humanoid/anim_HumanoidMale_JumpStart",
+                     "/Game/Characters/Humanoid/anim_HumanoidMale_Sprint"],
+    "MartianMale": ["/Game/Characters/Martian/anim_MartianMale_JumpStart",
+                    "/Game/Characters/Martian/anim_MartianMale_Sprint"],
+    "SpaceElfMale": ["/Game/Characters/SpaceElf/anim_SpaceElfMale_JumpStart",
+                     "/Game/Characters/SpaceElf/anim_SpaceElfMale_Sprint"],
+    "SpaceOrcMale": ["/Game/Characters/SpaceOrc/anim_SpaceOrcMale_JumpStart",
+                     "/Game/Characters/SpaceOrc/anim_SpaceOrcMale_Sprint"],
 }
 LOD_COUNT = 4
 
