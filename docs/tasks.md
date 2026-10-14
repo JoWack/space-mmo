@@ -9368,7 +9368,8 @@ How it would fail:
 
 ## 191 — A sprint clip for every race, through the Blender MCP
 
-**Built 11 October, awaiting Joe's playtest:** a sprint per race, made in Blender through the MCP, played in game by
+**Built 11 October; the run-to-sprint blend rebuilt 13 October after Joe's playtest (below), awaiting his next:**
+a sprint per race, made in Blender through the MCP, played in game by
 each race's own child of `ABP_Human`, measured on the walker and on another player's copy. Belongs to **M7**,
 beside 176, whose table already had a sprint row with no clip behind it. Joe, 11 October: *"use Blender MCP to add a sprinting animation to all of the characters
 and implement it in the game."*
@@ -9397,7 +9398,7 @@ the pose so a planted foot shows as standing still:
   frames 16-19 and 0-3, the right at 8-12 and 24-27. A blend space keeps its samples at the same fraction of
   their length, so **each sprint clip holds two strides too**, with the left foot landing at the start and
   halfway, the right at a quarter and three quarters. One stride against the jog's two would cross the legs in
-  every blend between run and sprint.
+  every blend between run and sprint. (`ABP_Human`'s blend space did not, having no sync group: see 13 October.)
 - **The jog's root travels 3.64 m/s, and the game plays it at 6.** The walk's travels 1.27 m/s and is played at
   2. Both slide today, by 39% and 37%: 176's table assumed they matched. Not this task's to change, and not
   touched; recorded here because it is the same check, failed by clips nobody had measured.
@@ -9587,3 +9588,185 @@ server and `join.bat a` / `b`.
   - **The other player's sprint wrong and your own right:** the staged server is older than this
     (`check-staged-server.ps1`), or their race did not reach you (182's "race N's body" lines).
   - **A character standing in its bind pose:** its blueprint did not load; the log says so by name.
+
+### Joe's playtest, 13 October: the run-to-sprint blend
+
+*"Sprinting looks a bit odd when going from the normal move speed to sprint on all races - the arms and legs move
+much differently outward/inward as compared to the normal movement animation. I'd like it to be more of a seamless
+transition from move to sprint."*
+
+**Measured before changing anything** (`tools/characters/ue_measure_run.py`, new: the run on each body, retargeted as
+the game plays it, every joint's place across the body at each of its 33 keys, into
+`tools/characters/run_shape.json`). The library's jog swings each hand diagonally, in across the chest at the front
+of its stride and out past the hip at the back, and flares the knees as each leg swings through. The sprints swung
+the arms straight fore and aft, further out, and held the knees in line:
+
+| Body | Hand at the front of its swing, run → sprint (cm from the midline) | Knee, mean | Ankle, mean |
+|---|---|---|---|
+| Humanoid | 11.8 → 20.4 | 17.3 → 11.7 | 13.7 → 13.0 |
+| Martian | 12.1 → 33.1 | 19.3 → 9.7 | 14.6 → 10.0 |
+| Elf | 13.6 → 28.8 | 20.0 → 13.0 | 15.5 → 14.8 |
+| Orc | 24.5 → 53.6 | 27.7 → 26.7 | 23.5 → 31.4 |
+
+Every blend between the two dragged those joints sideways, up to 29 cm, in the sixth of a second a change of pace
+takes. The sprint's arms had been placed by angles from the A-pose, which on the long-armed and wide-chested bodies
+left the hands far out; the knees by a pole kept in the leg's plane.
+
+**The test first: `SpaceMMO.Character.SprintKeepsTheRunsShape`.** For each race, a walker and another player's copy
+at the walk (2 m/s), halfway to the run (4 m/s), the run (6 m/s), halfway to the sprint (8.4 m/s: the walker's own
+`SprintMultiplier` set to 1.4) and the sprint, each held two seconds and measured for a second and a half; at the
+halfway paces the blend space plays half of each neighbour. Off the drawn pose it reads, for the elbows, hands,
+knees and ankles on both sides, the middle of each joint's sideways sweep and how wide it is (nearest and furthest
+from the midline, which do not depend on how many strides the window catches, as a mean would), and fore and aft,
+how far apart the balls of the feet reach on each whole step. It asserts:
+- the sprint sweeps where the run does, within 2 cm, and as wide, within 3;
+- halfway to the sprint, every joint stays between them, within 1 cm, and sweeps no wider than the wider of them,
+  within 1.5;
+- at both halfway paces, every step reaches at least three quarters as far as the shortest step at either end, and
+  there are at least two to measure. Two gaits blended in step reach about as far as each other; out of step, one's
+  forward leg is the other's back one, and the blend's steps come up short;
+- and through the change itself, which is what Joe watched: Shift pressed half a second into the measured stretch,
+  and released. Every joint stays inside the sweep the run and the sprint make between them, within 1.5 cm, and
+  every step reaches three quarters as far as the shorter of theirs.
+
+The library's own walk-to-run blend, which nobody has found odd, is reported beside it sideways as a yardstick.
+
+**Run against the first sprints, 116 assertions failed** (the steps were not yet measured), with the numbers of the
+table above, and something more: halfway to the sprint each ankle's sideways sweep was 11-19 cm wide (the
+Martian's 18.2 cm, against 4.7 in his run and 0.1 in his sprint). A blend of two leg poses that disagree sideways
+throws the feet out and in, worse than either: what Joe saw.
+
+**First, the sprint takes the run's shape across the body, fraction by fraction.** Both clips land the left foot at
+the start and halfway, so at the same fraction of their length both are at the same point of the stride. `sprint()`
+now puts each joint where the run's is across the body at that fraction, and keeps its own motion fore and aft and
+up and down, which is what makes it a sprint:
+- **the elbow**, by turning the whole arm about the chest's forward axis; **the hand**, by turning the upper arm
+  about its own length, which keeps the elbow a hinge, as a person carries a hand across the chest. At most 34°
+  across and 61° about its length (the orc), each looked at in front and side renders;
+- **the knee**, by turning its pole about the line from hip to ankle: the knee goes round a circle about that line,
+  and the pole sets where on it;
+- **the ankle**, by placing it, but a planted one is held still across the body where the run's was as that foot
+  landed, since a planted foot cannot slide sideways; the run's drifts a centimetre and a half while down. The
+  swing eases out the difference over its first third.
+
+`GAITS` lost `narrow`: the run decides where the feet go across the body. `sprint_measure` reports each joint's
+largest distance from the run's across the body (`LIMITS`: 1 cm for elbows, hands and knees, 2.5 for ankles) in place
+of the knee-splay limit, since the knees now flare as the run's do. Its planted-step band tightened from 2 mm to
+0.5: the Martian's foot came within 0.9 mm of the ground the frame before landing, arriving at 1.3 m/s, and counted
+as a slide. `verify_export.py` the same.
+
+In Blender, on every body: elbows, hands and knees 0.00 cm from the run's at every frame; ankles 1.06, 1.88, 1.03
+and 0.92 cm; every planted step at 10.80 m/s; the leg limits held. Read back from the exported files: sag between
+keys 0.76, 1.42, 0.54 and 0.55 cm (the Martian's up from 1.01, his feet now as wide as his run's). Key poses, front
+and side: `docs/wip/191-sprint/<body>_sprint_keyposes_13oct.png` (git-ignored); the Humanoid man's video is
+re-rendered too (`_preview_13oct.mp4`), the others' are still 11 October's. **These were imported without Joe
+seeing them first**, unlike 11 October's: the fix could only be measured in game.
+
+**That fixed both ends and not the middle.** Every assertion on the run and the sprint passed, each joint's middle
+within 0.9 cm of the run's and its sweep within 1.6 cm as wide. But halfway, **both ankles of every race still swung
+3.5-10.6 cm wider than in either clip**, the Martian's left knee 4.8 cm wider, and some middles strayed up to 3.4 cm
+outside both (the orc's right hand): 36 assertions, the same 18 on the walker and on the copy.
+
+**Because `ABP_Human`'s speed blend space had never synced its samples.** A blend space asset keeps its own samples
+in step. An embedded one, whose samples are separate sequence players, does so only through a sync group
+(`AnimNode_BlendSpaceGraphBase.cpp` opens a sync scope only when its group is not `None`), and `ABP_Human`'s was
+`None`. So each sample's player kept its own clock from wherever it stood when its weight rose from nothing, and
+the sprint came in at whatever point of its stride it happened to be, not the run's; matching them fraction by
+fraction cannot help two clips playing at unrelated fractions. Every blend this blueprint has made was unsynced,
+the walk to the run included. The importer now puts the blend space in sync group `SpeedBlend` and reads it back off
+the compiled blueprint.
+
+**In step, it also matters which step.** Synced by length, a blend space keeps its samples at the same fraction of
+their length, and the run is planted for about a quarter of each stride, the sprints for an eighth to a sixth: by
+fraction, the run's planted leg is averaged with the sprint's already folding one. So the importer reads each clip's
+footfalls off its own feet, on the body it plays on (the ball of the foot within 1.5 cm of its lowest), and writes
+them as sync markers, `LeftFootDown`, `LeftFootUp`, `RightFootDown` and `RightFootUp`, on a `Footfalls` track, every
+run: eight on the run and on each sprint, two strides each. The engine then matches clips marker by marker
+(`FAnimGroupInstance::Prepare`: the heaviest sample leads; with markers, every follower with markers follows them,
+any without follows by length). The Humanoid man's sprint puts his left foot down at 0.486 and 0.986 of the clip
+and up at 0.078 and 0.578; the run at 0.488 and 0.990, and 0.121 and 0.621.
+
+**The walk, which the same group now keeps with the run.** The step measure was added for this, and found it: synced,
+halfway from walk to run, **every race's legs reached only 18-30 cm apart on each step, against 57-76 cm at the walk
+and 82-108 at the run.** The legs barely parted, a shuffle every time a character sets off or slows. The walk holds
+one stride where the run holds two, so matched by length, the walk's left foot comes down while the run's right is
+planted. Unsynced,
+as they were before, the two drifted through each other, in step one moment and not the next: the same test on the
+committed blueprints passed walk to run in its window and failed run to sprint, steps collapsing to 30-44 cm partway
+through. So the walk is marked too (`LibraryGaits` in the importer, one stride: right foot down at 0.334, left up at
+0.393, left down at 0.824, right up at 0.895), and halfway from walk to run every step reaches 64-83 cm.
+
+The walk and the run are the library's clips, changed by this. A re-import of the library would drop their markers;
+the importer puts them back on every run.
+
+### What was verified, 13 October
+
+- **Builds:** `SpaceMMOEditor`, `Result: Succeeded` from `UnrealEngineSource`, compiling the importer and the test
+  after each change, and never a test run on an unchecked build. `SpaceMMOServer` likewise.
+- **The importer:** `Result: OK`, 0 problems. Footfalls read and written on all six clips, read back off each; the
+  blend space *"plays 0.00 anim_Idle, 2.00 anim_Walk_Fwd_Loop_L, 6.00 anim_Jog_Loop_Fwd, 10.80
+  anim_HumanoidMale_Sprint, in sync group 'SpeedBlend'"*, read off the compiled blueprint; each child's override read
+  back as on 11 October.
+- **`SprintKeepsTheRunsShape`**, the walker and another player's copy identical to the tenth of a centimetre:
+
+  | Race | Sprint against run, across: middle / width | Halfway to the sprint: outside / wider | Steps, cm: walk · halfway · run · halfway · sprint |
+  |---|---|---|---|
+  | 0 Humanoid | 0.8 / 1.1 cm | 0.4 / 0.5 | 57-58 · 64 · 82-83 · 98 · 106 |
+  | 1 Martian | 0.9 / 1.4 | 0.4 / 0.2 | 76 · 83 · 107-108 · 123-124 · 134-136 |
+  | 2 Elf | 0.9 / 1.8 | 0.5 / 0.3 | 72 · 79 · 101-102 · 122-123 · 133-134 |
+  | 3 Orc | 0.9 / 1.5 | 0.8 / 0.8 | 67-68 · 75 · 97-98 · 109-110 · 116 |
+
+  The yardstick, walk to run sideways: at most 0.1 cm outside its ends, and narrower than either. **Through the
+  change**, every joint inside both paces' sweep, and the steps lengthen and shorten without a short one: Shift
+  pressed, 100 → 106 cm (Humanoid), 127 → 136 (Martian), 125 → 134 (elf), 112 → 116 (orc); released, 106 → 83,
+  136 → 99, 134 → 101, 116 → 97.
+- **Seen red for each reason it exists**, every time on the walker and the copy alike, the assets each time checked
+  out of `HEAD` and restored byte for byte afterwards:
+  - **what Joe played** (the first sprints, the committed blueprints, the walk and run unmarked): **160**
+    assertions. 108 at the ends, the sprint not where the run is; 24 sideways halfway; 8 steps halfway to the sprint
+    (30-42 cm against 82-107); and **20 through the change itself**, 18 of them a foot thrown outside both paces'
+    sweep as Shift went down or up (the Martian's right foot came within 0.8 cm of his midline on releasing it,
+    against 10.0-16.9 cm at either pace) and 2 a step short. The test's first version, run against the same, failed
+    the 116 of these that existed then;
+  - the reshaped sprints on the committed, unsynced blueprints: **44**, the 36 sideways ones above and all 8 steps
+    from run to sprint;
+  - synced, the walk not yet marked: **8**, every one a step from walk to run.
+- **`EachRaceSprintsOnItsOwnFeet`** still green on the synced blend: planted feet slide at 1072.3, 1075.4, 1072.7 and
+  1069.9 cm/s against 1080, sinking 0.63, 1.30, 0.54 and 0.46 cm; the control 1410.6.
+- **Client suite: `PASS: 308 tests, 0 failures`.**
+- **The dedicated server is re-cooked**, since the test file changed and the content with it: `SpaceMMOServer`
+  `Result: Succeeded`, compiling it; `UnrealPak` and `ShaderCompileWorker` up to date; the cook made 645 of 654
+  packages (9 skipped by platform), `ExitCode=0`. The walk, the run, the four sprints and the four blueprints are in
+  the server's IoStore container (`UnrealPak <utoc> -List`), and `check-staged-server.ps1` passes.
+
+**Not verified by anything automated:** how any of it looks. The change of pace is measured at one moment of the
+stride, half a second into the stretch, not every moment a player might press Shift. Nor the idle: it has no
+footfalls, and below 1 m/s, where it outweighs the walk, the group syncs by length to the idle's clip.
+
+### What a playtest has to say, 13 October
+
+This replaces 11 October's *Run to sprint and back*. **Restart the editor first**: `ABP_Human`, the walk, the run
+and the four sprints changed under it. For two players, the re-cooked server and `join.bat a` / `b`.
+
+- **Run to sprint and back, on every race** (`SpaceMMO.ForceBodyRace 0` to `3`; -1 gives your race back). Hold and
+  release Left Shift while running, and watch the arms and knees through the change: the hands should cross in
+  front of the chest at the front of each swing and pass out by the hip at the back at both paces, the knees flare
+  as each leg comes through, and nothing should move out and back in as the pace changes. This is Joe's report.
+- **The sprint itself looks different** from what Joe approved on 11 October: the run's arm and knee shape, faster and
+  longer. Most of all the Martian's and orc's arms, whose hands swung 21 and 29 cm further out. The new key poses
+  are in `docs/wip/191-sprint/`, `_13oct`.
+- **Walk to run, setting off and stopping:** in step for the first time. The legs should go from walk to run without
+  a shuffle or a skipped beat.
+- **How it would fail:**
+  - **Arms or knees still moving out and in through the change:** the client is older than the assets (restart the
+    editor), or the blend space lost its sync group (the importer's *"in sync group 'SpeedBlend'"*; the test would
+    fail by 3.5-10.6 cm).
+  - **A shuffle between walk and run, or the legs stalling between run and sprint:** a clip lost its footfall
+    markers. A re-import of the library drops the walk's and run's; re-running the importer restores them, and the
+    test would fail by steps of 18-44 cm.
+  - **A hitch at the instant Shift is pressed or released:** a clip jumping into step as its weight rises, or as the
+    lead passes. The test presses and releases it once each, at one moment of the stride; at another it would be new.
+  - **The legs crawling at a slow push of a stick, below 1 m/s:** the idle leading the group and the walk following
+    its length. Not expected with keys, which pass that speed almost at once.
+  - **The other player's sprint wrong and your own right:** the staged server is older than this
+    (`check-staged-server.ps1`).

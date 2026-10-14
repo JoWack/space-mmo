@@ -15,7 +15,8 @@ session through the MCP: Auto-Rig Pro's Smart detection needs a 3D view, so this
   7. export(name)         Auto-Rig Pro's FBX with the settings 175 recorded, and the four textures.
 
 The sprint (191) is made on a finished rig, from its file, with nothing measured from markers:
-    sprint(name)                      the Sprint action, keyed every frame from GAITS[name], and its measurements
+    sprint(name)                      the Sprint action, keyed every frame from GAITS[name] and the run's shape
+                                      across the body (run_shape.json, from ue_measure_run.py), and its measurements
     sprint_preview(name, out_dir)     key poses side and front, and a video of it running over a moving floor
     export(name, "Sprint", name + "_Sprint", maps=False, fps=SPRINT_FPS)
 
@@ -25,6 +26,7 @@ over his 1.80 m, kl its root height over his 0.92 m.
 
 import contextlib
 import io
+import json
 import math
 import os
 import time
@@ -591,7 +593,8 @@ SPRINT_FPS = 60
 # root height over his; angles are degrees; frames are thirtieths of a second, keyed at SPRINT_FPS.
 #   cycle    frames from a foot's touchdown to its next. The clip holds two, because the library's jog it blends
 #            with holds two in its 32 frames, left foot down at about 0 and 16, right at 8 and 24 (measured on the
-#            Humanoid man, 191), and a blend space keeps its samples at the same fraction of their length.
+#            Humanoid man, 191). ABP_Human's blend space keeps them in step by the footfall markers the clip
+#            importer reads off both, in its sync group (191, 13 October); before that it kept them in no step at all.
 #   contact  frames a foot is on the ground. It sweeps SPRINT_SPEED x contact / 30 back under the body then, so
 #            a leg's reach bounds it: 0.72 m on two frames, 1.08 on three.
 #   ahead    where the ball of the foot lands in front of the hip; the rest of the sweep is behind it.
@@ -599,6 +602,7 @@ SPRINT_FPS = 60
 #            far the knee folds as the heel comes through. The swing is authored in joint angles, not as a path
 #            for the foot: a path for the foot left the knee to fold to 151 degrees and the ankle to bend 70
 #            degrees past neutral toward the shin, and Joe, 11 October, saw "the feet and legs ... all warped".
+# Where the joints sit across the body is not here: it is the run's (RUN_SHAPE, below).
 GAITS = {
     # The baseline: a strong forward lean, high heel recovery, arms driving hard past the hips. Landing 0.30 ahead
     # left his push-off on a locked knee (0.3 degrees), the ankle swinging on the whole leg's length around the hip,
@@ -606,30 +610,80 @@ GAITS = {
     # and it sinks 0.74 (verify_export.py's sag check, on trial exports of 0.34, 0.36 and 0.38).
     "HumanoidMale": dict(cycle=14, contact=2, ahead=0.38, drop=0.065, bob=0.025, lean=12, chest=3, head=-13,
                          pelvis_yaw=7, chest_yaw=9, arm_mid=5, arm_amp=45, adduct=22, elbow_mid=85, elbow_amp=10,
-                         drive=62, fold=120, narrow=0.04),
+                         drive=62, fold=120),
     # A long, light stride with little bob (176): a slower cycle on longer legs, contact on three frames. Landing
     # 0.30 ahead left 0.68 m of the 1.08 m sweep behind him, past his reach at toe-off (1.03 of his leg, and 8 of
     # 12 planted steps landed); 0.40 ahead centres it.
     "MartianMale": dict(cycle=18, contact=3, ahead=0.40, drop=0.09, bob=0.012, lean=9, chest=2, head=-10,
                         pelvis_yaw=6, chest_yaw=7, arm_mid=4, arm_amp=40, adduct=20, elbow_mid=85, elbow_amp=10,
-                        drive=58, fold=110, narrow=0.04),
+                        drive=58, fold=110),
     # Upright and light-footed (176): little lean, the heel kicked high, a quick turnover.
     "SpaceElfMale": dict(cycle=16, contact=2, ahead=0.28, drop=0.06, bob=0.018, lean=6, chest=1, head=-6,
                          pelvis_yaw=6, chest_yaw=8, arm_mid=5, arm_amp=42, adduct=22, elbow_mid=85, elbow_amp=10,
-                         drive=66, fold=122, narrow=0.05),
+                         drive=66, fold=122),
     # Heavy and wide (176): more lean and drop, feet apart, arms swinging round his chest rather than past it. His
     # arms hang 40 degrees out at rest; left there, his fists swung 0.8-0.9 m from his midline against a torso
     # 0.37 m wide at the armpit, and read as flailing. 18 in keeps them just outside his chest.
     # At 0.08 his deeper knee bent the ankle 22.9 degrees up at mid-stance, past LIMITS.
     "SpaceOrcMale": dict(cycle=16, contact=2, ahead=0.30, drop=0.065, bob=0.03, lean=14, chest=4, head=-15,
                          pelvis_yaw=8, chest_yaw=11, arm_mid=4, arm_amp=40, adduct=18, elbow_mid=90, elbow_amp=10,
-                         drive=55, fold=108, narrow=0.0),
+                         drive=55, fold=108),
 }
 
 # What a leg may do, checked on every frame by sprint_measure. The ankle is the angle between shin and foot
 # against its rest angle: a real one dorsiflexes about 20 degrees and plantarflexes about 50. A knee folded past
 # about 130 degrees collapses its back under linear blend skinning. A boot bent more than 30 at the ball creases.
-LIMITS = dict(knee_max=130.0, dorsiflex_max=22.0, plantarflex_max=50.0, toe_bend_max=32.0, knee_splay_max=0.25)
+# shape_max is how far, in centimetres, an elbow, hand or knee may sit across the body from where the run has it at
+# the same point of the stride; an ankle gets more, because a planted one holds still where the run's drifts.
+LIMITS = dict(knee_max=130.0, dorsiflex_max=22.0, plantarflex_max=50.0, toe_bend_max=32.0, shape_max=1.0,
+              ankle_shape_max=2.5)
+
+# Where the run every race plays puts each joint across the body, at each fraction of its two strides, measured on
+# each body in Unreal by ue_measure_run.py (191). Joe, 13 October, after playing the first sprints: going from the
+# run to the sprint "the arms and legs move much differently outward/inward". The run swings each hand across the
+# chest at the front of its stride and out past the hip at the back and flares the knees through the swing; those
+# sprints swung the arms straight and held the knees in line, and every blend between them dragged the joints
+# sideways, up to 29 cm on the orc. The blend space keeps the two in step by footfall (the clip importer's markers,
+# in ABP_Human's sync group), and both land each foot at nearly the same fractions of their length, so matching the
+# run at each fraction leaves a blend between them nothing to move sideways. Fore-aft and up-down stay the sprint's
+# own.
+RUN_SHAPE = "D:/Programming/SpaceMMO/tools/characters/run_shape.json"
+
+
+def _run_shape(name):
+    """The run's joints on this body: at(joint, t) is where the run puts joint ('hand_l', 'calf_r' ...) at fraction
+    t of its clip, in metres in the rig's axes. Unreal's are the same but for forward, which is +y there."""
+    with open(RUN_SHAPE) as f:
+        data = json.load(f)["bodies"][name]
+    tracks = {j: np.array(v, float) for j, v in data["tracks"].items()}
+    keys = data["keys"]
+
+    def at(joint, t):
+        k = (t % 1.0) * (keys - 1)
+        i = min(int(math.floor(k)), keys - 2)
+        a, b = tracks[joint][i], tracks[joint][i + 1]
+        x, y, z = (a + (b - a) * (k - i)) / 100.0
+        return Vector((x, -y, z))
+    return at
+
+
+def _solve_across(a, b, c):
+    """The angle nearest nought with a cos(angle) + b sin(angle) = c, or the nearest it can get."""
+    r = math.hypot(a, b)
+    if r < 1e-9:
+        return 0.0
+    base = math.atan2(b, a)
+    spread = math.acos(max(-1.0, min(1.0, c / r)))
+    cands = [math.remainder(base + spread, 2 * math.pi), math.remainder(base - spread, 2 * math.pi)]
+    return min(cands, key=abs)
+
+
+def _turn_across(v, axis, target_x):
+    """How far to turn vector v about unit axis, in radians, for its x to be target_x (Rodrigues' formula, the
+    same right-hand turn Matrix.Rotation makes)."""
+    along = axis * axis.dot(v)
+    perp = v - along
+    return _solve_across(perp.x, axis.cross(perp).x, target_x - along.x)
 TOE_OFF_PITCH = 38.0   # the heel's lift about the ball at toe-off; 55 bent the boot 47 degrees at the toes
 
 
@@ -674,6 +728,7 @@ def sprint(name):
     swinging leg is placed by its joints: the thigh's angle, the knee's fold and the ankle's angle against the shin,
     splined from the planted pose it leaves to the one it lands in, through a heel recovery and a knee drive."""
     g = GAITS[name]
+    shape = _run_shape(name)
     rig = bpy.data.objects["rig"]
     pb, X, Y, reset, turn, move = _pose_tools(rig)
     scn = bpy.context.scene
@@ -703,6 +758,7 @@ def sprint(name):
             "c_leg_pole.l", "c_leg_pole.r"]
     fingers = [f + j for f in ("c_index", "c_middle", "c_ring", "c_pinky") for j in ("1", "2", "3")]
     ctrl = ctrl + [f + "." + s for f in fingers for s in ("l", "r")]
+    arm_turns = {"across": 0.0, "roll": 0.0}
 
     def wave(p, peak):
         return math.cos(2 * math.pi * (p - peak))
@@ -719,7 +775,8 @@ def sprint(name):
         if q.angle > 1e-6:
             turn("c_forearm_fk." + side, q.axis, math.degrees(q.angle))
 
-    def pose_body(p):
+    def pose_body(p, t):
+        """Everything but the legs at phase p of a stride, which is fraction t of the clip."""
         reset()
         # The hips: lowered, bobbing twice a stride (lowest mid-stance, highest mid-flight), turning toward the
         # leg that swings forward. The left leg is furthest forward just before its touchdown, at p ~ 0.92.
@@ -749,30 +806,64 @@ def sprint(name):
             for f in fingers:
                 pb[f + "." + side].rotation_euler = (math.radians(-35), 0, 0)
         bpy.context.view_layer.update()
+        # Then across the body, where the run has them at this fraction of its clip: the elbow by turning the whole
+        # arm about the chest's forward axis, then the hand by turning the upper arm about its own length, which
+        # keeps the elbow a hinge, as a person carries a hand across the chest.
+        for side in ("l", "r"):
+            shoulder = pb["c_arm_fk." + side].head.copy()
+            elbow = pb["c_forearm_fk." + side].head.copy()
+            across = _turn_across(elbow - shoulder, forward, shape("lowerarm_" + side, t).x - shoulder.x)
+            turn("c_arm_fk." + side, forward, math.degrees(across), pivot=shoulder)
+            elbow = pb["c_forearm_fk." + side].head.copy()
+            length = (elbow - shoulder).normalized()
+            roll = _turn_across(pb["c_hand_fk." + side].head - shoulder, length, shape("hand_" + side, t).x - shoulder.x)
+            turn("c_arm_fk." + side, length, math.degrees(roll), pivot=shoulder)
+            arm_turns["across"] = max(arm_turns["across"], abs(math.degrees(across)))
+            arm_turns["roll"] = max(arm_turns["roll"], abs(math.degrees(roll)))
 
-    def aim_pole(side, sgn):
-        """The knee's pole, kept in the plane of the hip and ankle, so the knee drives straight forward. Left at
-        rest, outside the hip, it splayed the knees outward in the swing."""
-        hip, ankle = pb["thigh_ik." + side].head, pb["c_foot_ik." + side].head
-        move("c_leg_pole." + side, (0.5 * (hip.x + ankle.x) - pole_rest[side].x, 0, 0))
+    def aim_knee(side, t):
+        """The knee's pole, turned about the line from hip to ankle until the knee sits across the body where the
+        run's does at fraction t: the knee goes round a circle about that line, and the pole sets where on it. (The
+        first sprints kept the pole in the leg's plane, the knee straight ahead, where the run flares it.)"""
+        hip, ankle = pb["thigh_ik." + side].head.copy(), pb["c_foot_ik." + side].head.copy()
+        a, b = thigh_len[side], shin_len[side]
+        d = min((ankle - hip).length, 0.999 * (a + b))
+        u = (ankle - hip).normalized()
+        along = (a * a - b * b + d * d) / (2 * d)
+        radius = math.sqrt(max(a * a - along * along, 1e-8))
+        centre = hip + u * along
+        ahead = Vector((0, -1, 0))
+        ahead = (ahead - u * ahead.dot(u)).normalized()
+        side_way = u.cross(ahead).normalized()
+        angle = _solve_across(radius * ahead.x, radius * side_way.x, shape("calf_" + side, t).x - centre.x)
+        want = centre + (ahead * math.cos(angle) + side_way * math.sin(angle)) * 0.6
+        move("c_leg_pole." + side, want - pb["c_leg_pole." + side].head)
 
-    def pose_planted(side, sgn, f):
-        """Frame f of the stance: the ball on the ground sliding back at SPRINT_SPEED, the heel rising about it, the
-        toes bent flat against the ground as far as a boot bends and no further."""
+    def planted_x(side, t_down):
+        """Where a planted ankle sits across the body: where the run's is as that foot lands, held there, since a
+        planted foot cannot move sideways. The run's drifts by a centimetre and a half while down."""
+        return shape("foot_" + side, t_down).x
+
+    def pose_planted(side, sgn, f, t, t_down):
+        """Frame f of the stance, fraction t of the clip, the foot down since t_down: the ball on the ground sliding
+        back at SPRINT_SPEED, the heel rising about it, the toes bent flat as far as a boot bends and no further."""
         u = f / c
         pitch = 12 + (TOE_OFF_PITCH - 12) * u * u
-        off = Vector((-sgn * g["narrow"] * kl, -g["ahead"] * kl + per_frame * f - ball[side].y, 0))
+        off = Vector((planted_x(side, t_down) - ankle_rest[side].x, -g["ahead"] * kl + per_frame * f - ball[side].y, 0))
         move("c_foot_ik." + side, off)
         turn("c_foot_ik." + side, X, pitch, pivot=ball[side] + off)
         turn("c_toes_ik." + side, X, -min(pitch, LIMITS["toe_bend_max"] - 2), pivot=ball[side] + off)
-        aim_pole(side, sgn)
+        aim_knee(side, t)
 
-    def pose_swinging(side, sgn, s, spline):
-        """Fraction s of the swing, from the joint angles the spline gives: the ankle placed by the thigh and knee,
-        the foot turned about it to its angle against the shin, the toes straightening early."""
+    def pose_swinging(side, sgn, s, spline, t, t_up, t_down):
+        """Fraction s of the swing, fraction t of the clip, the foot up since t_up after landing at t_down: the ankle
+        placed by the thigh and knee, the foot turned about it to its angle against the shin, the toes straightening
+        early. Across the body it follows the run's ankle, easing out over the swing's first third the gap between
+        where it was held planted and where the run's had drifted to."""
         thigh, fold, ankle_angle = spline(s)
         hip = pb["thigh_ik." + side].head.copy()
-        x = ankle_rest[side].x - sgn * g["narrow"] * kl
+        held = planted_x(side, t_down) - shape("foot_" + side, t_up).x
+        x = shape("foot_" + side, t).x + held * (1.0 - float(_smooth(0.0, 0.3, s)))
         # The leg's lengths in the side view: the hip and ankle are this far apart across the body.
         lat = abs(x - hip.x) / (thigh_len[side] + shin_len[side])
         lt, ls = thigh_len[side] * math.sqrt(1 - lat * lat), shin_len[side] * math.sqrt(1 - lat * lat)
@@ -787,7 +878,7 @@ def sprint(name):
         bend = max(0.0, 1.0 - s / 0.2) * min(TOE_OFF_PITCH, LIMITS["toe_bend_max"] - 2)
         if bend:
             turn("c_toes_ik." + side, X, -bend, pivot=pb["toes_01." + side].head.copy())
-        aim_pole(side, sgn)
+        aim_knee(side, t)
 
     # The knee's pole follows the foot in this rig (Auto-Rig Pro's pole_parent 1). A heel kicked up behind took
     # the pole with it, and the knee bent backward toward it; with 0 it stays with the root. Keyed every frame, and
@@ -796,13 +887,22 @@ def sprint(name):
         pb["c_leg_pole." + side]["pole_parent"] = 0
     bpy.context.view_layer.update()
     phases = {"l": (1, 0.0), "r": (-1, 0.5)}
+
+    def foot_frame(frame, shift):
+        """For one foot at a frame of the clip: its frame within its stride, and the clip fractions at which it last
+        landed and lifted."""
+        f = ((frame / n + shift) % 1.0) * n
+        down = (frame - round(f) if f <= c + 1e-9 else frame - f) % frames
+        return f, down / frames, ((down + c) % frames) / frames
+
     # First pass: the planted frames alone, to read the leg's angles where the swing must leave and land.
     planted = {}
     for side, (sgn, shift) in phases.items():
         rows = []
         for f in range(c + 1):
-            pose_body((f / n + shift) % 1.0)
-            pose_planted(side, sgn, f)
+            frame = round((f / n - shift) % 1.0 * n)
+            pose_body((frame % n) / n, frame / frames)
+            pose_planted(side, sgn, f, frame / frames, foot_frame(frame, shift)[1])
             rows.append(_leg_angles(pb, side))
         planted[side] = rows
 
@@ -833,13 +933,14 @@ def sprint(name):
     splines = {side: swing_spline(side) for side in phases}
     for frame in range(frames + 1):
         p = (frame % n) / n
-        pose_body(p)
+        t = frame / frames
+        pose_body(p, t)
         for side, (sgn, shift) in phases.items():
-            f = ((p + shift) % 1.0) * n
+            f, t_down, t_up = foot_frame(frame, shift)
             if f <= c + 1e-9:
-                pose_planted(side, sgn, round(f))
+                pose_planted(side, sgn, round(f), t, t_down)
             else:
-                pose_swinging(side, sgn, (f - c) / (n - c), splines[side])
+                pose_swinging(side, sgn, (f - c) / (n - c), splines[side], t, t_up, t_down)
         for ctl in ctrl:
             pb[ctl].keyframe_insert("location", frame=frame)
             pb[ctl].keyframe_insert("rotation_euler", frame=frame)
@@ -852,6 +953,7 @@ def sprint(name):
     scn.frame_set(0)
     out = sprint_measure(name)
     out.update({"action": act.name, "frames": frames + 1, "kl": round(kl, 3),
+                "arm_turns_max_deg": {k: round(v, 1) for k, v in arm_turns.items()},
                 "planted_angles": {s: [[round(float(v), 1) for v in r] for r in planted[s]] for s in planted},
                 "rest_ankle": {s: round(v, 1) for s, v in _rest_ankle.items()}})
     return out
@@ -871,10 +973,11 @@ def rest_on_jump():
     return {"action": rig.animation_data.action.name, "pole_parent": [rig.pose.bones["c_leg_pole." + s]["pole_parent"] for s in ("l", "r")]}
 
 
-def sprint_preview(name, out_dir, loops=3, size=(640, 720)):
+def sprint_preview(name, out_dir, loops=3, size=(640, 720), every=2):
     """Key poses of one stride, side and front, and a video of the sprint over a checkered floor moving back at
     SPRINT_SPEED, side and front side by side. On that floor a planted foot stands still and a sliding one moves
-    against the squares, which is the slide the numbers measure, made visible. Everything temporary is removed."""
+    against the squares, which is the slide the numbers measure, made visible. Everything temporary is removed.
+    The video takes every `every`th key, at the speed it plays: at 60 keys a second a whole one outran the MCP."""
     g = GAITS[name]
     rig, body = bpy.data.objects["rig"], bpy.data.objects[name]
     H = float(max((body.matrix_world @ Vector(c)).z for c in body.bound_box))
@@ -923,7 +1026,7 @@ def sprint_preview(name, out_dir, loops=3, size=(640, 720)):
     count = loops * clip
     views = {"side": (3.4 * k, 0, 0.55 * H), "front": (0, -3.4 * k, 0.55 * H)}
     paths = []
-    for i in range(count):
+    for i in range(0, count, every):
         sc.frame_set(i % clip)
         floor.location.y = (SPRINT_SPEED * i / SPRINT_FPS) % 2.0
         row = []
@@ -962,7 +1065,7 @@ def sprint_preview(name, out_dir, loops=3, size=(640, 720)):
     edit = bpy.data.scenes.new("SprintPreviewEdit")
     edit.render.resolution_x, edit.render.resolution_y = 2 * size[0], size[1]
     edit.render.resolution_percentage = 100
-    edit.render.fps, edit.render.fps_base = SPRINT_FPS, 1.0
+    edit.render.fps, edit.render.fps_base = SPRINT_FPS // every, 1.0
     se = edit.sequence_editor_create()
     strips = se.strips if hasattr(se, "strips") else se.sequences     # renamed in Blender 4.4; empty is falsy
     strip = strips.new_image("frames", paths[0], 1, 1)
@@ -996,6 +1099,8 @@ def sprint_measure(name):
     act = rig.animation_data.action
     f0, f1 = int(act.frame_range[0]), int(act.frame_range[1])
     balls, lows, roots, mats, legs = {"l": [], "r": []}, [], [], [], {"l": [], "r": []}
+    shape = _run_shape(name)
+    shape_err = {"lowerarm": 0.0, "hand": 0.0, "calf": 0.0, "foot": 0.0}
     for f in range(f0, f1 + 1):
         scn.frame_set(f)
         dg = bpy.context.evaluated_depsgraph_get()
@@ -1008,6 +1113,13 @@ def sprint_measure(name):
         lows.append(float(co.reshape(-1, 3)[:, 2].min()))
         ev.to_mesh_clear()
         roots.append(np.array(rig.pose.bones["c_traj"].matrix.translation))
+        t = (f - f0) / max(f1 - f0, 1)
+        for s in ("l", "r"):
+            pbs = rig.pose.bones
+            for joint, bone in (("lowerarm", "c_forearm_fk."), ("hand", "c_hand_fk."), ("calf", "leg_ik."),
+                                ("foot", "foot.")):
+                off = abs((rig.matrix_world @ pbs[bone + s].head).x - shape(joint + "_" + s, t).x) * 100
+                shape_err[joint] = max(shape_err[joint], off)
         for s, sgn in (("l", 1), ("r", -1)):
             pb = rig.pose.bones
             hip, knee, ankle = pb["thigh_ik." + s].head, pb["leg_ik." + s].head, pb["foot." + s].head
@@ -1022,7 +1134,9 @@ def sprint_measure(name):
     speeds = []
     for s in ("l", "r"):
         b = np.array(balls[s])
-        planted = [i for i in range(len(b)) if abs(b[i][2] - rest_z[s]) < 0.002]
+        # Planted means at its rest height to the half millimetre: the frame before a landing comes within 1 mm
+        # (the Martian's, once his feet followed the run across the body) and is arriving, not sliding.
+        planted = [i for i in range(len(b)) if abs(b[i][2] - rest_z[s]) < 0.0005]
         for i, j in zip(planted, planted[1:]):
             if j == i + 1:
                 v = (b[j] - b[i]) * scn.render.fps
@@ -1054,12 +1168,15 @@ def sprint_measure(name):
     toe = max(float((L[s][:, 3] - rest[s][1]).max()) for s in L)
     splay = max(float(np.abs(L[s][:, 4]).max()) for s in L)
     legs_ok = (knee_max <= LIMITS["knee_max"] and dorsi <= LIMITS["dorsiflex_max"]
-               and plantar <= LIMITS["plantarflex_max"] and toe <= LIMITS["toe_bend_max"]
-               and splay <= LIMITS["knee_splay_max"])
+               and plantar <= LIMITS["plantarflex_max"] and toe <= LIMITS["toe_bend_max"])
+    shape_ok = (max(shape_err["lowerarm"], shape_err["hand"], shape_err["calf"]) <= LIMITS["shape_max"]
+                and shape_err["foot"] <= LIMITS["ankle_shape_max"])
     return {"planted_speeds": speeds, "speed_min": min(vals) if vals else None, "speed_max": max(vals) if vals else None,
             "planted_steps": len(vals), "planted_expected": expected,
             "speed_ok": len(vals) == expected and all(abs(v - SPRINT_SPEED) <= 0.05 * SPRINT_SPEED for v in vals),
-            "legs_ok": legs_ok, "knee_fold_max": round(knee_max, 1), "ankle_dorsiflex_max": round(dorsi, 1),
+            "legs_ok": legs_ok, "shape_ok": shape_ok,
+            "shape_err_cm": {k: round(v, 2) for k, v in shape_err.items()},
+            "knee_fold_max": round(knee_max, 1), "ankle_dorsiflex_max": round(dorsi, 1),
             "ankle_plantarflex_max": round(plantar, 1), "toe_bend_max": round(toe, 1), "knee_splay_max": round(splay, 2),
             "lowest_cm": round(100 * min(lows), 2), "lowest_at": f0 + int(np.argmin(lows)),
             "root_moves_m": round(float(np.ptp(np.array(roots), 0).max()), 5), "loop_max_diff": round(loop, 6)}

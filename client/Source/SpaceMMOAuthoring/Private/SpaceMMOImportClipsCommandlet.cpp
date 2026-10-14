@@ -2,6 +2,9 @@
 
 #include "AnimGraphNode_BlendSpaceGraphBase.h"
 #include "AnimGraphNode_SequencePlayer.h"
+#include "AnimationBlueprintLibrary.h"
+#include "AnimationRuntime.h"
+#include "BonePose.h"
 #include "Animation/AnimBlueprint.h"
 #include "Animation/AnimBlueprintGeneratedClass.h"
 #include "Animation/AnimData/IAnimationDataModel.h"
@@ -122,6 +125,27 @@ namespace SpaceMMOImportClips
 	};
 
 	const TCHAR* const HumanBlueprint = TEXT("/Game/Characters/Human/ABP_Human.ABP_Human");
+
+	/** The sync group ABP_Human's speed blend space keeps its samples in; nothing else in the blueprint uses it. */
+	const FName SpeedSyncGroup(TEXT("SpeedBlend"));
+
+	/** A library clip the speed blend space plays, and how many strides it holds. */
+	struct FLibraryGait
+	{
+		const TCHAR* Clip;
+		int32 Strides;
+	};
+
+	/**
+	 * The walk and the run every race plays, which carry footfall markers as the sprints do. The run is what each
+	 * sprint syncs with; the walk, because the sync group that keeps run and sprint in step keeps the walk with the
+	 * run too, and it holds one stride against the run's two: matched by length, the walk's left foot comes down
+	 * while the run's right is planted.
+	 */
+	const FLibraryGait LibraryGaits[] = {
+		{TEXT("/Game/FreeAnimationLibrary/Animations/Walk/anim_Walk_Fwd_Loop_L.anim_Walk_Fwd_Loop_L"), 1},
+		{TEXT("/Game/FreeAnimationLibrary/Animations/Jog/anim_Jog_Loop_Fwd.anim_Jog_Loop_Fwd"), 2},
+	};
 
 	const FLocomotion Locomotion[] = {
 		{HumanoidMale, TEXT("/Game/Characters/Humanoid/anim_HumanoidMale_Sprint.anim_HumanoidMale_Sprint"), HumanBlueprint},
@@ -445,6 +469,170 @@ namespace SpaceMMOImportClips
 		return Problems;
 	}
 
+	/**
+	 * Footfall sync markers (task 191, Joe's 13 October playtest). The run is the library's jog, which keeps each foot
+	 * down for a quarter of its stride; a sprint can keep it down for barely a seventh before the leg runs out of
+	 * reach. Blended by fraction of their length, the run's planted, straight leg was averaged with the sprint's
+	 * leg already folding up, and the foot swung across the body. With these on both, a sync group keeps them in
+	 * step by footfall instead: foot down with foot down, foot up with foot up. The walk carries them too, for
+	 * the same group keeps it with the run (LibraryGaits).
+	 */
+	const FName FootfallTrack(TEXT("Footfalls"));
+
+	/** Where each foot lands and lifts in Sequence, as fractions of it, read off its balls of the feet. */
+	struct FFootfalls
+	{
+		TArray<TPair<double, FName>> Events;
+		FString Problem;
+	};
+
+	FFootfalls ReadFootfalls(const UAnimSequence* Sequence, USkeleton* Skeleton, const USkeletalMesh* Body, const int32 Strides)
+	{
+		FFootfalls Out;
+		const FReferenceSkeleton& Reference = Body != nullptr ? Body->GetRefSkeleton() : Skeleton->GetReferenceSkeleton();
+		TArray<FBoneIndexType> Required;
+
+		for (int32 Index = 0; Index < Reference.GetNum(); ++Index)
+		{
+			Required.Add(static_cast<FBoneIndexType>(Index));
+		}
+
+		// On the body it was made on where there is one, retargeted as the game plays it; the library's walk and run on
+		// the skeleton.
+		FBoneContainer Bones;
+		Bones.InitializeTo(Required, UE::Anim::FCurveFilterSettings(UE::Anim::ECurveFilterMode::DisallowAll),
+			Body != nullptr ? static_cast<UObject&>(*const_cast<USkeletalMesh*>(Body)) : static_cast<UObject&>(*Skeleton));
+		Bones.SetUseRAWData(true);
+
+		const FName Balls[] = { TEXT("ball_l"), TEXT("ball_r") };
+		const FName Downs[] = { TEXT("LeftFootDown"), TEXT("RightFootDown") };
+		const FName Ups[] = { TEXT("LeftFootUp"), TEXT("RightFootUp") };
+		constexpr int32 Samples = 512;
+		const double Length = Sequence->GetPlayLength();
+		const FCompactPoseBoneIndex Root = Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(Reference.FindBoneIndex(TEXT("root"))));
+		TArray<double> Heights[2];
+
+		for (int32 Sample = 0; Sample < Samples; ++Sample)
+		{
+			// Compact poses allocate from the memory stack, which wants a mark in scope (as the engine's AnimPose has).
+			FMemMark Mark(FMemStack::Get());
+			FCompactPose Pose;
+			Pose.SetBoneContainer(&Bones);
+			Pose.ResetToRefPose();
+			FBlendedCurve Curve;
+			Curve.InitFrom(Bones);
+			UE::Anim::FStackAttributeContainer Attributes;
+			FAnimationPoseData Data(Pose, Curve, Attributes);
+
+			Sequence->GetAnimationPose(Data, FAnimExtractContext(Length * Sample / Samples, false));
+
+			FCSPose<FCompactPose> Component;
+			Component.InitPose(Pose);
+
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const FCompactPoseBoneIndex Ball = Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(Reference.FindBoneIndex(Balls[Side])));
+				Heights[Side].Add(Component.GetComponentSpaceTransform(Ball).GetLocation().Z
+					- Component.GetComponentSpaceTransform(Root).GetLocation().Z);
+			}
+		}
+
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			// The ground under the ball: the height of its lowest twentieth, which a ball sagging between keys or a
+			// foot rolling on its toes does not move far. Down is within 1.5 cm of it, for at least 6 samples running.
+			TArray<double> Sorted = Heights[Side];
+			Sorted.Sort();
+			const double Ground = Sorted[Samples / 20];
+			const auto IsDown = [&](const int32 Step) { return Heights[Side][Step % Samples] - Ground < 1.5; };
+			int32 Landings = 0;
+
+			// A landing is a sample down after one that is not, round the loop, so a stance across the end counts once.
+			for (int32 Step = 0; Step < Samples; ++Step)
+			{
+				if (IsDown(Step) && !IsDown(Step + Samples - 1))
+				{
+					int32 End = Step;
+
+					while (End < Step + Samples && IsDown(End))
+					{
+						++End;
+					}
+
+					if (End - Step >= 6)
+					{
+						Out.Events.Emplace(static_cast<double>(Step) / Samples, Downs[Side]);
+						Out.Events.Emplace(static_cast<double>(End % Samples) / Samples, Ups[Side]);
+						++Landings;
+					}
+				}
+			}
+
+			// A landing a foot a stride.
+			if (Landings != Strides)
+			{
+				Out.Problem += FString::Printf(TEXT(" %s lands %d times, not %d;"), *Balls[Side].ToString(), Landings, Strides);
+			}
+		}
+
+		Out.Events.Sort([](const TPair<double, FName>& A, const TPair<double, FName>& B) { return A.Key < B.Key; });
+
+		return Out;
+	}
+
+	/** Replaces Sequence's footfall markers with those read off it, and reports them. Each sprint holds two strides. */
+	int32 MarkFootfalls(UAnimSequence* Sequence, USkeleton* Skeleton, const USkeletalMesh* Body = nullptr, const int32 Strides = 2)
+	{
+		const FFootfalls Footfalls = ReadFootfalls(Sequence, Skeleton, Body, Strides);
+		FString Listed;
+
+		for (const TPair<double, FName>& Event : Footfalls.Events)
+		{
+			Listed += FString::Printf(TEXT(" %s %.3f"), *Event.Value.ToString(), Event.Key);
+		}
+
+		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %s's footfalls, as fractions of it:%s."), *Sequence->GetName(), *Listed);
+
+		if (!Footfalls.Problem.IsEmpty())
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Clips: %s's footfalls are not %d strides':%s"), *Sequence->GetName(), Strides,
+				*Footfalls.Problem);
+
+			return 1;
+		}
+
+		Sequence->Modify();
+
+		if (UAnimationBlueprintLibrary::IsValidAnimNotifyTrackName(Sequence, FootfallTrack))
+		{
+			UAnimationBlueprintLibrary::RemoveAnimationSyncMarkersByTrack(Sequence, FootfallTrack);
+		}
+		else
+		{
+			UAnimationBlueprintLibrary::AddAnimationNotifyTrack(Sequence, FootfallTrack);
+		}
+
+		for (const TPair<double, FName>& Event : Footfalls.Events)
+		{
+			UAnimationBlueprintLibrary::AddAnimationSyncMarker(Sequence, Event.Value,
+				static_cast<float>(Event.Key * Sequence->GetPlayLength()), FootfallTrack);
+		}
+
+		// Read back off the sequence, not from the list just made.
+		TArray<FAnimSyncMarker> Markers;
+		UAnimationBlueprintLibrary::GetAnimationSyncMarkersForTrack(Sequence, FootfallTrack, Markers);
+
+		if (Markers.Num() != Footfalls.Events.Num() || Markers.Num() != 4 * Strides)
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Clips: %s carries %d footfall markers, not %d."), *Sequence->GetName(), Markers.Num(),
+				4 * Strides);
+
+			return 1;
+		}
+
+		return 0;
+	}
+
 	/** The sample at Speed, or INDEX_NONE. */
 	int32 SampleAt(const UBlendSpace* Space, const double Speed)
 	{
@@ -554,6 +742,22 @@ namespace SpaceMMOImportClips
 
 		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %s's speed blend space played %s."), *Human->GetName(), *Describe(Node));
 
+		// How its samples are kept in step: the node syncs them only as a named group (AnimNode_BlendSpaceGraphBase),
+		// and each sample's player says how it joins one.
+		FString Methods;
+
+		for (const UEdGraph* Graph : Node->GetGraphs())
+		{
+			const UAnimGraphNode_SequencePlayer* const Player = SamplePlayer(Graph);
+
+			Methods += FString::Printf(TEXT(" %s:%s"), Player != nullptr && Player->GetAnimationAsset() != nullptr
+					? *Player->GetAnimationAsset()->GetName() : TEXT("<none>"),
+				Player != nullptr ? *UEnum::GetValueAsString(Player->Node.GetGroupMethod()) : TEXT("-"));
+		}
+
+		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: its sync group is '%s'; its sample players sync by%s."),
+			*Node->GetSyncGroupName().ToString(), *Methods);
+
 		Human->Modify();
 		Node->Modify();
 		Space->Modify();
@@ -610,6 +814,14 @@ namespace SpaceMMOImportClips
 		Player->SetAnimationAsset(Sprint);
 		OutPlayer = Player->NodeGuid;
 
+		// One clock for the samples. Without a group the node keeps none (AnimNode_BlendSpaceGraphBase syncs only a
+		// named one) and every sample's player ran on its own: a sprint could come in on the opposite foot to the run
+		// it blended with. Found 13 October, reading this node; walk and run were unsynced too.
+		if (Node->GetSyncGroupName() != SpeedSyncGroup)
+		{
+			Node->SetSyncGroupName(SpeedSyncGroup);
+		}
+
 		// What plays at run time is rebuilt from the samples, in the order the editor does it.
 		Space->ResampleData();
 		Space->ValidateSampleData();
@@ -623,7 +835,15 @@ namespace SpaceMMOImportClips
 			return 1;
 		}
 
-		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %s's speed blend space plays %s."), *Human->GetName(), *Describe(Node));
+		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %s's speed blend space plays %s, in sync group '%s'."),
+			*Human->GetName(), *Describe(Node), *Node->GetSyncGroupName().ToString());
+
+		if (Node->GetSyncGroupName() != SpeedSyncGroup)
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Clips: %s's speed blend space is not in its sync group."), *Human->GetName());
+
+			return 1;
+		}
 
 		const int32 Sprinting = SampleAt(Space, SprintSpeed);
 
@@ -728,6 +948,24 @@ namespace SpaceMMOImportClips
 
 		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: sprint at %.2f m/s, run at %.2f."), SprintSpeed, RunSpeed);
 
+		// The walk and the run carry the same footfall markers, so the sync group can match each to the next foot by
+		// foot. They are the library's clips, changed by this: a re-import of the library would drop them, and this
+		// puts them back.
+		for (const FLibraryGait& Gait : LibraryGaits)
+		{
+			UAnimSequence* const Clip = LoadObject<UAnimSequence>(nullptr, Gait.Clip);
+
+			if (Clip == nullptr)
+			{
+				UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Clips: could not load %s."), Gait.Clip);
+
+				return 1;
+			}
+
+			Problems += MarkFootfalls(Clip, Clip->GetSkeleton(), nullptr, Gait.Strides);
+			Problems += Save(Clip) ? 0 : 1;
+		}
+
 		FGuid SprintPlayer;
 
 		for (const FLocomotion& Row : Locomotion)
@@ -826,6 +1064,12 @@ int32 USpaceMMOImportClipsCommandlet::Main(const FString& Params)
 		}
 
 		FAssetRegistryModule::AssetCreated(Sequence);
+
+		// Every sprint is synced to the run by footfall (task 191); nothing else here loops on a stride.
+		if (FString(Clip.Name).EndsWith(TEXT("_Sprint")))
+		{
+			Problems += MarkFootfalls(Sequence, Skeleton, LoadObject<USkeletalMesh>(nullptr, Clip.AuthoredOn));
+		}
 
 		Problems += Save(Sequence) ? 0 : 1;
 		Problems += Check(Clip, Sequence, Skeleton);

@@ -76,8 +76,9 @@ public class SpaceMMOAuthoring : ModuleRules
 
 			// The clip importer (tasks 175-176, USpaceMMOImportClipsCommandlet): it repoints the
 			// animation blueprint's sequence players, which are editor graph nodes, and since 191 adds
-			// the sprint to the blend space embedded in it.
+			// the sprint to the blend space embedded in it, and footfall sync markers to the clips.
 			"AnimGraph",
+			"AnimationBlueprintLibrary",
 			"BlueprintGraph",
 		});
 	}

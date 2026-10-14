@@ -59,7 +59,8 @@ def loop_and_slide(arm, f0, f1, speed, planted_expected, fps, say, fail):
     for name, track in balls.items():
         b = np.array(track)
         low = b[:, 2].min()
-        down = [i for i in range(len(b)) if b[i][2] - low < 0.002]
+        # Within half a millimetre: the frame before a landing can come within 1 mm, and is arriving, not sliding.
+        down = [i for i in range(len(b)) if b[i][2] - low < 0.0005]
         for i, j in zip(down, down[1:]):
             if j == i + 1:
                 d = b[j] - b[i]
