@@ -9368,7 +9368,8 @@ How it would fail:
 
 ## 191 — A sprint clip for every race, through the Blender MCP
 
-**Built 11 October; the run-to-sprint blend rebuilt 13 October after Joe's playtest (below), awaiting his next:**
+**Done, 14 October:** built 11 October; the run-to-sprint blend rebuilt 13 October after Joe's playtest (below), and
+his next approved it:
 a sprint per race, made in Blender through the MCP, played in game by
 each race's own child of `ABP_Human`, measured on the walker and on another player's copy. Belongs to **M7**,
 beside 176, whose table already had a sprint row with no clip behind it. Joe, 11 October: *"use Blender MCP to add a sprinting animation to all of the characters
@@ -9770,3 +9771,7 @@ and the four sprints changed under it. For two players, the re-cooked server and
     its length. Not expected with keys, which pass that speed almost at once.
   - **The other player's sprint wrong and your own right:** the staged server is older than this
     (`check-staged-server.ps1`).
+
+### Joe's playtest, 14 October
+
+*"Great, looking perfect now!"* Played on the editor after the 13 October rebuild. Task closed.
