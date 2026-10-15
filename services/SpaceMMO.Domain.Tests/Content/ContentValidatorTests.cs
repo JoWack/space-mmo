@@ -1091,6 +1091,61 @@ public sealed class ContentValidatorTests
         Assert.False(HasError(ContentValidator.Validate(pack), "carries a style"));
     }
 
+    // ── Faction space (task 104) ─────────────────────────────────────────────
+
+    /// <summary>
+    /// A capital at the origin and the four homeworlds 200 km out, Faction A's two on the +X/+Y side.
+    /// </summary>
+    private static ContentPack FactionSpacePack(FactionSpaceContent space, double homeDistance = 200.0) =>
+        Pack(
+            systems: [System()],
+            bodies:
+            [
+                Body("body_capital", systemPosition: [0.0, 0.0, 0.0]),
+                Body(Races.HomeBodyKeyFor(Race.Humanoid), systemPosition: [homeDistance, 0.0, 0.0], startDirection: [0.0, 0.0, 1.0]),
+                Body(Races.HomeBodyKeyFor(Race.Martian), systemPosition: [0.0, homeDistance, 0.0], startDirection: [0.0, 0.0, 1.0]),
+                Body(Races.HomeBodyKeyFor(Race.SpaceElf), systemPosition: [-homeDistance, 0.0, 0.0], startDirection: [0.0, 0.0, 1.0]),
+                Body(Races.HomeBodyKeyFor(Race.SpaceOrc), systemPosition: [0.0, -homeDistance, 0.0], startDirection: [0.0, 0.0, 1.0]),
+            ]) with { FactionSpace = space };
+
+    private static FactionSpaceContent Fitting(double[]? direction = null) =>
+        new("body_capital", 40.0, 120.0, direction ?? [1.0, 1.0, 0.0], 300.0);
+
+    [Fact]
+    public void AFactionSpaceThatFitsItsPlanetsIsAccepted() =>
+        Assert.DoesNotContain(ContentValidator.Validate(FactionSpacePack(Fitting())), e => e.Scope == "factionSpace");
+
+    [Fact]
+    public void AHomeworldOnTheWrongSideOfTheDivideIsRefused()
+    {
+        // A divide pointing the wrong way puts Terra in Faction B's half, as the old +X default did to
+        // the real Terra.
+        ContentPack pack = FactionSpacePack(Fitting([-1.0, 0.0, 0.0]));
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "Humanoid's homeworld is in Faction B's half"));
+    }
+
+    [Fact]
+    public void AHomeworldInsideTheContestedRingIsRefused()
+    {
+        // The old 500 km anchorage over a system 200 km across: every homeworld in it.
+        ContentPack pack = FactionSpacePack(new FactionSpaceContent("body_capital", 500.0, 2_000.0, [1.0, 1.0, 0.0], 300.0));
+
+        Assert.True(HasError(ContentValidator.Validate(pack), "inside the Anchorage"));
+    }
+
+    [Fact]
+    public void FactionSpaceRadiiMustRiseOutward() =>
+        Assert.True(HasError(
+            ContentValidator.Validate(FactionSpacePack(new FactionSpaceContent("body_capital", 120.0, 40.0, [1.0, 1.0, 0.0], 300.0))),
+            "Radii must rise"));
+
+    [Fact]
+    public void FactionSpaceIsCentredOnAPlacedBody() =>
+        Assert.True(HasError(
+            ContentValidator.Validate(FactionSpacePack(Fitting() with { Capital = "body_nowhere" })),
+            "is not a body"));
+
     private static StarSystemContent System(string key = "system_origin") =>
         new(key, "Origin", 0, 0, 0, 42, SecurityLevel.Secure);
 

@@ -17,8 +17,11 @@ public sealed class PvpTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 6, 12, 0, 0, TimeSpan.Zero);
 
+    // Made-up geometry, deliberately: these tests are about the rule. Whether the shipped numbers fit the
+    // shipped planets is ContentValidatorTests' question and TheShippedFactionSpaceFitsTheSystem's.
     private static readonly FactionSpace Space = new()
     {
+        Capital = SystemPosition.Origin,
         SafeRadiusKilometres = 500.0,
         ContestedRadiusKilometres = 2_000.0,
         FactionADirection = (1.0, 0.0, 0.0),

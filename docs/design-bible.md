@@ -89,8 +89,8 @@ Three categories. The M1 slice implements only the skills marked **[M1]**.
 
 | Skill key | Name | Role |
 |---|---|---|
-| `guns` | Guns | Ranged personal combat |
-| `melee` | Melee | Close personal combat |
+| ~~`guns`~~ | ~~Guns~~ | ~~Ranged personal combat~~ — replaced by a skill per weapon; see "Weapon skills" below |
+| ~~`melee`~~ | ~~Melee~~ | ~~Close personal combat~~ — replaced by a skill per weapon; see "Weapon skills" below |
 | `constitution` | Constitution | Max health |
 | `stamina` | Stamina | Sprint, jump, exertion pool |
 
@@ -107,6 +107,45 @@ Three categories. The M1 slice implements only the skills marked **[M1]**.
 need a defined XP source before they're implemented — most likely awarded passively
 alongside combat actions, as RuneScape does with Hitpoints. Deferred to the combat
 milestone.
+
+### Weapon skills (Joe, 14 October 2026)
+
+**This replaces `guns` and `melee` above, and widens `lasers` and `missiles`.** Every weapon is a
+skill of its own. Joe's notes, as given:
+
+- "All weapons should scale 0-99 skills similar to the other skills. Including on-foot and in-ship
+  weapons."
+- **Shared XP by family and type.** "For on-foot weapons, weapons of the same family+type give shared
+  XP, with a heavy emphasis on the exact weapon being used (for example, using the Laser Rifle will give
+  the majority of XP to Laser Rifle, but also some XP to other 'Laser' + 'Ranged' weapons)".
+- **A tree per weapon, in the manner of New World.** Each weapon has a skill tree: active abilities to
+  choose from ("same amount as New World"), and passives that enhance the weapon and its abilities.
+  Each weapon has a basic attack and a heavy attack (a click against holding the click).
+- **Skill points come from levelling that weapon**, at certain levels rather than every one, and all
+  of them are unlocked by level 50. Levels past that give rewards such as titles and weapon skins.
+- **Two weapons equipped at once**, switched between as in New World.
+
+**Joe's starting list of on-foot weapons**, with family and type "not set in stone". He wants at least
+one melee and one ranged weapon in every family:
+
+| Weapon | Family | Type |
+|---|---|---|
+| Laser Rifle | Laser | Ranged |
+| Laser Pistol | Laser | Ranged |
+| Assault Rifle | Kinetic | Ranged |
+| Magnum | Kinetic | Ranged |
+| Saber | Force | Melee |
+| Staff | Force | Ranged |
+
+**Consequences already visible, recorded so they are decided rather than discovered:**
+
+- **Level 50 is 0.78% of the XP to 99** on this curve (101,333 of 13,034,431; level 92 is half). With
+  every tree point unlocked by 50, a weapon's whole tree arrives in its first hundredth, and the rest
+  is titles and skins. That matches 99 being prestige in RuneScape; it should be chosen, not met.
+- **Weapons are player-made** (§5, `weaponcrafting`), so each one is a crafted good with a style tag
+  (task 187), and comes in Common and the four worlds' styles with no further design.
+- **Laser and Kinetic have no melee weapon yet**, which the one-of-each rule asks for.
+- The open questions, and Claude's suggestions against them, are task 192.
 
 ---
 

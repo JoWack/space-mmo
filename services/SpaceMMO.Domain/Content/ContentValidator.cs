@@ -1,4 +1,5 @@
 using SpaceMMO.Domain.Characters;
+using SpaceMMO.Domain.Combat;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
 using SpaceMMO.Domain.Quests;
@@ -56,6 +57,7 @@ public static class ContentValidator
         ValidateRecipes(pack, skillKeys, itemKeys, toolKeys, errors);
         ValidateQuests(pack, skillKeys, questKeys, errors);
         ValidateUniverse(pack, systemKeys, bodyKeys, errors);
+        ValidateFactionSpace(pack, errors);
         ValidateResourceNodes(pack, bodyKeys, itemKeys, skillKeys, errors);
         ValidateRecipeGraphIsAcyclic(pack, errors);
         ValidatePrerequisitesAreAcyclic(pack, errors);
@@ -203,6 +205,112 @@ public static class ContentValidator
                     required,
                     $"{race}'s home body has no startDirection; new characters of that race have "
                     + "nowhere to start."));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks the system's PvP geometry fits the system it is drawn over (task 104).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The homeworlds are the check that matters.</strong> Each must lie in its own faction's
+    /// half and out beyond the contested ring, in faction space proper. Until 14 October the geometry
+    /// lived in code as defaults that put every planet in the anchorage and Terra on Faction B's side
+    /// of the line, and every test passed, because each built its own. Moving a planet in the
+    /// authoring panel could do the same again with nothing looking wrong.
+    /// </para>
+    /// <para>
+    /// The planets' drawn size is a client constant, unknown here, so this checks centres. How far
+    /// clear of the line each one is, against its drawn radius, is the shipped-content test's job.
+    /// </para>
+    /// </remarks>
+    private static void ValidateFactionSpace(ContentPack pack, List<ContentError> errors)
+    {
+        if (pack.FactionSpace is not { } authored)
+        {
+            return;
+        }
+
+        const string Scope = "factionSpace";
+
+        BodyContent? capital = pack.Bodies.FirstOrDefault(b => b.Key == authored.Capital);
+
+        if (capital?.SystemPosition is not { Length: 3 } at)
+        {
+            errors.Add(new ContentError(
+                Scope,
+                authored.Capital,
+                capital is null
+                    ? $"Capital '{authored.Capital}' is not a body."
+                    : $"Capital '{authored.Capital}' has no system position to centre the zones on."));
+
+            return;
+        }
+
+        bool shaped = true;
+
+        if (authored.SafeRadiusKm <= 0.0 || authored.ContestedRadiusKm <= authored.SafeRadiusKm)
+        {
+            errors.Add(new ContentError(
+                Scope,
+                authored.Capital,
+                $"Radii must rise from the anchorage outward: safe {authored.SafeRadiusKm} km, "
+                + $"contested {authored.ContestedRadiusKm} km."));
+
+            shaped = false;
+        }
+
+        if (authored.FactionADirection is not { Length: 3 } d || (d[0] == 0.0 && d[1] == 0.0 && d[2] == 0.0))
+        {
+            errors.Add(new ContentError(
+                Scope, authored.Capital, "Faction A's direction must be three components, not all zero."));
+
+            shaped = false;
+        }
+
+        if (authored.RetaliationSeconds <= 0.0)
+        {
+            errors.Add(new ContentError(
+                Scope, authored.Capital, "The retaliation window must be positive."));
+        }
+
+        if (!shaped)
+        {
+            return;
+        }
+
+        FactionSpace space = FactionSpace.FromContent(authored, new SystemPosition(at[0], at[1], at[2]));
+
+        foreach (Race race in Enum.GetValues<Race>())
+        {
+            string homeKey = Races.HomeBodyKeyFor(race);
+
+            if (pack.Bodies.FirstOrDefault(b => b.Key == homeKey)?.SystemPosition is not { Length: 3 } p)
+            {
+                continue;
+            }
+
+            var home = new SystemPosition(p[0], p[1], p[2]);
+            Faction own = Races.FactionFor(race);
+
+            if (space.TerritoryAt(home) != own)
+            {
+                errors.Add(new ContentError(
+                    Scope,
+                    homeKey,
+                    $"{Races.DisplayName(race)}'s homeworld is in Faction {space.TerritoryAt(home)}'s half; "
+                    + $"it must be in Faction {own}'s."));
+            }
+
+            if (space.ZoneAt(home) != PvpZone.FactionSpace)
+            {
+                errors.Add(new ContentError(
+                    Scope,
+                    homeKey,
+                    $"{Races.DisplayName(race)}'s homeworld is {home.DistanceTo(space.Capital):0} km from the "
+                    + $"Capital, inside the {space.ZoneAt(home)}; homeworlds belong in faction space, beyond "
+                    + $"{authored.ContestedRadiusKm} km."));
             }
         }
     }

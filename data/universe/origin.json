@@ -1,6 +1,15 @@
 {
   "$comment": "The starting system at the galactic centre, per design-bible §1. Four race homeworlds and the capital world's trading hub. Radii are already at the 1:10 universe scale (ADR-0001) — the scale is applied once here in authored content, never at conversion time, so a body's radius means the same thing everywhere it is read. TODO(name): every name below is a placeholder; the races and factions are still unnamed.",
 
+  "$factionSpaceComment": "Who may shoot whom, where (ADR-0008, ADR-0009; task 104; Joe, 14 October 2026). Centred on the Capital body. The anchorage reaches 40 km: the Capital is drawn 20 km in radius and Deepdock floats 33 km from its centre, so both places to dock at the centre are safe. The contested ring runs out to 120 km, and the homeworlds sit 184-224 km away, so a run home is about 80 km of contested space and then the runner's own. factionADirection is the plane through the Capital that leaves each homeworld furthest on its own side: Terra and Ares 49 km into Faction A's half, Verdance 57 and Grimhold 49 into B's, each more than twice a planet's drawn radius. Move a homeworld and the validator says if it has changed sides or strayed into the ring; refit the plane if so. retaliationSeconds is ADR-0009's five minutes, a guess and content.",
+  "factionSpace": {
+    "capital": "body_capital",
+    "safeRadiusKm": 40,
+    "contestedRadiusKm": 120,
+    "factionADirection": [-0.398, -0.37, -0.839],
+    "retaliationSeconds": 300
+  },
+
   "systems": [
     {
       "key": "system_origin",

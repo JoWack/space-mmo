@@ -1585,6 +1585,10 @@ crafting tree: `armorcrafting`, `weaponcrafting`, `electronics`, `construction`.
 Cheap in itself — the skill system, XP curve and awarding all work — but blocked behind 102 for the
 two that have no XP source, and pointless before there is an action that awards the rest.
 
+**Changed 14 October:** Joe's combat notes replace `guns` and `melee` with a skill per weapon, on foot and
+in ships (design-bible §2, "Weapon skills"; task 192). Which skills to seed now waits on 192's weapon
+list; `constitution` and `stamina` still wait on 102.
+
 ## 102 — Decide where `constitution` and `stamina` XP comes from
 
 **Pending. A decision, not an implementation.**
@@ -1614,7 +1618,8 @@ that requires goods to be somewhere they can be lost.
 
 ## 104 — Pairwise aggression and security zones
 
-**Pending.** ADR-0008 and ADR-0009 are accepted and unimplemented.
+**Faction space built 14 October; the attack record waits on weapons (192).** ADR-0008 and ADR-0009 are
+accepted; the rule was built in August, and its numbers now fit the system (below).
 
 ADR-0009 settles the rule — aggression is pairwise, faction space is defended rather than hunted —
 and ADR-0008 sets what a security zone means for who may attack whom. `SecurityLevel` already exists
@@ -1624,6 +1629,53 @@ display.
 Worth doing early in the milestone rather than late: it decides where combat may happen at all, and
 building weapons first would mean tuning them in a world with no rules about where they may be
 fired.
+
+### What was already there, found 14 October
+
+**The rule exists.** `Pvp.CanAttack` and `FactionSpace` (`SpaceMMO.Domain/Combat`) were built with
+ADR-0009 in August (`f29d0aa`), with twelve tests: friendly fire, the anchorage, the contested ring,
+locals against intruders, retaliation and its expiry, protection. "Unimplemented" above was wrong.
+
+**Its numbers described no system that exists.** `FactionSpace` defaulted to a capital at the origin, a
+500 km anchorage, a 2,000 km contested ring and a divide along +X. In `origin.json` the Capital is at
+(60, 0, 0) and every body lies within 251 km of the origin, so the whole system was anchorage and nobody
+could have attacked anybody anywhere. Shrinking the radii would not have saved it: the +X divide put
+Terra in Faction B's half and Verdance in A's. Every test passed, because every test built its own
+geometry. Found by measuring the authored positions against the defaults, not by any test.
+
+### Decided by Joe, 14 October
+
+- **Anchorage: 40 km** from the Capital's centre, covering it, its orbit and Deepdock (33 km out).
+- **Contested ring out to 120 km.** A homeworld run is then about 45 km of the runner's own faction's
+  space, 80 km contested, then the anchorage. Homeworlds sit 184–224 km from the Capital.
+- **The divide fitted to the planets**: the plane through the Capital that leaves each homeworld
+  furthest on its own side, at least 49 km, more than twice a planet's drawn 20 km radius. Authored in
+  `origin.json`, and checked so a moved planet cannot quietly change sides.
+- **The attack record waits for weapons.** ADR-0009's per-pair timestamp arrives with the first weapon
+  that fires; 104 makes faction space real and checked.
+
+### Built, 14 October
+
+- **`factionSpace` in `data/universe/origin.json`**: the Capital body, 40 km, 120 km, the fitted divide
+  `[-0.398, -0.37, -0.839]` and 300 s, with a comment saying where each number came from. Read into
+  `ContentPack.FactionSpace`; **a second file authoring it is refused, naming the file**.
+- **`FactionSpace` has no defaults left.** Every value is required, and `FactionSpace.FromContent`
+  builds one centred on the Capital body's position. The rule itself (`Pvp.CanAttack`) is unchanged.
+- **The validator** refuses a capital that is not a placed body, radii that do not rise outward, a zero
+  divide or retaliation window, and **any homeworld outside its own faction's half or inside the ring**.
+- **Not built:** the per-pair attack record, deliberately (above); and nothing serves the geometry yet,
+  because nothing asks. Both arrive with the first weapon, which reads the pack or a served copy.
+
+**Verified:** domain 510 (5 new validator tests over made-up planets), data 256
+(`TheShippedFactionSpaceFitsTheSystemTests`: every homeworld wholly in its own half, clear of the divide
+by more than its drawn 20 km and with its nearest ground beyond the ring; the Capital and Deepdock in
+the anchorage; `CanAttack` over the real Terra: the local may fire first, the intruder may not, either
+may halfway home, nobody at the Capital), API 102, and a seed through the real loader. **Broken on
+purpose, each failing its test:** the old +X divide and the old radii put back in the file (the
+validator also failed the shipped content both times), the validator's territory and ring checks, and
+the loader's duplicate guard.
+
+**Nothing to playtest**: nothing fires yet.
 
 # Found while building, and not yet in a milestone
 
@@ -9775,3 +9827,49 @@ and the four sprints changed under it. For two players, the re-cooked server and
 ### Joe's playtest, 14 October
 
 *"Great, looking perfect now!"* Played on the editor after the 13 October rebuild. Task closed.
+
+## 192 — Weapons: a 0–99 skill and an ability tree for every weapon
+
+**Pending; design first.** Belongs to **M6**. Joe's combat notes of 14 October are recorded in full in
+[design-bible.md](design-bible.md) §2, "Weapon skills": every weapon a 0–99 skill, on foot and in
+ships; XP shared within a family and type, mostly to the weapon used; a New World-style tree per
+weapon, with actives, passives, a basic and a heavy attack; skill points at certain levels, all by 50;
+titles and skins after; two weapons equipped and switched between. They replace the design bible's
+`guns` and `melee` skills (101).
+
+**Joe's starting list** (family and type "not set in stone"; at least one melee and one ranged weapon per
+family): Laser Rifle and Laser Pistol (Laser, ranged), Assault Rifle and Magnum (Kinetic, ranged), Saber
+(Force, melee), Staff (Force, ranged).
+
+### Open, for Joe
+
+Joe asked for feedback and suggestions. **Everything under "Claude suggested" is a suggestion, not a
+decision.**
+
+- **The XP split within a family and type.** Joe: "the majority" to the weapon used, "some" to the
+  rest. *Claude suggested* 80% to the weapon and 20% shared among the others of its family and type,
+  so owning more weapons in a family never makes a fight worth more XP in total.
+- **A melee weapon for Laser and for Kinetic**, which the one-of-each rule needs. *Claude suggested* a
+  **Cutter** (Laser, melee: a short industrial cutting beam, the mining laser's violent cousin, which
+  ties the first tool a player crafts to the first weapon) and a **Breaching Hammer** (Kinetic, melee:
+  slow, heavy, staggers).
+- **The Force family's name.** Saber, Staff and "Force" together read as Star Wars' lightsaber and the
+  Force. *Claude suggested* an original name for the family, such as **Resonance**, keeping the weapons.
+- **Healing.** New World's group play leans on a healing weapon (the Life Staff). *Claude suggested*
+  deciding early whether one exists, since it shapes every other tree; the Force Staff is the natural
+  candidate.
+- **More weapons.** *Claude suggested* a **Scattergun** (Kinetic, ranged, short range) so the two
+  Kinetic guns differ by more than size, and leaving heavy weapons for later.
+- **Ship weapons.** "Including in-ship weapons" makes `lasers` and `missiles` the start of a list.
+  Whether ship weapons have trees and two equipped at once, or only the 0–99 skill, is open.
+  *Claude suggested* mirroring the on-foot families, with a Kinetic ship weapon (a railgun) beside
+  lasers and missiles.
+- **How many actives, passives and points.** "Same amount as New World" wants writing down in this
+  game's own numbers before a tree is drawn. New World equips three actives per weapon at a time,
+  chosen from two trees.
+- **Level 50 is 0.78% of the XP to 99** (design-bible §2). Whether a weapon's whole tree should arrive
+  in its first hundredth of XP.
+- **Where skill points come from**: which levels grant them, and how many there are by 50.
+
+**Also blocked on:** 102 (constitution and stamina, which abilities may draw on), 179's equipment
+slots (two weapons equipped needs somewhere to equip them), and 104 (where a weapon may be fired).

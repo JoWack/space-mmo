@@ -333,6 +333,29 @@ public sealed record StationContent(
 }
 
 /// <summary>
+/// The shape of the system's PvP rules, as authored in <c>data/universe/</c> (ADR-0008, task 104).
+/// </summary>
+/// <param name="Capital">The body at the centre of both radii: the Capital.</param>
+/// <param name="SafeRadiusKm">The anchorage: no PvP within this distance of the Capital's centre.</param>
+/// <param name="ContestedRadiusKm">The contested ring, out to this distance; faction space beyond.</param>
+/// <param name="FactionADirection">
+/// The direction of Faction A's half from the Capital. Faction B's is the other side of the plane through
+/// the Capital at right angles to it.
+/// </param>
+/// <param name="RetaliationSeconds">How long someone attacked may answer their attacker (ADR-0009).</param>
+/// <remarks>
+/// Content rather than code because every number here is the world's: where the planets were put
+/// decides where the line can run. Defaults in code described a system that did not exist, and every
+/// test passed against it (task 104).
+/// </remarks>
+public sealed record FactionSpaceContent(
+    string Capital,
+    double SafeRadiusKm,
+    double ContestedRadiusKm,
+    double[] FactionADirection,
+    double RetaliationSeconds);
+
+/// <summary>
 /// Everything loaded from <c>data/</c>, before it reaches the database.
 /// </summary>
 /// <remarks>
@@ -353,6 +376,9 @@ public sealed record ContentPack(
     /// <summary>An empty pack, for tests and for merging.</summary>
     public static ContentPack Empty { get; } = new([], [], [], [], [], [], [], []);
 
+    /// <summary>The system's PvP geometry, or null if the pack does not author it (task 104).</summary>
+    public FactionSpaceContent? FactionSpace { get; init; }
+
     /// <summary>Combines two packs, so content can be split across many files.</summary>
     public ContentPack Concat(ContentPack other)
     {
@@ -366,6 +392,10 @@ public sealed record ContentPack(
             [.. Systems, .. other.Systems],
             [.. Bodies, .. other.Bodies],
             [.. Stations, .. other.Stations],
-            [.. ResourceNodes, .. other.ResourceNodes]);
+            [.. ResourceNodes, .. other.ResourceNodes])
+        {
+            // One file authors it. The loader refuses a second, naming the file, before this is reached.
+            FactionSpace = FactionSpace ?? other.FactionSpace,
+        };
     }
 }

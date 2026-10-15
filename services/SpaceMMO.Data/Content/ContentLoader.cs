@@ -85,6 +85,14 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 continue;
             }
 
+            // One system, one set of PvP rules. Two files each authoring them would leave whichever
+            // was read first in force, silently (task 104).
+            if (file.FactionSpace is not null && pack.FactionSpace is not null)
+            {
+                throw new InvalidOperationException(
+                    $"'{path}' authors factionSpace, which an earlier file already authors.");
+            }
+
             pack = pack.Concat(new ContentPack(
                 file.Skills ?? [],
                 file.Items ?? [],
@@ -93,7 +101,10 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 file.Systems ?? [],
                 file.Bodies ?? [],
                 file.Stations ?? [],
-                file.ResourceNodes ?? []));
+                file.ResourceNodes ?? [])
+            {
+                FactionSpace = file.FactionSpace,
+            });
         }
 
         return pack;
@@ -729,5 +740,6 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         IReadOnlyList<StarSystemContent>? Systems,
         IReadOnlyList<BodyContent>? Bodies,
         IReadOnlyList<StationContent>? Stations,
-        IReadOnlyList<ResourceNodeContent>? ResourceNodes);
+        IReadOnlyList<ResourceNodeContent>? ResourceNodes,
+        FactionSpaceContent? FactionSpace = null);
 }
