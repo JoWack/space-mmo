@@ -9873,7 +9873,9 @@ the type ignored, the rounding remainder dropped, the schedule rounded down, and
 ### Still open
 
 - **Each weapon's two trees**: themes, actives, passives and capstones, eighteen trees on foot and six for
-  ships. The bulk of the milestone's design. Claude can draft a weapon's trees for Joe to edit.
+  ships. The bulk of the milestone's design. **The Laser Rifle's are drafted** (15 October,
+  [weapons/laser-rifle.md](weapons/laser-rifle.md)), for Joe to edit: Marksman and Thermal, with heat as
+  the Laser family's resource, which is itself a question for Joe.
 - **The Scattergun** (Kinetic, ranged, short range), suggested and not yet answered.
 - **Ship weapon names**, and whether more families than Laser, Kinetic and Missile fly.
 - **XP per point of damage** (RuneScape gives four), and whatever earns a future buffer or shield its XP.
