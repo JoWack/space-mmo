@@ -199,7 +199,8 @@ dotnet run --project services/SpaceMMO.Api -- --seed
 - **M6** — combat, and the rules that already assume it: personal and ship weapons, each a 0–99
   skill with a New World-style ability tree, two equipped at once
   ([ADR-0015](docs/adr/0015-every-weapon-is-a-skill.md); task 192), the `constitution`,
-  `stamina` and pilot skills, security zones and pairwise aggression
+  `stamina` and pilot skills, PvE (creatures to fight, which Joe confirmed on 15 October and nothing yet
+  designs), security zones and pairwise aggression
   ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md),
   [ADR-0009](docs/adr/0009-retaliation.md)), and death and insurance made real
   ([ADR-0006](docs/adr/0006-death-and-insurance.md))

@@ -489,6 +489,9 @@ future credit source must route through them.
    the actual quests are not written.
 5. **Career questline content** — the natural M4 content milestone.
 6. **All `TODO(name)` naming** — planets. (Factions named 30 September: §1.)
+7. **PvE** — Joe confirmed on 15 October that there will be creatures to fight, with weak points
+   (task 192, [weapons/README.md](weapons/README.md)). What they are, where they live, what they drop,
+   and how they fit a world whose materials are planet-locked are all undesigned. Hosted by M6.
 
 ### Recently resolved
 

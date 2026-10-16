@@ -9873,9 +9873,13 @@ the type ignored, the rounding remainder dropped, the schedule rounded down, and
 ### Still open
 
 - **Each weapon's two trees**: themes, actives, passives and capstones, eighteen trees on foot and six for
-  ships. The bulk of the milestone's design. **The Laser Rifle's are drafted** (15 October,
-  [weapons/laser-rifle.md](weapons/laser-rifle.md)), for Joe to edit: Marksman and Thermal, with heat as
-  the Laser family's resource, which is itself a question for Joe.
+  ships. The bulk of the milestone's design. **The Laser family's are drafted** (15 October), for Joe
+  to edit, with the family's shared rules in [weapons/README.md](weapons/README.md):
+  [Laser Rifle](weapons/laser-rifle.md) (Marksman, Thermal), [Laser Pistol](weapons/laser-pistol.md)
+  (Gunslinger, Overclock) and [Cutter](weapons/cutter.md) (Breacher, Slag).
+- **Decided by Joe on the Rifle's draft, 15 October:** heat is the whole Laser family's mechanic; weak
+  points stay and **PvE will exist** (now on M6's roadmap line and design-bible §10, undesigned);
+  Exposed stays, "fun if done right"; blindness and smoke "will need to be designed eventually".
 - **The Scattergun** (Kinetic, ranged, short range), suggested and not yet answered.
 - **Ship weapon names**, and whether more families than Laser, Kinetic and Missile fly.
 - **XP per point of damage** (RuneScape gives four), and whatever earns a future buffer or shield its XP.

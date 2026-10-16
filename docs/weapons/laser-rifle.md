@@ -1,6 +1,7 @@
 # Laser Rifle — draft trees
 
-**Status: Claude's draft, 15 October 2026, for Joe to edit. Nothing here is decided.** Task 192,
+**Status: Claude's draft, 15 October 2026, for Joe to edit.** Decided since: heat is the Laser family's
+mechanic, weak points stay, Exposed stays (all Joe, 15 October). Everything else is a draft. Task 192,
 [ADR-0015](../adr/0015-every-weapon-is-a-skill.md). Numbers are first guesses to give the shape weight;
 none has been tested in play and combat has no simulator, so expect every one to move.
 
@@ -13,9 +14,9 @@ heat drains when you stop firing, and a rifle that reaches 100 overheats and loc
 it vents. The two trees are the two ways to treat heat: avoid it and make every shot count (**Marksman**),
 or run hot on purpose and burn things (**Thermal**).
 
-**A family question first, for Joe:** if heat is the Laser family's mechanic, the Pistol and the Cutter
-use it too, and Kinetic weapons get something else (a magazine and reloads), as would Resonance (perhaps
-charge built by hitting). That gives each family its own feel before any tree is read. Undecided.
+**Heat is the whole Laser family's mechanic** (Joe, 15 October): the Pistol and the Cutter use it too,
+each at its own rates ([README](README.md)). Kinetic weapons would get a magazine and reloads, and
+Resonance something of its own, so each family feels different before any tree is read.
 
 ## Attacks every Laser Rifle has
 
@@ -86,10 +87,8 @@ to locking up.
 
 ## Questions this draft raises
 
-- **Heat as the Laser family's mechanic** (above). If not heat, the Thermal tree has no subject.
-- **Blind and smoke** are interface: what a blinded screen looks like, and what smoke hides.
-- **"Weak point"** assumes ships and creatures have marked weak spots. Nothing has decided creatures exist;
-  PvE is not designed anywhere yet.
+Answered by Joe, 15 October: heat is the family's (yes); blindness and smoke "will need to be designed
+eventually"; weak points stay, and **PvE will exist**; Exposed "can be fun if done right". The open ones
+those leave are in the [README](README.md). Still open here:
+
 - **Ships**: a Laser Rifle fired at a ship. Probably it does almost nothing; worth saying.
-- **Seeing through walls** (Exposed) cuts against a game where faction space is "defended rather than
-  hunted" (ADR-0009). Possibly wrong for PvP; easy to cut.
