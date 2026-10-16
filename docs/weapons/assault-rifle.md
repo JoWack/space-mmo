@@ -5,8 +5,8 @@ else sounds great!"*), with the family's rounds and Stagger decided ([README](RE
 a first guess and none has been tested. Task 192,
 [ADR-0015](../adr/0015-every-weapon-is-a-skill.md).
 
-**Kinetic family, ranged, on foot.** 30 rounds a magazine, a 2 s reload. Shares 20% of its XP with the
-Magnum.
+**Kinetic family, ranged, on foot.** 30 rounds a magazine, a 2 s reload. Shares 20% of its XP with its
+siblings, the Magnum and the Scattergun, 10% each (80/20 when the Magnum was its only sibling).
 
 ## The idea
 

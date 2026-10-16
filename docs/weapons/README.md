@@ -6,7 +6,7 @@ has a page with its basic and heavy attacks and its two trees; this page holds w
 | Family | On foot, ranged | On foot, melee | Mechanic |
 |---|---|---|---|
 | Laser | [Laser Rifle](laser-rifle.md), [Laser Pistol](laser-pistol.md) | [Cutter](cutter.md) | **Heat** (decided) |
-| Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md), Scattergun (added 16 October, not yet drafted) | [Daggers](daggers.md) | **Rounds** (decided) |
+| Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md), [Scattergun](scattergun.md) (added 16 October) | [Daggers](daggers.md) | **Rounds** (decided) |
 | Resonance | [Staff](staff.md), [Focus](focus.md) (the healer) | [Saber](saber.md) | **Charge** (decided) |
 
 And on ships ([below](#ship-weapons)):
@@ -51,6 +51,7 @@ skill.
 |---|---|---|
 | Assault Rifle | 30 a magazine | Reloading, 2 s |
 | Magnum | 6 in the cylinder | Reloading, 2.5 s, or one round at a time, 0.4 s each |
+| Scattergun | 8 shells in a tube | One shell at a time, 0.5 s each, interruptible |
 | Daggers | 4 throwing blades | One returns every 3 s, or all of them when picked back up |
 
 **Stagger** is the family's effect, as Scorch is Laser's: every Kinetic hit adds stagger to its target,

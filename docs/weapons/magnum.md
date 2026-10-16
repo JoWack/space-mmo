@@ -6,7 +6,8 @@ a first guess and none has been tested. Task 192,
 [ADR-0015](../adr/0015-every-weapon-is-a-skill.md).
 
 **Kinetic family, ranged, on foot.** Six rounds in the cylinder; a full reload in 2.5 s, or one round at a
-time at 0.4 s each, interruptible. Shares 20% of its XP with the Assault Rifle.
+time at 0.4 s each, interruptible. Shares 20% of its XP with its siblings,
+the Assault Rifle and the Scattergun, 10% each.
 
 ## The idea
 

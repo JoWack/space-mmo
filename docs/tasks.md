@@ -9935,7 +9935,8 @@ Four rounds, each offered with alternatives; the details are in [weapons/README.
 - **Decided by Joe on the Rifle's draft, 15 October:** heat is the whole Laser family's mechanic; weak
   points stay and **PvE will exist** (now on M6's roadmap line and design-bible §10, undesigned);
   Exposed stays, "fun if done right"; blindness and smoke "will need to be designed eventually".
-- **The Scattergun's trees** (added 16 October).
+- **The Scattergun's trees**: drafted 16 October ([weapons/scattergun.md](weapons/scattergun.md)),
+  Brawler and Gatekeeper, for Joe to edit. Adding it made the Assault Rifle's and Magnum's splits 80/10/10.
 - **Ship weapon names** (Beam Laser, Railgun and Missile Rack are the drafts'), and whether more families
   than Laser, Kinetic and Missile fly.
 - **XP per point of damage**, decided to wait for damage numbers (16 October): health and weapon damage
