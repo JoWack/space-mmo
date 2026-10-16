@@ -41,11 +41,27 @@ namespace
 		return Skill;
 	}
 
+	/** A tool in its slot, which is where it has to be to work (task 193). */
 	FBackendItemInstance ToolAt(const TCHAR* Key, const int32 Condition)
 	{
 		FBackendItemInstance Instance;
 		Instance.ItemKey = Key;
 		Instance.Condition = Condition;
+		Instance.Kind = EBackendInventoryKind::Equipped;
+		Instance.bEquipped = true;
+		Instance.EquippedSlot = EBackendEquipmentSlot::MiningTool;
+		Instance.bEquippable = true;
+		Instance.EquipsAs = EBackendEquipKind::MiningTool;
+
+		return Instance;
+	}
+
+	/** The same tool, owned and not worn: in the pockets, where every laser was before task 193. */
+	FBackendItemInstance ToolCarried(const TCHAR* Key, const int32 Condition)
+	{
+		FBackendItemInstance Instance = ToolAt(Key, Condition);
+		Instance.Kind = EBackendInventoryKind::CharacterCarried;
+		Instance.bEquipped = false;
 
 		return Instance;
 	}
@@ -133,6 +149,39 @@ bool FSpaceMMODepositPromptNamesTheBlockerTest::RunTest(const FString& Parameter
 
 	TestEqual(TEXT("A broken laser is none"), Broken.ToolBlocker, FString(TEXT("you have none")));
 	TestFalse(TEXT("And blocks the gather"), Broken.bCanGather);
+
+	// Owned and not worn (task 193). The server refuses it, so the prompt must too, and say what is wrong
+	// and which key fixes it, as Joe chose on 16 October -- not "you have none", which would send somebody
+	// looking for a laser they are holding.
+	const FSpaceMMODepositPromptText InPockets = USpaceMMODepositPrompt::Build(
+		GatedFerrite(),
+		{ SkillAt(TEXT("mining"), 5, 400) },
+		{ ToolCarried(TEXT("crude_mining_laser"), 87) },
+		TEXT("E"),
+		TEXT("L"));
+
+	TestEqual(TEXT("Owned, not equipped"), InPockets.ToolBlocker, FString(TEXT("not equipped (L)")));
+	TestFalse(TEXT("And blocks the gather"), InPockets.bCanGather);
+
+	// With the equipment key unbound, the words without an empty pair of brackets.
+	const FSpaceMMODepositPromptText Unbound = USpaceMMODepositPrompt::Build(
+		GatedFerrite(),
+		{ SkillAt(TEXT("mining"), 5, 400) },
+		{ ToolCarried(TEXT("crude_mining_laser"), 87) },
+		TEXT("E"));
+
+	TestEqual(TEXT("No key, no brackets"), Unbound.ToolBlocker, FString(TEXT("not equipped")));
+
+	// A spare in the pockets beside the one being worn changes nothing: the worn one counts.
+	const FSpaceMMODepositPromptText Spare = USpaceMMODepositPrompt::Build(
+		GatedFerrite(),
+		{ SkillAt(TEXT("mining"), 5, 400) },
+		{ ToolCarried(TEXT("crude_mining_laser"), 40), ToolAt(TEXT("crude_mining_laser"), 87) },
+		TEXT("E"),
+		TEXT("L"));
+
+	TestTrue(TEXT("The worn one counts"), Spare.bCanGather);
+	TestTrue(TEXT("And nothing blocks"), Spare.ToolBlocker.IsEmpty());
 
 	return true;
 }

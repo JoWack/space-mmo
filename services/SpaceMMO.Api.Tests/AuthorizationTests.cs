@@ -131,6 +131,22 @@ public sealed class AuthorizationTests(ApiDatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Equipping_or_unequipping_another_accounts_character_reports_not_found()
+    {
+        // Task 193. Unequipping somebody else's laser would put it in their pockets, which sounds harmless
+        // until their pockets are full and it goes to a hangar they are not standing in.
+        string token = await RegisterAsync("attacker7@example.com");
+
+        HttpResponseMessage equip = await PostAsync(
+            $"/characters/{_victimCharacterId}/equipment/equip", new { itemInstanceId = 1L }, token);
+        HttpResponseMessage unequip = await PostAsync(
+            $"/characters/{_victimCharacterId}/equipment/unequip", new { slot = 5 }, token);
+
+        Assert.Equal(HttpStatusCode.NotFound, equip.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unequip.StatusCode);
+    }
+
+    [Fact]
     public async Task Accepting_a_quest_as_another_accounts_character_reports_not_found()
     {
         string token = await RegisterAsync("attacker6@example.com");

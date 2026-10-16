@@ -106,6 +106,16 @@ namespace SpaceMMOBuildMenus
 			return Block;
 		}
 
+		/** A widget of a Blueprint's own class: a slot Blueprint placed inside a screen. */
+		UUserWidget* MakeOf(UClass* Class, const TCHAR* Name, const bool bPart = false) const
+		{
+			UUserWidget* Widget = Blueprint->WidgetTree->ConstructWidget<UUserWidget>(Class, FName(Name));
+			Widget->bIsVariable = bPart;
+			Blueprint->OnVariableAdded(Widget->GetFName());
+
+			return Widget;
+		}
+
 		UButton* Button(const TCHAR* Name, const FString& Label, const bool bPrimary) const
 		{
 			UButton* Made = Make<UButton>(Name, true);
@@ -658,6 +668,194 @@ namespace SpaceMMOBuildMenus
 	}
 
 	// ------------------------------------------------------------------------------------------------
+	// Task 193: the equipment screen, and its two shapes of slot
+
+	/** A slot whose name and item share a line, as the mock has them: "Head: —", "Mining: Crude Mining Laser". */
+	void BuildEquipmentSlot(const FBuilder& B)
+	{
+		UVerticalBox* Body = StationRowShell(B);
+
+		UHorizontalBox* ItemLine = B.Make<UHorizontalBox>(TEXT("SlotLine"));
+		AddV(Body, ItemLine);
+
+		AddH(ItemLine, B.Text(TEXT("SlotNameText"), TEXT("Head:"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), false);
+		AddH(ItemLine, B.Text(TEXT("ItemText"), TEXT("—"), 19.0f, TextSecondary, TEXT("Regular"), 0, true), false,
+			FMargin(10, 0, 0, 0));
+		AddH(ItemLine, B.Text(TEXT("StyleTagText"), TEXT("[TER]"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), false,
+			FMargin(10, 0, 0, 0));
+		AddH(ItemLine, B.Make<USpacer>(TEXT("SlotGap")), true);
+	}
+
+	/** A weapon slot: its name over what is in it, "— empty —" when nothing is, as in the mock. */
+	void BuildWeaponSlot(const FBuilder& B)
+	{
+		UVerticalBox* Body = StationRowShell(B);
+
+		AddV(Body, B.Text(TEXT("SlotNameText"), TEXT("Weapon 1"), 15.0f, TextSecondary, TEXT("Regular"), 0, true));
+
+		UHorizontalBox* ItemLine = B.Make<UHorizontalBox>(TEXT("SlotLine"));
+		AddV(Body, ItemLine, FMargin(0, 6, 0, 0));
+
+		AddH(ItemLine, B.Text(TEXT("ItemText"), TEXT("Laser Rifle"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), false);
+		AddH(ItemLine, B.Text(TEXT("StyleTagText"), TEXT("[MAR]"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), false,
+			FMargin(10, 0, 0, 0));
+		AddH(ItemLine, B.Make<USpacer>(TEXT("SlotGap")), true);
+	}
+
+	/** A box of a slot Blueprint, at a fixed width so the column of armour lines up under the head. */
+	USizeBox* SlotBox(const FBuilder& B, UClass* Class, const TCHAR* Name, const float Width)
+	{
+		USizeBox* Size = B.Make<USizeBox>(*(FString(Name) + TEXT("Size")));
+		Size->SetWidthOverride(Width);
+
+		if (Class != nullptr)
+		{
+			Size->AddChild(B.MakeOf(Class, Name, true));
+		}
+
+		return Size;
+	}
+
+	/** One rounded outline, for the figure. */
+	UImage* FigurePart(const FBuilder& B, const TCHAR* Name, const FVector2D& Size, const float Radius)
+	{
+		UImage* Part = B.Make<UImage>(Name);
+
+		FSlateBrush Brush = Rounded(White(0.04f), White(0.30f), 1.5f, FVector4(Radius, Radius, Radius, Radius));
+		Brush.ImageSize = Size;
+		Part->SetBrush(Brush);
+		Part->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+		return Part;
+	}
+
+	/**
+	 * The stand-in figure between the weapons: a head, a body and two legs in outline. Joe chose slots now
+	 * and a live render of the character later (16 October), so this only has to say "this is you".
+	 */
+	UVerticalBox* Figure(const FBuilder& B)
+	{
+		UVerticalBox* Shape = B.Make<UVerticalBox>(TEXT("Figure"));
+
+		AddV(Shape, FigurePart(B, TEXT("FigureHead"), FVector2D(34.0, 34.0), 17.0f), FMargin(), HAlign_Center);
+		AddV(Shape, FigurePart(B, TEXT("FigureBody"), FVector2D(64.0, 104.0), 12.0f), FMargin(0, 6, 0, 0), HAlign_Center);
+
+		UHorizontalBox* Legs = B.Make<UHorizontalBox>(TEXT("FigureLegs"));
+		AddV(Shape, Legs, FMargin(0, 4, 0, 0), HAlign_Center);
+
+		AddH(Legs, FigurePart(B, TEXT("FigureLegLeft"), FVector2D(26.0, 96.0), 10.0f), false);
+		AddH(Legs, FigurePart(B, TEXT("FigureLegRight"), FVector2D(26.0, 96.0), 10.0f), false, FMargin(8, 0, 0, 0));
+
+		return Shape;
+	}
+
+	UClass* BuiltClass(const TCHAR* AssetName)
+	{
+		const UWidgetBlueprint* Built = LoadObject<UWidgetBlueprint>(
+			nullptr, *FString::Printf(TEXT("/Game/UI/%s.%s"), AssetName, AssetName));
+
+		if (Built == nullptr || Built->GeneratedClass == nullptr)
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Menus: %s is needed by the equipment screen and is not built."), AssetName);
+
+			return nullptr;
+		}
+
+		return Built->GeneratedClass;
+	}
+
+	/**
+	 * The equipment screen as Joe approved it on 16 October:
+	 *
+	 *               [ Head: — ]
+	 *     [Weapon 1]    O     [Weapon 2]
+	 *     Laser Rifle  /|\    — empty —
+	 *               [ Body: — ]
+	 *               [ Legs: — ]
+	 *
+	 *     Tools
+	 *     [Mining: Crude Mining Laser]
+	 *
+	 * A paired panel the inventory's size, framed as the inventory is (SpaceMMOStylePanels' InventoryScreen),
+	 * so the two read as a pair when they sit side by side.
+	 */
+	void BuildEquipmentScreen(const FBuilder& B)
+	{
+		UClass* ArmourSlot = BuiltClass(TEXT("WBP_EquipmentSlot"));
+		UClass* WeaponSlot = BuiltClass(TEXT("WBP_WeaponSlot"));
+
+		UCanvasPanel* Root = B.Make<UCanvasPanel>(TEXT("Root"));
+		B.Blueprint->WidgetTree->RootWidget = Root;
+
+		UImage* Dim = B.Make<UImage>(TEXT("WorldDim"), true);
+		Dim->SetBrush(Solid(SpaceMMO::Style::WorldDim(), FVector2D(32.0, 32.0)));
+		Dim->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+		UCanvasPanelSlot* DimSlot = Root->AddChildToCanvas(Dim);
+		DimSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		DimSlot->SetOffsets(FMargin(0.0f));
+
+		// The inventory's size, centred on its anchor: the paired panels slide it sideways by a fraction of
+		// the screen, and two panels of different widths would sit unevenly.
+		UBorder* Panel = B.Make<UBorder>(TEXT("PanelRoot"), true);
+		Panel->SetBrush(SpaceMMO::Style::Glass());
+		Panel->SetPadding(FMargin(12.0f));
+
+		UCanvasPanelSlot* PanelSlot = Root->AddChildToCanvas(Panel);
+		PanelSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+		PanelSlot->SetAlignment(FVector2D(0.0, 0.0));
+		PanelSlot->SetAutoSize(false);
+		PanelSlot->SetOffsets(FMargin(-420.0f, -430.0f, 840.0f, 860.0f));
+
+		UOverlay* Inside = B.Make<UOverlay>(TEXT("PanelOverlay"));
+		Panel->AddChild(Inside);
+
+		const TCHAR* Corners[] = {TEXT("TL"), TEXT("TR"), TEXT("BL"), TEXT("BR")};
+
+		for (const TCHAR* Corner : Corners)
+		{
+			const bool bLeft = Corner[1] == TEXT('L');
+			const bool bTop = Corner[0] == TEXT('T');
+
+			for (const bool bAcross : {true, false})
+			{
+				UImage* Bar = B.Make<UImage>(*FString::Printf(TEXT("Bracket%s%s"), Corner, bAcross ? TEXT("Across") : TEXT("Down")));
+				Bar->SetBrush(Solid(White(0.55f), bAcross ? FVector2D(20.0, 2.0) : FVector2D(2.0, 20.0)));
+				Bar->SetVisibility(ESlateVisibility::HitTestInvisible);
+				AddO(Inside, Bar, bLeft ? HAlign_Left : HAlign_Right, bTop ? VAlign_Top : VAlign_Bottom);
+			}
+		}
+
+		UVerticalBox* Body = B.Make<UVerticalBox>(TEXT("Body"));
+		AddO(Inside, Body, HAlign_Fill, VAlign_Fill, FMargin(36.0f, 28.0f));
+
+		// Its words; the panels' type is applied at run time (USpaceMMOEquipmentScreen::NativeConstruct).
+		// Centred, as the inventory's title is, so the pair read alike side by side.
+		AddV(Body, B.Text(TEXT("PanelNameText"), TEXT("Equipment"), 28.0f, TextPrimary, TEXT("Regular"), 0, true),
+			FMargin(0, 0, 0, 30), HAlign_Center);
+
+		constexpr float ArmourWidth = 300.0f;
+
+		AddV(Body, SlotBox(B, ArmourSlot, TEXT("HeadSlot"), ArmourWidth), FMargin(0, 0, 0, 18), HAlign_Center);
+
+		UHorizontalBox* Middle = B.Make<UHorizontalBox>(TEXT("WeaponsAndFigure"));
+		AddV(Body, Middle, FMargin(0, 0, 0, 18));
+
+		AddH(Middle, WeaponSlot != nullptr ? static_cast<UWidget*>(B.MakeOf(WeaponSlot, TEXT("Weapon1Slot"), true)) : B.Make<USpacer>(TEXT("NoWeapon1")),
+			true, FMargin(), VAlign_Center);
+		AddH(Middle, Figure(B), false, FMargin(28, 0), VAlign_Center);
+		AddH(Middle, WeaponSlot != nullptr ? static_cast<UWidget*>(B.MakeOf(WeaponSlot, TEXT("Weapon2Slot"), true)) : B.Make<USpacer>(TEXT("NoWeapon2")),
+			true, FMargin(), VAlign_Center);
+
+		AddV(Body, SlotBox(B, ArmourSlot, TEXT("BodySlot"), ArmourWidth), FMargin(0, 0, 0, 12), HAlign_Center);
+		AddV(Body, SlotBox(B, ArmourSlot, TEXT("LegsSlot"), ArmourWidth), FMargin(), HAlign_Center);
+
+		AddV(Body, B.Text(TEXT("ToolsHeadingText"), TEXT("Tools"), 15.0f, TextSecondary, TEXT("Regular"), 0, true),
+			FMargin(0, 40, 0, 12));
+		AddV(Body, SlotBox(B, ArmourSlot, TEXT("MiningToolSlot"), 420.0f), FMargin(), HAlign_Left);
+	}
+
+	// ------------------------------------------------------------------------------------------------
 	// Making, saving and checking
 
 	struct FMenuAsset
@@ -758,8 +956,12 @@ int32 USpaceMMOBuildMenusCommandlet::Main(const FString& Params)
 
 	// -Rebuild=WBP_RecipeRow,WBP_JobRow rebuilds only those. -Force rebuilds everything, menus Joe may
 	// have edited included; this is for changing one generated row without touching anything else.
+	//
+	// Read to the next space, not the next comma. FParse::Value stops at ',' and ')' unless told not to, so
+	// the list form above rebuilt only its first name until 16 October -- found when three equipment
+	// Blueprints were asked for and one came back.
 	FString RebuildList;
-	FParse::Value(*Params, TEXT("Rebuild="), RebuildList);
+	FParse::Value(*Params, TEXT("Rebuild="), RebuildList, /* bShouldStopOnSeparator */ false);
 
 	TArray<FString> Rebuild;
 	RebuildList.ParseIntoArray(Rebuild, TEXT(","));
@@ -780,6 +982,15 @@ int32 USpaceMMOBuildMenusCommandlet::Main(const FString& Params)
 		{TEXT("WBP_RecipeRow"), TEXT("/Script/SpaceMMOBackend.SpaceMMORecipeRow"), &BuildRecipeRow, nullptr, nullptr, {}, TEXT("/Game/UI")},
 		{TEXT("WBP_JobRow"), TEXT("/Script/SpaceMMOBackend.SpaceMMOJobRow"), &BuildJobRow, nullptr, nullptr, {}, TEXT("/Game/UI")},
 		{TEXT("WBP_QuestRow"), TEXT("/Script/SpaceMMOBackend.SpaceMMOQuestRow"), &BuildQuestRow, nullptr, nullptr, {}, TEXT("/Game/UI")},
+
+		// Task 193. The two slot shapes first, since the screen is built of them.
+		// The two differ in layout only; what each says is the slot's, decided in C++ (ItemLabel).
+		{TEXT("WBP_EquipmentSlot"), TEXT("/Script/SpaceMMOBackend.SpaceMMOEquipmentSlot"), &BuildEquipmentSlot, nullptr, nullptr, {},
+			TEXT("/Game/UI")},
+		{TEXT("WBP_WeaponSlot"), TEXT("/Script/SpaceMMOBackend.SpaceMMOEquipmentSlot"), &BuildWeaponSlot, nullptr, nullptr, {},
+			TEXT("/Game/UI")},
+		{TEXT("WBP_EquipmentScreen"), TEXT("/Script/SpaceMMOBackend.SpaceMMOEquipmentScreen"), &BuildEquipmentScreen, nullptr, nullptr, {},
+			TEXT("/Game/UI")},
 	};
 
 	int32 Problems = 0;

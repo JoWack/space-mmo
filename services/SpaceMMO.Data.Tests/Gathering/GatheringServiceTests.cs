@@ -251,6 +251,35 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Gathering_WithTheToolInThePocketsButNotEquipped_IsRefused()
+    {
+        // Joe, 16 October: a tool must be in its slot to work. Carried was the rule before task 193, so this
+        // is the case that would pass if the gate quietly went back to asking only where the laser is.
+        await using (SpaceMmoDbContext seed = _fixture.CreateContext())
+        {
+            Inventory carried = await new InventoryService(seed).GetOrCreateCarriedAsync(_alice);
+
+            seed.ItemInstances.Add(new ItemInstance
+            {
+                ItemDefId = _laserId,
+                InventoryId = carried.Id,
+                Condition = 100,
+                AcquisitionValue = Credits.FromWholeCredits(200),
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+            await seed.SaveChangesAsync();
+        }
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        MissingToolException refused = await Assert.ThrowsAsync<MissingToolException>(() =>
+            new GatheringService(context).GatherAsync(_alice, _toolGatedNodeId));
+
+        Assert.Contains("equipped", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Gathering_WithTheToolLeftInAHangar_IsRefused()
     {
         // Owning the laser is not holding it. Task 94 recorded that this check could not be
@@ -596,20 +625,23 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         var inventories = new InventoryService(context);
 
-        // On their person. Mining requires the tool carried, not merely owned: a laser in a hangar on
-        // another planet is not a laser you are holding.
+        // In its slot. Mining requires the tool equipped, not merely owned or carried (task 193): put in
+        // the pockets and then equipped through the service, the way a player does it.
         Inventory carried = await inventories.GetOrCreateCarriedAsync(characterId);
 
-        context.ItemInstances.Add(new ItemInstance
+        var laser = new ItemInstance
         {
             ItemDefId = _laserId,
             InventoryId = carried.Id,
             Condition = 100,
             AcquisitionValue = Credits.FromWholeCredits(200),
             CreatedAt = DateTimeOffset.UtcNow,
-        });
+        };
 
+        context.ItemInstances.Add(laser);
         await context.SaveChangesAsync();
+
+        await new EquipmentService(context).EquipAsync(characterId, laser.Id);
     }
 
     private async Task<long> AddNodeAsync(
@@ -715,7 +747,7 @@ public sealed class GatheringServiceTests(DatabaseFixture fixture) : IAsyncLifet
         var laser = new ItemDef
         {
             Key = "crude_mining_laser", Name = "Crude Mining Laser",
-            Category = ItemCategory.Tool, VolumeM3 = 2,
+            Category = ItemCategory.Tool, VolumeM3 = 2, EquipsAs = EquipKind.MiningTool,
         };
 
         context.ItemDefs.AddRange(ore, laser);

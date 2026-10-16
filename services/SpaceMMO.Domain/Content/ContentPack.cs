@@ -37,7 +37,8 @@ public sealed record ItemContent(
     bool PlanetLocked = false,
     double? HoldCapacityM3 = null,
     string? Family = null,
-    ItemStyle Style = ItemStyle.Common)
+    ItemStyle Style = ItemStyle.Common,
+    EquipKind? EquipsAs = null)
 {
     /// <summary>
     /// Whether this material occurs on exactly one body and nowhere else (ADR-0008).
@@ -74,6 +75,15 @@ public sealed record ItemContent(
     /// styled material to the planet it is locked to, so the two cannot drift apart.
     /// </remarks>
     public ItemStyle Style { get; init; } = Style;
+
+    /// <summary>
+    /// What slot a weapon, armour piece or tool goes in (task 193), or null for anything not worn.
+    /// </summary>
+    /// <remarks>
+    /// Required of every weapon, armour piece and tool, and refused on anything else, by the validator: a
+    /// tool that does not say must never be equipped, and a tool must be equipped to work.
+    /// </remarks>
+    public EquipKind? EquipsAs { get; init; } = EquipsAs;
 }
 
 /// <summary>One material a recipe consumes.</summary>

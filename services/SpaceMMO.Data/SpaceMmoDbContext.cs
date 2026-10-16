@@ -427,6 +427,12 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
         modelBuilder.Entity<ItemInstance>(entity =>
         {
             entity.HasIndex(e => e.InventoryId);
+
+            // One item to a slot (task 193). Partial, since every item not equipped has no slot.
+            entity.HasIndex(e => new { e.InventoryId, e.EquippedSlot })
+                .IsUnique()
+                .HasFilter("equipped_slot IS NOT NULL")
+                .HasDatabaseName("ix_item_instances_one_per_slot");
             entity.HasIndex(e => e.ItemDefId);
 
             entity.HasOne(e => e.ItemDef).WithMany().HasForeignKey(e => e.ItemDefId);

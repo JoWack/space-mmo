@@ -213,6 +213,9 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 // Assigned, like the rest. Only a raw material's style lives here, and its stacks
                 // carry none of their own, so changing it re-styles every stack with nothing to move.
                 item.Style = content.Style;
+
+                // Assigned like the rest, so a tool's slot follows its content (task 193).
+                item.EquipsAs = content.EquipsAs;
                 continue;
             }
 
@@ -226,6 +229,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 FactionBuyPrice = FactionPriceOf(content),
                 Family = content.Family,
                 Style = content.Style,
+                EquipsAs = content.EquipsAs,
             };
 
             _database.ItemDefs.Add(created);

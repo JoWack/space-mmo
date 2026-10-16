@@ -587,6 +587,7 @@ public static class ContentValidator
             }
 
             ValidateItemStyle(item, pack, errors);
+            ValidateEquipsAs(item, errors);
 
             if (item.FactionBuyPrice is not { } price)
             {
@@ -672,6 +673,33 @@ public static class ContentValidator
                 expected == ItemStyle.Common
                     ? $"Styled {item.Style}, but found only on '{bodies[0]}', which is nobody's homeworld."
                     : $"Found only on '{bodies[0]}', so its style must be {expected}, not {item.Style}."));
+        }
+    }
+
+    /// <summary>
+    /// Everything worn says where, and nothing else claims a slot (task 193).
+    /// </summary>
+    /// <remarks>
+    /// A tool must be equipped to work (Joe, 16 October), so a tool authored without a slot could never be used
+    /// for anything; and a weapon claiming to be a helmet would be equipped somewhere it makes no sense.
+    /// </remarks>
+    private static void ValidateEquipsAs(ItemContent item, List<ContentError> errors)
+    {
+        if (item.EquipsAs is not { } kind)
+        {
+            if (Equipment.IsEquippable(item.Category))
+            {
+                errors.Add(new ContentError(
+                    "item", item.Key, $"A {item.Category} must say what slot it equips as (equipsAs)."));
+            }
+
+            return;
+        }
+
+        if (!Equipment.CategoryMayBe(item.Category, kind))
+        {
+            errors.Add(new ContentError(
+                "item", item.Key, $"A {item.Category} cannot equip as {kind}."));
         }
     }
 

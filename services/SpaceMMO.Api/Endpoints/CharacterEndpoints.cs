@@ -28,6 +28,18 @@ public sealed record TransferRequest(
 /// <summary>Moving one non-stackable item, which carries its own condition and value.</summary>
 public sealed record TransferInstanceRequest(long ItemInstanceId, long ToInventoryId);
 
+/// <summary>Putting an item in a slot (task 193): the one named, or wherever it fits first when null.</summary>
+public sealed record EquipRequest(long ItemInstanceId, EquipmentSlot? Slot = null);
+
+/// <summary>
+/// Taking whatever is in a slot out of it (task 193): into the container it was dragged to, or the pockets
+/// when none is named.
+/// </summary>
+public sealed record UnequipRequest(EquipmentSlot Slot, long? ToInventoryId = null);
+
+/// <summary>What equipping did: the slot used, and what came out of it to make room.</summary>
+public sealed record EquipResponse(EquipmentSlot Slot, long? SwappedOutInstanceId);
+
 public sealed record CharacterResponse(
     int Id,
     string Name,
@@ -150,7 +162,13 @@ public sealed record ItemInstanceResponse(
     bool Deployed = false,
 
     /// <summary>Which world's look this item has, decided when it was made (task 187).</summary>
-    ItemStyle Style = ItemStyle.Common);
+    ItemStyle Style = ItemStyle.Common,
+
+    /// <summary>The slot it is in, while equipped; null otherwise (task 193).</summary>
+    EquipmentSlot? EquippedSlot = null,
+
+    /// <summary>What slot it goes in, for a weapon, armour or tool; null for anything not worn.</summary>
+    EquipKind? EquipsAs = null);
 
 /// <summary>
 /// Everything a character owns, in the two shapes owning something can take.
@@ -203,6 +221,8 @@ public static class CharacterEndpoints
         // condition and acquisition value. One endpoint switching on which field was populated
         // would hide that in a null check.
         group.MapPost("/{characterId:int}/inventory/transfer", TransferAsync);
+        group.MapPost("/{characterId:int}/equipment/equip", EquipAsync);
+        group.MapPost("/{characterId:int}/equipment/unequip", UnequipAsync);
         group.MapPost("/{characterId:int}/inventory/transfer-instance", TransferInstanceAsync);
     }
 
@@ -457,7 +477,9 @@ public static class CharacterEndpoints
                 // Projected rather than read off IsDeployed, because this runs in the database and
                 // an expression-bodied property on the entity has no SQL translation.
                 i.DeployedSystemX != null,
-                i.Style))
+                i.Style,
+                i.EquippedSlot,
+                i.ItemDef.EquipsAs))
             .ToListAsync(cancellation);
 
         // Every container, not only the ones holding something. Transfer is addressed by inventory
@@ -535,6 +557,71 @@ public static class CharacterEndpoints
         }
 
         return Results.Ok();
+    }
+
+    /// <summary>
+    /// Puts an item in a slot (task 193). Where it may come from, and what comes out to make room, are the
+    /// service's rules, so this endpoint cannot be the one that forgets them.
+    /// </summary>
+    private static async Task<IResult> EquipAsync(
+        int characterId,
+        EquipRequest request,
+        HttpContext context,
+        Caller caller,
+        SpaceMmoDbContext database,
+        CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        OwnershipResult owned = await caller.OwnedCharacterAsync(context, characterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        try
+        {
+            EquipResult result = await new EquipmentService(database)
+                .EquipAsync(characterId, request.ItemInstanceId, request.Slot, cancellation);
+
+            return Results.Ok(new EquipResponse(result.Slot, result.SwappedOutInstanceId));
+        }
+        catch (EquipmentException error)
+        {
+            return Results.Conflict(new { error = error.Message, reason = error.Reason });
+        }
+    }
+
+    /// <summary>Takes an item out of a slot, into the pockets or the docked hangar (task 193).</summary>
+    private static async Task<IResult> UnequipAsync(
+        int characterId,
+        UnequipRequest request,
+        HttpContext context,
+        Caller caller,
+        SpaceMmoDbContext database,
+        CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        OwnershipResult owned = await caller.OwnedCharacterAsync(context, characterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        try
+        {
+            long to = await new EquipmentService(database)
+                .UnequipAsync(characterId, request.Slot, request.ToInventoryId, cancellation);
+
+            return Results.Ok(new { toInventoryId = to });
+        }
+        catch (EquipmentException error)
+        {
+            return Results.Conflict(new { error = error.Message, reason = error.Reason });
+        }
     }
 
     /// <summary>Moves one non-stackable item — a tool, a weapon, a ship — between containers.</summary>

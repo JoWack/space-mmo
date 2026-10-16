@@ -410,6 +410,23 @@ public:
 		int64 ToInventoryId,
 		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
 
+	/**
+	 * Puts an item in a slot (task 193): the one named, or wherever it fits first. What was there comes out
+	 * to where the new one came from; the server decides that, and the refreshed inventory shows it.
+	 */
+	void Equip(
+		int32 CharacterId,
+		int64 ItemInstanceId,
+		TOptional<EBackendEquipmentSlot> Slot,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
+	/** Takes an item out of a slot, into the container named, or the pockets when it is zero. */
+	void Unequip(
+		int32 CharacterId,
+		EBackendEquipmentSlot Slot,
+		int64 ToInventoryId,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Industry")
 	void ClaimJob(int32 CharacterId, int64 JobId);
 

@@ -75,6 +75,9 @@ public class ItemDef : IRetirableContent
     /// </remarks>
     public ItemStyle Style { get; set; }
 
+    /// <summary>What slot this goes in, for a weapon, armour piece or tool; null otherwise (task 193).</summary>
+    public EquipKind? EquipsAs { get; set; }
+
     /// <summary>
     /// When content stopped naming this item, or null while it still does (task 188).
     /// </summary>
@@ -281,6 +284,16 @@ public class ItemInstance
     /// Which world's look this item has, decided when it was made (task 187).
     /// </summary>
     public ItemStyle Style { get; set; }
+
+    /// <summary>
+    /// Which slot it is in, while it sits in its owner's Equipped inventory; null everywhere else (task 193).
+    /// </summary>
+    /// <remarks>
+    /// One item to a slot, enforced by a unique index on the inventory and the slot. Set and cleared only by
+    /// <c>EquipmentService</c>: the transfer routes refuse the Equipped inventory, so nothing arrives there
+    /// without a slot or leaves still holding one.
+    /// </remarks>
+    public EquipmentSlot? EquippedSlot { get; set; }
 
     /// <summary>
     /// What this instance actually cost — input material value if crafted, price paid if

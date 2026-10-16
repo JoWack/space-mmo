@@ -5,6 +5,7 @@
 #include "Engine/GameInstance.h"
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
+#include "SpaceMMOEquipmentScreen.h"
 #include "SpaceMMOItemStyleTag.h"
 #include "SpaceMMOPlayerController.h"
 
@@ -112,6 +113,22 @@ FReply USpaceMMOInventoryRow::NativeOnMouseButtonDown(
 	return FReply::Handled().DetectDrag(TakeWidget(), EKeys::LeftMouseButton);
 }
 
+FReply USpaceMMOInventoryRow::NativeOnMouseButtonDoubleClick(
+	const FGeometry& Geometry, const FPointerEvent& Event)
+{
+	// Only something worn, and only from somewhere within reach: the server refuses the rest, and a
+	// double-click on ore doing nothing is less surprising than one that asks the server and is told no.
+	if (!Line.CanDrag() || Line.InstanceId == 0 || !Line.bEquippable
+		|| Event.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return FReply::Unhandled();
+	}
+
+	USpaceMMOEquipmentScreen::SendEquip(this, Line.InstanceId, TOptional<EBackendEquipmentSlot>());
+
+	return FReply::Handled();
+}
+
 void USpaceMMOInventoryRow::NativeOnDragDetected(
 	const FGeometry& Geometry, const FPointerEvent& Event, UDragDropOperation*& OutOperation)
 {
@@ -144,6 +161,24 @@ bool USpaceMMOInventoryRow::NativeOnDrop(
 	const FGeometry& Geometry, const FDragDropEvent& Event, UDragDropOperation* Operation)
 {
 	USpaceMMOInventoryScreen* Screen = OwningScreen.Get();
+
+	// Out of a slot and into this container (task 193): taking it off, named where it goes.
+	if (const USpaceMMOEquipmentDrag* FromSlot = Cast<USpaceMMOEquipmentDrag>(Operation))
+	{
+		if (Screen != nullptr)
+		{
+			Screen->SetDropTargetContainer(0);
+		}
+
+		if (!USpaceMMOInventoryScreen::CanTakeOffInto(Line))
+		{
+			return false;
+		}
+
+		USpaceMMOEquipmentScreen::SendUnequip(this, FromSlot->View.Slot, Line.InventoryId);
+
+		return true;
+	}
 
 	const USpaceMMOInventoryDrag* Drag = Cast<USpaceMMOInventoryDrag>(Operation);
 
@@ -222,6 +257,12 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 	// hold is where a first haul goes, and no list of contents can mention it.
 	for (const FBackendInventoryContainer& Container : Containers)
 	{
+		// Worn gear is the equipment screen's (task 193), and is not a place goods can be dragged to.
+		if (Container.Kind == EBackendInventoryKind::Equipped)
+		{
+			continue;
+		}
+
 		GroupFor(Container.InventoryId, Container.Kind, Container.StationId);
 	}
 
@@ -243,6 +284,11 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 
 	for (const FBackendItemInstance& Instance : Instances)
 	{
+		if (Instance.Kind == EBackendInventoryKind::Equipped)
+		{
+			continue;
+		}
+
 		FInventoryGroup& Group = GroupFor(
 			Instance.InventoryId, Instance.Kind, Instance.StationId);
 
@@ -254,6 +300,8 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 		Line.InstanceId = Instance.Id;
 		Line.Quantity = 1;
 		Line.Style = Instance.Style;
+		Line.bEquippable = Instance.bEquippable;
+		Line.EquipsAs = Instance.EquipsAs;
 
 		Group.Lines.Add(Line);
 	}
@@ -319,6 +367,13 @@ void USpaceMMOInventoryRow::NativeOnDragEnter(
 
 	USpaceMMOInventoryScreen* Screen = OwningScreen.Get();
 
+	if (Screen != nullptr && Cast<USpaceMMOEquipmentDrag>(Operation) != nullptr)
+	{
+		Screen->SetDropTargetContainer(USpaceMMOInventoryScreen::CanTakeOffInto(Line) ? Line.InventoryId : 0);
+
+		return;
+	}
+
 	if (Drag == nullptr || Screen == nullptr)
 	{
 		return;
@@ -361,6 +416,11 @@ bool USpaceMMOInventoryScreen::CanDrop(
 	// Already there. Harmless to send and confusing to watch: the server would move goods from a
 	// place to itself and the screen would redraw identically, which reads as the drop being lost.
 	return Target.InventoryId != Source.InventoryId;
+}
+
+bool USpaceMMOInventoryScreen::CanTakeOffInto(const FSpaceMMOInventoryLine& Target)
+{
+	return Target.bReachable && Target.InventoryId != 0;
 }
 
 USpaceMMOInventoryRow* USpaceMMOInventoryScreen::MakeRow(const FSpaceMMOInventoryLine& Line)

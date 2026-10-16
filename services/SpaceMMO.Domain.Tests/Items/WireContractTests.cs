@@ -13,9 +13,9 @@ namespace SpaceMMO.Domain.Tests.Items;
 /// matches the wrong rows and shows the player nothing, which is how a market UI once shipped with
 /// a hangar filter that only ever matched ship holds.
 ///
-/// Renumbering any of these means editing EBackendInventoryKind, EBackendOrderSide or
-/// EBackendItemStyle in client/Source/SpaceMMOBackend/Public/SpaceMMOBackendTypes.h in the same
-/// commit.
+/// Renumbering any of these means editing EBackendInventoryKind, EBackendOrderSide,
+/// EBackendItemStyle, EBackendEquipmentSlot or EBackendEquipKind in
+/// client/Source/SpaceMMOBackend/Public/SpaceMMOBackendTypes.h in the same commit.
 /// </remarks>
 public sealed class WireContractTests
 {
@@ -23,6 +23,7 @@ public sealed class WireContractTests
     [InlineData(InventoryKind.CharacterCarried, 0)]
     [InlineData(InventoryKind.ShipHold, 1)]
     [InlineData(InventoryKind.StationHangar, 2)]
+    [InlineData(InventoryKind.Equipped, 3)]
     public void InventoryKindKeepsItsWireValue(InventoryKind kind, int expected) =>
         Assert.Equal(expected, (int)kind);
 
@@ -40,4 +41,23 @@ public sealed class WireContractTests
     [InlineData(ItemStyle.Grimhold, 4)]
     public void ItemStyleKeepsItsWireValue(ItemStyle style, int expected) =>
         Assert.Equal(expected, (int)style);
+
+    [Theory]
+    [InlineData(EquipmentSlot.Weapon1, 0)]
+    [InlineData(EquipmentSlot.Weapon2, 1)]
+    [InlineData(EquipmentSlot.Head, 2)]
+    [InlineData(EquipmentSlot.Body, 3)]
+    [InlineData(EquipmentSlot.Legs, 4)]
+    [InlineData(EquipmentSlot.MiningTool, 5)]
+    public void EquipmentSlotKeepsItsWireValue(EquipmentSlot slot, int expected) =>
+        Assert.Equal(expected, (int)slot);
+
+    [Theory]
+    [InlineData(EquipKind.Weapon, 0)]
+    [InlineData(EquipKind.Head, 1)]
+    [InlineData(EquipKind.Body, 2)]
+    [InlineData(EquipKind.Legs, 3)]
+    [InlineData(EquipKind.MiningTool, 4)]
+    public void EquipKindKeepsItsWireValue(EquipKind kind, int expected) =>
+        Assert.Equal(expected, (int)kind);
 }

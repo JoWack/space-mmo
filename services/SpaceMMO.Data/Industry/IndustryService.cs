@@ -34,9 +34,11 @@ public sealed class NoFreeJobSlotException(string skillKey, int slots)
     public int Slots { get; } = slots;
 }
 
-/// <summary>Thrown when a recipe needs a tool the character does not own.</summary>
+/// <summary>Thrown when a recipe or a deposit needs a tool the character does not have equipped.</summary>
+/// <remarks>"Equipped" in the words since task 193: a player holding the laser in their pockets is otherwise
+/// told they need something they are carrying.</remarks>
 public sealed class MissingToolException(string toolKey, string? toolName = null)
-    : InvalidOperationException($"You need a {toolName ?? toolKey} to do this.")
+    : InvalidOperationException($"You need a {toolName ?? toolKey} equipped to do this.")
 {
     /// <summary>The item's key, for anything deciding what to do about it.</summary>
     public string ToolKey { get; } = toolKey;
@@ -96,6 +98,8 @@ public sealed class IndustryService(SpaceMmoDbContext database)
         database ?? throw new ArgumentNullException(nameof(database));
 
     private readonly InventoryService _inventories = new(database);
+
+    private readonly EquipmentService _equipment = new(database);
 
     /// <summary>
     /// Starts a job: checks the gates, consumes inputs, charges the fee, and sets the clock.
@@ -364,6 +368,11 @@ public sealed class IndustryService(SpaceMmoDbContext database)
                 };
 
                 _database.ItemInstances.Add(instance);
+
+                // Straight into its slot if that slot is empty (Joe, 16 October), so the opening's mining
+                // laser is ready to mine with the moment it is claimed; otherwise the hangar, as before.
+                await _equipment.EquipIfSlotEmptyAsync(characterId, instance, cancellationToken);
+
                 await _database.SaveChangesAsync(cancellationToken);
 
                 instanceIds.Add(instance.Id);
@@ -633,16 +642,21 @@ public sealed class IndustryService(SpaceMmoDbContext database)
             return;
         }
 
-        // Tools are tracked per instance, and a broken one does not count — condition is what the
-        // repair loop will eventually act on.
-        bool owned = await _database.ItemInstances.AnyAsync(
+        // Equipped, as gathering's gate asks (task 193): a tool must be in its slot to work. This one used to
+        // accept a tool anywhere the character owned it -- a laser in a hangar four worlds away -- which was
+        // the sibling of gathering's old rule and outlived it.
+        //
+        // A broken one does not count -- condition is what the repair loop will eventually act on.
+        bool equipped = await _database.ItemInstances.AnyAsync(
             instance => instance.ItemDefId == toolDefId
                 && instance.DestroyedAt == null
                 && instance.Condition > 0
-                && instance.Inventory!.CharacterId == characterId,
+                && instance.EquippedSlot != null
+                && instance.Inventory!.CharacterId == characterId
+                && instance.Inventory.Kind == InventoryKind.Equipped,
             cancellationToken);
 
-        if (!owned)
+        if (!equipped)
         {
             // Both, because the message is read by a person and the key is read by code.
             var tool = await _database.ItemDefs

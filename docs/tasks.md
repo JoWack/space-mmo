@@ -7939,7 +7939,8 @@ the game and equipped to characters."*
 
 ## 179 — Armour a character can craft and wear
 
-**Pending, blocked on 178, 177, and an equipment design that does not exist.** Belongs to **M4**.
+**Pending, blocked on 178 and 177.** Belongs to **M4**. The equipment design it was also blocked on is
+193, built 16 October: armour goes in Head, Body and Legs slots, one per hit zone.
 Recorded so 178 is drawn against what armour has to become, not as a plan.
 
 Known, from documents already written:
@@ -9948,3 +9949,148 @@ Four rounds, each offered with alternatives; the details are in [weapons/README.
 **Also blocked on:** 102 (constitution and stamina, which abilities may draw on), 179's equipment
 slots (two weapons equipped needs somewhere to equip them), and the attack record in 104 (where a weapon
 may be fired is built; who has fired at whom is not).
+
+## 193 — Equipment: slots to wear weapons, armour and tools in
+
+**Built, 16 October; waiting on Joe's playtest.** Belongs to **M4** ("equippable tools, weapons and armour"). Split out of 179,
+whose "equipment design that does not exist" was the one blocker art did not hold: 179 keeps the armour
+itself, and 192's two equipped weapons need somewhere to go.
+
+### Decided by Joe, 16 October
+
+Each offered with alternatives:
+
+- **Slots: Weapon 1, Weapon 2, Head, Body, Legs, and one per tool type.** Armour is **head, body and
+  legs**, matching the hit zones, so each piece protects hits to its zone, and 96 fits are drawn rather
+  than 160 (against New World's five pieces, and one suit). Weapons: two, switched between (ADR-0015).
+- **Tools must be equipped to work**, one slot for each tool type: *"I would like tool slots - and one slot
+  for each tool type. Tools will need to be equipped in those slots to work."* Offered against tools
+  working from the pockets, as they do today. Only mining has a tool so far.
+- **New gear auto-equips into an empty slot**: a tool or weapon claimed from a job goes straight into its
+  slot when that slot is free, otherwise to the hangar as now. The opening keeps working unchanged, and
+  existing mining lasers are equipped the same way when this lands. Offered against teaching it with a
+  quest step.
+- **Equip anywhere, out of combat**, from your **pockets, your ship's hold, or the hangar you are docked
+  at** (against only when docked, and any time; and against pockets only). There is no combat yet, so
+  "out of combat" is a rule waiting for the first weapon to fire.
+- **Worn gear does not count against what you carry** (6 m³ on foot; ADR-0014). Offered against counting it.
+- **A separate equipment screen on L**, as mocked below, opening beside the inventory the way the station
+  screen does; **drag an item onto a slot, or double-click it**, to equip, and the reverse to take it off.
+  The figure in the middle waits for armour to have something to show (179): **slots now, a live render of
+  your own character later**. Offered against a group at the top of the inventory; U and O; a live figure
+  now, and a silhouette per race.
+
+```
+EQUIPMENT
+
+            [ Head: — ]
+  [Weapon 1]    O     [Weapon 2]
+  Laser Rifle  /|\    — empty —
+            [ Body: — ]
+            [ Legs: — ]
+
+  Tools
+  [Mining: Crude Mining Laser]
+```
+
+### Decided by Joe while it was built, 16 October
+
+- **The deposit prompt says "not equipped (L)"** when a laser is owned but not in its slot, with the key
+  read from the binding; "you have none" still means none. Offered against "not equipped" alone, and
+  leaving the wording as it was.
+- **Equipment covers the station screen.** Docked with the station and inventory open, L puts equipment
+  on the left and hides the station screen without closing it; L again brings it back, and Tab over
+  equipment swaps back to the station. Offered against the last-opened closing the other, and three columns.
+
+### What was built
+
+**Server.**
+- `Equipment.cs` in the domain: the six slots, the five kinds an item can be, and the rules (which kinds
+  fit which slots, which categories may be which kinds, the first empty slot). `InventoryKind.Equipped = 3`
+  is the container worn things sit in.
+- Content says what slot an item goes in: `equipsAs` on an item. The validator requires it of every
+  weapon, armour and tool, and checks the kind suits the category, so a tool nobody can ever equip, and so
+  never use, cannot be authored. The crude mining laser is `MiningTool`.
+- Migration `Equipment`: `item_defs.equips_as`, `item_instances.equipped_slot`, and a unique index on
+  `(inventory_id, equipped_slot)` where a slot is set, so two items can never share one whatever route a
+  later change takes.
+- **`EquipmentService` is the only way in or out.** Both transfer routes refuse the Equipped container in
+  either direction: a drag would otherwise leave a laser worn in no slot, or a slot set on one in the pockets.
+  - Equip reaches the pockets, a hold, or the hangar where the character is docked. What comes out of a
+    full slot goes back where the new item came from, and the swap is refused (`no_room`) if it would not
+    fit there, rather than half of it quietly going somewhere else. Weapon 1 onto Weapon 2 swaps them.
+  - The swap is two saves inside one transaction, because Postgres checks the unique index row by row and
+    a swap written in one save collides with itself.
+  - Unequip goes to the container a slot was dragged onto (reach and room checked, refused rather than
+    rerouted), or with none named to the pockets, then the docked hangar, else refused.
+- **Both tool gates now ask for the tool equipped.** Gathering's asked for it carried; industry's still
+  accepted one *anywhere its owner had one* — the sibling of gathering's pre-94 rule, which had outlived it.
+  Both read the same condition now, so they cannot disagree about whether somebody holds the laser.
+- **Auto-equip** when a claimed tool's slot is empty, inside the claim's transaction; never over something
+  worn. **`--seed` equips the best-condition tool** each character owns where their slot is empty, from
+  wherever it is (the server tidying its own change, not a player reaching), so nobody's mining stops the
+  day this lands. Idempotent.
+- API: `POST /characters/{id}/equipment/equip` `{itemInstanceId, slot?}` and `/equipment/unequip`
+  `{slot, toInventoryId?}`, refusals as 409 with the reason; inventory items carry `equippedSlot` (null
+  when not worn) and `equipsAs`, and the Equipped container is listed with the others.
+
+**Client.**
+- The wire enums, and kind 3 read as Equipped. **Until this, any kind past 2 was clamped to the pockets**,
+  so the old client would have listed a worn laser as carried and the Equipped container as a second pair
+  of pockets — a drop target the server then refuses.
+- `USpaceMMOEquipmentScreen` on L, built by `SpaceMMOBuildMenus` as `WBP_EquipmentScreen` from two slot
+  Blueprints, `WBP_EquipmentSlot` ("Head: —") and `WBP_WeaponSlot` (name over item, "— empty —"), as in
+  the mock. The figure is a stand-in in outline.
+- The inventory no longer lists worn gear (worn is not carried). Double-click a wearable item to equip it;
+  drag it onto a slot to choose the slot (only slots it fits light up); drag a slot onto a container, or
+  double-click it, to take it off.
+- The deposit prompt asks what the server asks — the tool in its slot — and says "not equipped (L)".
+- `SpaceMMOLookPanels Equipment` and `Gear` (equipment beside the inventory, docked, the station hidden
+  under it) for looking without a server.
+
+### Not done, and why
+
+- **"Out of combat"** waits for combat: nothing fires yet.
+- **No message on equipping.** A transfer says "Moved Crude Mining Laser"; equipping says nothing on
+  success, because no line for it was agreed. Double-clicking a laser with the equipment screen closed takes
+  it out of the inventory list and nothing says where it went. A question for Joe.
+- **Only the mining slot can be filled in play.** No weapon or armour exists as content (192's are designs,
+  179 is the armour). The weapon slots, the swap and armour fitting are proven by the tests and the sample
+  look, not by play.
+- **Worn gear and death (103)**: whether a death drops what is worn is part of the rethink Joe opened on
+  15 October.
+- **The live figure** waits for armour to have something to show (179).
+
+### Verified, and how
+
+- Suites: Domain 572, Data 278, API 108, client 313 (`scripts/tests.bat SpaceMMO 313`), all passing after
+  the last change, against a build that said `Result: Succeeded`.
+- **Every new rule was broken on purpose and seen to fail its own test**, then restored: on the server, the
+  gathering gate back to carried, the industry gate back to anywhere, the swap in one save (Postgres
+  refuses it, as the comment says), no auto-equip on claim, auto-equip over a full slot (the unique index
+  refuses it), transfers allowed to touch Equipped, the backfill choosing the worst laser, the swap's room
+  check removed, any hangar reachable, unequip ignoring the pockets' room, a named destination ignoring reach
+  and ignoring room, Choose always picking Weapon 1, and the validator skipping `equipsAs`; on the client,
+  kind 3 clamped to 2 again, the Equipped container listed again, and the deposit prompt counting an owned
+  laser as enough.
+- **The client's parse test reads the server's own JSON**: the inventory endpoint's answer with a laser
+  equipped, captured from the API test that equips one. MiningTool is 5 as a slot and 4 as a kind there.
+- `--seed` against the dev database applied the migration and equipped five characters' lasers (Boreth222,
+  Prospector5752, Spelf, Orenthal, Ayla1204); a second seed equipped nobody.
+- **Rendered**: `SpaceMMOLookPanels Gear shot` captured the screen beside the inventory, docked, matching
+  the mock. Its log says the station overlay was open while it was not drawn: hidden, not closed.
+
+**Not verified by anything but Joe's playtest:** dragging onto a slot, double-clicking either way, dragging
+a slot onto a container, Weapon 1 onto Weapon 2, L, Tab over equipment, Esc's order, and the deposit
+prompt's red line over a real rock.
+
+### Learned on the way
+
+- **Class defaults a commandlet sets on a widget Blueprint do not reach copies of it placed inside another
+  Blueprint.** The weapon slot's "— empty —" was set on its class, saved in its asset (the bytes are there),
+  and the copies inside the equipment screen still said "—": the screen's asset stores its own values for
+  them. Seen in the first render, which is the only place it could be. What each slot says is now decided in
+  C++ from the slot (`ItemLabel`, tested), and the two slot Blueprints differ in layout only.
+- **`FParse::Value` stops at `,` and `)` unless told not to.** `SpaceMMOBuildMenus -Rebuild=A,B,C` has only
+  ever rebuilt A — three Blueprints were asked for and one came back. Fixed there, and in its sibling: a
+  `-BackendPassword=` containing either character arrived cut short, which would read as a wrong password.

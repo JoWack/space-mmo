@@ -267,6 +267,12 @@ enum class EBackendInventoryKind : uint8
 
 	/** Rented storage at a station. The only place goods can back a market order. */
 	StationHangar = 2,
+
+	/**
+	 * Worn (task 193): what is in the character's slots. Listed with the other containers, and never a
+	 * place to drag goods into: the server refuses a transfer either way, and equipping is its own call.
+	 */
+	Equipped = 3,
 };
 
 /**
@@ -284,6 +290,39 @@ enum class EBackendItemStyle : uint8
 	Martian = 2,
 	Verdant = 3,
 	Grimhold = 4,
+};
+
+/**
+ * A place on a character an item is worn in, mirroring EquipmentSlot on the server (task 193).
+ *
+ * Two weapons, armour for the three hit zones, and one slot for each tool type. The numbers are the wire
+ * contract, pinned by the server's WireContractTests. Append only.
+ */
+UENUM(BlueprintType)
+enum class EBackendEquipmentSlot : uint8
+{
+	Weapon1 = 0,
+	Weapon2 = 1,
+	Head = 2,
+	Body = 3,
+	Legs = 4,
+	MiningTool = 5,
+};
+
+/**
+ * What sort of slot an item goes in, mirroring EquipKind on the server (task 193).
+ *
+ * Not the same enum as the slot, and not the same numbers: a weapon goes in either of two slots. MiningTool
+ * is 5 as a slot and 4 as a kind, and a client that read one as the other would put a laser in Weapon 2.
+ */
+UENUM(BlueprintType)
+enum class EBackendEquipKind : uint8
+{
+	Weapon = 0,
+	Head = 1,
+	Body = 2,
+	Legs = 3,
+	MiningTool = 4,
 };
 
 /**
@@ -1107,6 +1146,20 @@ struct SPACEMMOBACKEND_API FBackendItemInstance
 	/** Which world's look it has, decided when it was made (task 187). */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	EBackendItemStyle Style = EBackendItemStyle::Common;
+
+	/** Whether it is in a slot (task 193). When false, EquippedSlot means nothing. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bEquipped = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendEquipmentSlot EquippedSlot = EBackendEquipmentSlot::Weapon1;
+
+	/** Whether it is worn at all: a weapon, armour or a tool. When false, EquipsAs means nothing. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bEquippable = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	EBackendEquipKind EquipsAs = EBackendEquipKind::Weapon;
 };
 
 /**

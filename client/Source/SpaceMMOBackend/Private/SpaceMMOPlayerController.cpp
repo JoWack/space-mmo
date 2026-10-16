@@ -21,6 +21,7 @@
 #include "SpaceMMODepositActor.h"
 #include "SpaceMMOFlightReadout.h"
 #include "SpaceMMOHudSettings.h"
+#include "SpaceMMOEquipmentScreen.h"
 #include "SpaceMMOInventoryScreen.h"
 #include "SpaceMMOLoginScreen.h"
 #include "SpaceMMODockingComponent.h"
@@ -167,6 +168,9 @@ void ASpaceMMOPlayerController::CreateHud()
 	InventoryScreen = CreateHudWidget<USpaceMMOInventoryScreen>(
 		this, Settings->InventoryScreen, TEXT("inventory screen"));
 
+	EquipmentScreen = CreateHudWidget<USpaceMMOEquipmentScreen>(
+		this, Settings->EquipmentScreen, TEXT("equipment screen"));
+
 	LoginScreen = CreateHudWidget<USpaceMMOLoginScreen>(
 		this, Settings->LoginScreen, TEXT("login screen"));
 
@@ -225,7 +229,7 @@ void ASpaceMMOPlayerController::ApplyMouseCapture()
 	UUserWidget* const Menu = MenuWidget(ActiveMenu);
 
 	const bool bScreenWantsCursor =
-		bAwaitingSignIn || Menu != nullptr || bInventoryScreenOpen || bStationOverlayOpen;
+		bAwaitingSignIn || Menu != nullptr || bInventoryScreenOpen || bStationOverlayOpen || bEquipmentScreenOpen;
 
 	if (bMouseCaptured && !bScreenWantsCursor)
 	{
@@ -287,7 +291,7 @@ void ASpaceMMOPlayerController::ToggleMouseCapture()
 
 	// What actually happened, not what was asked for. An open screen keeps the cursor either way,
 	// and "Mouse captured" over a cursor still sitting on the screen reads as a broken key.
-	const bool bHeldByScreen = bInventoryScreenOpen || bStationOverlayOpen;
+	const bool bHeldByScreen = bInventoryScreenOpen || bStationOverlayOpen || bEquipmentScreenOpen;
 
 	if (bMouseCaptured && bHeldByScreen)
 	{
@@ -328,6 +332,12 @@ void ASpaceMMOPlayerController::SetupInputComponent()
 			IE_Pressed,
 			this,
 			&ASpaceMMOPlayerController::ToggleStationOverlay);
+
+		InputComponent->BindAction(
+			TEXT("ToggleEquipment"),
+			IE_Pressed,
+			this,
+			&ASpaceMMOPlayerController::ToggleEquipmentScreen);
 
 		InputComponent->BindAction(
 			TEXT("StationTabMarket"), IE_Pressed, this, &ASpaceMMOPlayerController::ShowMarketTab);
@@ -825,6 +835,7 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 		Show(DepositPrompt, false);
 		Show(SkillsScreen, false);
 		Show(InventoryScreen, false);
+		Show(EquipmentScreen, false);
 		Show(StationOverlay, false);
 
 		return;
@@ -840,7 +851,7 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// one is about whether the view still means anything, and this one is about whether the player
 	// is looking at the world at all.
 	Show(Crosshair,
-		!bSkillsScreenOpen && !bInventoryScreenOpen && !bStationOverlayOpen
+		!bSkillsScreenOpen && !bInventoryScreenOpen && !bStationOverlayOpen && !bEquipmentScreenOpen
 			&& ActiveMenu == ESpaceMMOMenu::None);
 
 	// Gathering happens on foot — the component lives on the character pawn, and a ship has nothing
@@ -866,17 +877,31 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// Open together, they take a side each and stop covering one another. That pairing is the whole
 	// point while transferring: goods move between a hangar and a hold, and reading one with the
 	// other hidden is what makes hauling feel like paperwork. Alone, each returns to the middle.
-	const bool bPaired = bStationOverlayOpen && bInventoryScreenOpen;
+	//
+	// The equipment screen takes the same left-hand place (task 193), and while it is open the station
+	// overlay is hidden under it rather than closed: three panels would cover the world, and Joe chose
+	// the screen just asked for over the one that was already there (16 October).
+	const bool bStationShows = bStationOverlayOpen && !bEquipmentScreenOpen;
+	const bool bLeftTaken = bStationShows || bEquipmentScreenOpen;
+	const bool bPaired = bLeftTaken && bInventoryScreenOpen;
 
 	if (StationOverlay != nullptr)
 	{
 		StationOverlay->SetSide(bPaired ? ESpaceMMOPanelSide::Left : ESpaceMMOPanelSide::Centre);
 	}
 
+	if (EquipmentScreen != nullptr)
+	{
+		EquipmentScreen->SetSide(bPaired ? ESpaceMMOPanelSide::Left : ESpaceMMOPanelSide::Centre);
+	}
+
 	if (InventoryScreen != nullptr)
 	{
 		InventoryScreen->SetSide(bPaired ? ESpaceMMOPanelSide::Right : ESpaceMMOPanelSide::Centre);
 	}
+
+	// SelfHitTestInvisible, as the inventory: its slots are dragged and dropped on, its empty half is not.
+	Show(EquipmentScreen, bEquipmentScreenOpen, ESlateVisibility::SelfHitTestInvisible);
 
 	// Undocking closes the station overlay rather than leaving a station's market floating over open
 	// space — and it opens on docking, so arriving somewhere shows you where you have arrived.
@@ -895,7 +920,9 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 
 	// SelfHitTestInvisible for the same reason as the inventory screen: rows, tabs, a search box and
 	// two order buttons are all clicked, but the empty half of a full-screen root must not be.
-	Show(StationOverlay, bStationOverlayOpen, ESlateVisibility::SelfHitTestInvisible);
+	//
+	// Recomputed after the docking checks above, which can close it, so a closed overlay is never shown.
+	Show(StationOverlay, bStationOverlayOpen && !bEquipmentScreenOpen, ESlateVisibility::SelfHitTestInvisible);
 }
 
 void ASpaceMMOPlayerController::ToggleStationOverlay()
@@ -907,11 +934,47 @@ void ASpaceMMOPlayerController::ToggleStationOverlay()
 		return;
 	}
 
-	bStationOverlayOpen = !bStationOverlayOpen;
+	// Tab over the equipment screen brings the station back rather than closing the station underneath
+	// it (Joe, 16 October): the overlay is what Tab is about, and it was hidden, not closed.
+	if (bEquipmentScreenOpen)
+	{
+		bEquipmentScreenOpen = false;
+		bStationOverlayOpen = true;
+	}
+	else
+	{
+		bStationOverlayOpen = !bStationOverlayOpen;
+	}
 
 	// The same reason the inventory screen does it: rows are clicked, prices are typed and buttons
 	// are pressed here, none of which a captured cursor can reach.
 	ApplyMouseCapture();
+
+	UpdateHudContext();
+}
+
+void ASpaceMMOPlayerController::ToggleEquipmentScreen()
+{
+	if (EquipmentScreen == nullptr)
+	{
+		return;
+	}
+
+	bEquipmentScreenOpen = !bEquipmentScreenOpen;
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("HUD: equipment screen %s (station %s)."),
+		bEquipmentScreenOpen ? TEXT("opened") : TEXT("closed"),
+		bStationOverlayOpen ? (bEquipmentScreenOpen ? TEXT("hidden under it") : TEXT("shown again")) : TEXT("not open"));
+
+	// Slots are dragged to and from, which a captured cursor cannot do.
+	ApplyMouseCapture();
+
+	// Fresh on opening, as the inventory is: a laser claimed a moment ago went straight into its slot on
+	// the server, and the screen opened to see it is the one that must not be stale.
+	if (bEquipmentScreenOpen)
+	{
+		RefreshCharacterState();
+	}
 
 	UpdateHudContext();
 }
@@ -1292,9 +1355,11 @@ void ASpaceMMOPlayerController::BeginIdentifying()
 
 bool ASpaceMMOPlayerController::FindCredentials(FString& OutEmail, FString& OutPassword)
 {
+	// Not stopping at ',' or ')': FParse::Value's default would cut a password containing either short, and
+	// the refusal would read as a wrong password (see BeginSmokeTest).
 	const bool bFromCommandLine =
-		FParse::Value(FCommandLine::Get(), TEXT("BackendEmail="), OutEmail)
-		&& FParse::Value(FCommandLine::Get(), TEXT("BackendPassword="), OutPassword);
+		FParse::Value(FCommandLine::Get(), TEXT("BackendEmail="), OutEmail, false)
+		&& FParse::Value(FCommandLine::Get(), TEXT("BackendPassword="), OutPassword, false);
 
 	if (bFromCommandLine)
 	{
@@ -1537,14 +1602,23 @@ void ASpaceMMOPlayerController::HandleEscape()
 	// Logged with everything it decides on. Esc that "did nothing" on 1 October left no trace at all,
 	// and from the outside a key that never arrives and a key that arrives and is refused look the same.
 	UE_LOG(LogSpaceMMOBackend, Log,
-		TEXT("Menus: Esc pressed (playing %d, inventory %d, station %d, skills %d, menu %s)."),
-		bPresented ? 1 : 0, bInventoryScreenOpen ? 1 : 0, bStationOverlayOpen ? 1 : 0, bSkillsScreenOpen ? 1 : 0,
+		TEXT("Menus: Esc pressed (playing %d, inventory %d, equipment %d, station %d, skills %d, menu %s)."),
+		bPresented ? 1 : 0, bInventoryScreenOpen ? 1 : 0, bEquipmentScreenOpen ? 1 : 0, bStationOverlayOpen ? 1 : 0,
+		bSkillsScreenOpen ? 1 : 0,
 		*UEnum::GetValueAsString(ActiveMenu));
 
 	// An open screen first, then the menu (Joe, 1 October).
 	if (bInventoryScreenOpen)
 	{
 		ToggleInventoryScreen();
+
+		return;
+	}
+
+	// Before the station, which it covers: Esc closes what is in front, and the station shows again.
+	if (bEquipmentScreenOpen)
+	{
+		ToggleEquipmentScreen();
 
 		return;
 	}
@@ -1678,8 +1752,13 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 
 	const bool bPair = View.Equals(TEXT("Pair"), ESearchCase::IgnoreCase);
 
-	bInventoryScreenOpen = bPair || View.Equals(TEXT("Inventory"), ESearchCase::IgnoreCase);
-	bStationOverlayOpen = bPair || View.Equals(TEXT("Station"), ESearchCase::IgnoreCase);
+	// Gear: the equipment screen beside the inventory (task 193), and docked, so the station overlay is open
+	// underneath it and the capture shows it staying hidden.
+	const bool bGear = View.Equals(TEXT("Gear"), ESearchCase::IgnoreCase);
+
+	bInventoryScreenOpen = bPair || bGear || View.Equals(TEXT("Inventory"), ESearchCase::IgnoreCase);
+	bStationOverlayOpen = bPair || bGear || View.Equals(TEXT("Station"), ESearchCase::IgnoreCase);
+	bEquipmentScreenOpen = bGear || View.Equals(TEXT("Equipment"), ESearchCase::IgnoreCase);
 	bSkillsScreenOpen = View.Equals(TEXT("Skills"), ESearchCase::IgnoreCase);
 
 	// Docked as of now, so the overlay is not closed for want of a station or reopened as an arrival.
@@ -1738,8 +1817,9 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 		}
 	}
 
-	UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: SpaceMMOLookPanels %s %s %s %s -- inventory %d, station %d, skills %d, shot %d."),
-		*View, *TabOrShot, *Shot, *More, bInventoryScreenOpen ? 1 : 0, bStationOverlayOpen ? 1 : 0, bSkillsScreenOpen ? 1 : 0, bShot ? 1 : 0);
+	UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: SpaceMMOLookPanels %s %s %s %s -- inventory %d, equipment %d, station %d, skills %d, shot %d."),
+		*View, *TabOrShot, *Shot, *More, bInventoryScreenOpen ? 1 : 0, bEquipmentScreenOpen ? 1 : 0, bStationOverlayOpen ? 1 : 0,
+		bSkillsScreenOpen ? 1 : 0, bShot ? 1 : 0);
 
 	if (!bShot)
 	{

@@ -356,26 +356,25 @@ public sealed class GatheringService(SpaceMmoDbContext database)
             return;
         }
 
-        // On their person, not merely owned.
+        // Equipped, not merely carried (task 193).
         //
-        // This used to accept the tool anywhere the character owned it, and task 94 recorded why it
-        // could not be tightened: nothing routed anything into a carried inventory, so requiring the
-        // laser to be carried would have made mining impossible rather than stricter. Both halves of
-        // that are now false — a character has pockets and can move things into them — so the check
-        // is what it was always meant to be. A laser in a hangar on another planet is not a laser
-        // you are holding.
+        // This accepted the tool anywhere the character owned it until task 94, then on their person;
+        // since 16 October a tool must be in its slot to work (Joe: "Tools will need to be equipped in
+        // those slots to work"). Industry's tool gate asks the same question, so the two cannot disagree
+        // about whether a player holds the laser.
         //
         // Condition above zero, still: a broken tool is not a tool, and accepting one would promise
         // a gather that the rest of this method then refuses.
-        bool carried = await _database.ItemInstances.AnyAsync(
+        bool equipped = await _database.ItemInstances.AnyAsync(
             instance => instance.ItemDefId == toolDefId
                 && instance.DestroyedAt == null
                 && instance.Condition > 0
+                && instance.EquippedSlot != null
                 && instance.Inventory!.CharacterId == characterId
-                && instance.Inventory.Kind == InventoryKind.CharacterCarried,
+                && instance.Inventory.Kind == InventoryKind.Equipped,
             cancellationToken);
 
-        if (!carried)
+        if (!equipped)
         {
             // Both, because the message is read by a person and the key is read by code.
             var tool = await _database.ItemDefs

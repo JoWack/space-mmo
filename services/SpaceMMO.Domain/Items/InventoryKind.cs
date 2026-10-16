@@ -22,4 +22,10 @@ public enum InventoryKind
     /// the sink that stops it becoming a free infinite warehouse.
     /// </summary>
     StationHangar = 2,
+
+    /// <summary>
+    /// What a character is wearing and holding ready: one item to a slot (task 193). Worn, not carried, so it
+    /// has no capacity (Joe, 16 October); nothing moves into or out of it except by equipping.
+    /// </summary>
+    Equipped = 3,
 }

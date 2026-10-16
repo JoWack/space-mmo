@@ -250,6 +250,16 @@ if (args.Contains("--seed", StringComparer.Ordinal))
         Console.WriteLine($"Gave {withoutCarried.Count} character(s) a carried inventory.");
     }
 
+    // Tools in their slots for everyone who owns one and has none equipped (task 193). Tools must be equipped
+    // to work from the day that landed, and every laser made before then was in a hangar or a pocket.
+    // Idempotent: a filled slot is left alone.
+    IReadOnlyList<string> equippedTools = await new EquipmentService(database).EquipOwnedToolsAsync();
+
+    foreach (string line in equippedTools)
+    {
+        Console.WriteLine($"Equipped {line}.");
+    }
+
     return 0;
 }
 

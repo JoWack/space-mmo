@@ -39,8 +39,10 @@ void USpaceMMOBackendClient::BeginSmokeTest()
 	FString Email;
 	FString Password;
 
-	if (!FParse::Value(FCommandLine::Get(), TEXT("BackendEmail="), Email)
-		|| !FParse::Value(FCommandLine::Get(), TEXT("BackendPassword="), Password))
+	// Not stopping at ',' or ')', which FParse::Value does by default: a password containing either would
+	// otherwise arrive cut short and read as a wrong one (found beside -Rebuild=, 16 October).
+	if (!FParse::Value(FCommandLine::Get(), TEXT("BackendEmail="), Email, false)
+		|| !FParse::Value(FCommandLine::Get(), TEXT("BackendPassword="), Password, false))
 	{
 		UE_LOG(LogSpaceMMOBackend, Error,
 			TEXT("SMOKE: -BackendSmokeTest needs -BackendEmail= and -BackendPassword=."));
@@ -836,6 +838,55 @@ void USpaceMMOBackendClient::TransferInstance(
 		MoveTemp(OnFailure));
 }
 
+void USpaceMMOBackendClient::Equip(
+	const int32 CharacterId,
+	const int64 ItemInstanceId,
+	const TOptional<EBackendEquipmentSlot> Slot,
+	TFunction<void(const FBackendFailure&)> OnFailure)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		FString::Printf(TEXT("/characters/%d/equipment/equip"), CharacterId),
+		FSpaceMMOBackendProtocol::MakeEquipBody(ItemInstanceId, Slot),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			// Refetched, as a transfer is: a swap moved two items, and only the server knows where the second went.
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				Self->SelectCharacter(CharacterId);
+			}
+		},
+		FString(),
+		MoveTemp(OnFailure));
+}
+
+void USpaceMMOBackendClient::Unequip(
+	const int32 CharacterId,
+	const EBackendEquipmentSlot Slot,
+	const int64 ToInventoryId,
+	TFunction<void(const FBackendFailure&)> OnFailure)
+{
+	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
+
+	Send(
+		TEXT("POST"),
+		FString::Printf(TEXT("/characters/%d/equipment/unequip"), CharacterId),
+		FSpaceMMOBackendProtocol::MakeUnequipBody(Slot, ToInventoryId),
+		true,
+		[WeakThis, CharacterId](const FString&)
+		{
+			if (USpaceMMOBackendClient* Self = WeakThis.Get())
+			{
+				Self->SelectCharacter(CharacterId);
+			}
+		},
+		FString(),
+		MoveTemp(OnFailure));
+}
+
 void USpaceMMOBackendClient::StartJob(
 	const int32 CharacterId, const int32 RecipeId, const int32 StationId, const int32 Runs)
 {
@@ -1562,6 +1613,7 @@ void USpaceMMOBackendClient::UseSampleDataForLook()
 	Container(1, EBackendInventoryKind::CharacterCarried, 0);
 	Container(2, EBackendInventoryKind::ShipHold, 0);
 	Container(3, EBackendInventoryKind::StationHangar, Borlash.Id);
+	Container(4, EBackendInventoryKind::Equipped, 0);
 
 	Inventory.Reset();
 
@@ -1667,15 +1719,45 @@ void USpaceMMOBackendClient::UseSampleDataForLook()
 
 	ItemInstances.Reset();
 
+	// Task 193's mock, as Joe approved it: a Laser Rifle in Weapon 1, Weapon 2 empty, the laser in its slot.
+	// The rifle is not content yet; it is here so the weapon slots have something to look like.
 	FBackendItemInstance Laser;
-	Laser.InventoryId = 1;
+	Laser.InventoryId = 4;
 	Laser.Id = 501;
 	Laser.ItemDefId = 9;
 	Laser.Name = TEXT("Crude Mining Laser");
 	Laser.Condition = 87;
-	Laser.Kind = EBackendInventoryKind::CharacterCarried;
+	Laser.Kind = EBackendInventoryKind::Equipped;
 	Laser.Category = EBackendItemCategory::Tool;
+	Laser.bEquipped = true;
+	Laser.EquippedSlot = EBackendEquipmentSlot::MiningTool;
+	Laser.bEquippable = true;
+	Laser.EquipsAs = EBackendEquipKind::MiningTool;
 	ItemInstances.Add(Laser);
+
+	FBackendItemInstance Rifle;
+	Rifle.InventoryId = 4;
+	Rifle.Id = 503;
+	Rifle.ItemDefId = 20;
+	Rifle.Name = TEXT("Laser Rifle");
+	Rifle.Condition = 100;
+	Rifle.Kind = EBackendInventoryKind::Equipped;
+	Rifle.Category = EBackendItemCategory::Weapon;
+	Rifle.Style = EBackendItemStyle::Martian;
+	Rifle.bEquipped = true;
+	Rifle.EquippedSlot = EBackendEquipmentSlot::Weapon1;
+	Rifle.bEquippable = true;
+	Rifle.EquipsAs = EBackendEquipKind::Weapon;
+	ItemInstances.Add(Rifle);
+
+	// A spare in the pockets, so the inventory still lists a tool and has something to double-click.
+	FBackendItemInstance Spare = Laser;
+	Spare.InventoryId = 1;
+	Spare.Id = 504;
+	Spare.Condition = 40;
+	Spare.Kind = EBackendInventoryKind::CharacterCarried;
+	Spare.bEquipped = false;
+	ItemInstances.Add(Spare);
 
 	FBackendItemInstance Shuttle;
 	Shuttle.InventoryId = 3;

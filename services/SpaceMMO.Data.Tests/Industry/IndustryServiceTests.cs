@@ -204,6 +204,37 @@ public sealed class IndustryServiceTests(DatabaseFixture fixture) : IAsyncLifeti
     }
 
     [Fact]
+    public async Task StartingAJob_WithTheToolOwnedButNotEquipped_IsRejected()
+    {
+        // Until task 193 this gate accepted the tool anywhere its owner had one, which is where this
+        // fixture's laser used to sit: in the hangar. If the gate ever goes back to asking only about
+        // ownership, this is the test that notices.
+        await using (SpaceMmoDbContext seed = _fixture.CreateContext())
+        {
+            Inventory hangar = await new InventoryService(seed).GetOrCreateStationHangarAsync(_characterId, _stationId);
+
+            seed.ItemInstances.Add(new ItemInstance
+            {
+                ItemDefId = _laserId,
+                InventoryId = hangar.Id,
+                Condition = 100,
+                AcquisitionValue = Cr(200),
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+            await seed.SaveChangesAsync();
+        }
+
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        MissingToolException refused = await Assert.ThrowsAsync<MissingToolException>(() =>
+            new IndustryService(context)
+                .StartJobAsync(_characterId, _craftLaserRecipeId, _stationId, runs: 1));
+
+        Assert.Contains("equipped", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartingAJob_WithTheRequiredTool_IsAllowed()
     {
         await GiveToolAsync();
@@ -360,6 +391,39 @@ public sealed class IndustryServiceTests(DatabaseFixture fixture) : IAsyncLifeti
         // Ore was gathered, so it cost nothing; the acquisition value is the job fee.
         Assert.Equal(started.Fee + started.InputCostBasis, instance.AcquisitionValue);
         Assert.True(instance.AcquisitionValue.IsPositive);
+
+        // The slot was taken by the laser that made it, so the new one is not put on: a claim never takes
+        // off what somebody is wearing (Joe, 16 October).
+        Assert.Null(instance.EquippedSlot);
+    }
+
+    [Fact]
+    public async Task ClaimingATool_WithItsSlotEmpty_PutsItOn()
+    {
+        // Auto-equip, Joe's 16 October decision: a newly made tool goes straight into an empty slot, so the
+        // first laser anybody makes works without a trip to the equipment screen.
+        long maker = await GiveToolAsync();
+
+        StartJobResult started = await StartAndCompleteAsync(_craftLaserRecipeId, runs: 1);
+
+        await using (SpaceMmoDbContext off = _fixture.CreateContext())
+        {
+            await new EquipmentService(off).UnequipAsync(_characterId, EquipmentSlot.MiningTool);
+        }
+
+        await using SpaceMmoDbContext claim = _fixture.CreateContext();
+        ClaimJobResult result = await new IndustryService(claim)
+            .ClaimJobAsync(started.JobId, _characterId);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemInstance made = await verify.ItemInstances
+            .Include(i => i.Inventory)
+            .SingleAsync(i => i.Id == result.InstanceIds[0]);
+
+        Assert.Equal(EquipmentSlot.MiningTool, made.EquippedSlot);
+        Assert.Equal(InventoryKind.Equipped, made.Inventory!.Kind);
+        Assert.Null((await verify.ItemInstances.SingleAsync(i => i.Id == maker)).EquippedSlot);
     }
 
     // ── Cancelling ───────────────────────────────────────────────────────────
@@ -662,23 +726,29 @@ public sealed class IndustryServiceTests(DatabaseFixture fixture) : IAsyncLifeti
         await context.SaveChangesAsync();
     }
 
-    private async Task GiveToolAsync()
+    /// <summary>A laser in its slot, equipped from the pockets the way a player does it (task 193).</summary>
+    private async Task<long> GiveToolAsync()
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();
         var inventories = new InventoryService(context);
 
-        Inventory hangar = await inventories.GetOrCreateStationHangarAsync(_characterId, _stationId);
+        Inventory carried = await inventories.GetOrCreateCarriedAsync(_characterId);
 
-        context.ItemInstances.Add(new ItemInstance
+        var laser = new ItemInstance
         {
             ItemDefId = _laserId,
-            InventoryId = hangar.Id,
+            InventoryId = carried.Id,
             Condition = 100,
             AcquisitionValue = Cr(200),
             CreatedAt = DateTimeOffset.UtcNow,
-        });
+        };
 
+        context.ItemInstances.Add(laser);
         await context.SaveChangesAsync();
+
+        await new EquipmentService(context).EquipAsync(_characterId, laser.Id);
+
+        return laser.Id;
     }
 
     private async Task SeedAsync()
@@ -740,7 +810,7 @@ public sealed class IndustryServiceTests(DatabaseFixture fixture) : IAsyncLifeti
         var laser = new ItemDef
         {
             Key = "crude_mining_laser", Name = "Crude Mining Laser",
-            Category = ItemCategory.Tool, VolumeM3 = 2,
+            Category = ItemCategory.Tool, VolumeM3 = 2, EquipsAs = EquipKind.MiningTool,
         };
 
         context.ItemDefs.AddRange(ore, plate, section, scrap, laser);

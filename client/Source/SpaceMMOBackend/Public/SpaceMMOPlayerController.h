@@ -201,7 +201,9 @@ public:
 	/**
 	 * Opens the game's panels over sample data, for looking at them without a server (task 173).
 	 *
-	 *   SpaceMMOLookPanels Inventory|Station|Skills|Pair|SignIn|Flight [Market|Industry|Quests|MyOrders|Ships] [prompt] [shot]
+	 *   SpaceMMOLookPanels Inventory|Station|Skills|Pair|Equipment|Gear|SignIn|Flight [Market|Industry|Quests|MyOrders|Ships] [prompt] [shot]
+	 *
+	 * Gear is the equipment screen beside the inventory (task 193).
 	 *
 	 * With "shot", the screen is captured with its interface three seconds later -- once the rows have been
 	 * built -- to Saved/Screenshots/LookPanels_<view>.png, and the game quits two seconds after that. A dev
@@ -225,6 +227,14 @@ public:
 	 * stray keypress would get old faster than the information is worth.
 	 */
 	void ToggleStationOverlay();
+
+	/**
+	 * Opens and closes the equipment screen (task 193). Bound to L.
+	 *
+	 * Beside the inventory, where the station screen goes, and over that one while it is open: the station
+	 * screen hides rather than closes, and is back when this closes (Joe, 16 October).
+	 */
+	void ToggleEquipmentScreen();
 
 	/**
 	 * Which station the player is docked at, or 0.
@@ -344,6 +354,10 @@ public:
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOInventoryScreen> InventoryScreen;
 
+	/** What the character wears (task 193), or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOEquipmentScreen> EquipmentScreen;
+
 	/** The sign-in screen, or null when none is configured. */
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOLoginScreen> LoginScreen;
@@ -370,6 +384,14 @@ public:
 
 	/** Whether the inventory screen is open. Same reasoning as bSkillsScreenOpen. */
 	bool bInventoryScreenOpen = false;
+
+	/**
+	 * Whether the equipment screen is open. Same reasoning as bSkillsScreenOpen.
+	 *
+	 * The station overlay keeps its own flag while this covers it, which is what brings it back when this
+	 * closes: hidden is not closed.
+	 */
+	bool bEquipmentScreenOpen = false;
 
 	/** Task 110's screens, each null when not configured. */
 	UPROPERTY()

@@ -116,6 +116,7 @@
       "key": "crude_mining_laser",
       "name": "Crude Mining Laser",
       "category": "Tool",
+      "equipsAs": "MiningTool",
       "volumeM3": 2.0
     },
     {

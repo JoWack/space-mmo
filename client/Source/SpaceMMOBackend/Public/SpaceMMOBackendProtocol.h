@@ -146,6 +146,18 @@ public:
 	 */
 	static FString MakeTransferInstanceBody(int64 ItemInstanceId, int64 ToInventoryId);
 
+	/**
+	 * Putting an item in a slot (task 193). No slot named means wherever it fits first, which is what a
+	 * double-click asks for; a drop onto a slot names it.
+	 */
+	static FString MakeEquipBody(int64 ItemInstanceId, TOptional<EBackendEquipmentSlot> Slot);
+
+	/**
+	 * Taking an item out of a slot. A destination of zero names none, and the server puts it in the
+	 * pockets, or the docked hangar when they are full; a drag onto a container names that one.
+	 */
+	static FString MakeUnequipBody(EBackendEquipmentSlot Slot, int64 ToInventoryId);
+
 	/** JSON body for claiming a job. */
 	static FString MakeClaimJobBody(int32 CharacterId, int64 JobId);
 

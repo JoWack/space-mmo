@@ -282,6 +282,48 @@ FString FSpaceMMOBackendProtocol::MakeTransferInstanceBody(
 	return Output;
 }
 
+FString FSpaceMMOBackendProtocol::MakeEquipBody(
+	const int64 ItemInstanceId, const TOptional<EBackendEquipmentSlot> Slot)
+{
+	FString Output;
+
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+
+	Writer->WriteObjectStart();
+	Writer->WriteValue(TEXT("itemInstanceId"), ItemInstanceId);
+
+	// Left out rather than sent as null when none is named: the server's default is "wherever it fits".
+	if (Slot.IsSet())
+	{
+		Writer->WriteValue(TEXT("slot"), static_cast<int32>(Slot.GetValue()));
+	}
+
+	Writer->WriteObjectEnd();
+	Writer->Close();
+
+	return Output;
+}
+
+FString FSpaceMMOBackendProtocol::MakeUnequipBody(const EBackendEquipmentSlot Slot, const int64 ToInventoryId)
+{
+	FString Output;
+
+	const TSharedRef<TJsonWriter<>> Writer = TJsonWriterFactory<>::Create(&Output);
+
+	Writer->WriteObjectStart();
+	Writer->WriteValue(TEXT("slot"), static_cast<int32>(Slot));
+
+	if (ToInventoryId != 0)
+	{
+		Writer->WriteValue(TEXT("toInventoryId"), ToInventoryId);
+	}
+
+	Writer->WriteObjectEnd();
+	Writer->Close();
+
+	return Output;
+}
+
 bool FSpaceMMOBackendProtocol::ReadInt64(
 	const TSharedPtr<FJsonObject>& Object, const FString& Field, int64& OutValue)
 {
@@ -634,7 +676,7 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 
 		if (ReadInt64(Object, TEXT("kind"), Where))
 		{
-			Item.Kind = ToEnum(Where, EBackendInventoryKind::CharacterCarried, 2);
+			Item.Kind = ToEnum(Where, EBackendInventoryKind::CharacterCarried, 3);
 		}
 
 		// Absent for a ship hold, which has no station. Zero reads as "not at a station", which is
@@ -693,7 +735,7 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 
 			if (ReadInt64(Object, TEXT("kind"), Number))
 			{
-				Instance.Kind = ToEnum(Number, EBackendInventoryKind::CharacterCarried, 2);
+				Instance.Kind = ToEnum(Number, EBackendInventoryKind::CharacterCarried, 3);
 			}
 
 			if (ReadInt64(Object, TEXT("stationId"), Number))
@@ -711,6 +753,20 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 			if (ReadInt64(Object, TEXT("style"), Number))
 			{
 				Instance.Style = ToEnum(Number, EBackendItemStyle::Common, 4);
+			}
+
+			// Null when not worn, and a number the server has not taught this client yet means not worn as far as
+			// this client can tell: placing it in a slot it does not have would show it in the wrong box.
+			if (ReadInt64(Object, TEXT("equippedSlot"), Number) && Number >= 0 && Number <= 5)
+			{
+				Instance.bEquipped = true;
+				Instance.EquippedSlot = static_cast<EBackendEquipmentSlot>(Number);
+			}
+
+			if (ReadInt64(Object, TEXT("equipsAs"), Number) && Number >= 0 && Number <= 4)
+			{
+				Instance.bEquippable = true;
+				Instance.EquipsAs = static_cast<EBackendEquipKind>(Number);
 			}
 
 			OutInstances.Add(Instance);
@@ -741,7 +797,7 @@ bool FSpaceMMOBackendProtocol::ParseInventory(
 
 			if (ReadInt64(Object, TEXT("kind"), Number))
 			{
-				Container.Kind = ToEnum(Number, EBackendInventoryKind::CharacterCarried, 2);
+				Container.Kind = ToEnum(Number, EBackendInventoryKind::CharacterCarried, 3);
 			}
 
 			if (ReadInt64(Object, TEXT("stationId"), Number))

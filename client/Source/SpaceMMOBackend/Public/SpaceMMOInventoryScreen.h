@@ -69,6 +69,14 @@ struct SPACEMMOBACKEND_API FSpaceMMOInventoryLine
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	bool bReachable = true;
 
+	/** Whether this is something worn (task 193): a weapon, armour or a tool. Double-clicking puts it on. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bEquippable = false;
+
+	/** What slot it goes in, when it is worn at all. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	EBackendEquipKind EquipsAs = EBackendEquipKind::Weapon;
+
 	/** Whether this line names something that can be picked up and moved. */
 	bool CanDrag() const
 	{
@@ -133,6 +141,10 @@ protected:
 	virtual FReply NativeOnMouseButtonDown(
 		const FGeometry& Geometry, const FPointerEvent& Event) override;
 
+	/** Puts a worn item on (task 193): the double-click Joe chose beside dragging it onto a slot. */
+	virtual FReply NativeOnMouseButtonDoubleClick(
+		const FGeometry& Geometry, const FPointerEvent& Event) override;
+
 	virtual void NativeOnDragDetected(
 		const FGeometry& Geometry,
 		const FPointerEvent& Event,
@@ -179,6 +191,9 @@ private:
  * model and a quantity affordance; seeing what you own and where is a screen on its own, and it is
  * the half that is missing. Transfer arrives later as drag between groups.
  *
+ * <strong>What is worn is not listed</strong> (task 193): it is on the equipment screen, and Joe decided
+ * worn gear does not count against what is carried, so listing it under CARRIED would say it did.
+ *
  * <strong>It does not set its own visibility</strong>; see
  * <c>ASpaceMMOPlayerController::UpdateHudContext</c>.
  */
@@ -214,6 +229,12 @@ public:
 	 * are already in, which would send the server a move from a place to itself.
 	 */
 	static bool CanDrop(const FSpaceMMOInventoryLine& Source, const FSpaceMMOInventoryLine& Target);
+
+	/**
+	 * Whether something taken out of a slot may be dropped on a line's container (task 193): any container
+	 * here, as long as it is within reach. Where it fits is the server's to say.
+	 */
+	static bool CanTakeOffInto(const FSpaceMMOInventoryLine& Target);
 
 	/**
 	 * Begins a move, asking how many first if the goods are a stack.

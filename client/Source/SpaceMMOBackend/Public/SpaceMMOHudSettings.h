@@ -92,6 +92,14 @@ public:
 	FSoftClassPath InventoryScreen;
 
 	/**
+	 * What the character wears, opened with L (task 193). Must derive from <c>USpaceMMOEquipmentScreen</c>.
+	 * Built by the SpaceMMOBuildMenus commandlet.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOEquipmentScreen"))
+	FSoftClassPath EquipmentScreen;
+
+	/**
 	 * The sign-in screen. Must derive from <c>USpaceMMOLoginScreen</c>.
 	 *
 	 * Unset means the game behaves exactly as it did before task 107: credentials come from

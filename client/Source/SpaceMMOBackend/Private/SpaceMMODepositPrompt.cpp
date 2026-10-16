@@ -13,7 +13,8 @@ FSpaceMMODepositPromptText USpaceMMODepositPrompt::Build(
 	const FBackendResourceNode& Node,
 	const TArray<FBackendSkill>& Skills,
 	const TArray<FBackendItemInstance>& Instances,
-	const FString& GatherKey)
+	const FString& GatherKey,
+	const FString& EquipKey)
 {
 	FSpaceMMODepositPromptText Text;
 
@@ -56,28 +57,57 @@ FSpaceMMODepositPromptText USpaceMMODepositPrompt::Build(
 
 	Text.Tool = FString::Printf(TEXT("needs %s"), *Node.RequiredToolName);
 
-	// Condition above zero, because that is exactly what the server asks: GuardToolAsync ignores a
-	// broken tool. A prompt that counted one would promise a gather the server then refuses, which
-	// is worse than saying nothing at all.
-	bool bCarried = false;
+	// In its slot, and condition above zero, because that is exactly what the server asks: the gate wants
+	// the tool equipped (task 193) and ignores a broken one. A prompt that counted a laser in a hangar, as
+	// this one did until then, would promise a gather the server refuses -- worse than saying nothing.
+	bool bEquipped = false;
+	bool bOwned = false;
 
 	for (const FBackendItemInstance& Instance : Instances)
 	{
-		if (Instance.ItemKey == Node.RequiredToolKey && Instance.Condition > 0)
+		if (Instance.ItemKey != Node.RequiredToolKey || Instance.Condition <= 0)
 		{
-			bCarried = true;
+			continue;
+		}
+
+		bOwned = true;
+
+		if (Instance.Kind == EBackendInventoryKind::Equipped && Instance.bEquipped)
+		{
+			bEquipped = true;
 
 			break;
 		}
 	}
 
-	Text.ToolBlocker = bCarried ? FString() : TEXT("you have none");
-	Text.bCanGather = bLevelMet && bCarried;
+	// Owned and not worn says so, and which key opens the slots (Joe, 16 October): a player who took the
+	// laser off is one keypress from mining, and "you have none" would send them looking for another.
+	if (bEquipped)
+	{
+		Text.ToolBlocker = FString();
+	}
+	else if (bOwned)
+	{
+		Text.ToolBlocker = EquipKey.IsEmpty()
+			? FString(TEXT("not equipped"))
+			: FString::Printf(TEXT("not equipped (%s)"), *EquipKey);
+	}
+	else
+	{
+		Text.ToolBlocker = TEXT("you have none");
+	}
+
+	Text.bCanGather = bLevelMet && bEquipped;
 
 	return Text;
 }
 
 FString USpaceMMODepositPrompt::FindGatherKey()
+{
+	return FindKey(TEXT("Gather"));
+}
+
+FString USpaceMMODepositPrompt::FindKey(const FName Action)
 {
 	const UInputSettings* Settings = GetDefault<UInputSettings>();
 
@@ -88,7 +118,7 @@ FString USpaceMMODepositPrompt::FindGatherKey()
 
 	TArray<FInputActionKeyMapping> Mappings;
 
-	Settings->GetActionMappingByName(TEXT("Gather"), Mappings);
+	Settings->GetActionMappingByName(Action, Mappings);
 
 	// The first binding rather than all of them: the hint is one glyph beside a rock, and a deposit
 	// captioned "E / Gamepad_FaceButton_Right gather" is not a hint. An unbound action gives an
@@ -155,7 +185,7 @@ void USpaceMMODepositPrompt::NativeTick(const FGeometry& Geometry, const float D
 	}
 
 	const FSpaceMMODepositPromptText Text =
-		Build(Nearby, Client->GetSkills(), Client->GetItemInstances(), FindGatherKey());
+		Build(Nearby, Client->GetSkills(), Client->GetItemInstances(), FindGatherKey(), FindKey(TEXT("ToggleEquipment")));
 
 	auto Set = [](UTextBlock* Block, const FString& Value)
 	{

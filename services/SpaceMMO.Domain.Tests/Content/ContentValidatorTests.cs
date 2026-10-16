@@ -26,8 +26,9 @@ public sealed class ContentValidatorTests
         ItemCategory category = ItemCategory.Raw,
         double volume = 1.0,
         long? factionBuyPrice = null,
-        bool planetLocked = false) =>
-        new(key, key, category, volume, factionBuyPrice, planetLocked);
+        bool planetLocked = false,
+        EquipKind? equipsAs = null) =>
+        new(key, key, category, volume, factionBuyPrice, planetLocked, EquipsAs: equipsAs);
 
     private static RecipeContent Recipe(
         string key = "r1",
@@ -144,11 +145,55 @@ public sealed class ContentValidatorTests
     public void AValidToolGate_IsAccepted()
     {
         ContentPack pack = Pack(
-            items: [Item("ore"), Item("plate", ItemCategory.Refined), Item("laser", ItemCategory.Tool)],
+            items:
+            [
+                Item("ore"),
+                Item("plate", ItemCategory.Refined),
+                Item("laser", ItemCategory.Tool, equipsAs: EquipKind.MiningTool),
+            ],
             recipes: [Recipe(tool: "laser")]);
 
         Assert.Empty(ContentValidator.Validate(pack));
     }
+
+    // ── Equipment (task 193) ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(ItemCategory.Tool)]
+    [InlineData(ItemCategory.Weapon)]
+    [InlineData(ItemCategory.Armor)]
+    public void AWornItemThatDoesNotSayWhereItGoes_IsRejected(ItemCategory category)
+    {
+        // A tool must be equipped to work, so a tool with no slot is a tool nobody can ever use: every
+        // gate that asks for it would refuse forever, and nothing would say why.
+        IReadOnlyList<ContentError> errors = ContentValidator.Validate(
+            Pack(items: [Item("ore"), Item("plate", ItemCategory.Refined), Item("worn", category)]));
+
+        Assert.True(HasError(errors, "must say what slot it equips as"));
+    }
+
+    [Theory]
+    [InlineData(ItemCategory.Weapon, EquipKind.MiningTool)]
+    [InlineData(ItemCategory.Tool, EquipKind.Weapon)]
+    [InlineData(ItemCategory.Armor, EquipKind.Weapon)]
+    [InlineData(ItemCategory.Raw, EquipKind.Head)]
+    public void AnItemEquippingAsSomethingItIsNot_IsRejected(ItemCategory category, EquipKind kind)
+    {
+        IReadOnlyList<ContentError> errors = ContentValidator.Validate(Pack(
+            items: [Item("ore"), Item("plate", ItemCategory.Refined), Item("odd", category, equipsAs: kind)]));
+
+        Assert.True(HasError(errors, $"cannot equip as {kind}"));
+    }
+
+    [Theory]
+    [InlineData(ItemCategory.Tool, EquipKind.MiningTool)]
+    [InlineData(ItemCategory.Weapon, EquipKind.Weapon)]
+    [InlineData(ItemCategory.Armor, EquipKind.Head)]
+    [InlineData(ItemCategory.Armor, EquipKind.Body)]
+    [InlineData(ItemCategory.Armor, EquipKind.Legs)]
+    public void AnItemEquippingAsWhatItIs_IsAccepted(ItemCategory category, EquipKind kind) =>
+        Assert.Empty(ContentValidator.Validate(Pack(
+            items: [Item("ore"), Item("plate", ItemCategory.Refined), Item("worn", category, equipsAs: kind)])));
 
     // ── Ranges ───────────────────────────────────────────────────────────────
 

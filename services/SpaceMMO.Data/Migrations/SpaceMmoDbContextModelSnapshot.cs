@@ -773,6 +773,11 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("character varying(48)")
                         .HasColumnName("category");
 
+                    b.Property<string>("EquipsAs")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("equips_as");
+
                     b.Property<long?>("FactionBuyPrice")
                         .HasColumnType("bigint")
                         .HasColumnName("faction_buy_price");
@@ -862,6 +867,11 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("destroyed_at");
 
+                    b.Property<string>("EquippedSlot")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("equipped_slot");
+
                     b.Property<long?>("InventoryId")
                         .HasColumnType("bigint")
                         .HasColumnName("inventory_id");
@@ -884,6 +894,11 @@ namespace SpaceMMO.Data.Migrations
 
                     b.HasIndex("ItemDefId")
                         .HasDatabaseName("ix_item_instances_item_def_id");
+
+                    b.HasIndex("InventoryId", "EquippedSlot")
+                        .IsUnique()
+                        .HasDatabaseName("ix_item_instances_one_per_slot")
+                        .HasFilter("equipped_slot IS NOT NULL");
 
                     b.ToTable("item_instances", null, t =>
                         {

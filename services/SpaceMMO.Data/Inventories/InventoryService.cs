@@ -334,6 +334,7 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         GuardQuantity(quantity);
 
         await GuardSameOwnerAsync(fromInventoryId, toInventoryId, cancellationToken);
+        await GuardNotEquippedAsync(fromInventoryId, toInventoryId, cancellationToken);
 
         Credits moved = await RemoveAsync(
             fromInventoryId, itemDefId, quantity, style, cancellationToken);
@@ -377,8 +378,31 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         }
 
         await GuardSameOwnerAsync(fromInventoryId, toInventoryId, cancellationToken);
+        await GuardNotEquippedAsync(fromInventoryId, toInventoryId, cancellationToken);
 
         instance.InventoryId = toInventoryId;
+    }
+
+    /// <summary>
+    /// Neither end of a transfer may be the Equipped inventory (task 193).
+    /// </summary>
+    /// <remarks>
+    /// Equipping has rules a transfer does not know: which slot, whether the item fits it, what comes out to
+    /// make room. A transfer that put a laser into the Equipped inventory would leave it there with no slot,
+    /// and one that took it out would leave its slot set on an item in someone's pockets. So the two routes
+    /// in and out are <c>EquipmentService</c>'s, and this says so.
+    /// </remarks>
+    private async Task GuardNotEquippedAsync(
+        long fromInventoryId, long toInventoryId, CancellationToken cancellationToken)
+    {
+        bool touchesEquipped = await _database.Inventories.AnyAsync(
+            i => (i.Id == fromInventoryId || i.Id == toInventoryId) && i.Kind == InventoryKind.Equipped,
+            cancellationToken);
+
+        if (touchesEquipped)
+        {
+            throw new InventoryTransferException("Equip or unequip it instead of moving it.");
+        }
     }
 
     /// <summary>
@@ -649,6 +673,37 @@ public sealed class InventoryService(SpaceMmoDbContext database)
         await _database.SaveChangesAsync(cancellationToken);
 
         return carried;
+    }
+
+    /// <summary>
+    /// What a character is wearing and holding ready, creating it if it does not exist (task 193).
+    /// </summary>
+    /// <remarks>
+    /// Keyed on the character alone, like the pockets. Capacity zero, which is unlimited: worn is not carried
+    /// (Joe, 16 October), and each slot holds one item anyway.
+    /// </remarks>
+    public async Task<Inventory> GetOrCreateEquippedAsync(
+        int characterId, CancellationToken cancellationToken = default)
+    {
+        Inventory? existing = await _database.Inventories.FirstOrDefaultAsync(
+            i => i.CharacterId == characterId && i.Kind == InventoryKind.Equipped, cancellationToken);
+
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var equipped = new Inventory
+        {
+            CharacterId = characterId,
+            Kind = InventoryKind.Equipped,
+            CapacityM3 = 0,
+        };
+
+        _database.Inventories.Add(equipped);
+        await _database.SaveChangesAsync(cancellationToken);
+
+        return equipped;
     }
 
     /// <summary>

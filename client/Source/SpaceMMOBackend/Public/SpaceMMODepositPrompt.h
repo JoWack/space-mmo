@@ -47,7 +47,10 @@ struct SPACEMMOBACKEND_API FSpaceMMODepositPromptText
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	FString Tool;
 
-	/** "you have none", or empty when one is carried. */
+	/**
+	 * "you have none", "not equipped (L)" when one is owned but not in its slot (task 193), or empty when
+	 * one is equipped.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	FString ToolBlocker;
 
@@ -98,10 +101,14 @@ public:
 		const FBackendResourceNode& Node,
 		const TArray<FBackendSkill>& Skills,
 		const TArray<FBackendItemInstance>& Instances,
-		const FString& GatherKey);
+		const FString& GatherKey,
+		const FString& EquipKey = FString());
 
 	/** The key bound to the Gather action, or empty if it is unbound. */
 	static FString FindGatherKey();
+
+	/** The first key bound to an action, or empty if it is unbound. */
+	static FString FindKey(FName Action);
 
 	/** Whether anything is in reach. Bind the root container's visibility to this. */
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
