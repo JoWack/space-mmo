@@ -6,7 +6,7 @@ has a page with its basic and heavy attacks and its two trees; this page holds w
 | Family | On foot, ranged | On foot, melee | Mechanic |
 |---|---|---|---|
 | Laser | [Laser Rifle](laser-rifle.md), [Laser Pistol](laser-pistol.md) | [Cutter](cutter.md) | **Heat** (decided) |
-| Kinetic | Assault Rifle, Magnum | Daggers | Magazine and reload (proposed) |
+| Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md) | [Daggers](daggers.md) | **Rounds** (proposed) |
 | Resonance | Staff, Focus (the healer) | Saber | Undecided |
 
 Every tree page is **Claude's draft until Joe edits it or says otherwise**; its status line says which.
@@ -28,6 +28,30 @@ That makes the second weapon a way to cool the first, which the Pistol's Gunslin
 
 **Scorch** is the family's burn: 2% of the hit's damage a second for 4 s, stacking three times. Every
 Laser tree that burns uses it rather than inventing its own, so one status reads the same everywhere.
+
+## Kinetic: rounds (proposed)
+
+**Claude's proposal, 15 October; not decided.** Where a Laser weapon is limited by heat, a Kinetic
+weapon is limited by **rounds**: a count it carries, spends, and has to restore. The guns hold a magazine
+and reload, which is a pause you choose; the Daggers carry throwing blades that come back to the sheath on
+their own. Running dry is the Kinetic player's version of overheating, and choosing when to reload is the
+skill.
+
+| Weapon | Rounds | Restored by |
+|---|---|---|
+| Assault Rifle | 30 a magazine | Reloading, 2 s |
+| Magnum | 6 in the cylinder | Reloading, 2.5 s, or one round at a time, 0.4 s each |
+| Daggers | 4 throwing blades | One returns every 3 s, or all of them when picked back up |
+
+**Stagger** is the family's effect, as Scorch is Laser's: every Kinetic hit adds stagger to its target,
+heavy hits more, and at 100 the target is **staggered** for 0.75 s, interrupted and unable to sprint.
+Stagger drains when they stop being hit. Laser burns; Kinetic knocks people about.
+
+**The question this raises: are rounds an item?** If a magazine draws on ammunition in the inventory,
+ammunition is a consumable that `weaponcrafting` makes and every Kinetic shot uses up: a steady material
+sink, and a difference from lasers that players would feel in their wallets. If not, a reload is free and
+rounds are only a rhythm. Worth deciding with the death rethink (task 103), since both are about what combat
+consumes.
 
 ## Shared ideas still to design
 

@@ -1616,6 +1616,24 @@ affordance.
 So this is blocked on M4 rather than on combat: the interesting half of dying is what it costs, and
 that requires goods to be somewhere they can be lost.
 
+### Joe is rethinking what death costs, 15 October
+
+*"I'm also starting to re-think gear loss on death- maybe we restrict that to something like only
+materials are lost, but weapons, ships, etc are kept. Something we should revisit as we keep building out
+combat, insurance, death, etc."* **A direction to revisit, not a decision:** ADR-0006 stands until
+something supersedes it. What it would touch, written down so the revisit starts from it:
+
+- **Insurance has nothing to insure.** ADR-0006's insurance covers hulls only; if ships are kept, it goes,
+  and with it the acquisition-value machinery built to stop insurance fraud (cost basis exists for it).
+- **PvP keeps a stake through cargo.** Materials in a hold or a pack are still lost, so hauling stays
+  risky and raiding stays worth it (ADR-0008); a raider just cannot take the ship.
+- **Demand for crafted gear.** If weapons and ships are never lost, each player needs one of each and the
+  crafters' market dries up; EconSim measured loss as the standing source of demand. Something else would
+  have to consume gear: wear and repair, upgrades, or new tiers.
+- **A middle already in the design**: ADR-0006's three outcomes include *damaged*. Gear could survive
+  death damaged rather than destroyed, so dying costs a repair (design-bible §10, the repair loop) rather
+  than the item, and materials are lost outright.
+
 ## 104 — Pairwise aggression and security zones
 
 **Faction space built 14 October; the attack record waits on weapons (192).** ADR-0008 and ADR-0009 are
@@ -9876,7 +9894,12 @@ the type ignored, the rounding remainder dropped, the schedule rounded down, and
   ships. The bulk of the milestone's design. **The Laser family's are drafted** (15 October), for Joe
   to edit, with the family's shared rules in [weapons/README.md](weapons/README.md):
   [Laser Rifle](weapons/laser-rifle.md) (Marksman, Thermal), [Laser Pistol](weapons/laser-pistol.md)
-  (Gunslinger, Overclock) and [Cutter](weapons/cutter.md) (Breacher, Slag).
+  (Gunslinger, Overclock) and [Cutter](weapons/cutter.md) (Breacher, Slag). **The Kinetic family's too**,
+  same day: [Assault Rifle](weapons/assault-rifle.md) (Assault, Specialist), [Magnum](weapons/magnum.md)
+  (Hand Cannon, Six-shooter) and [Daggers](weapons/daggers.md) (Flanker, Skirmisher), on a proposed
+  family mechanic, **rounds** (magazines, a cylinder, throwing blades), and a proposed family effect,
+  **Stagger**; neither decided. Whether rounds are an ammunition item is open, beside the death rethink
+  (103), since both are about what combat consumes.
 - **Decided by Joe on the Rifle's draft, 15 October:** heat is the whole Laser family's mechanic; weak
   points stay and **PvE will exist** (now on M6's roadmap line and design-bible §10, undesigned);
   Exposed stays, "fun if done right"; blindness and smoke "will need to be designed eventually".
