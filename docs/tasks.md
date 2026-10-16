@@ -9902,6 +9902,12 @@ the type ignored, the rounding remainder dropped, the schedule rounded down, and
   to be crafted or a separate item, just baked into the weapon. Everything else sounds great!"* Rounds and
   Stagger stand, a reload is free, and the three drafts are approved in outline; their numbers are
   untested.
+- **Resonance, decided by Joe the same day:** its mechanic is **charge** built by landing hits (healing,
+  for the Focus) and spent on heavy attacks and abilities, chosen from charge, a rhythm and an energy pool;
+  its effect is **Dissonance** (enemies deal less), with **Harmony** its mirror on allies, chosen from
+  Dissonance, Echo and a resonant link. **Drafted:** [Staff](weapons/staff.md) (Wavecaster, Gravity),
+  [Focus](weapons/focus.md) (Mender, Warden) and [Saber](weapons/saber.md) (Duelist, Vanguard). That
+  completes the nine on-foot weapons in draft.
 - **Decided by Joe on the Rifle's draft, 15 October:** heat is the whole Laser family's mechanic; weak
   points stay and **PvE will exist** (now on M6's roadmap line and design-bible §10, undesigned);
   Exposed stays, "fun if done right"; blindness and smoke "will need to be designed eventually".

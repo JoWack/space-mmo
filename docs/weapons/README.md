@@ -7,7 +7,7 @@ has a page with its basic and heavy attacks and its two trees; this page holds w
 |---|---|---|---|
 | Laser | [Laser Rifle](laser-rifle.md), [Laser Pistol](laser-pistol.md) | [Cutter](cutter.md) | **Heat** (decided) |
 | Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md) | [Daggers](daggers.md) | **Rounds** (decided) |
-| Resonance | Staff, Focus (the healer) | Saber | Undecided |
+| Resonance | [Staff](staff.md), [Focus](focus.md) (the healer) | [Saber](saber.md) | **Charge** (decided) |
 
 Every tree page is **Claude's draft until Joe edits it or says otherwise**; its status line says which.
 
@@ -53,6 +53,29 @@ Stagger drains when they stop being hit. Laser burns; Kinetic knocks people abou
 the inventory, so rounds are a rhythm, not a cost. Asked as a choice against a crafted ammunition
 consumable, which would have been a steady material sink; whatever combat consumes is now for the death
 rethink (task 103) to say.
+
+## Resonance: charge
+
+**Decided by Joe, 15 October 2026**, from three offered (charge built by hits, a rhythm, an energy pool).
+The opposite of heat: a Resonance weapon **starts empty and builds charge, 0 to 100, by landing hits**
+(by healing, for the Focus). The heavy attack and several actives **spend** it, and it fades once you are
+out of a fight. Laser is held back by what it builds; Kinetic by what it spends; Resonance is pushed on
+by what it builds and chooses when to spend it.
+
+| Weapon | Charge built | Spent on |
+|---|---|---|
+| Staff | +6 a hit | Its heavy wave, and some actives |
+| Focus | +1 for every 2% of a target's health healed | Its heavy bloom, and some actives |
+| Saber | +8 a hit | Its heavy cleave, and some actives |
+
+Charge fades at 5 a second after 4 s without landing a hit (or a heal). Like heat, it is the weapon's: the
+other equipped weapon keeps its own.
+
+**Dissonance** is the family's effect, beside Scorch and Stagger, also decided by Joe on 15 October (from
+Dissonance, Echo and a resonant link). Each stack lowers the damage and healing the target deals by 5% for
+5 s, stacking three times. **Harmony** is its mirror, applied by the Focus to allies: each stack raises
+the damage and healing they deal by 4% for 5 s, three times. Laser burns, Kinetic interrupts, Resonance
+weakens and strengthens.
 
 ## Shared ideas still to design
 
