@@ -91,4 +91,5 @@ Answered by Joe, 15 October: heat is the family's (yes); blindness and smoke "wi
 eventually"; weak points stay, and **PvE will exist**; Exposed "can be fun if done right". The open ones
 those leave are in the [README](README.md). Still open here:
 
-- **Ships**: a Laser Rifle fired at a ship. Probably it does almost nothing; worth saying.
+- **Ships**, decided 16 October: an on-foot weapon does about 5% of its damage to a ship, in full on a
+  system's weak point ([README](README.md#combat-rules)).

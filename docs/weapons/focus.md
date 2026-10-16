@@ -75,8 +75,6 @@ group, or a shield when it is needed. Its trees are **Mender** (healing, more of
 
 - **Healing in PvP.** One healer behind a group changes faction-space fights a great deal (ADR-0009); the
   numbers here are guesses and healing is the first thing PvP balance usually cuts.
-- **Healing yourself**: nothing here does, deliberately. A healer who can always heal themselves is very
-  hard to kill alone. Worth deciding outright.
+- **Decided 16 October:** the Focus heals the player holding it **at half strength**, and healing earns
+  XP **only when it undoes damage an enemy dealt** ([README](README.md#combat-rules)). Second wind stays.
 - **Second wind** prevents a death, which ADR-0006 (and its rethink, task 103) gives weight to.
-- **Healing earns XP** (ADR-0015), so healing an ally who is being hurt on purpose is a way to farm it.
-  Healing done in combat only, or with a cap, would close that.

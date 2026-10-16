@@ -54,7 +54,7 @@ before 1.5 s breaks the lock.
 |---|---|---|
 | **Volley** | Active, 16 s | Fires the whole rack at once at the locked target, without spending it. |
 | ↳ Wide volley | Upgrade | The missiles spread to strike up to three ships near the target. |
-| ↳ Stagger volley | Upgrade | Each missile adds 20 stagger. |
+| ↳ Shaking volley | Upgrade | Each missile adds a stack of Shaken. |
 | **Multi-lock** | Active, 20 s | For 5 s you can lock up to four ships at once, and Lock and fire sends a missile to each. |
 | ↳ Fast multi-lock | Upgrade | Each lock takes 1 s. |
 | ↳ Six | Upgrade | Up to six ships. |
@@ -69,8 +69,9 @@ before 1.5 s breaks the lock.
 
 ## Questions this draft raises
 
-- **The Missile family's effect**: Laser has Scorch and Kinetic Stagger. Missiles here borrow Stagger
-  (Stagger volley) and disabling (Lights out); whether they have one of their own is open.
+- **Decided 16 October:** missiles have their own effect, **Shaken** (slower locks, a narrower gimbal;
+  [README](README.md#ship-weapons)), so Stagger volley became Shaking volley; and missiles are countered by
+  a countermeasures module as well as Point defence. Silent locks stay, under the PvP rules.
 - **Warnings and silent locks**: a lock warning is interface, and Quiet lock and Swarm take it away. In PvP
   that may be the most important single thing on a ship's screen.
 - **Minefields** left behind in contested space could linger where nobody meant them to; their lifetime and

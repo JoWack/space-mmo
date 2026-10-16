@@ -55,7 +55,7 @@ then spends it all at the moment that matters. Its trees are **Wavecaster** (are
 | ↳ Drop | Upgrade | They land hard: damage and a stack of Dissonance. |
 | ↳ Suspended | Upgrade | 3 s. |
 | **Repel** | Active, 12 s | A burst of force in a cone that throws enemies back 6 m. |
-| ↳ Into the wall | Upgrade | Anyone thrown into a wall is dazed for 1 s. |
+| ↳ Into the wall | Upgrade | Anyone thrown into a wall is staggered. |
 | ↳ Clear the way | Upgrade | Allies in the cone are untouched and move 20% faster for 2 s. |
 | Heavy air | Passive | Your bolts slow their target 10% for 2 s. |
 | Mass | Passive | Gravity effects last 25% longer. |
@@ -72,7 +72,6 @@ then spends it all at the moment that matters. Its trees are **Wavecaster** (are
 
 ## Questions this draft raises
 
-- **Lift and Well** take control away from a player entirely for seconds. Strong in PvE, possibly
-  miserable in PvP, where durations may want to differ.
-- **Dazed** (Into the wall) is another status beside Scorch, Stagger and Dissonance; probably it should
-  simply be Stagger.
+- **Decided 16 October:** Lift and Well fall under **diminishing returns** in PvP
+  ([README](README.md#combat-rules)). Into the wall now staggers rather than inventing a "dazed" status
+  beside Scorch, Stagger and Dissonance (Claude's tidy, flagged in the draft).

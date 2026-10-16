@@ -33,11 +33,11 @@ possible single shot) and **Six-shooter** (the cylinder as something to play wit
 | **Heavy round** | Active, 12 s | Loads one round that deals double damage and staggers on hit, whatever the target's stagger. |
 | ↳ Through and through | Upgrade | It passes through the first target. |
 | ↳ Knockdown | Upgrade | The stagger becomes a knockdown: 1.25 s on the ground. |
-| **Called shot** | Active, 18 s | Aim at a body part for 1 s: a hit on the legs slows 50% for 4 s; on the arms, the target's next ability is delayed 2 s; on the head, a critical hit. |
+| **Called shot** | Active, 18 s | Aim at a hit zone for 1 s: a hit on the legs slows 50% for 4 s; on the body, the target's next ability is delayed 2 s; on the head, a critical hit. |
 | ↳ Quick call | Upgrade | Aiming takes 0.5 s. |
 | ↳ Crippling | Upgrade | The leg slow lasts 6 s. |
 | **Warning shot** | Active, 14 s | A round fired near, not at, enemies within 8 m of the impact: they are pushed back 4 m and their sprint is broken. |
-| ↳ Deafening | Upgrade | Those pushed hear nothing but ringing for 2 s: the sound of footsteps and fire is cut. |
+| ↳ Rattled | Upgrade | Those pushed have their aim thrown wide for 2 s: double spread. *Replaces Deafening, cut by Joe on 16 October.* |
 | ↳ Ricochet threat | Upgrade | The round then bounces into the nearest of them. |
 | Big iron | Passive | Shots deal +10% damage. |
 | Weak point | Passive | Hits to a weak point critically hit, +50%: the most of any weapon, for the slowest. |
@@ -57,7 +57,7 @@ possible single shot) and **Six-shooter** (the cylinder as something to play wit
 | ↳ Spin | Upgrade | You may move at full speed while fanning. |
 | **Trick shot** | Active, 20 s | A shot aimed at a hard surface ricochets once toward the nearest enemy within 10 m of the bounce. |
 | ↳ Double bank | Upgrade | It may ricochet twice. |
-| ↳ Around the corner | Upgrade | The ricochet ignores that the enemy is behind cover. |
+| ↳ Lucky bounce | Upgrade | The ricochet critically hits. *Replaces Around the corner, cut by Joe on 16 October.* |
 | Last round | Passive | The sixth round of a cylinder deals +40%. |
 | Thumb loading | Passive | Single-round reloads take 0.25 s. |
 | Rolling cylinder | Passive | Every third hit refunds a round. |
@@ -71,11 +71,9 @@ possible single shot) and **Six-shooter** (the cylinder as something to play wit
 - **With the Assault Rifle**, its sibling: the rifle for the long middle of a fight, Swap and drop
   reloading the Magnum for the finish.
 
-## Questions this draft raises
+## Decided since, 16 October
 
-- **Deafening** cuts the sound of a fight for a player: interface and audio, and possibly more annoying
-  than fun.
-- **Around the corner** shooting through cover sits uneasily beside Exposed seeing through walls; both
-  together may make cover mean little.
-- **Called shot** assumes hit locations (legs, arms, head) on every body, including the four races' very
-  different builds and whatever creatures PvE brings.
+- **Deafening and Around the corner are cut** (Joe). Rattled and Lucky bounce stand in for them, Claude's,
+  and can be cut too.
+- **Hit zones are head, body and legs**, with facing ([README](README.md#combat-rules)), so Called shot's
+  arm effect moved to the body.

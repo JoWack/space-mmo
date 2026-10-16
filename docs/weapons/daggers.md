@@ -75,9 +75,8 @@ and **Skirmisher** (the throwing blades and staying mobile).
 
 ## Questions this draft raises
 
-- **No stealth exists.** "Unseen" and "from behind" are about position, not hiding; if stealth is ever
-  wanted, it is a family question for Daggers and a big one for PvP.
-- **Facing**: Backstab and Flank need the server to judge which way a target faces when a hit lands,
-  which no rule does yet.
+- **Decided 16 October:** **no stealth** in the game, so "Unseen" and "from behind" stay about position;
+  and **facing** is judged for every hit, front, side or back ([README](README.md#combat-rules)), which
+  Backstab and Flank rely on.
 - **Thrown blades on the ground** are objects others can see; whether an enemy can pick yours up is a small
   question with a large answer.

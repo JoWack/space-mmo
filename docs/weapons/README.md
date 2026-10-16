@@ -6,7 +6,7 @@ has a page with its basic and heavy attacks and its two trees; this page holds w
 | Family | On foot, ranged | On foot, melee | Mechanic |
 |---|---|---|---|
 | Laser | [Laser Rifle](laser-rifle.md), [Laser Pistol](laser-pistol.md) | [Cutter](cutter.md) | **Heat** (decided) |
-| Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md) | [Daggers](daggers.md) | **Rounds** (decided) |
+| Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md), Scattergun (added 16 October, not yet drafted) | [Daggers](daggers.md) | **Rounds** (decided) |
 | Resonance | [Staff](staff.md), [Focus](focus.md) (the healer) | [Saber](saber.md) | **Charge** (decided) |
 
 And on ships ([below](#ship-weapons)):
@@ -15,7 +15,7 @@ And on ships ([below](#ship-weapons)):
 |---|---|---|
 | Laser | [Beam Laser](beam-laser.md) | Heat, as on foot |
 | Kinetic | [Railgun](railgun.md) | Rounds, as on foot |
-| Missile | [Missile Rack](missile-rack.md) | Lock-on and a rack |
+| Missile | [Missile Rack](missile-rack.md) | Lock-on and a rack; **Shaken** |
 
 Every tree page is **Claude's draft until Joe edits it or says otherwise**; its status line says which.
 
@@ -104,18 +104,50 @@ weakens and strengthens.
 Ship and on-foot weapons never share XP (ADR-0015). With one ship weapon in each family so far, none has a
 sibling, so each keeps all of its XP until a second Laser, Kinetic or Missile ship weapon arrives.
 
-**Disabling, not only destroying.** ADR-0006 gives a pirate a reason to disable a ship rather than
-obliterate it: disabling preserves most of the cargo. So ship weapons can damage a ship's **systems**
-(engines, weapons, the hold's door) as well as its hull, and the Railgun's Disabler tree is built on that.
-Whether it still matters depends on the death rethink (task 103), since cargo is what is lost either way.
+**Ships have systems** (Joe, 16 October, against hull only): **engines, weapons and the hold**, each with
+health of its own beside the hull's, each able to be knocked out. That is what makes disabling real:
+ADR-0006 gives a pirate a reason to disable a ship rather than obliterate it, since disabling preserves
+most of the cargo, and the Railgun's Disabler tree is built on it. It also gives weak points a meaning on a
+ship. Whether disabling still matters depends on the death rethink (task 103), since cargo is what is lost
+either way.
+
+**Hardpoints come in sizes: light, medium and heavy** (Joe, 16 October, against one size). Each ship weapon
+comes in sizes, and a hull's hardpoints say which fit: the shuttle's one light hardpoint takes a light Beam
+Laser, Railgun or Missile Rack.
+
+**Missiles are countered two ways** (Joe, 16 October, against either alone): a **countermeasures module**
+any ship can fit, firing flares that break locks on a cooldown, and the Railgun's **Point defence** tree for
+a dedicated escort.
 
 **Stagger on a ship is a jolt**: at 100, the ship is knocked off its line, thrust and turning cut for
 0.75 s. **Scorch** burns the hull as it burns a body.
 
-**Open for ships:** hardpoint **sizes** ("light" implies them; until decided, every ship weapon fits every
-hardpoint); **countermeasures** against missiles (a module, a skill, or the Railgun's point defence);
-whether the **Missile family** has an effect of its own beside Scorch and Stagger; and what an **on-foot
-weapon does to a ship**, and a ship weapon to someone on foot.
+**Shaken** is the Missile family's own effect (Joe, 16 October, against borrowing Stagger): each stack makes
+the ship's locks take 20% longer and narrows its gimbal by 2°, for 4 s, stacking three times. A missile
+duel becomes a fight over who can still aim.
+
+## Combat rules
+
+**Decided by Joe, 16 October 2026**, each offered against alternatives; they hold for every weapon.
+
+- **Diminishing returns on control in PvP.** A second control effect (Lift, a gravity Well, Grapple slug,
+  a root) on the same player within 15 s lasts half as long; a third, not at all. Full strength the first
+  time; never chained. Creatures are unaffected. Offered against halving all control on players, and no
+  rule.
+- **The Focus heals the player holding it at half strength.** Alone, a healer survives; they are never
+  unkillable. Offered against no self-healing (the draft) and full.
+- **Healing earns XP only when it undoes damage an enemy dealt**: a creature, or a player one may attack.
+  Healing a friend who is hurting themselves earns nothing. Offered against a per-minute cap, and no rule.
+- **On-foot and ship weapons do little to each other.** An on-foot weapon does about 5% of its damage to a
+  ship, but a hit on one of its systems' weak points counts in full. Ship weapons cannot target someone on
+  foot: nobody is strafed from orbit. Offered against ships strafing, and separate scales.
+- **Hit zones and facing.** Every body and creature has a **head, body and legs**, and every hit is from the
+  **front, side or back**. Each race's build, and each creature's, has its zones fitted once. Offered
+  against head and body only, and none.
+- **No stealth.** Position, cover and smoke, but nobody is invisible, which keeps faction space defended
+  rather than hunted (ADR-0009): you can always see who is coming. Offered against maybe later, and yes.
+- **XP per point of damage waits for damage numbers.** Health and weapon damage have no scale yet, and the
+  rate means nothing without them; set it then, tuned so a weapon reaches 70 in a planned number of hours.
 
 ## Shared ideas still to design
 

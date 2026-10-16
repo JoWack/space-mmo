@@ -9915,16 +9915,32 @@ the type ignored, the rounding remainder dropped, the schedule rounded down, and
   is armed with one light hardpoint (against unarmed). Recorded in [weapons/README.md](weapons/README.md#ship-weapons).
   **Drafted:** [Beam Laser](weapons/beam-laser.md) (Lance, Burn), [Railgun](weapons/railgun.md) (Disabler,
   Point defence; the Disabler built on ADR-0006's disabling) and [Missile Rack](weapons/missile-rack.md)
-  (Hunter, Swarm). That completes every weapon ADR-0015 names, in draft. **Open for ships:** hardpoint
-  sizes, countermeasures, a Missile family effect, ship systems as state, and what on-foot and ship
-  weapons do to each other.
+  (Hunter, Swarm). That completes every weapon ADR-0015 names, in draft.
+
+### The drafts' questions, decided by Joe, 16 October
+
+Four rounds, each offered with alternatives; the details are in [weapons/README.md](weapons/README.md).
+
+- **Ships:** ships have **systems** (engines, weapons, the hold) with health of their own; hardpoints come
+  in **light, medium and heavy**; missiles are countered by a **module and** the Railgun's point defence;
+  the Missile family has its own effect, **Shaken**.
+- **Combat rules:** **diminishing returns** on control in PvP; the Focus heals its holder **at half
+  strength**; healing earns XP **only undoing enemy damage**; on-foot and ship weapons do **little to each
+  other** (about 5% one way, nothing the other); **hit zones** (head, body, legs) and **facing**; **no
+  stealth**; the **XP rate waits for damage numbers**.
+- **Abilities:** the Magnum's **Deafening and Around the corner are cut** (Rattled and Lucky bounce stand
+  in, Claude's); everything else flagged stays, the PvP-sensitive ones under diminishing returns (Joe gave
+  no preference on Challenge, Grapple slug, silent locks or Second wind).
+- **The Scattergun is added**: Kinetic, ranged, sharing XP with the Assault Rifle and Magnum. Not drafted.
 - **Decided by Joe on the Rifle's draft, 15 October:** heat is the whole Laser family's mechanic; weak
   points stay and **PvE will exist** (now on M6's roadmap line and design-bible §10, undesigned);
   Exposed stays, "fun if done right"; blindness and smoke "will need to be designed eventually".
-- **The Scattergun** (Kinetic, ranged, short range), suggested and not yet answered.
+- **The Scattergun's trees** (added 16 October).
 - **Ship weapon names** (Beam Laser, Railgun and Missile Rack are the drafts'), and whether more families
   than Laser, Kinetic and Missile fly.
-- **XP per point of damage** (RuneScape gives four), and whatever earns a future buffer or shield its XP.
+- **XP per point of damage**, decided to wait for damage numbers (16 October): health and weapon damage
+  need a scale first. And whatever earns a future buffer or shield its XP.
+- **Exposed, blindness and smoke** still want designing ([weapons/README.md](weapons/README.md)).
 - **Seeding the skills** (101): when the first weapon exists, with `family`, `type` and `mount` authored
   on each skill. The skills screen will want grouping before twelve more rows arrive, which is interface.
 

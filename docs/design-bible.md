@@ -131,7 +131,7 @@ which is the reference; in brief:
 | Family | On foot, ranged | On foot, melee |
 |---|---|---|
 | Laser | Laser Rifle, Laser Pistol | Cutter |
-| Kinetic | Assault Rifle, Magnum | Daggers |
+| Kinetic | Assault Rifle, Magnum, Scattergun (added 16 October) | Daggers |
 | Resonance | Staff, Focus (the healer) | Saber |
 
 - **Resonance** replaces Joe's first name for the family, "Force".
@@ -143,6 +143,9 @@ which is the reference; in brief:
 - **Twenty points, evenly from level 4 to level 70** (moved from 50, which is 0.78% of the XP to 99 on
   this curve; 70 is 5.7%). 70 to 99 is titles, skins and the like.
 - **Weapons are player-made** (§5, `weaponcrafting`), so each is a crafted good with a style (task 187).
+- **Every weapon's trees, the families' mechanics (heat, rounds, charge) and the combat rules** (diminishing
+  returns in PvP, hit zones and facing, no stealth, ship systems and hardpoint sizes) are in
+  [weapons/](weapons/README.md).
 
 ---
 

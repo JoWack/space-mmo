@@ -68,5 +68,6 @@ defence** (shooting down missiles, and flak against small fast things).
 - **Opening the hold** (Dead in space) is ADR-0006's disabling made concrete: a disabled ship's cargo can be
   taken. It assumes looting a ship is a thing someone does, which the death rethink (task 103) may change.
 - **Grapple slug** holds a ship in place, which in PvP may feel worse than being destroyed.
-- **Point defence** is one answer to missiles; countermeasures as a module would be another, and both may be
-  wanted.
+- **Decided 16 October:** ships have **systems** (engines, weapons, the hold), so Ion slug and Dead in
+  space have something to hit; missiles are countered by a module **and** Point defence; Grapple slug stays,
+  under diminishing returns ([README](README.md#ship-weapons)).

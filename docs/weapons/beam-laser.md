@@ -65,8 +65,8 @@ precision, a ship's weak points) and **Burn** (sustained beams, Scorch on the hu
 
 ## Questions this draft raises
 
-- **Systems** (Subsystem strike, Overload) assume ships have engines, weapons and the like that can be hit
-  separately: new state on every ship, and the heart of ADR-0006's disabling.
+- **Decided 16 October:** ships have **systems**, engines, weapons and the hold, each with its own health
+  ([README](README.md#ship-weapons)), which Subsystem strike and Overload hit.
 - **Blinded sensors** (Heat dump) is blindness again, on a cockpit this time.
 - **Four kilometres** sounds long and is about five seconds' flight at top speed (ADR-0001's 1:10 scale):
   ranges want measuring against the flight model before any is trusted.
