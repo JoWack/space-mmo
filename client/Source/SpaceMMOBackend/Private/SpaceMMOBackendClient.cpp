@@ -842,7 +842,8 @@ void USpaceMMOBackendClient::Equip(
 	const int32 CharacterId,
 	const int64 ItemInstanceId,
 	const TOptional<EBackendEquipmentSlot> Slot,
-	TFunction<void(const FBackendFailure&)> OnFailure)
+	TFunction<void(const FBackendFailure&)> OnFailure,
+	TFunction<void()> OnEquipped)
 {
 	TWeakObjectPtr<USpaceMMOBackendClient> WeakThis(this);
 
@@ -851,12 +852,17 @@ void USpaceMMOBackendClient::Equip(
 		FString::Printf(TEXT("/characters/%d/equipment/equip"), CharacterId),
 		FSpaceMMOBackendProtocol::MakeEquipBody(ItemInstanceId, Slot),
 		true,
-		[WeakThis, CharacterId](const FString&)
+		[WeakThis, CharacterId, OnEquipped = MoveTemp(OnEquipped)](const FString&)
 		{
 			// Refetched, as a transfer is: a swap moved two items, and only the server knows where the second went.
 			if (USpaceMMOBackendClient* Self = WeakThis.Get())
 			{
 				Self->SelectCharacter(CharacterId);
+			}
+
+			if (OnEquipped)
+			{
+				OnEquipped();
 			}
 		},
 		FString(),

@@ -283,6 +283,10 @@ bool FSpaceMMOEquipmentFillsTheApprovedSlotsTest::RunTest(const FString& Paramet
 	TestEqual(TEXT("Mining with a colon"), USpaceMMOEquipmentScreen::NameLabel(EBackendEquipmentSlot::MiningTool), FString(TEXT("Mining:")));
 	TestEqual(TEXT("And its laser"), USpaceMMOEquipmentScreen::ItemLabel(Views[5]), FString(TEXT("Crude Mining Laser")));
 
+	// What putting it on says, as Joe agreed on 16 October: the word "Moved" uses, for the same reason.
+	TestEqual(TEXT("The message"), USpaceMMOEquipmentScreen::EquippedMessage(TEXT("Crude Mining Laser")),
+		FString(TEXT("Equipped Crude Mining Laser")));
+
 	// Something in the Equipped container with no slot -- mid-refresh, or a slot this client does not know --
 	// is shown nowhere rather than guessed into a box.
 	FBackendItemInstance Unplaced = Worn(12, TEXT("Visor"), EBackendEquipmentSlot::Head, EBackendEquipKind::Head);

@@ -418,7 +418,8 @@ public:
 		int32 CharacterId,
 		int64 ItemInstanceId,
 		TOptional<EBackendEquipmentSlot> Slot,
-		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr,
+		TFunction<void()> OnEquipped = nullptr);
 
 	/** Takes an item out of a slot, into the container named, or the pockets when it is zero. */
 	void Unequip(

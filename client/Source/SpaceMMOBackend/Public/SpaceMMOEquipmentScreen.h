@@ -180,8 +180,16 @@ public:
 	/**
 	 * Asks the server to put an item on. Static so the inventory's double-click and a drop here go
 	 * through the one route, with the one way of reporting a refusal.
+	 *
+	 * Says "Equipped <name>" once the server agrees (Joe, 16 October), because a double-click with this screen
+	 * closed otherwise takes the item out of the inventory with nothing to say where it went. No name, no
+	 * message: moving a weapon between its two slots is watched happening on this screen.
 	 */
-	static void SendEquip(const UUserWidget* From, int64 InstanceId, TOptional<EBackendEquipmentSlot> Which);
+	static void SendEquip(
+		const UUserWidget* From, int64 InstanceId, TOptional<EBackendEquipmentSlot> Which, const FString& ItemName);
+
+	/** "Equipped Crude Mining Laser". */
+	static FString EquippedMessage(const FString& ItemName);
 
 	/** Asks the server to take an item off, into the container named, or the pockets when it is zero. */
 	static void SendUnequip(const UUserWidget* From, EBackendEquipmentSlot Which, int64 ToInventoryId);

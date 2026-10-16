@@ -10001,6 +10001,12 @@ EQUIPMENT
 - **Equipment covers the station screen.** Docked with the station and inventory open, L puts equipment
   on the left and hides the station screen without closing it; L again brings it back, and Tab over
   equipment swaps back to the station. Offered against the last-opened closing the other, and three columns.
+- **Equipping says "Equipped Crude Mining Laser"**, once the server agrees, the way a move says "Moved".
+  Asked after the first build, which said nothing: a double-click with the equipment screen closed took the
+  item out of the inventory with no word of where it went. Moving a weapon between its two slots says
+  nothing, since that happens on the screen being watched.
+- **Weapon slot names stay in the panels' heading capitals** ("WEAPON 1"), as first rendered, rather than
+  the mock's "Weapon 1".
 
 ### What was built
 
@@ -10051,9 +10057,6 @@ EQUIPMENT
 ### Not done, and why
 
 - **"Out of combat"** waits for combat: nothing fires yet.
-- **No message on equipping.** A transfer says "Moved Crude Mining Laser"; equipping says nothing on
-  success, because no line for it was agreed. Double-clicking a laser with the equipment screen closed takes
-  it out of the inventory list and nothing says where it went. A question for Joe.
 - **Only the mining slot can be filled in play.** No weapon or armour exists as content (192's are designs,
   179 is the armour). The weapon slots, the swap and armour fitting are proven by the tests and the sample
   look, not by play.

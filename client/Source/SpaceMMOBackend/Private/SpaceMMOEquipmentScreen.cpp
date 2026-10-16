@@ -154,8 +154,16 @@ bool USpaceMMOEquipmentScreen::CanMoveBetween(const FSpaceMMOEquipmentSlotView& 
 	return !From.IsEmpty() && From.Slot != To && IsWeaponSlot(From.Slot) && IsWeaponSlot(To);
 }
 
+FString USpaceMMOEquipmentScreen::EquippedMessage(const FString& ItemName)
+{
+	return FString::Printf(TEXT("Equipped %s"), *ItemName);
+}
+
 void USpaceMMOEquipmentScreen::SendEquip(
-	const UUserWidget* From, const int64 InstanceId, const TOptional<EBackendEquipmentSlot> Which)
+	const UUserWidget* From,
+	const int64 InstanceId,
+	const TOptional<EBackendEquipmentSlot> Which,
+	const FString& ItemName)
 {
 	ASpaceMMOPlayerController* Controller = nullptr;
 	USpaceMMOBackendClient* Client = nullptr;
@@ -168,7 +176,24 @@ void USpaceMMOEquipmentScreen::SendEquip(
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Equipment: equip %lld into %s."),
 		InstanceId, Which.IsSet() ? *SlotName(Which.GetValue()) : TEXT("its first free slot"));
 
-	Client->Equip(Controller->GetCharacterId(), InstanceId, Which, ShowRefusal(Controller));
+	// On the server's yes rather than straight away, as "Moved" is: a refusal arriving after "Equipped" would
+	// be two messages contradicting each other.
+	TFunction<void()> OnEquipped;
+
+	if (!ItemName.IsEmpty())
+	{
+		TWeakObjectPtr<ASpaceMMOPlayerController> Weak(Controller);
+
+		OnEquipped = [Weak, Message = EquippedMessage(ItemName)]()
+		{
+			if (ASpaceMMOPlayerController* Owner = Weak.Get())
+			{
+				Owner->ShowTransientMessage(Message, ESpaceMMOMessageTone::Positive);
+			}
+		};
+	}
+
+	Client->Equip(Controller->GetCharacterId(), InstanceId, Which, ShowRefusal(Controller), MoveTemp(OnEquipped));
 }
 
 void USpaceMMOEquipmentScreen::SendUnequip(
@@ -290,7 +315,7 @@ bool USpaceMMOEquipmentSlot::NativeOnDrop(
 			return false;
 		}
 
-		USpaceMMOEquipmentScreen::SendEquip(this, FromInventory->Line.InstanceId, View.Slot);
+		USpaceMMOEquipmentScreen::SendEquip(this, FromInventory->Line.InstanceId, View.Slot, FromInventory->Line.Label);
 
 		return true;
 	}
@@ -303,7 +328,7 @@ bool USpaceMMOEquipmentSlot::NativeOnDrop(
 		}
 
 		// Weapon 1 onto Weapon 2: the server swaps the two.
-		USpaceMMOEquipmentScreen::SendEquip(this, FromSlot->View.InstanceId, View.Slot);
+		USpaceMMOEquipmentScreen::SendEquip(this, FromSlot->View.InstanceId, View.Slot, FString());
 
 		return true;
 	}

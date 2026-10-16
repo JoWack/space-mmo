@@ -124,7 +124,7 @@ FReply USpaceMMOInventoryRow::NativeOnMouseButtonDoubleClick(
 		return FReply::Unhandled();
 	}
 
-	USpaceMMOEquipmentScreen::SendEquip(this, Line.InstanceId, TOptional<EBackendEquipmentSlot>());
+	USpaceMMOEquipmentScreen::SendEquip(this, Line.InstanceId, TOptional<EBackendEquipmentSlot>(), Line.Label);
 
 	return FReply::Handled();
 }
