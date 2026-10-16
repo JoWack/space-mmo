@@ -125,27 +125,24 @@ skill of its own. Joe's notes, as given:
   of them are unlocked by level 50. Levels past that give rewards such as titles and weapon skins.
 - **Two weapons equipped at once**, switched between as in New World.
 
-**Joe's starting list of on-foot weapons**, with family and type "not set in stone". He wants at least
-one melee and one ranged weapon in every family:
+**Settled with Joe on 15 October, and recorded as [ADR-0015](adr/0015-every-weapon-is-a-skill.md)**,
+which is the reference; in brief:
 
-| Weapon | Family | Type |
+| Family | On foot, ranged | On foot, melee |
 |---|---|---|
-| Laser Rifle | Laser | Ranged |
-| Laser Pistol | Laser | Ranged |
-| Assault Rifle | Kinetic | Ranged |
-| Magnum | Kinetic | Ranged |
-| Saber | Force | Melee |
-| Staff | Force | Ranged |
+| Laser | Laser Rifle, Laser Pistol | Cutter |
+| Kinetic | Assault Rifle, Magnum | Daggers |
+| Resonance | Staff, Focus (the healer) | Saber |
 
-**Consequences already visible, recorded so they are decided rather than discovered:**
-
-- **Level 50 is 0.78% of the XP to 99** on this curve (101,333 of 13,034,431; level 92 is half). With
-  every tree point unlocked by 50, a weapon's whole tree arrives in its first hundredth, and the rest
-  is titles and skins. That matches 99 being prestige in RuneScape; it should be chosen, not met.
-- **Weapons are player-made** (§5, `weaponcrafting`), so each one is a crafted good with a style tag
-  (task 187), and comes in Common and the four worlds' styles with no further design.
-- **Laser and Kinetic have no melee weapon yet**, which the one-of-each rule asks for.
-- The open questions, and Claude's suggestions against them, are task 192.
+- **Resonance** replaces Joe's first name for the family, "Force".
+- **Ship weapons** are skills of the same kind: a Laser beam, a Kinetic railgun and Missiles to begin with.
+- **XP is earned for damage dealt** (healing done, for the Focus), and **80% goes to the weapon used, 20%
+  divided among its siblings**: the same family, type and mount. With no sibling the weapon keeps all of
+  it. Ship and on-foot weapons never share.
+- **Two trees per weapon, three actives equipped**, beside the basic and heavy attacks.
+- **Twenty points, evenly from level 4 to level 70** (moved from 50, which is 0.78% of the XP to 99 on
+  this curve; 70 is 5.7%). 70 to 99 is titles, skins and the like.
+- **Weapons are player-made** (§5, `weaponcrafting`), so each is a crafted good with a style (task 187).
 
 ---
 

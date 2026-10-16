@@ -9830,46 +9830,56 @@ and the four sprints changed under it. For two players, the re-cooked server and
 
 ## 192 — Weapons: a 0–99 skill and an ability tree for every weapon
 
-**Pending; design first.** Belongs to **M6**. Joe's combat notes of 14 October are recorded in full in
-[design-bible.md](design-bible.md) §2, "Weapon skills": every weapon a 0–99 skill, on foot and in
-ships; XP shared within a family and type, mostly to the weapon used; a New World-style tree per
-weapon, with actives, passives, a basic and a heavy attack; skill points at certain levels, all by 50;
-titles and skins after; two weapons equipped and switched between. They replace the design bible's
-`guns` and `melee` skills (101).
+**The model decided and its rules built, 15 October ([ADR-0015](adr/0015-every-weapon-is-a-skill.md));
+the trees themselves are next.** Belongs to **M6**. Joe's combat notes of 14 October are in
+[design-bible.md](design-bible.md) §2, "Weapon skills"; they replace the design bible's `guns` and `melee`
+skills (101).
 
-**Joe's starting list** (family and type "not set in stone"; at least one melee and one ranged weapon per
-family): Laser Rifle and Laser Pistol (Laser, ranged), Assault Rifle and Magnum (Kinetic, ranged), Saber
-(Force, melee), Staff (Force, ranged).
+### Decided by Joe, 15 October
 
-### Open, for Joe
+Joe's starting list on 14 October, family and type "not set in stone": Laser Rifle and Laser Pistol
+(Laser, ranged), Assault Rifle and Magnum (Kinetic, ranged), Saber (Force, melee), Staff (Force, ranged),
+with at least one melee and one ranged weapon wanted in every family. Asked in three rounds, with Claude's
+suggestion first in each; what was offered against each answer is in the ADR's alternatives.
 
-Joe asked for feedback and suggestions. **Everything under "Claude suggested" is a suggestion, not a
-decision.**
+- **XP split 80/20.** 80% to the weapon used, 20% divided among the others of its family and type. Offered
+  against full XP plus 25% to each sibling, and 70/30.
+- **The missing melee weapons: Cutter (Laser) and Daggers (Kinetic).** Claude offered Cutter and Breaching
+  Hammer; Joe kept the Cutter and chose *"Daggers (same as Combat Knife, but call them Daggers)"*.
+- **"Force" becomes Resonance**, keeping the weapons.
+- **A separate healing weapon: the Focus** (Resonance, ranged), so it shares XP with the Staff. Offered
+  against the Staff healing, and no healing weapon.
+- **The tree ends at level 70, not 50.** Offered after measuring the curve: 50 is 0.78% of the XP to 99,
+  70 is 5.7%, 80 (also offered) is 15%.
+- **Twenty points, evenly from level 4 to 70**, about every three and a half levels. Joe first chose
+  "every second level to the cap", worded for a cap of 50; at 70 that meant nothing until level 32, so it
+  was asked again.
+- **XP for damage dealt** (healing done, for the Focus). Offered against per hit and per kill.
+- **Two trees per weapon, three actives equipped.** Offered against one tree, and four actives.
+- **Ship weapons get skills and trees like on-foot ones, and never share XP with them**, even within a
+  family. Hardpoints stand in for "two equipped".
 
-- **The XP split within a family and type.** Joe: "the majority" to the weapon used, "some" to the
-  rest. *Claude suggested* 80% to the weapon and 20% shared among the others of its family and type,
-  so owning more weapons in a family never makes a fight worth more XP in total.
-- **A melee weapon for Laser and for Kinetic**, which the one-of-each rule needs. *Claude suggested* a
-  **Cutter** (Laser, melee: a short industrial cutting beam, the mining laser's violent cousin, which
-  ties the first tool a player crafts to the first weapon) and a **Breaching Hammer** (Kinetic, melee:
-  slow, heavy, staggers).
-- **The Force family's name.** Saber, Staff and "Force" together read as Star Wars' lightsaber and the
-  Force. *Claude suggested* an original name for the family, such as **Resonance**, keeping the weapons.
-- **Healing.** New World's group play leans on a healing weapon (the Life Staff). *Claude suggested*
-  deciding early whether one exists, since it shapes every other tree; the Force Staff is the natural
-  candidate.
-- **More weapons.** *Claude suggested* a **Scattergun** (Kinetic, ranged, short range) so the two
-  Kinetic guns differ by more than size, and leaving heavy weapons for later.
-- **Ship weapons.** "Including in-ship weapons" makes `lasers` and `missiles` the start of a list.
-  Whether ship weapons have trees and two equipped at once, or only the 0–99 skill, is open.
-  *Claude suggested* mirroring the on-foot families, with a Kinetic ship weapon (a railgun) beside
-  lasers and missiles.
-- **How many actives, passives and points.** "Same amount as New World" wants writing down in this
-  game's own numbers before a tree is drawn. New World equips three actives per weapon at a time,
-  chosen from two trees.
-- **Level 50 is 0.78% of the XP to 99** (design-bible §2). Whether a weapon's whole tree should arrive
-  in its first hundredth of XP.
-- **Where skill points come from**: which levels grant them, and how many there are by 50.
+### Built, 15 October
+
+**`SpaceMMO.Domain/Combat/Weapons.cs`**: `WeaponFamily` (Laser, Kinetic, Resonance, Missile),
+`WeaponType`, `WeaponMount`, `WeaponSkill.IsSiblingOf`, `WeaponXp.Share` (integer, conserving: the
+rounding goes to the weapon used) and `WeaponTree` (`LevelOfPoint`, `PointsUnlockedAt`). Nothing calls
+them yet; they are the rules the first weapon will be built against.
+
+**Verified:** domain 532, 22 new in `Combat/WeaponTests.cs`, whose schedule test asserts the ADR's list
+of levels literally. **Broken on purpose, each failing its own tests:** no sharing, the mount ignored,
+the type ignored, the rounding remainder dropped, the schedule rounded down, and an off-by-one in points.
+
+### Still open
+
+- **Each weapon's two trees**: themes, actives, passives and capstones, eighteen trees on foot and six for
+  ships. The bulk of the milestone's design. Claude can draft a weapon's trees for Joe to edit.
+- **The Scattergun** (Kinetic, ranged, short range), suggested and not yet answered.
+- **Ship weapon names**, and whether more families than Laser, Kinetic and Missile fly.
+- **XP per point of damage** (RuneScape gives four), and whatever earns a future buffer or shield its XP.
+- **Seeding the skills** (101): when the first weapon exists, with `family`, `type` and `mount` authored
+  on each skill. The skills screen will want grouping before twelve more rows arrive, which is interface.
 
 **Also blocked on:** 102 (constitution and stamina, which abilities may draw on), 179's equipment
-slots (two weapons equipped needs somewhere to equip them), and 104 (where a weapon may be fired).
+slots (two weapons equipped needs somewhere to equip them), and the attack record in 104 (where a weapon
+may be fired is built; who has fired at whom is not).

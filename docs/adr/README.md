@@ -25,6 +25,7 @@ pitch, not a decision record.
 | [0012](0012-a-ship-is-earned-and-carries-its-own-hold.md) | A ship is earned, summoned, and carries its own hold | Accepted |
 | [0013](0013-terrain-is-a-function-everything-else-collides.md) | Terrain stays a function; everything else gets collision primitives | Accepted |
 | [0014](0014-capacity-is-volume-and-it-binds-everywhere.md) | Capacity is volume, enforced on every route into an inventory | Accepted |
+| [0015](0015-every-weapon-is-a-skill.md) | Every weapon is a 0–99 skill with two trees; XP shared 80/20 within family and type | Accepted |
 
 ## When to write one
 

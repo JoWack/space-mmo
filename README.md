@@ -198,7 +198,7 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   ergonomics of getting into and out of a ship
 - **M6** — combat, and the rules that already assume it: personal and ship weapons, each a 0–99
   skill with a New World-style ability tree, two equipped at once
-  ([design-bible.md](docs/design-bible.md) §2, "Weapon skills"; task 192), the `constitution`,
+  ([ADR-0015](docs/adr/0015-every-weapon-is-a-skill.md); task 192), the `constitution`,
   `stamina` and pilot skills, security zones and pairwise aggression
   ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md),
   [ADR-0009](docs/adr/0009-retaliation.md)), and death and insurance made real
