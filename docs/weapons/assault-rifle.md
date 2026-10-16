@@ -1,8 +1,9 @@
 # Assault Rifle — draft trees
 
-**Status: Claude's draft, 15 October 2026, for Joe to edit. Nothing here is decided**, including the
-Kinetic family's rounds and Stagger, which are proposals ([README](README.md)). Task 192,
-[ADR-0015](../adr/0015-every-weapon-is-a-skill.md). Numbers are first guesses; none has been tested.
+**Status: Claude's draft of 15 October 2026, approved in outline by Joe the same day** (*"Everything
+else sounds great!"*), with the family's rounds and Stagger decided ([README](README.md)). Every number is
+a first guess and none has been tested. Task 192,
+[ADR-0015](../adr/0015-every-weapon-is-a-skill.md).
 
 **Kinetic family, ranged, on foot.** 30 rounds a magazine, a 2 s reload. Shares 20% of its XP with the
 Magnum.
@@ -79,7 +80,7 @@ is spent or swapped.
 
 ## Questions this draft raises
 
-- **Rounds as an item** ([README](README.md)): if magazines draw on ammunition, Resupply is a way for one
-  player to spend their own stock on everyone's.
+- **Resupply** refills magazines for free, since rounds are not an item (Joe, 15 October); it is
+  purely a tempo tool, and could be cut if reloads alone feel enough.
 - **Exposed** again (Tracer rounds), and the PvP care it needs.
 - **Armour** (Piercing rounds) has no stats yet; task 179.

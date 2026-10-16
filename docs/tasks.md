@@ -9897,9 +9897,11 @@ the type ignored, the rounding remainder dropped, the schedule rounded down, and
   (Gunslinger, Overclock) and [Cutter](weapons/cutter.md) (Breacher, Slag). **The Kinetic family's too**,
   same day: [Assault Rifle](weapons/assault-rifle.md) (Assault, Specialist), [Magnum](weapons/magnum.md)
   (Hand Cannon, Six-shooter) and [Daggers](weapons/daggers.md) (Flanker, Skirmisher), on a proposed
-  family mechanic, **rounds** (magazines, a cylinder, throwing blades), and a proposed family effect,
-  **Stagger**; neither decided. Whether rounds are an ammunition item is open, beside the death rethink
-  (103), since both are about what combat consumes.
+  family mechanic, **rounds** (magazines, a cylinder, throwing blades), and a family effect, **Stagger**.
+- **Decided by Joe on the Kinetic drafts, 15 October:** *"Rounds is the right mechanic- ammo does not need
+  to be crafted or a separate item, just baked into the weapon. Everything else sounds great!"* Rounds and
+  Stagger stand, a reload is free, and the three drafts are approved in outline; their numbers are
+  untested.
 - **Decided by Joe on the Rifle's draft, 15 October:** heat is the whole Laser family's mechanic; weak
   points stay and **PvE will exist** (now on M6's roadmap line and design-bible §10, undesigned);
   Exposed stays, "fun if done right"; blindness and smoke "will need to be designed eventually".

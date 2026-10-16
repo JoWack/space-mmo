@@ -1,9 +1,10 @@
 # Daggers — draft trees
 
-**Status: Claude's draft, 15 October 2026, for Joe to edit. Nothing here is decided**, including the
-Kinetic family's rounds and Stagger, which are proposals ([README](README.md)). Joe named them on 15 October:
-*"Daggers (same as Combat Knife, but call them Daggers)"*: fast, short, light. Task 192,
-[ADR-0015](../adr/0015-every-weapon-is-a-skill.md). Numbers are first guesses; none has been tested.
+**Status: Claude's draft of 15 October 2026, approved in outline by Joe the same day** (*"Everything
+else sounds great!"*), with the family's rounds and Stagger decided ([README](README.md)). Every number is
+a first guess and none has been tested. Joe named them on 15 October: *"Daggers (same as Combat Knife,
+but call them Daggers)"*: fast, short, light. Task 192,
+[ADR-0015](../adr/0015-every-weapon-is-a-skill.md).
 
 **Kinetic family, melee, on foot.** The family's only melee weapon, so it has no sibling and keeps all of
 its XP. A pair, one in each hand, plus **four throwing blades**: the Daggers' rounds. A thrown blade comes

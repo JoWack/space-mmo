@@ -1,8 +1,9 @@
 # Magnum — draft trees
 
-**Status: Claude's draft, 15 October 2026, for Joe to edit. Nothing here is decided**, including the
-Kinetic family's rounds and Stagger, which are proposals ([README](README.md)). Task 192,
-[ADR-0015](../adr/0015-every-weapon-is-a-skill.md). Numbers are first guesses; none has been tested.
+**Status: Claude's draft of 15 October 2026, approved in outline by Joe the same day** (*"Everything
+else sounds great!"*), with the family's rounds and Stagger decided ([README](README.md)). Every number is
+a first guess and none has been tested. Task 192,
+[ADR-0015](../adr/0015-every-weapon-is-a-skill.md).
 
 **Kinetic family, ranged, on foot.** Six rounds in the cylinder; a full reload in 2.5 s, or one round at a
 time at 0.4 s each, interruptible. Shares 20% of its XP with the Assault Rifle.

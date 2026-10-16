@@ -6,7 +6,7 @@ has a page with its basic and heavy attacks and its two trees; this page holds w
 | Family | On foot, ranged | On foot, melee | Mechanic |
 |---|---|---|---|
 | Laser | [Laser Rifle](laser-rifle.md), [Laser Pistol](laser-pistol.md) | [Cutter](cutter.md) | **Heat** (decided) |
-| Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md) | [Daggers](daggers.md) | **Rounds** (proposed) |
+| Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md) | [Daggers](daggers.md) | **Rounds** (decided) |
 | Resonance | Staff, Focus (the healer) | Saber | Undecided |
 
 Every tree page is **Claude's draft until Joe edits it or says otherwise**; its status line says which.
@@ -29,9 +29,11 @@ That makes the second weapon a way to cool the first, which the Pistol's Gunslin
 **Scorch** is the family's burn: 2% of the hit's damage a second for 4 s, stacking three times. Every
 Laser tree that burns uses it rather than inventing its own, so one status reads the same everywhere.
 
-## Kinetic: rounds (proposed)
+## Kinetic: rounds
 
-**Claude's proposal, 15 October; not decided.** Where a Laser weapon is limited by heat, a Kinetic
+**Decided by Joe, 15 October 2026**: *"Rounds is the right mechanic- ammo does not need to be crafted or a
+separate item, just baked into the weapon. Everything else sounds great!"* Proposed by Claude the same day.
+Where a Laser weapon is limited by heat, a Kinetic
 weapon is limited by **rounds**: a count it carries, spends, and has to restore. The guns hold a magazine
 and reload, which is a pause you choose; the Daggers carry throwing blades that come back to the sheath on
 their own. Running dry is the Kinetic player's version of overheating, and choosing when to reload is the
@@ -47,11 +49,10 @@ skill.
 heavy hits more, and at 100 the target is **staggered** for 0.75 s, interrupted and unable to sprint.
 Stagger drains when they stop being hit. Laser burns; Kinetic knocks people about.
 
-**The question this raises: are rounds an item?** If a magazine draws on ammunition in the inventory,
-ammunition is a consumable that `weaponcrafting` makes and every Kinetic shot uses up: a steady material
-sink, and a difference from lasers that players would feel in their wallets. If not, a reload is free and
-rounds are only a rhythm. Worth deciding with the death rethink (task 103), since both are about what combat
-consumes.
+**Rounds are not an item.** Ammunition is part of the weapon: a reload is free and draws on nothing in
+the inventory, so rounds are a rhythm, not a cost. Asked as a choice against a crafted ammunition
+consumable, which would have been a steady material sink; whatever combat consumes is now for the death
+rethink (task 103) to say.
 
 ## Shared ideas still to design
 
