@@ -9,6 +9,14 @@ has a page with its basic and heavy attacks and its two trees; this page holds w
 | Kinetic | [Assault Rifle](assault-rifle.md), [Magnum](magnum.md) | [Daggers](daggers.md) | **Rounds** (decided) |
 | Resonance | [Staff](staff.md), [Focus](focus.md) (the healer) | [Saber](saber.md) | **Charge** (decided) |
 
+And on ships ([below](#ship-weapons)):
+
+| Family | Ship weapon | Mechanic |
+|---|---|---|
+| Laser | [Beam Laser](beam-laser.md) | Heat, as on foot |
+| Kinetic | [Railgun](railgun.md) | Rounds, as on foot |
+| Missile | [Missile Rack](missile-rack.md) | Lock-on and a rack |
+
 Every tree page is **Claude's draft until Joe edits it or says otherwise**; its status line says which.
 
 ## Laser: heat
@@ -76,6 +84,38 @@ Dissonance, Echo and a resonant link). Each stack lowers the damage and healing 
 5 s, stacking three times. **Harmony** is its mirror, applied by the Focus to allies: each stack raises
 the damage and healing they deal by 4% for 5 s, three times. Laser burns, Kinetic interrupts, Resonance
 weakens and strengthens.
+
+## Ship weapons
+
+**Decided by Joe, 15 October 2026**, each offered against alternatives:
+
+- **Gimballed.** A ship's weapons point forward but swivel within a cone of about 15° toward the reticle:
+  you fly to fight, without having to point the nose to the pixel at the speeds the flight model allows.
+  Offered against fixed-forward and turrets.
+- **Hardpoints vary by hull**, fitted at a hangar: the shuttle has one, the freighter two, and ships yet to
+  be designed more. **One weapon fires at a time, switched between as on foot**, so a ship weapon's basic
+  and heavy attacks and its three equipped actives work as a rifle's do. Offered against two on every
+  ship, and every hardpoint firing together.
+- **Families carry over.** A Beam Laser builds heat and a Railgun spends rounds, by the family rules above;
+  **missiles lock on**, then fire from a rack that reloads. Offered against one ship-wide energy pool.
+- **The shuttle is armed**, with one light hardpoint: enough to answer back on the run to the Capital, which
+  new-player protection already covers (ADR-0008). Offered against an unarmed shuttle.
+
+Ship and on-foot weapons never share XP (ADR-0015). With one ship weapon in each family so far, none has a
+sibling, so each keeps all of its XP until a second Laser, Kinetic or Missile ship weapon arrives.
+
+**Disabling, not only destroying.** ADR-0006 gives a pirate a reason to disable a ship rather than
+obliterate it: disabling preserves most of the cargo. So ship weapons can damage a ship's **systems**
+(engines, weapons, the hold's door) as well as its hull, and the Railgun's Disabler tree is built on that.
+Whether it still matters depends on the death rethink (task 103), since cargo is what is lost either way.
+
+**Stagger on a ship is a jolt**: at 100, the ship is knocked off its line, thrust and turning cut for
+0.75 s. **Scorch** burns the hull as it burns a body.
+
+**Open for ships:** hardpoint **sizes** ("light" implies them; until decided, every ship weapon fits every
+hardpoint); **countermeasures** against missiles (a module, a skill, or the Railgun's point defence);
+whether the **Missile family** has an effect of its own beside Scorch and Stagger; and what an **on-foot
+weapon does to a ship**, and a ship weapon to someone on foot.
 
 ## Shared ideas still to design
 

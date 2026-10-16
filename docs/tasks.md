@@ -9908,11 +9908,22 @@ the type ignored, the rounding remainder dropped, the schedule rounded down, and
   Dissonance, Echo and a resonant link. **Drafted:** [Staff](weapons/staff.md) (Wavecaster, Gravity),
   [Focus](weapons/focus.md) (Mender, Warden) and [Saber](weapons/saber.md) (Duelist, Vanguard). That
   completes the nine on-foot weapons in draft.
+- **Ship weapons, decided by Joe the same day:** gimballed within about 15° (against fixed-forward and
+  turrets); hardpoints that vary by hull, the shuttle one and the freighter two, one weapon firing at a time
+  and switched between (against two on every ship, and all firing together); the families' mechanics
+  carry over, and missiles lock on and fire from a rack (against one ship-wide energy pool); and the shuttle
+  is armed with one light hardpoint (against unarmed). Recorded in [weapons/README.md](weapons/README.md#ship-weapons).
+  **Drafted:** [Beam Laser](weapons/beam-laser.md) (Lance, Burn), [Railgun](weapons/railgun.md) (Disabler,
+  Point defence; the Disabler built on ADR-0006's disabling) and [Missile Rack](weapons/missile-rack.md)
+  (Hunter, Swarm). That completes every weapon ADR-0015 names, in draft. **Open for ships:** hardpoint
+  sizes, countermeasures, a Missile family effect, ship systems as state, and what on-foot and ship
+  weapons do to each other.
 - **Decided by Joe on the Rifle's draft, 15 October:** heat is the whole Laser family's mechanic; weak
   points stay and **PvE will exist** (now on M6's roadmap line and design-bible §10, undesigned);
   Exposed stays, "fun if done right"; blindness and smoke "will need to be designed eventually".
 - **The Scattergun** (Kinetic, ranged, short range), suggested and not yet answered.
-- **Ship weapon names**, and whether more families than Laser, Kinetic and Missile fly.
+- **Ship weapon names** (Beam Laser, Railgun and Missile Rack are the drafts'), and whether more families
+  than Laser, Kinetic and Missile fly.
 - **XP per point of damage** (RuneScape gives four), and whatever earns a future buffer or shield its XP.
 - **Seeding the skills** (101): when the first weapon exists, with `family`, `type` and `mount` authored
   on each skill. The skills screen will want grouping before twelve more rows arrive, which is interface.
