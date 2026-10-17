@@ -195,6 +195,21 @@ public sealed class ContentValidatorTests
         Assert.Empty(ContentValidator.Validate(Pack(
             items: [Item("ore"), Item("plate", ItemCategory.Refined), Item("worn", category, equipsAs: kind)])));
 
+    // ── Objectives nothing raises (16 October) ───────────────────────────────
+
+    [Theory]
+    [InlineData(ObjectiveType.Travel)]
+    [InlineData(ObjectiveType.Talk)]
+    public void AnObjectiveNothingRaises_IsRejected(ObjectiveType objective)
+    {
+        // Dock was one of these until 16 October: the engine counted it and nothing ever sent it, and the last
+        // main-story quest could not be finished by anybody.
+        IReadOnlyList<ContentError> errors = ContentValidator.Validate(Pack(
+            quests: [Quest(steps: new QuestStepContent(1, "Go somewhere.", objective, "station_somewhere", 1))]));
+
+        Assert.True(HasError(errors, "nothing raises one yet"));
+    }
+
     // ── Weapons (task 194) ───────────────────────────────────────────────────
 
     private static readonly SkillContent RifleSkill = new(

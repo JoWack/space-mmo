@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data.Entities;
 
 using SpaceMMO.Data.Inventories;
+using SpaceMMO.Data.Quests;
+using SpaceMMO.Domain.Quests;
 
 namespace SpaceMMO.Data.Docking;
 
@@ -87,7 +89,23 @@ public sealed class DockingService(SpaceMmoDbContext database, InventoryService 
         // Kept after undocking, unlike the line above: it is where they come back after dying (ADR-0016).
         character.LastDockedStationId = stationId;
 
+        await using var transaction = _database.Database.CurrentTransaction is null
+            ? await _database.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         await _database.SaveChangesAsync(cancellationToken);
+
+        // A quest asking you to dock here counts it (found 16 October). Nothing ever raised a Dock objective: the
+        // quest engine took the event from the start and docking never sent one, so "Out of the Gravity Well", the
+        // last of the main story, could not be finished by anybody -- and nobody could ever leave new-player
+        // protection. Every quest test fed its events in by hand, which is how it went unseen.
+        await new QuestService(_database).RecordProgressAsync(
+            characterId, new ObjectiveEvent(ObjectiveType.Dock, station.Key, 1), cancellationToken);
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     /// <summary>Undocks a character. Doing this when not docked is not an error.</summary>

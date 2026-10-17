@@ -10284,3 +10284,37 @@ death, and to **M4**'s gear that matters. Decided in
 Needs a maximum condition on every instance (a column), what each repair costs (content, per item or per
 category), and what "worn out" means at the bottom: unusable for good, or gone. Nothing wears an item yet,
 so it matters from the day 103's 10% a death lands; it can be built before then.
+
+## 197 — Docking never counted toward quests, so nobody could finish the main story
+
+**Fixed 17 October; Ayla's quest counted by the seed and waiting to be turned in.** Found by Joe on 16 October
+setting up 194's playtest: Ayla flew to the Capital and docked at Borlash, and "Out of the Gravity Well" stayed
+at nothing, with no way to hand it in.
+
+**The cause.** The quest engine has taken Dock events since M1 (`QuestService.RecordProgressAsync`'s own comment
+names them), and nothing ever sent one: only gathering and industry report progress. So the last main-story quest
+could not be finished by anybody, and since new-player protection lasts until the main story is done (ADR-0008),
+**nobody could ever leave protection** — which is what would have stopped 194's playtest at the first shot. The
+dev database confirms it: no character has ever completed `intro_fly_to_capital`. Task 145's notes had assumed it
+worked ("a character who starts at the Capital finishes it standing still").
+
+**Why no test caught it.** Every quest test fed its events in by hand. They proved the engine counts a dock event
+and never that anything sends one — CLAUDE.md's "feed in the real value", one layer over.
+
+**The fix.**
+- `DockingService.DockAsync` reports a Dock event for the station, in the docking's own transaction.
+- Being docked there already counts: when the quest is taken, and when the step before a Dock step finishes.
+- `--seed` counts where everybody is docked, once, for characters who docked before docking counted. On the dev
+  database it moved Ayla's quest to Ready to Turn In.
+- **The siblings:** Travel and Talk are objective types the engine accepts and nothing raises either. No content
+  uses them, so nothing is stuck; the validator now refuses them, so no quest can be authored that nobody could
+  finish, until something raises them.
+
+**Verified:** Domain 618, Data 300, API 112. `DockObjectiveTests` go through `DockingService` as the game server
+does: docking at the target finishes the quest and pays, elsewhere does nothing, already docked counts at accept
+and when the step before finishes, and the seed counts once and then finds nothing. Each part broken on purpose
+fails its own test. One full data run took 7 min 19 s against the usual 50 s, with Joe's game and API running on
+the same Postgres; a re-run took 50 s with no test slower than 2.2 s, and the cause was not found.
+
+**For Joe:** turn the quest in from the station's Quests tab. Restart the API, or docking will not count again
+until it is: the running one predates the fix.

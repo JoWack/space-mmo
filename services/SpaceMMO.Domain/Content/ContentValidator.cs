@@ -1041,6 +1041,17 @@ public static class ContentValidator
                     "quest", quest.Key, $"Step {step.Ordinal} has no description."));
             }
 
+            // Nothing raises these yet (16 October): an objective with no event behind it is a quest that can never
+            // be finished, which is what Dock was until docking began raising it. Allowed back when something
+            // raises it.
+            if (step.Objective is ObjectiveType.Travel or ObjectiveType.Talk)
+            {
+                errors.Add(new ContentError(
+                    "quest",
+                    quest.Key,
+                    $"Step {step.Ordinal} is a {step.Objective} objective, and nothing raises one yet: it could never be finished."));
+            }
+
             // Travel, dock, and talk are singular actions; asking for three of them would never
             // complete, since each event carries a quantity of one.
             bool singular = step.Objective

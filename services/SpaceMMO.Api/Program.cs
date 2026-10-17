@@ -262,6 +262,15 @@ if (args.Contains("--seed", StringComparer.Ordinal))
         Console.WriteLine($"Equipped {line}.");
     }
 
+    // Docked where a quest asks counts (found 16 October): docking never raised its event before, so anybody
+    // already docked at the Capital is still waiting on "Out of the Gravity Well". Idempotent.
+    int docked = await new QuestService(database).CountEveryoneDockedAsync();
+
+    if (docked > 0)
+    {
+        Console.WriteLine($"Counted where {docked} quest(s) were docked.");
+    }
+
     return 0;
 }
 

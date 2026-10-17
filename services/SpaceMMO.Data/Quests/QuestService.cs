@@ -110,9 +110,61 @@ public sealed class QuestService(SpaceMmoDbContext database)
         _database.CharacterQuests.Add(accepted);
 
         await _database.SaveChangesAsync(cancellationToken);
+
+        // Already docked where it asks counts (task 145 expected a character starting at the Capital to finish
+        // the last quest standing still).
+        await CountWhereDockedAsync(characterId, cancellationToken);
+
         await transaction.CommitAsync(cancellationToken);
 
         return accepted.Id;
+    }
+
+    /// <summary>
+    /// Counts the station a character is docked at towards any quest step asking them to dock there.
+    /// </summary>
+    /// <remarks>
+    /// Docking raises the event when it happens; this covers the station being reached first and the quest or
+    /// step after. A Dock step wants one, so counting it again cannot count it twice. Also run by <c>--seed</c>,
+    /// for characters docked at the target before docking counted at all.
+    /// </remarks>
+    public async Task CountWhereDockedAsync(int characterId, CancellationToken cancellationToken = default)
+    {
+        string? stationKey = await _database.Characters
+            .Where(c => c.Id == characterId && c.DockedStationId != null)
+            .Select(c => c.DockedStation!.Key)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (stationKey is not null)
+        {
+            await RecordProgressAsync(
+                characterId, new ObjectiveEvent(ObjectiveType.Dock, stationKey, 1), cancellationToken);
+        }
+    }
+
+    /// <summary>Runs <see cref="CountWhereDockedAsync"/> for everybody docked. Idempotent.</summary>
+    /// <returns>How many quests it finished.</returns>
+    public async Task<int> CountEveryoneDockedAsync(CancellationToken cancellationToken = default)
+    {
+        List<int> docked = await _database.Characters
+            .Where(c => c.DockedStationId != null)
+            .Select(c => c.Id)
+            .ToListAsync(cancellationToken);
+
+        int finished = 0;
+
+        foreach (int characterId in docked)
+        {
+            int before = await _database.CharacterQuests.CountAsync(
+                q => q.CharacterId == characterId && q.State != QuestState.InProgress, cancellationToken);
+
+            await CountWhereDockedAsync(characterId, cancellationToken);
+
+            finished += await _database.CharacterQuests.CountAsync(
+                q => q.CharacterId == characterId && q.State != QuestState.InProgress, cancellationToken) - before;
+        }
+
+        return finished;
     }
 
     /// <summary>
@@ -178,6 +230,7 @@ public sealed class QuestService(SpaceMmoDbContext database)
 
         var advanced = new List<long>();
         var completed = new List<long>();
+        bool steppedOn = false;
         Credits granted = Credits.Zero;
         Credits withheld = Credits.Zero;
 
@@ -221,6 +274,7 @@ public sealed class QuestService(SpaceMmoDbContext database)
             {
                 characterQuest.StepOrdinal++;
                 characterQuest.StepProgress = 0;
+                steppedOn = true;
                 continue;
             }
 
@@ -247,6 +301,13 @@ public sealed class QuestService(SpaceMmoDbContext database)
         }
 
         await _database.SaveChangesAsync(cancellationToken);
+
+        // A step just reached may be one already done: "now dock at the Capital" while docked there. Once, and
+        // never from a dock event itself, which is what this would raise.
+        if (steppedOn && objectiveEvent.Type != ObjectiveType.Dock)
+        {
+            await CountWhereDockedAsync(characterId, cancellationToken);
+        }
 
         if (transaction is not null)
         {
