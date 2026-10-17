@@ -202,8 +202,11 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   `stamina` and pilot skills, PvE (creatures to fight, which Joe confirmed on 15 October and nothing yet
   designs), security zones and pairwise aggression
   ([ADR-0008](docs/adr/0008-factions-pvp-and-markets.md),
-  [ADR-0009](docs/adr/0009-retaliation.md)), and death and insurance made real
-  ([ADR-0006](docs/adr/0006-death-and-insurance.md))
+  [ADR-0009](docs/adr/0009-retaliation.md)), health, damage from crafted tiers, a stamina pool and
+  a dodge roll ([ADR-0017](docs/adr/0017-the-scale-of-health-damage-and-stamina.md)), and death made
+  real: materials lost, gear and ships kept and worn, repaired at stations, a respawn at the last
+  docked station ([ADR-0016](docs/adr/0016-death-costs-materials-and-gear-wears.md), superseding
+  ADR-0006's insurance)
 - **M7** — a world worth being in: terrain that is textured rather than grey, cube-sphere LOD so a
   planet is not one patch on a smooth ball, caves
   ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md)), settlements, buildings you can walk

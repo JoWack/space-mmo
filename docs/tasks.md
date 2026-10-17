@@ -1589,11 +1589,18 @@ two that have no XP source, and pointless before there is an action that awards 
 in ships (design-bible §2, "Weapon skills"; task 192). Which skills to seed now waits on 192's weapon
 list; `constitution` and `stamina` still wait on 102.
 
+**Changed 16 October:** 102 is decided ([ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md)),
+so nothing here waits on a decision any more. Seed with the first things that award them: the Laser Rifle's
+skill, `weaponcrafting` and `constitution` with the first weapon (194), `stamina` with its pool (195).
+
 ## 102 — Decide where `constitution` and `stamina` XP comes from
 
-**Pending. A decision, not an implementation.**
+**Decided 16 October by Joe, in [ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md).**
+Constitution earns a third of every combat XP award, on top; it is even across weapons because weapon XP
+already is, which answers the normalisation worry below. Stamina earns XP for stamina spent. Health runs
+from 1,000 to 2,000, the stamina pool from 100 to 150. Building it is 101's seeding, 194 and 195.
 
-Design bible §2 names this as open: they "are pools, not activities, so they need a defined XP source
+Design bible §2 named this as open: they "are pools, not activities, so they need a defined XP source
 before they're implemented — most likely awarded passively alongside combat actions, as RuneScape
 does with Hitpoints."
 
@@ -1605,7 +1612,9 @@ players have XP is a migration and an apology.
 
 ## 103 — Make death and insurance real
 
-**Pending.** ADR-0006 is accepted and entirely inert.
+**Decided 16 October: [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md), superseding ADR-0006.
+Now an implementation, blocked on 194**, since nothing can die until something can be shot. ADR-0006 was
+accepted and entirely inert; what is below was written before the decision and is kept as its context.
 
 Cause-based loot destruction and acquisition-value insurance are implemented in `SpaceMMO.Domain`
 and covered by tests, and nothing can currently die. The rules also cannot bite while everything a
@@ -1633,6 +1642,28 @@ something supersedes it. What it would touch, written down so the revisit starts
 - **A middle already in the design**: ADR-0006's three outcomes include *damaged*. Gear could survive
   death damaged rather than destroyed, so dying costs a repair (design-bible §10, the repair loop) rather
   than the item, and materials are lost outright.
+
+### Decided by Joe, 16 October
+
+Recorded in ADR-0016, each offered against alternatives: **only materials are lost** (stackables carried,
+and the hold's if the ship went down); **half drops** in a container anyone may loot for 10 minutes and
+**half is destroyed**; what is kept — worn gear, weapons, the ship — **loses 10% condition**, and at 0 is
+broken until repaired; **repairs restore condition but lower the maximum** (196); **you respawn at the
+station you last docked at**, a ship that went down put away in its hangar; **dying at a station costs
+nothing**; **insurance is retired**.
+
+### What building it means
+
+- A death on the server, from damage (194), with its cause and where it happened.
+- The materials split: half of each stack destroyed, half into a lootable container in the world for 10
+  minutes. The container is new: a world actor, its contents server-side, opened like a deposit.
+- 10% condition off everything equipped (193's slots) and off the ship if it went down.
+- Respawn at the last docked station, on foot; the ship put away in that station's hangar.
+- Retiring `SpaceMMO.Domain.Loss`'s resolver and rule table, built to ADR-0006's cause table and never
+  called, rather than leaving them to look like the rule; and revisiting the death record in
+  `Entities/Ledger.cs`, whose seed was for that resolver's rolls.
+- **Open (ADR-0016):** what a disabled ship gives up when it is not destroyed, and whether faction space
+  keeps a defended player's drop from third parties.
 
 ## 104 — Pairwise aggression and security zones
 
@@ -6859,7 +6890,9 @@ CLAUDE.md, before any of them is scheduled.
 
 ## 172 — A capital city on every home world
 
-**Pending, blocked on Joe's playtest of 167 to 169**, which make Borlash the template. Belongs to
+**Pending, blocked on a name and concept art for each world.** It was blocked on Joe's playtest of 167
+to 169, which make Borlash the template; all three were confirmed in play on 2 October, and that line
+was not updated until 16 October. Belongs to
 **M7** (settlements). Joe, 2 October: "I'd like to populate each world with their capital city. Let's
 start with the Capital planet and the city/settlement called Borlash."
 
@@ -9946,9 +9979,13 @@ Four rounds, each offered with alternatives; the details are in [weapons/README.
 - **Seeding the skills** (101): when the first weapon exists, with `family`, `type` and `mount` authored
   on each skill. The skills screen will want grouping before twelve more rows arrive, which is interface.
 
-**Also blocked on:** 102 (constitution and stamina, which abilities may draw on), 179's equipment
-slots (two weapons equipped needs somewhere to equip them), and the attack record in 104 (where a weapon
-may be fired is built; who has fired at whom is not).
+**Also blocked on:** the attack record in 104 (where a weapon may be fired is built; who has fired at whom
+is not). **No longer blocked on** 102, decided 16 October (ADR-0017), or on equipment slots, built 16 October
+by 193 (this line named 179's, which was where the slots were first expected).
+
+**The XP rate, decided 16 October (ADR-0017):** a weapon reaches 70 in about 50 hours of fighting with it,
+which puts the XP per point of damage near 0.12, to be measured and set when the first weapon fires (194).
+Damage comes from the weapon's crafted tier, not its level.
 
 ## 193 — Equipment: slots to wear weapons, armour and tools in
 
@@ -10097,3 +10134,63 @@ prompt's red line over a real rock.
 - **`FParse::Value` stops at `,` and `)` unless told not to.** `SpaceMMOBuildMenus -Rebuild=A,B,C` has only
   ever rebuilt A — three Blueprints were asked for and one came back. Fixed there, and in its sibling: a
   `-BackendPassword=` containing either character arrived cut short, which would read as a wrong password.
+
+## 194 — The first weapon, end to end
+
+**Pending, 16 October. Needs Joe's yes on its interface before that part is built.** Belongs to **M6**. The
+build that ADR-0015, ADR-0016 and ADR-0017 were decided for: one weapon, fired on foot, doing damage that
+can kill, earning XP, with death costing what ADR-0016 says. Everything after it is more of the same.
+
+**The weapon is the Laser Rifle**, Joe's first on the list, Laser family, ranged (192,
+[weapons/laser-rifle.md](weapons/laser-rifle.md)), basic attack only: its heat (weapons/README), heavy
+attack and trees come after the loop works.
+
+What it needs, in order:
+1. **Content**: the Laser Rifle as an item (`Weapon`, `equipsAs: Weapon`, styles as every crafted good)
+   and a tier-1 recipe; `weaponcrafting`, the rifle's skill (family, type, mount authored, ADR-0015) and
+   `constitution` seeded (101).
+2. **Health** on every character, 1,000 at constitution 1 to 2,000 at 99, held by the server.
+3. **Firing from Weapon 1** (193's slot): the dedicated server decides the hit, with the zone and facing
+   multipliers of ADR-0017 (head ×1.5, legs ×0.75, back ×1.2). About 110 damage a second at tier 1.
+4. **XP**: the weapon's share and its sibling's (`WeaponXp.Share`, already built), constitution's third, at
+   about 0.12 a point of damage until measured.
+5. **Who may shoot whom**: the attack record in 104, on the faction space built 14 October.
+6. **Death** as 103 lays it out.
+
+**Interface, all Joe's to approve first:** a health bar, the rifle's heat, hit feedback, and what dying and
+coming back look like.
+
+**Open before it starts:** what the first thing to shoot is. PvE is undesigned (192), so either another
+player (two clients, as 182 was tested) or a target that exists only to be shot.
+
+## 195 — Stamina, and a dodge roll
+
+**Pending, 16 October. Needs Joe's yes on its bar before that part is built.** Belongs to **M6** for the
+pool, and to **M5** for the key, as sprint (136) did. Decided in
+[ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md):
+
+- A pool of 100 at stamina 1, 150 at 99, refilling 20 a second after 1 s without spending.
+- **Sprint drains it** while held, and at zero drops to a run. Sprint has been free since 136.
+- **The dodge roll, on Left Ctrl**: about 4 m over 0.5 s in the direction of movement, backwards if
+  standing still, untouchable for the first 0.25 s, 25 stamina.
+- **Jumping is free** (Joe, against a small cost).
+- `stamina` seeded (101), earning XP for stamina spent; the rate is content.
+
+Needs a roll animation for every race, made the way 191's sprint was (Blender MCP), and a stamina bar
+(interface). The untouchable quarter-second only means something once something can hit (194), and in PvP
+the server and the client have to agree when a roll began.
+
+## 196 — Repair at a station
+
+**Pending, 16 October. Needs Joe's yes on how it looks in the station screen.** Belongs to **M6**, with
+death, and to **M4**'s gear that matters. Decided in
+[ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md):
+
+- Any station's industry bay repairs an item, for materials (some of what it is made of) and credits.
+- Repair restores condition to the item's maximum and **lowers the maximum a little**: 2 points in Joe's
+  preview, so an item dies and is repaired about sixty times before it is worn out.
+- A broken item (condition 0) is kept, and unusable until repaired: the tool gates already refuse it.
+
+Needs a maximum condition on every instance (a column), what each repair costs (content, per item or per
+category), and what "worn out" means at the bottom: unusable for good, or gone. Nothing wears an item yet,
+so it matters from the day 103's 10% a death lands; it can be built before then.

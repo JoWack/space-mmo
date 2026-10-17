@@ -143,12 +143,15 @@ duel becomes a fight over who can still aim.
   ship, but a hit on one of its systems' weak points counts in full. Ship weapons cannot target someone on
   foot: nobody is strafed from orbit. Offered against ships strafing, and separate scales.
 - **Hit zones and facing.** Every body and creature has a **head, body and legs**, and every hit is from the
-  **front, side or back**. Each race's build, and each creature's, has its zones fitted once. Offered
+  **front, side or back**: head ×1.5, body ×1, legs ×0.75, and ×1.2 from behind, before armour (ADR-0017). Each race's build, and each creature's, has its zones fitted once. Offered
   against head and body only, and none.
 - **No stealth.** Position, cover and smoke, but nobody is invisible, which keeps faction space defended
   rather than hunted (ADR-0009): you can always see who is coming. Offered against maybe later, and yes.
-- **XP per point of damage waits for damage numbers.** Health and weapon damage have no scale yet, and the
-  rate means nothing without them; set it then, tuned so a weapon reaches 70 in a planned number of hours.
+- **The scale, decided 16 October ([ADR-0017](../adr/0017-the-scale-of-health-damage-and-stamina.md)).**
+  An even fight on foot lasts 8–12 s; health runs from 1,000 at constitution 1 to 2,000 at 99; a weapon's
+  damage comes from its crafted tier, not from its level; a weapon reaches 70 in about 50 hours of
+  fighting, which puts the XP per point of damage near 0.12, to be measured when the first weapon fires.
+  Sprint and a dodge roll (Left Ctrl, 4 m, untouchable for 0.25 s) spend stamina.
 
 ## Shared ideas still to design
 

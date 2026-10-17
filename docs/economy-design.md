@@ -164,6 +164,10 @@ a reason to exist.
 
 ## 3a. Ship insurance
 
+> **Superseded 16 October by [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md):** ships are
+> kept on death, so insurance has nothing to insure and is retired. Kept below as the reasoning ADR-0006
+> rested on, and because the fraud analysis still applies to anything ever pegged to a reference price.
+
 **Decision: insurance is optional, tiered, and pays a percentage of the ship's
 recorded value.**
 
@@ -245,6 +249,11 @@ The consequences follow directly:
 ---
 
 ## 3b. Death, loot, and destruction
+
+> **Superseded 16 October by [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md):** only
+> materials are lost, half dropped where you fell and half destroyed; gear and ships are kept and lose
+> condition, and repairs lower an item's maximum. The cause table below no longer drives anything. Its
+> material sink is weaker than this one, so §5a's sink gap needs measuring again.
 
 **Decision: what survives a death depends on how the death happened.** A ship that
 detonates does not leave a tidy pile of cargo.

@@ -104,9 +104,11 @@ Three categories. The M1 slice implements only the skills marked **[M1]**.
 | `warp` | Warp | Warp range, spool time; gates inter-system travel |
 
 **Note on `constitution` and `stamina`:** these are pools, not activities, so they
-need a defined XP source before they're implemented — most likely awarded passively
-alongside combat actions, as RuneScape does with Hitpoints. Deferred to the combat
-milestone.
+needed a defined XP source before they could be implemented. **Decided 16 October in
+[ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md):** constitution earns a third of
+every combat XP award on top, and health runs from 1,000 at level 1 to 2,000 at 99; stamina earns
+XP for stamina spent, and its pool runs from 100 to 150. Sprint and a dodge roll spend it; jumping
+is free.
 
 ### Weapon skills (Joe, 14 October 2026)
 
@@ -174,9 +176,10 @@ this is what makes bulk hauling a real profession and gives freighters a purpose
 item *damaged* rather than destroyed, and insurance payouts are pegged to what a
 specific hull actually cost. See [economy-design.md](economy-design.md) §3a–3b.
 
-The repair loop that `condition` implies — a repair skill, material costs, and
-probably a condition ceiling that degrades per repair so items eventually die anyway —
-is **deferred past M3**. The column exists from the first migration regardless, since
+The repair loop that `condition` implies is **decided by
+[ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md)** (16 October): any station repairs an
+item for materials and credits, restoring its condition and lowering its maximum a little, so items
+eventually wear out. A repair skill may come later. It was **deferred past M3**. The column exists from the first migration regardless, since
 adding one to a table full of live player items is far worse than carrying an unused
 one.
 
@@ -484,17 +487,19 @@ future credit source must route through them.
    *tuning*: the capital's fee premium, flight times between bodies, and which
    high-tier recipes cross faction lines. Those are content numbers, and EconSim
    should settle them.
-2. **`constitution` / `stamina` XP sources** — see §2.
-3. **Repair loop mechanics** — `condition` is in the schema from the start, but the
-   repair skill, its material costs, and whether repeated repairs permanently lower an
-   item's condition ceiling are undecided. Deferred past M3; see §3.
+2. ~~**`constitution` / `stamina` XP sources**~~ — decided in
+   [ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md); see §2.
+3. ~~**Repair loop mechanics**~~ — decided in
+   [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md): a station service, materials and
+   credits, and a maximum that falls with each repair. What a repair costs per item is content.
 4. **Repeatable sidequest content** — the daily cap and the mechanism are designed;
    the actual quests are not written.
 5. **Career questline content** — the natural M4 content milestone.
 6. **All `TODO(name)` naming** — planets. (Factions named 30 September: §1.)
-7. **What death costs** — Joe is rethinking ADR-0006 (15 October): perhaps only materials are lost, and
-   weapons, ships and other gear kept. To revisit as combat, insurance and death are built; task 103
-   lists what it would change.
+7. ~~**What death costs**~~ — decided 16 October in
+   [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md), superseding ADR-0006: only materials
+   are lost, half dropped and half destroyed; gear and ships are kept and wear; insurance is retired.
+   Open: what a disabled ship gives up, and whether faction space keeps a defended player's drop.
 8. **PvE** — Joe confirmed on 15 October that there will be creatures to fight, with weak points
    (task 192, [weapons/README.md](weapons/README.md)). What they are, where they live, what they drop,
    and how they fit a world whose materials are planet-locked are all undesigned. Hosted by M6.

@@ -1,6 +1,7 @@
 # ADR-0006 — Cause-based loot destruction, and insurance pegged to acquisition value
 
-**Status:** Accepted · 2026-07-29
+**Status:** Accepted · 2026-07-29 · **superseded by [ADR-0016](0016-death-costs-materials-and-gear-wears.md)**,
+2026-10-16: only materials are lost, gear and ships are kept and wear, and insurance is retired
 
 ## Context
 
