@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Api.Endpoints;
 using SpaceMMO.Data;
+using SpaceMMO.Data.Combat;
 using SpaceMMO.Data.Content;
 using SpaceMMO.Data.Docking;
 using SpaceMMO.Data.Gathering;
@@ -42,6 +43,7 @@ builder.Services.AddScoped<ShipService>();
 builder.Services.AddScoped<QuestService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<WhereaboutsService>();
+builder.Services.AddScoped<CombatService>();
 builder.Services.AddScoped<Caller>();
 
 // The Unreal dedicated server's own credential. Absent unless configured, and absent means every
@@ -302,6 +304,7 @@ app.MapCharacterEndpoints();
 app.MapGatheringEndpoints();
 app.MapDockingEndpoints();
 app.MapWhereaboutsEndpoints();
+app.MapCombatEndpoints();
 app.MapShipEndpoints();
 app.MapIndustryEndpoints();
 app.MapMarketEndpoints();

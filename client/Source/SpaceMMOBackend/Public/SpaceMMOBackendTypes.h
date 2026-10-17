@@ -1227,6 +1227,141 @@ struct SPACEMMOBACKEND_API FBackendResourceNode
 };
 
 /**
+ * Where on a body a hit landed, mirroring HitZone on the server (task 194).
+ *
+ * Sent by the dedicated server to the API as a number; pinned by the server's WireContractTests. Append only.
+ */
+UENUM(BlueprintType)
+enum class EBackendHitZone : uint8
+{
+	Head = 0,
+	Body = 1,
+	Legs = 2,
+};
+
+/** Which side of the target a shot came from, mirroring HitFacing on the server. */
+UENUM(BlueprintType)
+enum class EBackendHitFacing : uint8
+{
+	Front = 0,
+	Side = 1,
+	Back = 2,
+};
+
+/** The weapon a character would fire: what is in Weapon 1 (task 194). */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendWeapon
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 ItemInstanceId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString ItemKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Name;
+
+	/** The skill it levels: <c>laser_rifle</c>. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString SkillKey;
+
+	/** A basic attack's damage on the body from the front, before armour. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Damage = 0;
+
+	/** The least time between two basic attacks. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 CooldownMs = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 RangeMetres = 0;
+};
+
+/** A character's health now, and what they would fire, as the game server reads it (task 194). */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendCombatStatus
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 CharacterId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Health = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 MaxHealth = 0;
+
+	/** Whether Weapon 1 holds a weapon that works. When false, Weapon means nothing. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bHasWeapon = false;
+
+	/** How long ago they last dealt or took damage; negative for never. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	double SecondsSinceCombat = -1.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FBackendWeapon Weapon;
+};
+
+/**
+ * What a hit did, or why it did nothing (task 194).
+ *
+ * A refusal is an ordinary answer -- the rules said no (<c>not_allowed</c>), the shooter holds nothing that fires
+ * (<c>no_weapon</c>), or the target was already dead -- and arrives as a 200 with Refusal set.
+ */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendHitResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bLanded = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString Refusal;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Damage = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 TargetHealth = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 TargetMaxHealth = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	bool bKilled = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString WeaponSkillKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 WeaponXp = 0;
+};
+
+/** Where a character came back after dying (task 194). */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendRespawn
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 StationId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	FString StationKey;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Health = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 MaxHealth = 0;
+};
+
+/**
  * What one gathering attempt actually yielded.
  *
  * A zero quantity is a success, not a failure: it means too little time has passed since this

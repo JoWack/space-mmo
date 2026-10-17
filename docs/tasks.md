@@ -1592,6 +1592,7 @@ list; `constitution` and `stamina` still wait on 102.
 **Changed 16 October:** 102 is decided ([ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md)),
 so nothing here waits on a decision any more. Seed with the first things that award them: the Laser Rifle's
 skill, `weaponcrafting` and `constitution` with the first weapon (194), `stamina` with its pool (195).
+**`laser_rifle`, `weaponcrafting` and `constitution` were seeded by 194 the same day.**
 
 ## 102 — Decide where `constitution` and `stamina` XP comes from
 
@@ -1667,7 +1668,9 @@ nothing**; **insurance is retired**.
 
 ## 104 — Pairwise aggression and security zones
 
-**Faction space built 14 October; the attack record waits on weapons (192).** ADR-0008 and ADR-0009 are
+**Faction space built 14 October; the attack record built 16 October by 194**, with the first weapon:
+`attack_records`, one row a pair and direction, written on every attack the rules allow and read as "when did my
+target last attack me". ADR-0008 and ADR-0009 are
 accepted; the rule was built in August, and its numbers now fit the system (below).
 
 ADR-0009 settles the rule — aggression is pairwise, faction space is defended rather than hunted —
@@ -9979,8 +9982,8 @@ Four rounds, each offered with alternatives; the details are in [weapons/README.
 - **Seeding the skills** (101): when the first weapon exists, with `family`, `type` and `mount` authored
   on each skill. The skills screen will want grouping before twelve more rows arrive, which is interface.
 
-**Also blocked on:** the attack record in 104 (where a weapon may be fired is built; who has fired at whom
-is not). **No longer blocked on** 102, decided 16 October (ADR-0017), or on equipment slots, built 16 October
+**Also blocked on:** nothing recorded. The attack record in 104 was built by 194 on 16 October, with the
+Laser Rifle firing. **No longer blocked on** 102, decided 16 October (ADR-0017), or on equipment slots, built 16 October
 by 193 (this line named 179's, which was where the slots were first expected).
 
 **The XP rate, decided 16 October (ADR-0017):** a weapon reaches 70 in about 50 hours of fighting with it,
@@ -10137,7 +10140,7 @@ prompt's red line over a real rock.
 
 ## 194 — The first weapon, end to end
 
-**Pending, 16 October. Needs Joe's yes on its interface before that part is built.** Belongs to **M6**. The
+**Stage 1 built, 16 October; waiting on Joe's two-client playtest.** Stage 2 is 103's losses. Belongs to **M6**. The
 build that ADR-0015, ADR-0016 and ADR-0017 were decided for: one weapon, fired on foot, doing damage that
 can kill, earning XP, with death costing what ADR-0016 says. Everything after it is more of the same.
 
@@ -10161,7 +10164,94 @@ What it needs, in order:
 coming back look like.
 
 **Open before it starts:** what the first thing to shoot is. PvE is undesigned (192), so either another
-player (two clients, as 182 was tested) or a target that exists only to be shot.
+player (two clients, as 182 was tested) or a target that exists only to be shot. **Answered by Joe, 16 October:
+two clients**, another player.
+
+### Decided by Joe, 16 October
+
+Each offered against alternatives, Claude's suggestion first:
+- **Health comes back out of combat, quickly**: 10 s after the last damage dealt or taken, 5% of the maximum a
+  second. Offered against only by respawning, and always slowly.
+- **The HUD**: your health as a bar with its number at bottom centre, where stamina's will go under it (195);
+  the target's name and a thin bar over their head while you are hitting them; **damage numbers** where each hit
+  landed, gold for the head (Joe chose these over the bar and marker alone); the crosshair flashing on a hit and
+  red on a kill.
+- **Health bars are red, always, and glow harder as health runs low** — Joe's change to the mock's ice blue,
+  given with his yes to the rest.
+- **The bolt is a bright streak** from the shooter's chest to where it hit, with a flash there, seen by both.
+  Offered against an instant beam, and nothing.
+- **Dying shows a panel with a Respawn button**: "Killed by Orenthal", where you will come back, and the button.
+  Offered against coming back by itself after 5 s, and at once.
+- The two refusal lines in the mock, approved with it: "You can't attack them here" and "Nothing in Weapon 1
+  fires".
+
+### Stage 1, built 16 October
+
+**Server.**
+- Content: `weaponcrafting`, `constitution` and the Laser Rifle's skill seeded (101, in part), the skill carrying
+  its family, type, mount and XP rate; the **Laser Rifle** item (tier 1: 55 a bolt, 500 ms, 150 m) and its recipe
+  (weaponcrafting 1: 6 plate, 10 scrap, the plate's world for its look). The validator holds a weapon to having
+  numbers and a weapon's skill, and refuses weapons without constitution to take its third.
+- `CombatHealth` and `Hits` in the domain: health 1,000 to 2,000 by level, regeneration by the clock, the zone and
+  facing multipliers, XP per hundred points of damage and constitution's third.
+- `CombatService` and service-only `/combat` endpoints: a hit judged by `Pvp.CanAttack` with the target's
+  protection and **the attack record** (104's per-pair timestamp, built here), the weapon in Weapon 1, the damage,
+  both characters' health stored as of now before the clock moves, XP for the damage that landed (not overkill),
+  a death record on a kill; respawning at the last docked station, or the home world's first; status for the game
+  server to replicate. Faction space is written onto the star system at seed, so the API never reads `data/`.
+  Docking now remembers the last station after undocking.
+
+**Client and dedicated server.**
+- `USpaceMMOCombatComponent` on every character, attached by the server as gathering is: the **Fire** key (left
+  mouse, never through an open screen), the aim point from the camera, and on the server the shot itself —
+  `SpaceMMO::Shot` against each character's capsule in system space, then a physics trace for buildings and a walk
+  along the shot against the height function for the ground (terrain has no collision, ADR-0013). Health is
+  replicated as of the last fight and worked out on every machine by the API's rule, so bars fill with nothing
+  sent. A change to Weapon 1, however made, is noticed in the client's own inventory and sent to the server.
+- `ASpaceMMOBoltActor`, the streak, drawn by every client from the server's multicast.
+- `USpaceMMOCombatHud` (`WBP_CombatHud`, built by SpaceMMOBuildMenus) and the crosshair's flash.
+- The dead cannot move (`SetMovementLocked` on the pawn, replicated so the owner's prediction stops too) and get
+  the cursor for the Respawn button.
+- `SpaceMMOLookPanels Combat` and `Dead` show the HUD over sample numbers; `SpaceMMO.Fire` fires from the console.
+
+### Verified, and how
+
+- Suites: Domain 616, Data 295, API 112, client 317, after the last change, against builds that said
+  `Result: Succeeded`.
+- **Broken on purpose, each failing its own test**: on the server, no rule check, regeneration not kept before the
+  clock moves, XP for overkill (the health check constraint refuses it first), no constitution share, protection
+  ignored, no attack record, faction space not seeded, the last dock forgotten, no home fallback, the head
+  unscaled, regeneration with no wait, a weapon without numbers; on the client, regeneration with no wait, the
+  head threshold raised, front and back swapped, the glow with no floor.
+- **The client parses the API's own JSON**: a status, a landed head shot from behind (99) and a refusal, captured
+  from the endpoint tests.
+- `--seed` applied the `Combat` migration on the dev database: the rifle and its skills arrived with their
+  numbers, faction space sits on the system, and the three docked characters have a last docked station.
+- **Rendered**: `Combat` and `Dead` captures match the approved mock with Joe's red. The first capture showed no
+  damage number; two log lines measured it being placed, then thousands of pixels off screen, because the look
+  harness's character is falling at 32.6 m/s and the sample's hit point stayed put. In play a number stays where
+  the shot landed, which is right; the sample now follows the head.
+
+**Not verified by anything but the playtest:** the key, the aim, a bolt between two machines, a hit landing,
+health and bars on the other client, killing, the panel, the button and coming back at the station.
+
+### Playing it
+
+Two characters of **different factions** (friendly fire is never legal), the target **not under new-player
+protection** (main story finished), and a **Laser Rifle in Weapon 1** on whoever fires. On foot every fight is
+on somebody's homeworld: the local may fire first, the intruder only answer (ADR-0009). The dev database's pair:
+Ayla1204 (playera, faction A, six of seven main-story quests done) and Orenthal (player, faction B, three of
+seven), with no rifles yet. A rifle is a weaponcrafting job: 6 Structural Plate and 10 Scrap Alloy at any station.
+
+### Not done, and why
+
+- **ADR-0016's costs** — half the materials dropped in a lootable container, 10% wear — are 103, stage 2.
+- **Heat, the focused beam, the trees** come once the loop is played.
+- **No rifle model, no aiming or firing animation**, and the dead stand where they fell: the streak leaves the
+  chest, and nothing yet says a character is down except the bars and the panel.
+- **The XP rate** is ADR-0017's estimate until fights can be measured.
+- **Equipping "out of combat"** (193) can now be enforced, and is not yet.
+
 
 ## 195 — Stamina, and a dodge roll
 

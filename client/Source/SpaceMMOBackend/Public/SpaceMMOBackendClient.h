@@ -181,6 +181,31 @@ public:
 		FOnGatherComplete OnComplete = FOnGatherComplete(),
 		FOnGatherFailed OnRefused = FOnGatherFailed());
 
+	/**
+	 * Reports a hit the game server traced, for the API to judge (task 194). Service only: a hit is a fact about
+	 * where two bodies were, which only the simulation knows.
+	 */
+	void HitAsServer(
+		int32 AttackerCharacterId,
+		int32 TargetCharacterId,
+		EBackendHitZone Zone,
+		EBackendHitFacing Facing,
+		const FVector& PositionKilometres,
+		TFunction<void(const FBackendHitResult&)> OnResult,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
+	/** Reads a character's health and the weapon in Weapon 1, for the server to replicate and fire with. */
+	void FetchCombatStatusAsServer(
+		int32 CharacterId,
+		TFunction<void(const FBackendCombatStatus&)> OnStatus,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
+	/** Brings a dead character back at the station they last docked at (ADR-0016). */
+	void RespawnAsServer(
+		int32 CharacterId,
+		TFunction<void(const FBackendRespawn&)> OnRespawn,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
 	/** True if a service secret was found, so the server can actually act. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	bool HasServiceSecret() const { return !ServiceSecret.IsEmpty(); }

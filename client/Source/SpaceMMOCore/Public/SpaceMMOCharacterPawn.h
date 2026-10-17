@@ -153,6 +153,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Character")
 	FSystemCoordinate GetSystemPosition() const { return Navigation.SystemPosition; }
 
+	/**
+	 * Stops everything a player presses from moving them, or lets it again (task 194): while dead, until they
+	 * come back. Server only; replicated, so the owning client's prediction stops too rather than walking off and
+	 * being pulled back.
+	 */
+	void SetMovementLocked(bool bLocked);
+
+	bool IsMovementLocked() const { return bMovementLocked; }
+
+	/** How wide the body is, for anything that has to hit it rather than walk into it (task 194). */
+	double GetCollisionRadiusCentimetres() const { return CollisionRadiusCentimetres; }
+
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Character")
 	void SetSystemPosition(const FSystemCoordinate& NewPosition);
 
@@ -724,6 +736,10 @@ protected:
 	/** The race being drawn; INDEX_NONE until the owning client says (SetBodyRace). */
 	UPROPERTY(ReplicatedUsing = OnRep_BodyRace)
 	int32 BodyRace = INDEX_NONE;
+
+	/** See SetMovementLocked. */
+	UPROPERTY(Replicated)
+	bool bMovementLocked = false;
 
 	/** The last race this client asked the server for, so a caller every frame sends it once. */
 	int32 BodyRaceRequested = INDEX_NONE;

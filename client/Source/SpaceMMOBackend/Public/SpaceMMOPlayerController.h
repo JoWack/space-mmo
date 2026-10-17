@@ -203,7 +203,8 @@ public:
 	 *
 	 *   SpaceMMOLookPanels Inventory|Station|Skills|Pair|Equipment|Gear|SignIn|Flight [Market|Industry|Quests|MyOrders|Ships] [prompt] [shot]
 	 *
-	 * Gear is the equipment screen beside the inventory (task 193).
+	 * Gear is the equipment screen beside the inventory (task 193). Combat and Dead are the combat HUD over sample
+	 * numbers (task 194).
 	 *
 	 * With "shot", the screen is captured with its interface three seconds later -- once the rows have been
 	 * built -- to Saved/Screenshots/LookPanels_<view>.png, and the game quits two seconds after that. A dev
@@ -235,6 +236,12 @@ public:
 	 * screen hides rather than closes, and is back when this closes (Joe, 16 October).
 	 */
 	void ToggleEquipmentScreen();
+
+	/**
+	 * Whether a screen or menu is up (task 194): a click then belongs to it, and the fire key must not shoot
+	 * through an inventory at whoever is behind it.
+	 */
+	bool IsAnyScreenOpen() const;
 
 	/**
 	 * Which station the player is docked at, or 0.
@@ -328,6 +335,13 @@ public:
 
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOCrosshair> Crosshair;
+
+	/** Health, bars over heads, damage numbers and the death panel (task 194), or null when none is configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOCombatHud> CombatHud;
+
+	/** Whether the possessed character is dead, so the cursor is freed for the Respawn button and taken back after. */
+	bool bShowingDeath = false;
 
 	/** The deposit prompt above the reticle, or null when none is configured. */
 	UPROPERTY()

@@ -57,6 +57,40 @@ namespace SpaceMMO.Data.Migrations
                     b.ToTable("accounts", (string)null);
                 });
 
+            modelBuilder.Entity("SpaceMMO.Data.Entities.AttackRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AttackedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("attacked_at");
+
+                    b.Property<int>("AttackerCharacterId")
+                        .HasColumnType("integer")
+                        .HasColumnName("attacker_character_id");
+
+                    b.Property<int>("TargetCharacterId")
+                        .HasColumnType("integer")
+                        .HasColumnName("target_character_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_attack_records");
+
+                    b.HasIndex("TargetCharacterId")
+                        .HasDatabaseName("ix_attack_records_target_character_id");
+
+                    b.HasIndex("AttackerCharacterId", "TargetCharacterId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_attack_records_attacker_character_id_target_character_id");
+
+                    b.ToTable("attack_records", (string)null);
+                });
+
             modelBuilder.Entity("SpaceMMO.Data.Entities.Body", b =>
                 {
                     b.Property<int>("Id")
@@ -264,9 +298,21 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("docked_station_id");
 
+                    b.Property<int?>("Health")
+                        .HasColumnType("integer")
+                        .HasColumnName("health");
+
                     b.Property<int>("HomeBodyId")
                         .HasColumnType("integer")
                         .HasColumnName("home_body_id");
+
+                    b.Property<DateTimeOffset?>("LastCombatAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_combat_at");
+
+                    b.Property<int?>("LastDockedStationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("last_docked_station_id");
 
                     b.Property<DateTimeOffset?>("LastGatheredAt")
                         .HasColumnType("timestamp with time zone")
@@ -318,11 +364,17 @@ namespace SpaceMMO.Data.Migrations
                     b.HasIndex("HomeBodyId")
                         .HasDatabaseName("ix_characters_home_body_id");
 
+                    b.HasIndex("LastDockedStationId")
+                        .HasDatabaseName("ix_characters_last_docked_station_id");
+
                     b.HasIndex("Name")
                         .IsUnique()
                         .HasDatabaseName("ix_characters_name");
 
-                    b.ToTable("characters", (string)null);
+                    b.ToTable("characters", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_characters_health_non_negative", "health IS NULL OR health >= 0");
+                        });
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.CharacterFaucetDaily", b =>
@@ -817,12 +869,31 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("volume_m3");
 
+                    b.Property<int?>("WeaponCooldownMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("weapon_cooldown_ms");
+
+                    b.Property<int?>("WeaponDamage")
+                        .HasColumnType("integer")
+                        .HasColumnName("weapon_damage");
+
+                    b.Property<int?>("WeaponRangeMetres")
+                        .HasColumnType("integer")
+                        .HasColumnName("weapon_range_metres");
+
+                    b.Property<int?>("WeaponSkillId")
+                        .HasColumnType("integer")
+                        .HasColumnName("weapon_skill_id");
+
                     b.HasKey("Id")
                         .HasName("pk_item_defs");
 
                     b.HasIndex("Key")
                         .IsUnique()
                         .HasDatabaseName("ix_item_defs_key");
+
+                    b.HasIndex("WeaponSkillId")
+                        .HasDatabaseName("ix_item_defs_weapon_skill_id");
 
                     b.ToTable("item_defs", null, t =>
                         {
@@ -1481,6 +1552,25 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
+                    b.Property<string>("WeaponFamily")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("weapon_family");
+
+                    b.Property<string>("WeaponMount")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("weapon_mount");
+
+                    b.Property<string>("WeaponType")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("weapon_type");
+
+                    b.Property<int?>("XpPerHundredDamage")
+                        .HasColumnType("integer")
+                        .HasColumnName("xp_per_hundred_damage");
+
                     b.HasKey("Id")
                         .HasName("pk_skills");
 
@@ -1499,6 +1589,34 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<double?>("FactionADirectionX")
+                        .HasColumnType("double precision")
+                        .HasColumnName("faction_a_direction_x");
+
+                    b.Property<double?>("FactionADirectionY")
+                        .HasColumnType("double precision")
+                        .HasColumnName("faction_a_direction_y");
+
+                    b.Property<double?>("FactionADirectionZ")
+                        .HasColumnType("double precision")
+                        .HasColumnName("faction_a_direction_z");
+
+                    b.Property<int?>("FactionCapitalBodyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("faction_capital_body_id");
+
+                    b.Property<double?>("FactionContestedRadiusKm")
+                        .HasColumnType("double precision")
+                        .HasColumnName("faction_contested_radius_km");
+
+                    b.Property<double?>("FactionRetaliationSeconds")
+                        .HasColumnType("double precision")
+                        .HasColumnName("faction_retaliation_seconds");
+
+                    b.Property<double?>("FactionSafeRadiusKm")
+                        .HasColumnType("double precision")
+                        .HasColumnName("faction_safe_radius_km");
 
                     b.Property<long>("GalaxyX")
                         .HasColumnType("bigint")
@@ -1724,6 +1842,23 @@ namespace SpaceMMO.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SpaceMMO.Data.Entities.AttackRecord", b =>
+                {
+                    b.HasOne("SpaceMMO.Data.Entities.Character", null)
+                        .WithMany()
+                        .HasForeignKey("AttackerCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_attack_records_characters_attacker_character_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.Character", null)
+                        .WithMany()
+                        .HasForeignKey("TargetCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_attack_records_characters_target_character_id");
+                });
+
             modelBuilder.Entity("SpaceMMO.Data.Entities.Body", b =>
                 {
                     b.HasOne("SpaceMMO.Data.Entities.StarSystem", "StarSystem")
@@ -1782,6 +1917,12 @@ namespace SpaceMMO.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_characters_bodies_home_body_id");
 
+                    b.HasOne("SpaceMMO.Data.Entities.Station", "LastDockedStation")
+                        .WithMany()
+                        .HasForeignKey("LastDockedStationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_characters_stations_last_docked_station_id");
+
                     b.Navigation("AboardShipItemInstance");
 
                     b.Navigation("Account");
@@ -1791,6 +1932,8 @@ namespace SpaceMMO.Data.Migrations
                     b.Navigation("DockedStation");
 
                     b.Navigation("HomeBody");
+
+                    b.Navigation("LastDockedStation");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.CharacterFaucetDaily", b =>
@@ -1978,6 +2121,17 @@ namespace SpaceMMO.Data.Migrations
                     b.Navigation("Inventory");
 
                     b.Navigation("ItemDef");
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.ItemDef", b =>
+                {
+                    b.HasOne("SpaceMMO.Data.Entities.Skill", "WeaponSkill")
+                        .WithMany()
+                        .HasForeignKey("WeaponSkillId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_item_defs_skills_weapon_skill_id");
+
+                    b.Navigation("WeaponSkill");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.ItemInstance", b =>

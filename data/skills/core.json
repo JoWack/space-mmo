@@ -6,6 +6,15 @@
     { "key": "refining", "name": "Refining", "category": "Life" },
     { "key": "toolcrafting", "name": "Toolcrafting", "category": "Life" },
     { "key": "shipcrafting", "name": "Shipcrafting", "category": "Life" },
-    { "$comment": "Ahead of the rest of the post-M1 list, because the opening needed it. crude_thruster was authored as the one thing players could not make, waiting on this skill, and the faction supply order that was supposed to sell it in the meantime was never built -- so the questline could not be finished at all (task 148). Everything is player-made, so the skill arrives rather than the exception staying.", "key": "electronics", "name": "Electronics", "category": "Life" }
+    { "$comment": "Ahead of the rest of the post-M1 list, because the opening needed it. crude_thruster was authored as the one thing players could not make, waiting on this skill, and the faction supply order that was supposed to sell it in the meantime was never built -- so the questline could not be finished at all (task 148). Everything is player-made, so the skill arrives rather than the exception staying.", "key": "electronics", "name": "Electronics", "category": "Life" },
+    { "$comment": "Task 194: makes the Laser Rifle. A weapon's damage comes from its crafted tier (ADR-0017), so this is the skill better weapons will need.", "key": "weaponcrafting", "name": "Weaponcrafting", "category": "Life" },
+    { "$comment": "Maximum health (ADR-0017): 1,000 at level 1 to 2,000 at 99. Earns a third of every combat XP award, on top of the weapon's, so it is even across weapons and cannot be trained apart from fighting.", "key": "constitution", "name": "Constitution", "category": "Combat" },
+    {
+      "$comment": "The first weapon (task 194, ADR-0015). Laser, ranged, on foot: the Laser Pistol is its sibling when it exists, and takes a fifth of its XP. 12 XP per hundred points of damage is ADR-0017's estimate for level 70 in about 50 hours of fighting, to be measured against real fights.",
+      "key": "laser_rifle",
+      "name": "Laser Rifle",
+      "category": "Combat",
+      "weapon": { "family": "Laser", "type": "Ranged", "mount": "OnFoot", "xpPerHundredDamage": 12 }
+    }
   ]
 }

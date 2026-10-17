@@ -7,6 +7,8 @@
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
 #include "SpaceMMOCharacterPawn.h"
+#include "SpaceMMOCombatComponent.h"
+#include "SpaceMMOStyle.h"
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMOStationMarkers.h"
 #include "SpaceMMOCrosshairMarker.h"
@@ -138,6 +140,7 @@ void USpaceMMOCrosshair::NativeTick(const FGeometry& Geometry, const float Delta
 	// changing, which is precisely boarding and docking. The mark would have hung on screen
 	// pointing at where a station was from where the player used to be.
 	StationMarks.Reset();
+	HitFlash = 0.0f;
 
 	const APlayerController* const Controller = GetOwningPlayer();
 
@@ -146,6 +149,18 @@ void USpaceMMOCrosshair::NativeTick(const FGeometry& Geometry, const float Delta
 	if (Pawn == nullptr)
 	{
 		return;
+	}
+
+	// A hit landed (task 194): the flash fades over its fraction of a second.
+	if (const USpaceMMOCombatComponent* const Combat = Pawn->FindComponentByClass<USpaceMMOCombatComponent>())
+	{
+		const UWorld* const World = GetWorld();
+		const double Since = World != nullptr && Combat->GetLastHitSeconds() >= 0.0
+			? World->GetRealTimeSeconds() - Combat->GetLastHitSeconds()
+			: TNumericLimits<double>::Max();
+
+		HitFlash = Since < HitFlashSeconds ? 1.0f - static_cast<float>(Since / HitFlashSeconds) : 0.0f;
+		bFlashKill = Combat->LastHitKilled();
 	}
 
 	// Faded while the camera is swung, because mid-orbit the view points somewhere the pawn has no
@@ -359,6 +374,22 @@ int32 USpaceMMOCrosshair::NativePaint(
 	FLinearColor Line = LineColour;
 	FLinearColor Outline = OutlineColour;
 
+	// A hit's flash: full white, or red for a kill, the ticks a little thicker and pushed out (task 194).
+	float Gap = CentreGap;
+	float Length = TickLength;
+	float Width = Thickness;
+
+	if (HitFlash > 0.0f)
+	{
+		const FLinearColor Flash = bFlashKill ? SpaceMMO::Style::ErrorRed() : FLinearColor::White;
+
+		Line = FLinearColor::LerpUsingHSV(Line, Flash, HitFlash);
+		Line.A = FMath::Lerp(Line.A, 1.0f, HitFlash);
+		Gap += 5.0f * HitFlash;
+		Length += 4.0f * HitFlash;
+		Width += 1.5f * HitFlash;
+	}
+
 	Line.A *= Opacity;
 	Outline.A *= Opacity;
 
@@ -372,9 +403,9 @@ int32 USpaceMMOCrosshair::NativePaint(
 	{
 		Stroke(
 			Elements, Base, Paint,
-			Centre + Axis * CentreGap,
-			Centre + Axis * (CentreGap + TickLength),
-			Line, Outline, Thickness);
+			Centre + Axis * Gap,
+			Centre + Axis * (Gap + Length),
+			Line, Outline, Width);
 	}
 
 	if (bMarkerVisible)

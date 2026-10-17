@@ -1,4 +1,5 @@
 using SpaceMMO.Domain.Characters;
+using SpaceMMO.Domain.Combat;
 using SpaceMMO.Domain.Content;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
@@ -187,13 +188,88 @@ public sealed class ContentValidatorTests
 
     [Theory]
     [InlineData(ItemCategory.Tool, EquipKind.MiningTool)]
-    [InlineData(ItemCategory.Weapon, EquipKind.Weapon)]
     [InlineData(ItemCategory.Armor, EquipKind.Head)]
     [InlineData(ItemCategory.Armor, EquipKind.Body)]
     [InlineData(ItemCategory.Armor, EquipKind.Legs)]
     public void AnItemEquippingAsWhatItIs_IsAccepted(ItemCategory category, EquipKind kind) =>
         Assert.Empty(ContentValidator.Validate(Pack(
             items: [Item("ore"), Item("plate", ItemCategory.Refined), Item("worn", category, equipsAs: kind)])));
+
+    // ── Weapons (task 194) ───────────────────────────────────────────────────
+
+    private static readonly SkillContent RifleSkill = new(
+        "laser_rifle", "Laser Rifle", SkillCategory.Combat,
+        new WeaponSkillContent(WeaponFamily.Laser, WeaponType.Ranged, WeaponMount.OnFoot, 12));
+
+    private static readonly SkillContent Constitution = new("constitution", "Constitution", SkillCategory.Combat);
+
+    private static ItemContent Rifle(WeaponContent? weapon) =>
+        new("rifle", "Rifle", ItemCategory.Weapon, 2.0, EquipsAs: EquipKind.Weapon, Weapon: weapon);
+
+    private static ContentPack WeaponPack(ItemContent weapon, params SkillContent[] skills) =>
+        Pack(
+            skills: skills.Length > 0 ? skills : [Skill(), RifleSkill, Constitution],
+            items: [Item("ore"), Item("plate", ItemCategory.Refined), weapon]);
+
+    [Fact]
+    public void AWeaponThatSaysWhatItDoes_IsAccepted() =>
+        Assert.Empty(ContentValidator.Validate(WeaponPack(Rifle(new WeaponContent("laser_rifle", 55, 500, 150)))));
+
+    [Fact]
+    public void AWeaponWithNoNumbers_IsRejected()
+    {
+        // It would equip, and never fire.
+        Assert.True(HasError(ContentValidator.Validate(WeaponPack(Rifle(null))), "must say what it does"));
+    }
+
+    [Fact]
+    public void AWeaponLevellingSomethingThatIsNotAWeaponsSkill_IsRejected()
+    {
+        // It would fire and pay its XP to refining.
+        IReadOnlyList<ContentError> errors =
+            ContentValidator.Validate(WeaponPack(Rifle(new WeaponContent("refining", 55, 500, 150))));
+
+        Assert.True(HasError(errors, "is not a weapon's skill"));
+    }
+
+    [Theory]
+    [InlineData(0, 500, 150)]
+    [InlineData(55, 0, 150)]
+    [InlineData(55, 500, 0)]
+    public void AWeaponWithANumberThatIsNotPositive_IsRejected(int damage, int cooldown, int range) =>
+        Assert.True(HasError(
+            ContentValidator.Validate(WeaponPack(Rifle(new WeaponContent("laser_rifle", damage, cooldown, range)))),
+            "must all be positive"));
+
+    [Fact]
+    public void SomethingThatIsNotAWeaponFiring_IsRejected()
+    {
+        ItemContent firingTool = new(
+            "laser", "Laser", ItemCategory.Tool, 2.0, EquipsAs: EquipKind.MiningTool,
+            Weapon: new WeaponContent("laser_rifle", 55, 500, 150));
+
+        Assert.True(HasError(ContentValidator.Validate(WeaponPack(firingTool)), "Only a weapon fires"));
+    }
+
+    [Fact]
+    public void AnOnFootWeaponsSkillOutsideCombat_IsRejected()
+    {
+        SkillContent misfiled = RifleSkill with { Category = SkillCategory.Life };
+
+        Assert.True(HasError(
+            ContentValidator.Validate(WeaponPack(Rifle(new WeaponContent("laser_rifle", 55, 500, 150)), Skill(), misfiled, Constitution)),
+            "skill is Combat"));
+    }
+
+    [Fact]
+    public void WeaponsWithoutConstitution_AreRejected()
+    {
+        // Constitution earns a third of every weapon's XP (ADR-0017); with no row to pay it into, it would
+        // quietly earn nothing.
+        Assert.True(HasError(
+            ContentValidator.Validate(WeaponPack(Rifle(new WeaponContent("laser_rifle", 55, 500, 150)), Skill(), RifleSkill)),
+            "constitution must"));
+    }
 
     // ── Ranges ───────────────────────────────────────────────────────────────
 

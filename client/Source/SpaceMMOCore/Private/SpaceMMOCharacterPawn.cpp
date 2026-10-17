@@ -284,6 +284,7 @@ void ASpaceMMOCharacterPawn::GetLifetimeReplicatedProps(
 
 	DOREPLIFETIME(ASpaceMMOCharacterPawn, NetState);
 	DOREPLIFETIME(ASpaceMMOCharacterPawn, BodyRace);
+	DOREPLIFETIME(ASpaceMMOCharacterPawn, bMovementLocked);
 }
 
 void ASpaceMMOCharacterPawn::SetBodyRace(const int32 RealRace)
@@ -982,8 +983,10 @@ void ASpaceMMOCharacterPawn::SimulateStep(const double DeltaSeconds)
 	// push against before it can decide what this step does.
 	ResolveSurface();
 
+	// Locked, nothing pressed moves them (task 194); gravity and the ground still act, so they stay on it.
 	WalkState = FCharacterWalkModel::Step(
-		WalkState, PendingInput, WalkConfig, SurfaceNormal, Gravity, bOnGround, DeltaSeconds);
+		WalkState, bMovementLocked ? FWalkInput() : PendingInput, WalkConfig, SurfaceNormal, Gravity, bOnGround,
+		DeltaSeconds);
 
 	const FSystemCoordinate Before = Navigation.SystemPosition;
 
@@ -1411,6 +1414,17 @@ void ASpaceMMOCharacterPawn::SetSystemPosition(const FSystemCoordinate& NewPosit
 
 	PublishRenderOrigin();
 	ApplyWorldTransform();
+}
+
+void ASpaceMMOCharacterPawn::SetMovementLocked(const bool bLocked)
+{
+	if (HasAuthority() && bMovementLocked != bLocked)
+	{
+		bMovementLocked = bLocked;
+		WalkState.Velocity = FVector::ZeroVector;
+
+		UE_LOG(LogSpaceMMO, Log, TEXT("%s: movement %s."), *GetName(), bLocked ? TEXT("locked") : TEXT("free"));
+	}
 }
 
 void ASpaceMMOCharacterPawn::ResumeAt(const FSystemCoordinate& Where)

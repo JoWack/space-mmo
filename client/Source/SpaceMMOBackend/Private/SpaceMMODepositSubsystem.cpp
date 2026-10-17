@@ -5,6 +5,7 @@
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOCharacterPawn.h"
+#include "SpaceMMOCombatComponent.h"
 #include "SpaceMMODepositActor.h"
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMOGatheringComponent.h"
@@ -149,6 +150,22 @@ void USpaceMMODepositSubsystem::AttachGathering(AActor* Actor)
 	// yet and the component's own BeginPlay binding found nothing. Binding again here is harmless
 	// when it already worked.
 	Gathering->BindInput(Pawn->InputComponent);
+
+	// Fighting (task 194), attached the same way and for the same reasons: by the server, which replicates it, so
+	// no client makes a second copy holding nobody's identity.
+	if (Pawn->FindComponentByClass<USpaceMMOCombatComponent>() == nullptr)
+	{
+		USpaceMMOCombatComponent* Combat = NewObject<USpaceMMOCombatComponent>(Pawn, TEXT("Combat"));
+
+		Combat->RegisterComponent();
+
+		if (const ASpaceMMOPlayerController* Controller = Cast<ASpaceMMOPlayerController>(Pawn->GetController()))
+		{
+			Combat->SetCharacter(Controller->GetCharacterId(), Controller->GetCharacterName());
+		}
+
+		Combat->BindInput(Pawn->InputComponent);
+	}
 }
 
 void USpaceMMODepositSubsystem::HandleBodiesLoaded()

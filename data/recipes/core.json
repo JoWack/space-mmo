@@ -155,6 +155,22 @@
         { "item": "shuttle_hull_section", "quantity": 4 },
         { "item": "crude_thruster", "quantity": 2 }
       ]
+    },
+    {
+      "$comment": "Task 194: the tier-1 Laser Rifle, from what a player has by the end of the opening -- plate and scrap -- so the first weapon needs no new gathering loop. Level 1, as every first recipe of a skill must be, or nobody can start it (task 148). Its look is its plate's world's, as a thruster's is (task 187). First numbers.",
+      "key": "craft_laser_rifle",
+      "output": "laser_rifle",
+      "outputQuantity": 1,
+      "skill": "weaponcrafting",
+      "requiredLevel": 1,
+      "jobSeconds": 60,
+      "xpPerRun": 400,
+      "requiredTool": null,
+      "mainInput": "ferrite_plate",
+      "inputs": [
+        { "item": "ferrite_plate", "quantity": 6 },
+        { "item": "scrap_alloy", "quantity": 10 }
+      ]
     }
   ]
 }

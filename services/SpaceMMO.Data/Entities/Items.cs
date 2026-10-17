@@ -78,6 +78,20 @@ public class ItemDef : IRetirableContent
     /// <summary>What slot this goes in, for a weapon, armour piece or tool; null otherwise (task 193).</summary>
     public EquipKind? EquipsAs { get; set; }
 
+    /// <summary>For a weapon (task 194), the skill it levels; null for anything else.</summary>
+    public int? WeaponSkillId { get; set; }
+
+    public Skill? WeaponSkill { get; set; }
+
+    /// <summary>A basic attack's damage on the body from the front, before armour: the weapon's tier (ADR-0017).</summary>
+    public int? WeaponDamage { get; set; }
+
+    /// <summary>The least time between two basic attacks, in milliseconds.</summary>
+    public int? WeaponCooldownMs { get; set; }
+
+    /// <summary>How far a basic attack reaches, in metres.</summary>
+    public int? WeaponRangeMetres { get; set; }
+
     /// <summary>
     /// When content stopped naming this item, or null while it still does (task 188).
     /// </summary>

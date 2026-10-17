@@ -163,6 +163,32 @@ public class Character
     /// </remarks>
     public bool LastSeenFlying { get; set; }
 
+    /// <summary>
+    /// Health as of <see cref="LastCombatAt"/>, or null for somebody never hurt (task 194).
+    /// </summary>
+    /// <remarks>
+    /// <strong>Not health now.</strong> It comes back out of combat (ADR-0017), and what it is at any moment
+    /// follows from this, the time and the maximum: <c>CombatHealth.Current</c>. Stored as of the last fight so
+    /// nothing has to tick for it to come back, on the server or while the player is away. Zero is dead, until
+    /// they respawn.
+    /// </remarks>
+    public int? Health { get; set; }
+
+    /// <summary>When they last dealt or took damage, or null if never: what out-of-combat regeneration waits on.</summary>
+    public DateTimeOffset? LastCombatAt { get; set; }
+
+    /// <summary>
+    /// The station they last docked at, or null if they never have (task 194): where they come back after dying
+    /// (ADR-0016).
+    /// </summary>
+    /// <remarks>
+    /// Not <see cref="DockedStationId"/>, which is cleared on undocking: the station to respawn at is the one
+    /// you last left, not the one you are in.
+    /// </remarks>
+    public int? LastDockedStationId { get; set; }
+
+    public Station? LastDockedStation { get; set; }
+
     public Station? DockedStation { get; set; }
 
     public ICollection<CharacterSkill> Skills { get; } = [];
@@ -181,6 +207,22 @@ public class Skill
     public required string Name { get; set; }
 
     public SkillCategory Category { get; set; }
+
+    /// <summary>For a weapon's skill (ADR-0015), its family; null for any other skill.</summary>
+    public Domain.Combat.WeaponFamily? WeaponFamily { get; set; }
+
+    public Domain.Combat.WeaponType? WeaponType { get; set; }
+
+    public Domain.Combat.WeaponMount? WeaponMount { get; set; }
+
+    /// <summary>For a weapon's skill, XP per hundred points of damage dealt with it (ADR-0017).</summary>
+    public int? XpPerHundredDamage { get; set; }
+
+    /// <summary>Whether this is a weapon's skill, with everything ADR-0015 needs to share its XP.</summary>
+    public Domain.Combat.WeaponSkill? AsWeapon() =>
+        WeaponFamily is { } family && WeaponType is { } type && WeaponMount is { } mount
+            ? new Domain.Combat.WeaponSkill(Key, family, type, mount)
+            : null;
 }
 
 /// <summary>

@@ -856,6 +856,96 @@ namespace SpaceMMOBuildMenus
 	}
 
 	// ------------------------------------------------------------------------------------------------
+	// Task 194: the combat HUD
+
+	/**
+	 * Health at bottom centre, marks over heads, and the death panel, as Joe approved them on 16 October -- the
+	 * bars red rather than the mock's ice, glowing as health runs low. The colours and the glow are set at run time
+	 * (USpaceMMOCombatHud), so this lays out shapes and words.
+	 */
+	void BuildCombatHud(const FBuilder& B)
+	{
+		UCanvasPanel* Root = B.Make<UCanvasPanel>(TEXT("Root"));
+		B.Blueprint->WidgetTree->RootWidget = Root;
+
+		auto Fill = [Root](UWidget* Widget)
+		{
+			UCanvasPanelSlot* Slot = Root->AddChildToCanvas(Widget);
+			Slot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+			Slot->SetOffsets(FMargin(0.0f));
+		};
+
+		// Bars over heads and damage numbers go here, made at run time.
+		UCanvasPanel* Marks = B.Make<UCanvasPanel>(TEXT("MarksCanvas"), true);
+		Marks->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Fill(Marks);
+
+		// Bottom centre: your health.
+		USizeBox* Health = B.Make<USizeBox>(TEXT("HealthPanel"), true);
+		Health->SetWidthOverride(360.0f);
+		Health->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+		UCanvasPanelSlot* HealthSlot = Root->AddChildToCanvas(Health);
+		HealthSlot->SetAnchors(FAnchors(0.5f, 1.0f));
+		HealthSlot->SetAlignment(FVector2D(0.5, 1.0));
+		HealthSlot->SetPosition(FVector2D(0.0, -36.0));
+		HealthSlot->SetAutoSize(true);
+
+		UVerticalBox* HealthBody = B.Make<UVerticalBox>(TEXT("HealthBody"));
+		Health->AddChild(HealthBody);
+
+		UHorizontalBox* Words = B.Make<UHorizontalBox>(TEXT("HealthWords"));
+		AddV(HealthBody, Words);
+
+		AddH(Words, B.Text(TEXT("HealthLabelText"), TEXT("Health"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), true);
+		AddH(Words, B.Text(TEXT("HealthValueText"), TEXT("1,640 / 2,000"), 17.0f, TextPrimary, TEXT("Regular"), 0, true), false);
+
+		// The bar over its glow: a halo three pixels round an eight-pixel bar, so it reads as light off the bar rather
+		// than as a second, paler bar behind it (the first render, 16 October).
+		USizeBox* BarSize = B.Make<USizeBox>(TEXT("HealthBarSize"));
+		BarSize->SetHeightOverride(14.0f);
+		AddV(HealthBody, BarSize, FMargin(0, 2, 0, 0));
+
+		UOverlay* BarLayers = B.Make<UOverlay>(TEXT("HealthBarLayers"));
+		BarSize->AddChild(BarLayers);
+
+		UImage* Glow = B.Make<UImage>(TEXT("HealthGlow"), true);
+		Glow->SetBrush(Rounded(FLinearColor::White, White(0.0f), 0.0f, FVector4(7.0, 7.0, 7.0, 7.0)));
+		AddO(BarLayers, Glow);
+
+		USizeBox* BarThickness = B.Make<USizeBox>(TEXT("HealthBarThickness"));
+		BarThickness->SetHeightOverride(8.0f);
+		AddO(BarLayers, BarThickness, HAlign_Fill, VAlign_Center, FMargin(3.0f, 0.0f));
+
+		UProgressBar* Bar = B.Make<UProgressBar>(TEXT("HealthBar"), true);
+		Bar->SetPercent(0.82f);
+		BarThickness->AddChild(Bar);
+
+		// The death panel: the world dimmed, and a box in the middle with one way back.
+		UOverlay* Death = B.Make<UOverlay>(TEXT("DeathPanel"), true);
+		Death->SetVisibility(ESlateVisibility::Collapsed);
+		Fill(Death);
+
+		UImage* Dim = B.Make<UImage>(TEXT("DeathDim"));
+		Dim->SetBrush(Solid(FLinearColor(0.0f, 0.0f, 0.0f, 0.35f), FVector2D(32.0, 32.0)));
+		AddO(Death, Dim);
+
+		UBorder* Box = B.Make<UBorder>(TEXT("DeathBox"));
+		Box->SetBrush(SpaceMMO::Style::PromptGlass());
+		Box->SetPadding(FMargin(44.0f, 30.0f));
+		AddO(Death, Box, HAlign_Center, VAlign_Center);
+
+		UVerticalBox* Body = B.Make<UVerticalBox>(TEXT("DeathBody"));
+		Box->AddChild(Body);
+
+		AddV(Body, B.Text(TEXT("DeathTitleText"), TEXT("Killed by Orenthal"), 26.0f, TextPrimary, TEXT("Regular"), 0, true),
+			FMargin(), HAlign_Center);
+		AddV(Body, B.Text(TEXT("DeathNoteText"), TEXT("You'll come back at the station you last docked at."), 15.0f,
+			TextSecondary, TEXT("Regular"), 0, true), FMargin(0, 12, 0, 0), HAlign_Center);
+		AddV(Body, B.Button(TEXT("RespawnButton"), TEXT("Respawn"), true), FMargin(0, 22, 0, 0), HAlign_Center);
+	}
+
+	// ------------------------------------------------------------------------------------------------
 	// Making, saving and checking
 
 	struct FMenuAsset
@@ -990,6 +1080,10 @@ int32 USpaceMMOBuildMenusCommandlet::Main(const FString& Params)
 		{TEXT("WBP_WeaponSlot"), TEXT("/Script/SpaceMMOBackend.SpaceMMOEquipmentSlot"), &BuildWeaponSlot, nullptr, nullptr, {},
 			TEXT("/Game/UI")},
 		{TEXT("WBP_EquipmentScreen"), TEXT("/Script/SpaceMMOBackend.SpaceMMOEquipmentScreen"), &BuildEquipmentScreen, nullptr, nullptr, {},
+			TEXT("/Game/UI")},
+
+		// Task 194.
+		{TEXT("WBP_CombatHud"), TEXT("/Script/SpaceMMOBackend.SpaceMMOCombatHud"), &BuildCombatHud, nullptr, nullptr, {},
 			TEXT("/Game/UI")},
 	};
 

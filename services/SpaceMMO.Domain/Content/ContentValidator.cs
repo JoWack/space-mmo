@@ -54,6 +54,7 @@ public static class ContentValidator
         CollectKeys(pack.Stations.Select(s => s.Key), "station", errors);
 
         ValidateItems(pack, errors);
+        ValidateWeaponSkills(pack, errors);
         ValidateRecipes(pack, skillKeys, itemKeys, toolKeys, errors);
         ValidateQuests(pack, skillKeys, questKeys, errors);
         ValidateUniverse(pack, systemKeys, bodyKeys, errors);
@@ -588,6 +589,7 @@ public static class ContentValidator
 
             ValidateItemStyle(item, pack, errors);
             ValidateEquipsAs(item, errors);
+            ValidateWeapon(item, pack, errors);
 
             if (item.FactionBuyPrice is not { } price)
             {
@@ -683,6 +685,85 @@ public static class ContentValidator
     /// A tool must be equipped to work (Joe, 16 October), so a tool authored without a slot could never be used
     /// for anything; and a weapon claiming to be a helmet would be equipped somewhere it makes no sense.
     /// </remarks>
+    /// <summary>
+    /// A weapon says what it does and which skill it levels, and nothing else says either (task 194).
+    /// </summary>
+    /// <remarks>
+    /// A weapon without numbers would equip and never fire; one naming a skill that is not a weapon's would
+    /// fire and pay its XP to mining. Both are content mistakes that would otherwise show up as a fight in
+    /// which nothing happens.
+    /// </remarks>
+    private static void ValidateWeapon(ItemContent item, ContentPack pack, List<ContentError> errors)
+    {
+        if (item.Weapon is not { } weapon)
+        {
+            if (item.Category == ItemCategory.Weapon)
+            {
+                errors.Add(new ContentError("item", item.Key, "A weapon must say what it does (weapon)."));
+            }
+
+            return;
+        }
+
+        if (item.Category != ItemCategory.Weapon)
+        {
+            errors.Add(new ContentError("item", item.Key, $"Only a weapon fires; this is a {item.Category}."));
+        }
+
+        SkillContent? skill = pack.Skills.FirstOrDefault(s => s.Key == weapon.Skill);
+
+        if (skill?.Weapon is null)
+        {
+            errors.Add(new ContentError(
+                "item", item.Key, $"Its weapon skill '{weapon.Skill}' is not a weapon's skill."));
+        }
+
+        if (weapon.Damage <= 0 || weapon.CooldownMs <= 0 || weapon.RangeMetres <= 0)
+        {
+            errors.Add(new ContentError(
+                "item", item.Key, "A weapon's damage, cooldown and range must all be positive."));
+        }
+    }
+
+    /// <summary>
+    /// A weapon skill is on foot and Combat, or on a ship and Pilot, and earns something for damage; and where
+    /// there are weapons there is constitution, which earns a third of what they do (ADR-0017).
+    /// </summary>
+    private static void ValidateWeaponSkills(ContentPack pack, List<ContentError> errors)
+    {
+        bool anyWeapon = false;
+
+        foreach (SkillContent skill in pack.Skills)
+        {
+            if (skill.Weapon is not { } weapon)
+            {
+                continue;
+            }
+
+            anyWeapon = true;
+
+            SkillCategory expected = weapon.Mount == WeaponMount.Ship ? SkillCategory.Pilot : SkillCategory.Combat;
+
+            if (skill.Category != expected)
+            {
+                errors.Add(new ContentError(
+                    "skill", skill.Key, $"A {weapon.Mount} weapon's skill is {expected}, not {skill.Category}."));
+            }
+
+            if (weapon.XpPerHundredDamage <= 0)
+            {
+                errors.Add(new ContentError(
+                    "skill", skill.Key, "A weapon skill must earn something for damage (xpPerHundredDamage)."));
+            }
+        }
+
+        if (anyWeapon && pack.Skills.All(s => s.Key != CombatXp.ConstitutionSkillKey))
+        {
+            errors.Add(new ContentError(
+                "skill", CombatXp.ConstitutionSkillKey, "Weapons exist, so constitution must: it earns a third of their XP."));
+        }
+    }
+
     private static void ValidateEquipsAs(ItemContent item, List<ContentError> errors)
     {
         if (item.EquipsAs is not { } kind)

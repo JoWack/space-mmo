@@ -21,6 +21,8 @@
 #include "SpaceMMODepositActor.h"
 #include "SpaceMMOFlightReadout.h"
 #include "SpaceMMOHudSettings.h"
+#include "SpaceMMOCombatComponent.h"
+#include "SpaceMMOCombatHud.h"
 #include "SpaceMMOEquipmentScreen.h"
 #include "SpaceMMOInventoryScreen.h"
 #include "SpaceMMOLoginScreen.h"
@@ -153,6 +155,9 @@ void ASpaceMMOPlayerController::CreateHud()
 	Crosshair = CreateHudWidget<USpaceMMOCrosshair>(
 		this, Settings->Crosshair, TEXT("crosshair"));
 
+	CombatHud = CreateHudWidget<USpaceMMOCombatHud>(
+		this, Settings->CombatHud, TEXT("combat HUD"));
+
 	DepositPrompt = CreateHudWidget<USpaceMMODepositPrompt>(
 		this, Settings->DepositPrompt, TEXT("deposit prompt"));
 
@@ -228,8 +233,8 @@ void ASpaceMMOPlayerController::ApplyMouseCapture()
 	// box, so a sign-in screen without this is one nobody can type into.
 	UUserWidget* const Menu = MenuWidget(ActiveMenu);
 
-	const bool bScreenWantsCursor =
-		bAwaitingSignIn || Menu != nullptr || bInventoryScreenOpen || bStationOverlayOpen || bEquipmentScreenOpen;
+	const bool bScreenWantsCursor = bAwaitingSignIn || Menu != nullptr || bInventoryScreenOpen || bStationOverlayOpen
+		|| bEquipmentScreenOpen || bShowingDeath;
 
 	if (bMouseCaptured && !bScreenWantsCursor)
 	{
@@ -836,6 +841,7 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 		Show(SkillsScreen, false);
 		Show(InventoryScreen, false);
 		Show(EquipmentScreen, false);
+		Show(CombatHud, false);
 		Show(StationOverlay, false);
 
 		return;
@@ -845,6 +851,22 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// somebody on foot are never the same moment.
 	Show(FlightReadout, bFlying);
 	Show(OnFootReadout, !bFlying);
+
+	// Fighting is on foot (task 194). Self-hit-test-invisible, as the paired panels are: only the death panel's
+	// button takes a click, never the empty screen around it.
+	Show(CombatHud, !bFlying, ESlateVisibility::SelfHitTestInvisible);
+
+	// Dead, the cursor is freed for the Respawn button, and taken back once they are up again.
+	const APawn* const Possessed = GetPawn();
+	const USpaceMMOCombatComponent* const Combat =
+		Possessed != nullptr ? Possessed->FindComponentByClass<USpaceMMOCombatComponent>() : nullptr;
+	const bool bDeadNow = Combat != nullptr && Combat->IsDead();
+
+	if (bDeadNow != bShowingDeath)
+	{
+		bShowingDeath = bDeadNow;
+		ApplyMouseCapture();
+	}
 
 	// Both pawns, and gone whenever a screen is open: a reticle over an inventory is pointing at a
 	// list. The widget fades itself while the camera is swung, which is a different question -- that
@@ -951,6 +973,12 @@ void ASpaceMMOPlayerController::ToggleStationOverlay()
 	ApplyMouseCapture();
 
 	UpdateHudContext();
+}
+
+bool ASpaceMMOPlayerController::IsAnyScreenOpen() const
+{
+	return bAwaitingSignIn || ActiveMenu != ESpaceMMOMenu::None || bInventoryScreenOpen || bStationOverlayOpen
+		|| bEquipmentScreenOpen || bSkillsScreenOpen;
 }
 
 void ASpaceMMOPlayerController::ToggleEquipmentScreen()
@@ -1751,6 +1779,24 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 	}
 
 	const bool bPair = View.Equals(TEXT("Pair"), ESearchCase::IgnoreCase);
+
+	// Combat and Dead: the combat HUD over sample numbers (task 194). The component is the possessed pawn's own,
+	// attached because a standalone game is its own server.
+	const bool bCombatLook = View.Equals(TEXT("Combat"), ESearchCase::IgnoreCase);
+	const bool bDeadLook = View.Equals(TEXT("Dead"), ESearchCase::IgnoreCase);
+
+	if (bCombatLook || bDeadLook)
+	{
+		if (USpaceMMOCombatComponent* Combat =
+			GetPawn() != nullptr ? GetPawn()->FindComponentByClass<USpaceMMOCombatComponent>() : nullptr)
+		{
+			Combat->ShowSampleForLook(bDeadLook);
+		}
+		else
+		{
+			UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: no combat component on %s to show."), *GetNameSafe(GetPawn()));
+		}
+	}
 
 	// Gear: the equipment screen beside the inventory (task 193), and docked, so the station overlay is open
 	// underneath it and the capture shows it staying hidden.
@@ -2621,6 +2667,12 @@ void ASpaceMMOPlayerController::RefreshPossessedPawn()
 				UE_LOG(LogSpaceMMOBackend, Log, TEXT("%s will gather as character %d (%s)."),
 					*GetNameSafe(Possessed), CharacterId, *CharacterName);
 			}
+		}
+
+		// Fighting (task 194): who fires, and what to call them in "killed by".
+		if (USpaceMMOCombatComponent* Combat = Possessed->FindComponentByClass<USpaceMMOCombatComponent>())
+		{
+			Combat->SetCharacter(CharacterId, CharacterName);
 		}
 
 		// The same for docking, which was left out of this and did not work for it.

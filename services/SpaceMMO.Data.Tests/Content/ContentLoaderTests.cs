@@ -277,6 +277,55 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task TheShippedFactionSpace_ReachesTheDatabaseAsAuthored()
+    {
+        // Task 194: the API judges attacks from the database, never from data/. If what it builds differs from
+        // what the content says by one field, every rule test stays green over geometry nobody plays in.
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+        FactionSpaceContent authored = pack.FactionSpace!;
+        double[] capital = pack.Bodies.Single(b => b.Key == authored.Capital).SystemPosition!;
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Domain.Combat.FactionSpace? served = await new SpaceMMO.Data.Combat.CombatService(verify).FactionSpaceAsync();
+
+        Assert.NotNull(served);
+        Assert.Equal(
+            Domain.Combat.FactionSpace.FromContent(authored, new SystemPosition(capital[0], capital[1], capital[2])),
+            served);
+    }
+
+    [Fact]
+    public async Task TheFirstWeapon_ReachesTheDatabaseReadyToFire()
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+        ItemContent authored = pack.Items.Single(i => i.Key == "laser_rifle");
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        ItemDef rifle = await verify.ItemDefs.Include(i => i.WeaponSkill).SingleAsync(i => i.Key == "laser_rifle");
+
+        Assert.Equal(EquipKind.Weapon, rifle.EquipsAs);
+        Assert.Equal(authored.Weapon!.Damage, rifle.WeaponDamage);
+        Assert.Equal(authored.Weapon.CooldownMs, rifle.WeaponCooldownMs);
+        Assert.Equal(authored.Weapon.RangeMetres, rifle.WeaponRangeMetres);
+        Assert.Equal(authored.Weapon.Skill, rifle.WeaponSkill!.Key);
+
+        // Its skill is a weapon's, with what ADR-0015 needs to share its XP.
+        Assert.NotNull(rifle.WeaponSkill.AsWeapon());
+        Assert.Equal(pack.Skills.Single(s => s.Key == "laser_rifle").Weapon!.XpPerHundredDamage, rifle.WeaponSkill.XpPerHundredDamage);
+
+        // And constitution exists to take its third.
+        Assert.True(await verify.Skills.AnyAsync(s => s.Key == Domain.Combat.CombatXp.ConstitutionSkillKey));
+    }
+
+    [Fact]
     public async Task EveryHomeBodysStart_ReachesTheDatabase()
     {
         // Task 145: where a new character first stands travels data/ -> seed -> Postgres -> API ->

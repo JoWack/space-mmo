@@ -140,4 +140,16 @@ private:
 
 	/** 0 while the camera is swung, 1 otherwise, eased between. */
 	float Opacity = 1.0f;
+
+	/**
+	 * How much of a hit's flash is left, 1 just after a hit to 0 (task 194): the ticks brighten, thicken and spread,
+	 * white for a hit and red for a kill, as Joe approved on 16 October.
+	 */
+	float HitFlash = 0.0f;
+
+	bool bFlashKill = false;
+
+public:
+	/** How long a hit's flash lasts. */
+	static constexpr float HitFlashSeconds = 0.18f;
 };

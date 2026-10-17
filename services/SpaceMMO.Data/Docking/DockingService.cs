@@ -84,6 +84,9 @@ public sealed class DockingService(SpaceMmoDbContext database, InventoryService 
         // first or handle a failure that means nothing to a player.
         character.DockedStationId = stationId;
 
+        // Kept after undocking, unlike the line above: it is where they come back after dying (ADR-0016).
+        character.LastDockedStationId = stationId;
+
         await _database.SaveChangesAsync(cancellationToken);
     }
 

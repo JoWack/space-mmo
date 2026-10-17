@@ -1437,6 +1437,151 @@ bool FSpaceMMOBackendProtocol::ParseResolvedCharacter(
 	return true;
 }
 
+FString FSpaceMMOBackendProtocol::MakeHitBody(
+	const int32 AttackerCharacterId,
+	const int32 TargetCharacterId,
+	const EBackendHitZone Zone,
+	const EBackendHitFacing Facing,
+	const FVector& PositionKilometres)
+{
+	// Nine decimal places, as whereabouts sends them: the position decides which half of the system the shot was
+	// fired in, and %f's six would put a shot tens of centimetres from where it was -- harmless here, but a
+	// position is a position, and the two should be written the same way.
+	return FString::Printf(
+		TEXT("{\"attackerCharacterId\":%d,\"targetCharacterId\":%d,\"zone\":%d,\"facing\":%d,\"x\":%.9f,\"y\":%.9f,\"z\":%.9f}"),
+		AttackerCharacterId,
+		TargetCharacterId,
+		static_cast<int32>(Zone),
+		static_cast<int32>(Facing),
+		PositionKilometres.X,
+		PositionKilometres.Y,
+		PositionKilometres.Z);
+}
+
+bool FSpaceMMOBackendProtocol::ParseHitResult(const FString& Json, FBackendHitResult& OutResult)
+{
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	if (!Object.IsValid() || !Object->TryGetBoolField(TEXT("landed"), OutResult.bLanded))
+	{
+		return false;
+	}
+
+	Object->TryGetStringField(TEXT("refusal"), OutResult.Refusal);
+	Object->TryGetStringField(TEXT("weaponSkillKey"), OutResult.WeaponSkillKey);
+	Object->TryGetBoolField(TEXT("killed"), OutResult.bKilled);
+
+	int64 Number = 0;
+
+	if (ReadInt64(Object, TEXT("damage"), Number))
+	{
+		OutResult.Damage = static_cast<int32>(Number);
+	}
+
+	if (ReadInt64(Object, TEXT("targetHealth"), Number))
+	{
+		OutResult.TargetHealth = static_cast<int32>(Number);
+	}
+
+	if (ReadInt64(Object, TEXT("targetMaxHealth"), Number))
+	{
+		OutResult.TargetMaxHealth = static_cast<int32>(Number);
+	}
+
+	ReadInt64(Object, TEXT("weaponXp"), OutResult.WeaponXp);
+
+	return true;
+}
+
+bool FSpaceMMOBackendProtocol::ParseCombatStatus(const FString& Json, FBackendCombatStatus& OutStatus)
+{
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	int64 Number = 0;
+
+	if (!Object.IsValid() || !ReadInt64(Object, TEXT("maxHealth"), Number))
+	{
+		return false;
+	}
+
+	OutStatus.MaxHealth = static_cast<int32>(Number);
+
+	if (ReadInt64(Object, TEXT("characterId"), Number))
+	{
+		OutStatus.CharacterId = static_cast<int32>(Number);
+	}
+
+	if (ReadInt64(Object, TEXT("health"), Number))
+	{
+		OutStatus.Health = static_cast<int32>(Number);
+	}
+
+	// Null for never: health was never touched, and there is no fight to wait out.
+	if (!Object->TryGetNumberField(TEXT("secondsSinceCombat"), OutStatus.SecondsSinceCombat))
+	{
+		OutStatus.SecondsSinceCombat = -1.0;
+	}
+
+	// Null when Weapon 1 is empty or broken: no weapon, rather than a weapon of zeroes.
+	const TSharedPtr<FJsonObject>* Weapon = nullptr;
+
+	OutStatus.bHasWeapon = Object->TryGetObjectField(TEXT("weapon"), Weapon) && Weapon != nullptr && Weapon->IsValid();
+
+	if (OutStatus.bHasWeapon)
+	{
+		const TSharedPtr<FJsonObject>& W = *Weapon;
+
+		ReadInt64(W, TEXT("itemInstanceId"), OutStatus.Weapon.ItemInstanceId);
+		W->TryGetStringField(TEXT("itemKey"), OutStatus.Weapon.ItemKey);
+		W->TryGetStringField(TEXT("name"), OutStatus.Weapon.Name);
+		W->TryGetStringField(TEXT("skillKey"), OutStatus.Weapon.SkillKey);
+
+		if (ReadInt64(W, TEXT("damage"), Number))
+		{
+			OutStatus.Weapon.Damage = static_cast<int32>(Number);
+		}
+
+		if (ReadInt64(W, TEXT("cooldownMs"), Number))
+		{
+			OutStatus.Weapon.CooldownMs = static_cast<int32>(Number);
+		}
+
+		if (ReadInt64(W, TEXT("rangeMetres"), Number))
+		{
+			OutStatus.Weapon.RangeMetres = static_cast<int32>(Number);
+		}
+	}
+
+	return true;
+}
+
+bool FSpaceMMOBackendProtocol::ParseRespawn(const FString& Json, FBackendRespawn& OutRespawn)
+{
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	int64 Number = 0;
+
+	if (!Object.IsValid() || !ReadInt64(Object, TEXT("stationId"), Number))
+	{
+		return false;
+	}
+
+	OutRespawn.StationId = static_cast<int32>(Number);
+	Object->TryGetStringField(TEXT("stationKey"), OutRespawn.StationKey);
+
+	if (ReadInt64(Object, TEXT("health"), Number))
+	{
+		OutRespawn.Health = static_cast<int32>(Number);
+	}
+
+	if (ReadInt64(Object, TEXT("maxHealth"), Number))
+	{
+		OutRespawn.MaxHealth = static_cast<int32>(Number);
+	}
+
+	return true;
+}
+
 bool FSpaceMMOBackendProtocol::ParseGatherResult(
 	const FString& Json, FBackendGatherResult& OutResult)
 {

@@ -110,6 +110,25 @@ public class InsurancePolicy
 /// rather than a matter of opinion, and lets EconSim reproduce destruction runs exactly
 /// (ADR-0006).
 /// </remarks>
+/// <summary>
+/// The last time one character attacked another (ADR-0009, task 104): what lets the target answer back.
+/// </summary>
+/// <remarks>
+/// Pairwise and directional. Shooting somebody makes you answerable to them and to nobody else, so a defender
+/// who fires on an intruder does not become fair game for the system. Written on every attack the rules allow;
+/// read as "when did my target last attack me".
+/// </remarks>
+public class AttackRecord
+{
+    public long Id { get; set; }
+
+    public int AttackerCharacterId { get; set; }
+
+    public int TargetCharacterId { get; set; }
+
+    public DateTimeOffset AttackedAt { get; set; }
+}
+
 public class DeathRecord
 {
     public long Id { get; set; }

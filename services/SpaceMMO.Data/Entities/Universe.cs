@@ -38,6 +38,25 @@ public class StarSystem
 
     public SecurityLevel SecurityLevel { get; set; }
 
+    /// <summary>
+    /// The body faction space is centred on (task 104), or null for a system authoring none. With the four values
+    /// below, what <c>FactionSpace.FromContent</c> needs, kept in the database so the API can judge an attack
+    /// without reading <c>data/</c> (task 194).
+    /// </summary>
+    public int? FactionCapitalBodyId { get; set; }
+
+    public double? FactionSafeRadiusKm { get; set; }
+
+    public double? FactionContestedRadiusKm { get; set; }
+
+    public double? FactionADirectionX { get; set; }
+
+    public double? FactionADirectionY { get; set; }
+
+    public double? FactionADirectionZ { get; set; }
+
+    public double? FactionRetaliationSeconds { get; set; }
+
     public ICollection<Body> Bodies { get; } = [];
 
     public ICollection<Station> Stations { get; } = [];

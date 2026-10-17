@@ -89,6 +89,8 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
     public DbSet<DeathRecord> DeathRecords => Set<DeathRecord>();
 
+    public DbSet<AttackRecord> AttackRecords => Set<AttackRecord>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         ArgumentNullException.ThrowIfNull(configurationBuilder);
@@ -297,6 +299,13 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
             entity.HasOne(e => e.HomeBody)
                 .WithMany()
                 .HasForeignKey(e => e.HomeBodyId);
+
+            entity.HasOne(e => e.LastDockedStation)
+                .WithMany()
+                .HasForeignKey(e => e.LastDockedStationId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.ToTable(t => t.HasCheckConstraint("ck_characters_health_non_negative", "health IS NULL OR health >= 0"));
         });
 
         modelBuilder.Entity<Skill>(entity =>
@@ -337,6 +346,10 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
             // Derived from Category; a stored copy could contradict it.
             entity.Ignore(e => e.IsStackable);
+
+            entity.HasOne(e => e.WeaponSkill)
+                .WithMany()
+                .HasForeignKey(e => e.WeaponSkillId);
 
             entity.ToTable(t => t.HasCheckConstraint(
                 "ck_item_defs_volume_positive", "volume_m3 > 0"));
@@ -681,6 +694,15 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
                     "ck_insurance_policies_payout_below_insured_value",
                     "payout_amount IS NULL OR payout_amount < insured_value");
             });
+        });
+
+        modelBuilder.Entity<AttackRecord>(entity =>
+        {
+            // One row a pair, in one direction: who last attacked whom, and when (ADR-0009).
+            entity.HasIndex(e => new { e.AttackerCharacterId, e.TargetCharacterId }).IsUnique();
+
+            entity.HasOne<Character>().WithMany().HasForeignKey(e => e.AttackerCharacterId);
+            entity.HasOne<Character>().WithMany().HasForeignKey(e => e.TargetCharacterId);
         });
 
         modelBuilder.Entity<DeathRecord>(entity =>

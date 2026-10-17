@@ -60,4 +60,20 @@ public sealed class WireContractTests
     [InlineData(EquipKind.MiningTool, 4)]
     public void EquipKindKeepsItsWireValue(EquipKind kind, int expected) =>
         Assert.Equal(expected, (int)kind);
+
+    // Sent by the game server rather than the client (task 194), and pinned for the same reason: the server's
+    // C++ holds its own copy of the numbering.
+    [Theory]
+    [InlineData(Domain.Combat.HitZone.Head, 0)]
+    [InlineData(Domain.Combat.HitZone.Body, 1)]
+    [InlineData(Domain.Combat.HitZone.Legs, 2)]
+    public void HitZoneKeepsItsWireValue(Domain.Combat.HitZone zone, int expected) =>
+        Assert.Equal(expected, (int)zone);
+
+    [Theory]
+    [InlineData(Domain.Combat.HitFacing.Front, 0)]
+    [InlineData(Domain.Combat.HitFacing.Side, 1)]
+    [InlineData(Domain.Combat.HitFacing.Back, 2)]
+    public void HitFacingKeepsItsWireValue(Domain.Combat.HitFacing facing, int expected) =>
+        Assert.Equal(expected, (int)facing);
 }

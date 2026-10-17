@@ -37,6 +37,10 @@ public:
 	 * Shares the flight readout's corner; the controller shows exactly one of them.
 	 */
 	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOCombatHud"))
+	FSoftClassPath CombatHud;
+
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
 		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOOnFootReadout"))
 	FSoftClassPath OnFootReadout;
 

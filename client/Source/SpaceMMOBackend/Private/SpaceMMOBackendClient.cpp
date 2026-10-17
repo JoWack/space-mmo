@@ -340,6 +340,97 @@ void USpaceMMOBackendClient::GatherAsServer(
 		});
 }
 
+void USpaceMMOBackendClient::HitAsServer(
+	const int32 AttackerCharacterId,
+	const int32 TargetCharacterId,
+	const EBackendHitZone Zone,
+	const EBackendHitFacing Facing,
+	const FVector& PositionKilometres,
+	TFunction<void(const FBackendHitResult&)> OnResult,
+	TFunction<void(const FBackendFailure&)> OnFailure)
+{
+	if (ServiceSecret.IsEmpty() || PositionKilometres.ContainsNaN())
+	{
+		UE_LOG(LogSpaceMMOBackend, Warning,
+			TEXT("Hit not reported: %s."), ServiceSecret.IsEmpty() ? TEXT("no service credential") : TEXT("no position"));
+
+		return;
+	}
+
+	Send(
+		TEXT("POST"),
+		TEXT("/combat/hits"),
+		FSpaceMMOBackendProtocol::MakeHitBody(AttackerCharacterId, TargetCharacterId, Zone, Facing, PositionKilometres),
+		false,
+		[OnResult = MoveTemp(OnResult)](const FString& ResponseBody)
+		{
+			FBackendHitResult Result;
+
+			if (FSpaceMMOBackendProtocol::ParseHitResult(ResponseBody, Result) && OnResult)
+			{
+				OnResult(Result);
+			}
+		},
+		ServiceSecret,
+		MoveTemp(OnFailure));
+}
+
+void USpaceMMOBackendClient::FetchCombatStatusAsServer(
+	const int32 CharacterId,
+	TFunction<void(const FBackendCombatStatus&)> OnStatus,
+	TFunction<void(const FBackendFailure&)> OnFailure)
+{
+	if (ServiceSecret.IsEmpty() || CharacterId == 0)
+	{
+		return;
+	}
+
+	Send(
+		TEXT("GET"),
+		FString::Printf(TEXT("/combat/%d"), CharacterId),
+		FString(),
+		false,
+		[OnStatus = MoveTemp(OnStatus)](const FString& ResponseBody)
+		{
+			FBackendCombatStatus Status;
+
+			if (FSpaceMMOBackendProtocol::ParseCombatStatus(ResponseBody, Status) && OnStatus)
+			{
+				OnStatus(Status);
+			}
+		},
+		ServiceSecret,
+		MoveTemp(OnFailure));
+}
+
+void USpaceMMOBackendClient::RespawnAsServer(
+	const int32 CharacterId,
+	TFunction<void(const FBackendRespawn&)> OnRespawn,
+	TFunction<void(const FBackendFailure&)> OnFailure)
+{
+	if (ServiceSecret.IsEmpty() || CharacterId == 0)
+	{
+		return;
+	}
+
+	Send(
+		TEXT("POST"),
+		TEXT("/combat/respawn"),
+		FString::Printf(TEXT("{\"characterId\":%d}"), CharacterId),
+		false,
+		[OnRespawn = MoveTemp(OnRespawn)](const FString& ResponseBody)
+		{
+			FBackendRespawn Respawn;
+
+			if (FSpaceMMOBackendProtocol::ParseRespawn(ResponseBody, Respawn) && OnRespawn)
+			{
+				OnRespawn(Respawn);
+			}
+		},
+		ServiceSecret,
+		MoveTemp(OnFailure));
+}
+
 void USpaceMMOBackendClient::Deinitialize()
 {
 	// The token is deliberately not persisted anywhere, so dropping it here is the whole cleanup.

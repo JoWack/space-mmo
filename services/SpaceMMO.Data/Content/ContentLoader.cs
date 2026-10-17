@@ -126,12 +126,13 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             await _database.Database.BeginTransactionAsync(cancellationToken);
 
         Dictionary<string, int> skillIds = await UpsertSkillsAsync(pack, cancellationToken);
-        Dictionary<string, int> itemIds = await UpsertItemsAsync(pack, cancellationToken);
+        Dictionary<string, int> itemIds = await UpsertItemsAsync(pack, skillIds, cancellationToken);
 
         // Universe before the rest only because stations reference bodies reference systems.
         // Nothing else depends on it — a character's home body is resolved by key at creation.
         Dictionary<string, int> systemIds = await UpsertSystemsAsync(pack, cancellationToken);
         Dictionary<string, int> bodyIds = await UpsertBodiesAsync(pack, systemIds, cancellationToken);
+        await ApplyFactionSpaceAsync(pack, bodyIds, cancellationToken);
 
         await UpsertStationsAsync(pack, systemIds, bodyIds, cancellationToken);
         await UpsertResourceNodesAsync(pack, systemIds, bodyIds, itemIds, skillIds, cancellationToken);
@@ -156,22 +157,27 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
 
         foreach (SkillContent content in pack.Skills)
         {
-            if (existing.TryGetValue(content.Key, out Skill? skill))
+            if (!existing.TryGetValue(content.Key, out Skill? skill))
             {
-                skill.Name = content.Name;
-                skill.Category = content.Category;
-                continue;
+                skill = new Skill
+                {
+                    Key = content.Key,
+                    Name = content.Name,
+                    Category = content.Category,
+                };
+
+                _database.Skills.Add(skill);
+                existing[content.Key] = skill;
             }
 
-            var created = new Skill
-            {
-                Key = content.Key,
-                Name = content.Name,
-                Category = content.Category,
-            };
+            skill.Name = content.Name;
+            skill.Category = content.Category;
 
-            _database.Skills.Add(created);
-            existing[content.Key] = created;
+            // Assigned, so a skill that stops being a weapon's in content stops being one here (task 194).
+            skill.WeaponFamily = content.Weapon?.Family;
+            skill.WeaponType = content.Weapon?.Type;
+            skill.WeaponMount = content.Weapon?.Mount;
+            skill.XpPerHundredDamage = content.Weapon?.XpPerHundredDamage;
         }
 
         await _database.SaveChangesAsync(cancellationToken);
@@ -179,8 +185,43 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         return existing.ToDictionary(e => e.Key, e => e.Value.Id, StringComparer.Ordinal);
     }
 
+    /// <summary>
+    /// Puts the authored faction space on the system its capital is in (task 194), so the API can judge an
+    /// attack without reading the content files.
+    /// </summary>
+    /// <remarks>Cleared from every other system, so moving the capital in content moves it here.</remarks>
+    private async Task ApplyFactionSpaceAsync(
+        ContentPack pack, Dictionary<string, int> bodyIds, CancellationToken cancellationToken)
+    {
+        FactionSpaceContent? content = pack.FactionSpace;
+
+        int? capitalBodyId = content is not null && bodyIds.TryGetValue(content.Capital, out int id) ? id : null;
+
+        int? capitalSystemId = capitalBodyId is int bodyId
+            ? await _database.Bodies
+                .Where(b => b.Id == bodyId)
+                .Select(b => (int?)b.StarSystemId)
+                .SingleAsync(cancellationToken)
+            : null;
+
+        foreach (StarSystem system in await _database.StarSystems.ToListAsync(cancellationToken))
+        {
+            FactionSpaceContent? here = system.Id == capitalSystemId ? content : null;
+
+            system.FactionCapitalBodyId = here is null ? null : capitalBodyId;
+            system.FactionSafeRadiusKm = here?.SafeRadiusKm;
+            system.FactionContestedRadiusKm = here?.ContestedRadiusKm;
+            system.FactionADirectionX = here?.FactionADirection[0];
+            system.FactionADirectionY = here?.FactionADirection[1];
+            system.FactionADirectionZ = here?.FactionADirection[2];
+            system.FactionRetaliationSeconds = here?.RetaliationSeconds;
+        }
+
+        await _database.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task<Dictionary<string, int>> UpsertItemsAsync(
-        ContentPack pack, CancellationToken cancellationToken)
+        ContentPack pack, Dictionary<string, int> skillIds, CancellationToken cancellationToken)
     {
         Dictionary<string, ItemDef> existing = await _database.ItemDefs
             .ToDictionaryAsync(i => i.Key, StringComparer.Ordinal, cancellationToken);
@@ -216,6 +257,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
 
                 // Assigned like the rest, so a tool's slot follows its content (task 193).
                 item.EquipsAs = content.EquipsAs;
+                AssignWeapon(item, content, skillIds);
                 continue;
             }
 
@@ -232,6 +274,8 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
                 EquipsAs = content.EquipsAs,
             };
 
+            AssignWeapon(created, content, skillIds);
+
             _database.ItemDefs.Add(created);
             existing[content.Key] = created;
         }
@@ -241,6 +285,17 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
         await _database.SaveChangesAsync(cancellationToken);
 
         return existing.ToDictionary(e => e.Key, e => e.Value.Id, StringComparer.Ordinal);
+    }
+
+    /// <summary>A weapon's numbers and skill, or none for anything else (task 194). Assigned, like the rest.</summary>
+    private static void AssignWeapon(ItemDef item, ItemContent content, Dictionary<string, int> skillIds)
+    {
+        WeaponContent? weapon = content.Weapon;
+
+        item.WeaponSkillId = weapon is null ? null : skillIds[weapon.Skill];
+        item.WeaponDamage = weapon?.Damage;
+        item.WeaponCooldownMs = weapon?.CooldownMs;
+        item.WeaponRangeMetres = weapon?.RangeMetres;
     }
 
     private async Task UpsertRecipesAsync(

@@ -1,3 +1,4 @@
+using SpaceMMO.Domain.Combat;
 using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
@@ -7,7 +8,36 @@ using SpaceMMO.Domain.Universe;
 namespace SpaceMMO.Domain.Content;
 
 /// <summary>A skill, as authored in <c>data/skills/</c>.</summary>
-public sealed record SkillContent(string Key, string Name, SkillCategory Category);
+/// <param name="Weapon">What makes it a weapon's skill (ADR-0015), or null for every other skill.</param>
+public sealed record SkillContent(string Key, string Name, SkillCategory Category, WeaponSkillContent? Weapon = null)
+{
+    /// <summary>A weapon skill's family, type, mount and XP rate, or null for any other skill.</summary>
+    public WeaponSkillContent? Weapon { get; init; } = Weapon;
+}
+
+/// <summary>
+/// What a weapon's skill says about itself (ADR-0015, task 194): which weapons share its XP, and what damage is
+/// worth.
+/// </summary>
+/// <param name="XpPerHundredDamage">
+/// XP per hundred points of damage dealt with it (ADR-0017): about 12, so a weapon reaches 70 in about 50 hours
+/// of fighting. Per hundred so a rate below one a point is a whole number.
+/// </param>
+public sealed record WeaponSkillContent(
+    WeaponFamily Family, WeaponType Type, WeaponMount Mount, int XpPerHundredDamage);
+
+/// <summary>
+/// What a weapon item does when it fires (task 194): the skill it levels, and its numbers.
+/// </summary>
+/// <param name="Skill">The weapon skill's key: the Laser Rifle item levels <c>laser_rifle</c>.</param>
+/// <param name="Damage">A basic attack's damage on the body, from the front, before armour.</param>
+/// <param name="CooldownMs">The least time between two basic attacks, in milliseconds.</param>
+/// <param name="RangeMetres">How far a basic attack reaches.</param>
+/// <remarks>
+/// On the item, not the skill, because damage comes from the weapon's tier (ADR-0017): a better-crafted rifle
+/// is another item with bigger numbers, levelling the same skill.
+/// </remarks>
+public sealed record WeaponContent(string Skill, int Damage, int CooldownMs, int RangeMetres);
 
 /// <summary>An item definition, as authored in <c>data/items/</c>.</summary>
 /// <param name="FactionBuyPrice">
@@ -38,8 +68,12 @@ public sealed record ItemContent(
     double? HoldCapacityM3 = null,
     string? Family = null,
     ItemStyle Style = ItemStyle.Common,
-    EquipKind? EquipsAs = null)
+    EquipKind? EquipsAs = null,
+    WeaponContent? Weapon = null)
 {
+    /// <summary>What it does when it fires, for a weapon (task 194); null for anything else.</summary>
+    public WeaponContent? Weapon { get; init; } = Weapon;
+
     /// <summary>
     /// Whether this material occurs on exactly one body and nowhere else (ADR-0008).
     /// </summary>

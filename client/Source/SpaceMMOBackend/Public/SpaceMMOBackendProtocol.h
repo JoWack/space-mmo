@@ -77,6 +77,26 @@ public:
 	/** Parses one gathering result. */
 	static bool ParseGatherResult(const FString& Json, FBackendGatherResult& OutResult);
 
+	/**
+	 * A hit for the API to judge (task 194): who, whom, where on the body, from which side, and where the shot was
+	 * fired from in system kilometres. Zone and facing go as the numbers the server's enums pin.
+	 */
+	static FString MakeHitBody(
+		int32 AttackerCharacterId,
+		int32 TargetCharacterId,
+		EBackendHitZone Zone,
+		EBackendHitFacing Facing,
+		const FVector& PositionKilometres);
+
+	/** Parses what a hit did. False for a body that is not a hit result at all. */
+	static bool ParseHitResult(const FString& Json, FBackendHitResult& OutResult);
+
+	/** Parses a character's health and weapon. */
+	static bool ParseCombatStatus(const FString& Json, FBackendCombatStatus& OutStatus);
+
+	/** Parses where a respawned character came back. */
+	static bool ParseRespawn(const FString& Json, FBackendRespawn& OutRespawn);
+
 	/** Parses a JSON array of bodies. */
 	static bool ParseBodies(const FString& Json, TArray<FBackendBody>& OutBodies);
 
