@@ -64,7 +64,11 @@ FLAT_NORMAL_FOR = {"HumanoidMale", "MartianMale", "SpaceElfMale", "SpaceOrcMale"
 # The clip importer (SpaceMMOImportClipsCommandlet) sets the same source itself since 191, from its own table.
 AUTHORED_ON = {
     "HumanoidMale": ["/Game/Characters/Humanoid/anim_HumanoidMale_JumpStart",
-                     "/Game/Characters/Humanoid/anim_HumanoidMale_Sprint"],
+                     "/Game/Characters/Humanoid/anim_HumanoidMale_Sprint",
+                     "/Game/Characters/Humanoid/anim_HumanoidMale_Death_Backward",
+                     "/Game/Characters/Humanoid/anim_HumanoidMale_Death_Forward",
+                     "/Game/Characters/Humanoid/anim_HumanoidMale_Death_ToLeft",
+                     "/Game/Characters/Humanoid/anim_HumanoidMale_Death_ToRight"],
     "MartianMale": ["/Game/Characters/Martian/anim_MartianMale_JumpStart",
                     "/Game/Characters/Martian/anim_MartianMale_Sprint"],
     "SpaceElfMale": ["/Game/Characters/SpaceElf/anim_SpaceElfMale_JumpStart",

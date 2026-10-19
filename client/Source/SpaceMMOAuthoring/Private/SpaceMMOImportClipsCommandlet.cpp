@@ -104,6 +104,19 @@ namespace SpaceMMOImportClips
 			TEXT("anim_SpaceElfMale_Sprint"), Mannequin, nullptr, nullptr, 65, 103.0, 112.0, SpaceElfMale, 60.0},
 		{TEXT("RawContent/Characters/SpaceOrcMale/SpaceOrcMale_Sprint.fbx"), TEXT("/Game/Characters/SpaceOrc"),
 			TEXT("anim_SpaceOrcMale_Sprint"), Mannequin, nullptr, nullptr, 65, 95.0, 107.0, SpaceOrcMale, 60.0},
+
+		// The four deaths (task 201), made once on the Humanoid man by tools/characters/rig_character.py's fall() and
+		// played on every race, as his jump is: standing to lying in 1.3 s, then held. The pawn plays them by config
+		// (DeathClips), not from a graph. The root stays put like every clip here's: the body falls by its pelvis, from
+		// 92 cm to 15-17 (read off the first import, 18 October).
+		{TEXT("RawContent/Characters/HumanoidMale/HumanoidMale_Death_Backward.fbx"), TEXT("/Game/Characters/Humanoid"),
+			TEXT("anim_HumanoidMale_Death_Backward"), Mannequin, nullptr, nullptr, 41, 13.0, 94.0, HumanoidMale},
+		{TEXT("RawContent/Characters/HumanoidMale/HumanoidMale_Death_Forward.fbx"), TEXT("/Game/Characters/Humanoid"),
+			TEXT("anim_HumanoidMale_Death_Forward"), Mannequin, nullptr, nullptr, 41, 13.0, 94.0, HumanoidMale},
+		{TEXT("RawContent/Characters/HumanoidMale/HumanoidMale_Death_ToLeft.fbx"), TEXT("/Game/Characters/Humanoid"),
+			TEXT("anim_HumanoidMale_Death_ToLeft"), Mannequin, nullptr, nullptr, 41, 15.0, 94.0, HumanoidMale},
+		{TEXT("RawContent/Characters/HumanoidMale/HumanoidMale_Death_ToRight.fbx"), TEXT("/Game/Characters/Humanoid"),
+			TEXT("anim_HumanoidMale_Death_ToRight"), Mannequin, nullptr, nullptr, 41, 15.0, 94.0, HumanoidMale},
 	};
 
 	/**

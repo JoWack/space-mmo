@@ -1180,3 +1180,392 @@ def sprint_measure(name):
             "ankle_plantarflex_max": round(plantar, 1), "toe_bend_max": round(toe, 1), "knee_splay_max": round(splay, 2),
             "lowest_cm": round(100 * min(lows), 2), "lowest_at": f0 + int(np.argmin(lows)),
             "root_moves_m": round(float(np.ptp(np.array(roots), 0).max()), 5), "loop_max_diff": round(loop, 6)}
+
+
+# --- The falls (201) --------------------------------------------------------------------------------------------
+#
+# Four deaths, made once on the Humanoid man and played on every race as his jump is (Joe, 18 October): backward
+# (shot from the front), forward (from behind, ending face down), and to each side (rolling part way onto the back).
+# Epic's mannequin deaths never reach the ground -- they hand over to a ragdoll part way -- and a ragdoll cannot
+# finish here: the terrain has no collision. So each of these ends lying, and holds.
+#
+#     fall("Death_Backward", BACKWARD)     keys every frame from the eased keys below, at 30 a second, in place
+#     fall_measure(name)                   the lowest point every frame (never below the ground), the legs' reach
+#     fall_sheet(tag, frames, views, dir)  key frames from each view; fall_video(...) the action at its own speed
+#     export(name, "Death_Backward", name + "_Death_Backward", maps=False)
+#
+# fall() lifts the body on any frame where something other than a foot would go below the ground, and each foot by
+# its own target, so eased keys cannot sink a hip, a hand or a heel between them; what it lifted, and by which bone
+# when over 2 cm, is kept on the action. Arms for a lying pose were found with fall_arm_search, which tries a grid and
+# keeps the hand resting lowest with nothing of the arm underground.
+
+FALL_KEYS = ["c_root_master.x", "c_spine_02.x", "c_spine_04.x", "c_neck.x", "c_head.x", "c_shoulder.l", "c_shoulder.r",
+             "c_arm_fk.l", "c_arm_fk.r", "c_forearm_fk.l", "c_forearm_fk.r", "c_hand_fk.l", "c_hand_fk.r",
+             "c_foot_ik.l", "c_foot_ik.r"]
+
+# A fall, at thirtieths of a second: keys of named values, each eased to the next. lean is the whole body's tip (degrees
+# about the hips: lean_x back(-)/forward(+), lean_y to a side); hip_y/hip_z where the hips are (metres); sp2/sp4/neck/head
+# bend (degrees about X, + forward); twist turns the chest about Z; turn turns the head about Z; per arm out (from the
+# A-pose), swing (+ back), elbow; per foot y, z, toe (- toes up), splay.
+DEFAULT = dict(lean_x=0, lean_y=0, hip_x=0, hip_y=0.0, hip_z=0.92, sp2=0, sp4=0, neck=0, head=0, twist=0, turn=0, tilt=0,
+               out_l=-12, out_r=-12, swing_l=0, swing_r=0, elbow_l=-8, elbow_r=-8,
+               fx_l=0, fx_r=0, fy_l=0.02, fy_r=0.02, fz_l=0.09, fz_r=0.09, toe_l=0, toe_r=0, splay_l=0, splay_r=0, roll_l=0, roll_r=0)
+
+BACKWARD = [
+    (0, {}),
+    (3, dict(lean_x=-8, hip_y=0.04, hip_z=0.91, sp2=-6, sp4=-14, neck=-6, head=-18, twist=10,
+             out_l=45, out_r=30, swing_l=-10, swing_r=-5, elbow_l=-45, elbow_r=-35)),
+    (8, dict(lean_x=-12, hip_y=0.08, hip_z=0.86, sp2=-4, sp4=-8, neck=-2, head=-8, twist=12,
+             out_l=30, out_r=24, swing_l=0, swing_r=4, elbow_l=-30, elbow_r=-28)),
+    (14, dict(lean_x=-22, hip_y=0.16, hip_z=0.58, sp2=4, sp4=2, neck=6, head=12, twist=8, turn=6,
+              out_l=20, out_r=16, swing_l=15, swing_r=12, elbow_l=-20, elbow_r=-24, fy_r=-0.04)),
+    (20, dict(lean_x=-55, hip_y=0.32, hip_z=0.21, sp2=8, sp4=8, neck=10, head=25, twist=6, turn=10,
+              out_l=55, out_r=48, swing_l=8, swing_r=4, elbow_l=-25, elbow_r=-30,
+              fy_l=-0.02, fy_r=-0.08, fz_l=0.10, fz_r=0.10, toe_l=-15, toe_r=-12)),
+    (25, dict(lean_x=-86, hip_y=0.43, hip_z=0.155, sp2=5, sp4=4, neck=4, head=10, twist=4, turn=16,
+              out_l=40, out_r=36, swing_l=30, swing_r=26, elbow_l=-12, elbow_r=-14,
+              fy_l=-0.18, fy_r=-0.24, fz_l=0.11, fz_r=0.11, toe_l=-48, toe_r=-50, splay_l=14, splay_r=18)),
+    (28, dict(lean_x=-84, hip_y=0.44, hip_z=0.16, sp2=4, sp4=3, neck=-4, head=-12, twist=3, turn=20,
+              out_l=32, out_r=28, swing_l=22, swing_r=20, elbow_l=-14, elbow_r=-15,
+              fy_l=-0.26, fy_r=-0.30, fz_l=0.115, fz_r=0.115, toe_l=-60, toe_r=-64, splay_l=20, splay_r=22)),
+    (33, dict(lean_x=-88, hip_y=0.45, hip_z=0.157, sp2=4, sp4=3, neck=-6, head=-14, twist=3, turn=25,
+              out_l=26, out_r=24, swing_l=18, swing_r=18, elbow_l=-15, elbow_r=-16,
+              fx_l=0.03, fx_r=-0.05, fy_l=-0.31, fy_r=-0.35, fz_l=0.12, fz_r=0.12, toe_l=-68, toe_r=-72,
+              splay_l=24, splay_r=28)),
+    (40, None),
+]
+
+
+FORWARD = [
+    (0, {}),
+    (3, dict(lean_x=5, hip_y=-0.05, hip_z=0.91, sp2=-6, sp4=-14, neck=-8, head=-16, twist=-8,
+             out_l=34, out_r=42, swing_l=22, swing_r=28, elbow_l=-35, elbow_r=-45)),
+    (8, dict(lean_x=10, hip_y=-0.10, hip_z=0.86, sp2=2, sp4=-2, neck=2, head=6, twist=-10,
+             out_l=24, out_r=30, swing_l=10, swing_r=14, elbow_l=-28, elbow_r=-32)),
+    (14, dict(lean_x=24, hip_y=-0.16, hip_z=0.56, sp2=8, sp4=8, neck=8, head=16, twist=-6, turn=-8,
+              out_l=10, out_r=14, swing_l=-8, swing_r=-4, elbow_l=-20, elbow_r=-24, fy_l=0.04)),
+    (20, dict(lean_x=55, hip_y=-0.20, hip_z=0.44, sp2=10, sp4=10, neck=10, head=18, twist=-4, turn=-20,
+              out_l=18, out_r=22, swing_l=-20, swing_r=-14, elbow_l=-18, elbow_r=-22,
+              fy_l=0.16, fy_r=0.12, fz_l=0.10, fz_r=0.10, toe_l=30, toe_r=26)),
+    (25, dict(lean_x=86, hip_y=-0.30, hip_z=0.15, sp2=6, sp4=4, neck=6, head=10, twist=-3, turn=-55,
+              out_l=40, out_r=24, swing_l=-16, swing_r=4, elbow_l=-28, elbow_r=-14,
+              fy_l=0.46, fy_r=0.43, fz_l=0.11, fz_r=0.11, toe_l=50, toe_r=46, splay_l=8, splay_r=10)),
+    (28, dict(lean_x=84, hip_y=-0.31, hip_z=0.15, sp2=5, sp4=3, neck=4, head=6, twist=-3, turn=-65,
+              out_l=54, out_r=20, swing_l=-24, swing_r=8, elbow_l=-34, elbow_r=-10,
+              fy_l=0.47, fy_r=0.44, fz_l=0.11, fz_r=0.11, toe_l=62, toe_r=58, splay_l=12, splay_r=14)),
+    (33, dict(lean_x=88, hip_y=-0.32, hip_z=0.14, sp2=4, sp4=3, neck=4, head=6, twist=-3, turn=-70,
+              out_l=60, out_r=20, swing_l=-30, swing_r=10, elbow_l=-40, elbow_r=-10,
+              fx_l=0.04, fx_r=-0.03, fy_l=0.50, fy_r=0.47, fz_l=0.12, fz_r=0.12, toe_l=64, toe_r=60,
+              splay_l=14, splay_r=16)),
+    (40, None),
+]
+
+# Shot from the right: the body goes down to its left (+x), tipping onto its side and rolling part way onto its back.
+TO_LEFT = [
+    (0, {}),
+    (3, dict(lean_y=6, hip_x=0.03, hip_z=0.91, sp4=-8, twist=14, neck=-4, head=-10, tilt=14,
+             out_l=26, out_r=44, swing_l=-4, swing_r=-12, elbow_l=-30, elbow_r=-48)),
+    (8, dict(lean_y=12, lean_x=-4, hip_x=0.08, hip_z=0.86, sp4=-4, twist=16, head=-2, tilt=10,
+             out_l=20, out_r=34, swing_l=4, swing_r=-2, elbow_l=-26, elbow_r=-34, fz_l=0.09)),
+    (14, dict(lean_y=26, lean_x=-4, hip_x=0.16, hip_z=0.58, sp2=4, sp4=2, twist=12, neck=6, head=10, tilt=6, turn=10,
+              out_l=16, out_r=26, swing_l=10, swing_r=6, elbow_l=-20, elbow_r=-26, fx_r=0.04)),
+    (20, dict(lean_y=56, lean_x=-12, hip_x=0.30, hip_z=0.24, sp2=6, sp4=6, twist=8, neck=8, head=16, tilt=0, turn=14,
+              out_l=5, out_r=40, swing_l=-40, swing_r=-6, elbow_l=-40, elbow_r=-30,
+              fx_l=0.02, fx_r=0.08, fy_l=-0.04, fy_r=0.02, fz_l=0.10, fz_r=0.12, roll_l=20, roll_r=-10)),
+    (25, dict(lean_y=86, lean_x=-50, hip_x=0.42, hip_z=0.17, sp2=4, sp4=4, twist=5, neck=2, head=4, tilt=-6, turn=18,
+              out_l=2, out_r=8, swing_l=-50, swing_r=30, elbow_l=-34, elbow_r=-14,
+              fx_l=-0.42, fx_r=-0.12, fy_l=-0.10, fy_r=0.06, fz_l=0.10, fz_r=0.12, toe_l=-20, toe_r=-24,
+              roll_l=45, roll_r=-30)),
+    (28, dict(lean_y=84, lean_x=-56, hip_x=0.43, hip_z=0.185, sp2=4, sp4=3, twist=4, neck=-2, head=-6, tilt=-8, turn=20,
+              out_l=0, out_r=2, swing_l=-56, swing_r=50, elbow_l=-38, elbow_r=-12,
+              fx_l=-0.46, fx_r=-0.15, fy_l=-0.12, fy_r=0.08, fz_l=0.10, fz_r=0.11, toe_l=-26, toe_r=-30,
+              roll_l=50, roll_r=-36)),
+    (33, dict(lean_y=88, lean_x=-60, hip_x=0.44, hip_z=0.18, sp2=4, sp4=3, twist=4, neck=-4, head=-10, tilt=-8, turn=22,
+              out_l=0, out_r=0, swing_l=-60, swing_r=60, elbow_l=-40, elbow_r=-10,
+              fx_l=-0.48, fx_r=-0.16, fy_l=-0.14, fy_r=0.09, fz_l=0.10, fz_r=0.11, toe_l=-30, toe_r=-32,
+              roll_l=52, roll_r=-38)),
+    (40, None),
+]
+
+_MIRRORED = ("lean_y", "hip_x", "twist", "turn", "tilt")
+
+
+def mirror(keys):
+    """The same fall to the other side: left and right swapped, and everything across the body negated."""
+    out = []
+    for f, d in keys:
+        if d is None:
+            out.append((f, None))
+            continue
+        m = {}
+        for k, v in d.items():
+            if k.endswith("_l") or k.endswith("_r"):
+                other = k[:-2] + ("_r" if k.endswith("_l") else "_l")
+                m[other] = -v if k.startswith("fx") else v
+            elif k in _MIRRORED:
+                m[k] = -v
+            else:
+                m[k] = v
+        out.append((f, m))
+    return out
+
+
+TO_RIGHT = mirror(TO_LEFT)
+
+
+def _ease(a, b, t):
+    t = t * t * (3 - 2 * t)
+    return a + (b - a) * t
+
+
+def _resolve(keys):
+    out, prev = [], dict(DEFAULT)
+    for f, d in keys:
+        cur = dict(prev) if d is None else dict(DEFAULT, **d)
+        out.append((f, cur))
+        prev = cur
+    return out
+
+
+def _at(keys, f):
+    keys = _resolve(keys)
+    for (f0, a), (f1, b) in zip(keys, keys[1:]):
+        if f0 <= f <= f1:
+            t = (f - f0) / (f1 - f0)
+            return {k: _ease(a[k], b[k], t) for k in a}
+    return keys[-1][1]
+
+
+def fall_pose(p):
+    rig = bpy.data.objects["rig"]
+    pb, X, Y, reset, turn, move = _pose_tools(rig)
+    Z = Vector((0, 0, 1))
+    reset()
+    # Limbs first, in the standing frame; the lean then takes them with it.
+    turn("c_spine_02.x", X, p["sp2"])
+    turn("c_spine_04.x", X, p["sp4"])
+    turn("c_spine_04.x", Z, p["twist"])
+    turn("c_neck.x", X, p["neck"])
+    turn("c_head.x", X, p["head"])
+    turn("c_head.x", Z, p["turn"])
+    turn("c_head.x", Y, p["tilt"])
+    for side, sgn in (("l", 1), ("r", -1)):
+        turn("c_arm_fk." + side, Y, -sgn * p["out_" + side])
+        turn("c_arm_fk." + side, X, p["swing_" + side])
+        turn("c_forearm_fk." + side, X, p["elbow_" + side])
+    hip = pb["c_root_master.x"].head.copy()
+    # To the side first, then about the body's own length: a body that goes down sideways and rolls onto its back.
+    # (Forward and backward falls have no side, so the order changes nothing for them.)
+    turn("c_root_master.x", Y, p["lean_y"], pivot=hip)
+    turn("c_root_master.x", X, p["lean_x"], pivot=hip)
+    move("c_root_master.x", (p["hip_x"] - hip.x, p["hip_y"] - hip.y, p["hip_z"] - hip.z))
+    for side, sgn in (("l", 1), ("r", -1)):
+        ankle = pb["c_foot_ik." + side].head.copy()
+        move("c_foot_ik." + side, (p["fx_" + side], p["fy_" + side] - ankle.y, p["fz_" + side] - ankle.z))
+        a = pb["c_foot_ik." + side].head.copy()
+        turn("c_foot_ik." + side, X, p["toe_" + side], pivot=a)
+        turn("c_foot_ik." + side, Z, sgn * p["splay_" + side], pivot=a)
+        turn("c_foot_ik." + side, Y, sgn * p["roll_" + side], pivot=a)
+
+
+def fall(action, keys):
+    rig = bpy.data.objects["rig"]
+    pb = rig.pose.bones
+    old = bpy.data.actions.get(action)
+    if old is not None:
+        bpy.data.actions.remove(old)
+    act = bpy.data.actions.new(action)
+    act.use_fake_user = True
+    rig.animation_data.action = act
+    last = keys[-1][0]
+    body = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent == rig)
+    names = {g.index: g.name for g in body.vertex_groups}
+    owner = [names[max(v.groups, key=lambda g: g.weight).group] if v.groups else "" for v in body.data.vertices]
+    feet = np.array([o.startswith(("foot", "toes")) for o in owner])
+    foot_of = {s: np.array([o.startswith(("foot", "toes")) and o.endswith("." + s) for o in owner]) for s in ("l", "r")}
+    lifts, culprits = [], []
+    for f in range(0, last + 1):
+        fall_pose(_at(keys, f))
+        # Nothing but a foot is let below the ground: the body is lifted by whatever went under, so the eased keys
+        # cannot sink a hip or a shoulder between them.
+        dg = bpy.context.evaluated_depsgraph_get()
+        ev = body.evaluated_get(dg)
+        m = ev.to_mesh()
+        co = np.empty(len(m.vertices) * 3)
+        m.vertices.foreach_get("co", co)
+        ev.to_mesh_clear()
+        z = co.reshape(-1, 3)[:, 2]
+        under = 0.004 - float(z[~feet].min())
+        if under > 0.02:
+            culprits.append((f, owner[int(np.where(~feet)[0][np.argmin(z[~feet])])], round(100 * under, 1)))
+        if under > 0:
+            pb["c_root_master.x"].matrix = Matrix.Translation(Vector((0, 0, under))) @ pb["c_root_master.x"].matrix
+            bpy.context.view_layer.update()
+        # And each foot by its own target, so a heel turning up does not dig in.
+        for side in ("l", "r"):
+            dg = bpy.context.evaluated_depsgraph_get()
+            ev = body.evaluated_get(dg)
+            m = ev.to_mesh()
+            co = np.empty(len(m.vertices) * 3)
+            m.vertices.foreach_get("co", co)
+            ev.to_mesh_clear()
+            dug = 0.002 - float(co.reshape(-1, 3)[foot_of[side], 2].min())
+            if dug > 0:
+                c = pb["c_foot_ik." + side]
+                c.matrix = Matrix.Translation(Vector((0, 0, dug))) @ c.matrix
+                bpy.context.view_layer.update()
+                under = max(under, dug)
+        lifts.append(round(100 * max(under, 0.0), 1))
+        for c in FALL_KEYS:
+            pb[c].keyframe_insert("location", frame=f)
+            pb[c].keyframe_insert("rotation_euler", frame=f)
+        for c in ("c_hand_ik.l", "c_hand_ik.r", "c_foot_ik.l", "c_foot_ik.r"):
+            pb[c].keyframe_insert('["ik_fk_switch"]', frame=f)
+    scn = bpy.context.scene
+    scn.frame_start, scn.frame_end = 0, last
+    scn.render.fps, scn.render.fps_base = 30, 1.0
+    act["lifts_cm"] = lifts
+    act["culprits"] = str(culprits[::4])
+    return act
+
+
+def fall_measure(name):
+    """Every frame off the evaluated mesh: the lowest point (not below the ground), the hip-to-ankle reach (not past
+    the leg), and at the end how much of the body lies within 3 cm of the ground."""
+    rig, body = bpy.data.objects["rig"], bpy.data.objects[name]
+    scn = bpy.context.scene
+    act = rig.animation_data.action
+    lows, reach = [], []
+    for f in range(int(act.frame_range[0]), int(act.frame_range[1]) + 1):
+        scn.frame_set(f)
+        dg = bpy.context.evaluated_depsgraph_get()
+        ev = body.evaluated_get(dg)
+        m = ev.to_mesh()
+        co = np.empty(len(m.vertices) * 3)
+        m.vertices.foreach_get("co", co)
+        ev.to_mesh_clear()
+        co = co.reshape(-1, 3)
+        lows.append(float(co[:, 2].min()))
+        pbs = rig.pose.bones
+        reach.append(max((pbs["thigh_ik." + s].head - pbs["foot." + s].head).length for s in ("l", "r")))
+        last = co
+    touching = float((last[:, 2] < 0.03).mean())
+    return {"lowest_cm": round(100 * min(lows), 1), "lowest_at": int(np.argmin(lows)),
+            "lowest_final_cm": round(100 * lows[-1], 1), "reach_max": round(max(reach), 3),
+            "final_top_cm": round(100 * float(last[:, 2].max()), 1), "touching_final": round(touching, 3)}
+
+
+def fall_sheet(tag, frames, views, out_dir):
+    sc = bpy.context.scene
+    sc.render.engine = "BLENDER_WORKBENCH"
+    sc.display.shading.light = "STUDIO"
+    sc.display.shading.color_type = "TEXTURE"
+    sc.render.resolution_x, sc.render.resolution_y = 480, 360
+    if "FallGround" not in bpy.data.objects:
+        me = bpy.data.meshes.new("FallGround")
+        me.from_pydata([(-3, -3, 0), (3, -3, 0), (3, 3, 0), (-3, 3, 0)], [], [(0, 1, 2, 3)])
+        g = bpy.data.objects.new("FallGround", me)
+        sc.collection.objects.link(g)
+    cd = bpy.data.cameras.get("FallCam") or bpy.data.cameras.new("FallCam")
+    cam = bpy.data.objects.get("FallCam") or bpy.data.objects.new("FallCam", cd)
+    if cam.name not in sc.collection.objects:
+        sc.collection.objects.link(cam)
+    sc.camera = cam
+    rows = []
+    for view, loc, target in views:
+        row = []
+        for f in frames:
+            sc.frame_set(f)
+            cam.location = loc
+            cam.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
+            path = "%s/%s_f%02d_%s.png" % (out_dir, tag, f, view)
+            sc.render.filepath = path
+            bpy.ops.render.render(write_still=True)
+            im = bpy.data.images.load(path)
+            a = np.empty(im.size[0] * im.size[1] * 4, np.float32)
+            im.pixels.foreach_get(a)
+            row.append(a.reshape(im.size[1], im.size[0], 4))
+            bpy.data.images.remove(im)
+        rows.append(np.concatenate(row, 1))
+    g = np.concatenate(rows[::-1], 0)
+    sheet = bpy.data.images.new("fall_sheet", g.shape[1], g.shape[0])
+    sheet.pixels.foreach_set(g.ravel())
+    os.makedirs(out_dir, exist_ok=True)
+    out = "%s/%s_sheet.png" % (out_dir, tag)
+    sheet.filepath_raw = out
+    sheet.file_format = "PNG"
+    sheet.save()
+    bpy.data.images.remove(sheet)
+    return out
+
+
+def fall_clean_up():
+    for n in ("FallGround", "FallCam"):
+        o = bpy.data.objects.get(n)
+        if o is not None:
+            bpy.data.objects.remove(o)
+    for coll in (bpy.data.meshes, bpy.data.cameras):
+        x = coll.get("FallGround") or coll.get("FallCam")
+        if x is not None:
+            coll.remove(x)
+
+
+def fall_video(tag, loc, target, out_dir, size=(640, 400), hold=20):
+    """The action as an MP4 at its own 30 a second, the last frame held a moment, for judging the timing."""
+    sc = bpy.context.scene
+    sc.render.engine = "BLENDER_WORKBENCH"
+    sc.display.shading.light = "STUDIO"
+    sc.display.shading.color_type = "TEXTURE"
+    sc.render.resolution_x, sc.render.resolution_y = size
+    cam = bpy.data.objects["FallCam"]
+    sc.camera = cam
+    cam.location = loc
+    cam.rotation_euler = (Vector(target) - Vector(loc)).to_track_quat("-Z", "Y").to_euler()
+    f0, f1 = sc.frame_start, sc.frame_end
+    sc.frame_end = f1 + hold
+    s = sc.render.image_settings
+    if hasattr(s, "media_type"):
+        s.media_type = "VIDEO"
+    s.file_format = "FFMPEG"
+    sc.render.ffmpeg.format = "MPEG4"
+    sc.render.ffmpeg.codec = "H264"
+    sc.render.filepath = "%s/%s.mp4" % (out_dir, tag)
+    bpy.ops.render.render(animation=True)
+    sc.frame_end = f1
+    if hasattr(s, "media_type"):
+        s.media_type = "IMAGE"
+    s.file_format = "PNG"
+    return sc.render.filepath
+
+
+def fall_arm_search(keys, frame, side, outs, swings, elbows):
+    """At one frame of a fall, every arm pose in the grid: how low that arm's hand and the arm itself go. Picks the
+    one whose hand rests lowest without anything of the arm under the ground."""
+    rig, body = bpy.data.objects["rig"], bpy.data.objects["HumanoidMale"]
+    names = {g.index: g.name for g in body.vertex_groups}
+    owner = [names[max(v.groups, key=lambda g: g.weight).group] if v.groups else "" for v in body.data.vertices]
+    arm = np.array([o.endswith("." + side) and any(k in o for k in ("arm", "hand", "thumb", "index", "middle", "ring",
+                                                                       "pinky", "forearm", "shoulder")) for o in owner])
+    hand = np.array([o.endswith("." + side) and any(k in o for k in ("hand", "thumb", "index", "middle", "ring", "pinky"))
+                     for o in owner])
+    rest = [o for o in range(len(owner)) if not arm[o]]
+    base = _at(keys, frame)
+    rows = []
+    for out in outs:
+        for swing in swings:
+            for elbow in elbows:
+                p = dict(base)
+                p["out_" + side], p["swing_" + side], p["elbow_" + side] = out, swing, elbow
+                fall_pose(p)
+                dg = bpy.context.evaluated_depsgraph_get()
+                ev = body.evaluated_get(dg)
+                m = ev.to_mesh()
+                co = np.empty(len(m.vertices) * 3)
+                m.vertices.foreach_get("co", co)
+                ev.to_mesh_clear()
+                z = co.reshape(-1, 3)[:, 2]
+                rows.append((round(100 * float(z[arm].min()), 1), round(100 * float(z[hand].min()), 1),
+                             round(100 * float(z[rest].min()), 1), out, swing, elbow))
+    ok = [r for r in rows if r[0] >= -0.5]
+    ok.sort(key=lambda r: r[1])
+    return {"best": ok[:5], "tried": len(rows), "body_low_cm": rows[0][2]}

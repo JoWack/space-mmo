@@ -10471,7 +10471,7 @@ else -- the camera, the render origin -- slides after it.
 
 ## 201 — A dying animation for every race
 
-**In progress, 18 October.** Belongs to **M6**, with 194 and 103. Joe, 18
+**Built 18 October; waiting on a death in play.** Belongs to **M6**, with 194 and 103. Joe, 18
 October: "I would like a dying animation for each race."
 
 **What is there.** Nothing plays on death: the dead stand where they fell, movement locked (194's "Not done").
@@ -10519,3 +10519,44 @@ measured lying on each body, with renders for his yes before anything is importe
 - The server decides the fall when a shot kills (`FallFrom`, from the hit's facing and which side it came from)
   and a variant among that fall's clips, both replicated with `bDead`, so every machine plays the same one.
 
+### The falls, made in Blender 18 October
+`rig_character.py`'s `fall()` on the Humanoid man's rig, keyed every frame at 30 a second from eased key poses: the
+hit (chest and head snap back, arms flinch out), a stagger, the knees giving unevenly, the hips down in about
+free-fall time, the back or front landing, a settle, then held -- 1.3 s to lying, 41 keys.
+
+| Fall | Shot from | Ends |
+|---|---|---|
+| `Death_Backward` | the front | on the back, arms out, head turned |
+| `Death_Forward` | behind | face down, onto the knees first, head turned onto a cheek |
+| `Death_ToLeft` | the right | down on the left side, rolled part way onto the back, the lower arm under the head |
+| `Death_ToRight` | the left | the same, mirrored by `mirror()` rather than keyed again |
+
+- **Nothing goes below the ground**, measured off the evaluated mesh every frame: `fall()` lifts the body when
+  anything but a foot would, and each foot by its own target. The first drafts sank 2.8 cm (heels), 16 cm (a knee and
+  a thumb, forward) and 63 cm (the side fall's lower arm, flung outward into the ground); each was found by the bone
+  `fall()` records, and the arms by `fall_arm_search`'s grid, not by eye.
+- **Joe's first look** (the backward fall alone, to settle the style before the other three): yes. The first draft
+  had read as a squat and a sit-up -- arms reaching forward, torso upright -- and was redone limp, asymmetric, with
+  the arms trailing.
+- Exported as `HumanoidMale_Death_*.fbx`, imported by `SpaceMMOImportClips` onto the library skeleton with the
+  Humanoid as retarget source (his jump's arrangement): root still, the pelvis 92 cm to 15-17.
+- `SpaceMMO.Death.EveryDeathEndsLyingOnTheGroundOnEveryRace` evaluates each clip's last frame on every race's body at
+  its drawn height: pelvis under 30 cm, head under 40, no joint below the ground.
+
+### Verified, and how, 18 October
+- Client suite 327, against a build that said `Result: Succeeded`.
+- **The lying test caught a real fault on its first run:** the forward fall put the SpaceOrc's thumbs 2.5 cm under the
+  ground, and the side fall his lower upper arm at -0.2 cm, where every other race was 3-12 cm clear. A clip shared
+  across bodies moves the arms by angle, and the orc's hang 40 degrees out on a far broader frame (191 met the same).
+  Fixed in the clip, not the test: the forward fall's arms were searched again for poses with the forearm on the
+  ground and the hand 7-9 cm clear on the Humanoid, and the side falls lie 1.5 cm higher.
+- **Broken on purpose:** a fall pointed at the library's jog fails the lying test (pelvis 87 cm on the Humanoid).
+- **Rendered in game** by `SpaceMMOLookPanels Fall` on all four races (backward), and the orc's forward and side falls:
+  each race plays them and ends in its lying pose. The look harness's character is in mid-air, so ground contact is
+  the tests' and the playtest's to show.
+- **Known limit:** the test measures joints. A body's skin lies below its joints, so a broad body on its side -- the
+  orc -- may still sink a few centimetres of shoulder into the ground with every joint above it. If the playtest
+  shows it, the fix is a per-race lift while dead, measured, in `RaceBodies`.
+- **Not verified by anything but the playtest:** a death between two clients, the body lying where it fell on both
+  screens, the fall matching the side the killing shot came from, a late-joining or re-signing client seeing the
+  body already down, and Respawn bringing it back standing.
