@@ -1248,6 +1248,22 @@ enum class EBackendHitFacing : uint8
 	Back = 2,
 };
 
+/**
+ * Why this window's time on the server is over (task 199). Held for the rest of the run: a client that has lost its
+ * server shows why, and never carries on as an offline game of its own.
+ */
+UENUM(BlueprintType)
+enum class ESpaceMMOSessionEnd : uint8
+{
+	None = 0,
+
+	/** The same account signed in from another window or computer, and the newest sign-in wins. */
+	SignedInElsewhere = 1,
+
+	/** Any other way of losing the server: stopped, crashed, unreachable. */
+	LostConnection = 2,
+};
+
 /** The weapon a character would fire: what is in Weapon 1 (task 194). */
 USTRUCT(BlueprintType)
 struct SPACEMMOBACKEND_API FBackendWeapon

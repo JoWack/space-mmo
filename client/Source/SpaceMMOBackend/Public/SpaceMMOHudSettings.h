@@ -115,6 +115,16 @@ public:
 	FSoftClassPath LoginScreen;
 
 	/**
+	 * Why a session ended: signed in elsewhere, or the server lost (task 199). Must derive from
+	 * <c>USpaceMMOSessionEndedScreen</c>.
+	 *
+	 * Unset still stops a disconnected window carrying on as an offline game; it shows nothing, and the log says why.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOSessionEndedScreen"))
+	FSoftClassPath SessionEndedScreen;
+
+	/**
 	 * Character select, after sign-in (task 110). Must derive from
 	 * <c>USpaceMMOCharacterSelectScreen</c>.
 	 *

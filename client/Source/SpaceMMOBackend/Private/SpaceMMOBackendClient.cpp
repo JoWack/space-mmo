@@ -2,6 +2,9 @@
 
 #include "GenericPlatform/GenericPlatformHttp.h"
 
+#include "Engine/Engine.h"
+#include "Engine/NetDriver.h"
+
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -25,6 +28,12 @@ void USpaceMMOBackendClient::Initialize(FSubsystemCollectionBase& Collection)
 	}
 
 	LoadServiceSecret();
+
+	if (GEngine != nullptr)
+	{
+		NetworkFailureHandle =
+			GEngine->OnNetworkFailure().AddUObject(this, &USpaceMMOBackendClient::HandleNetworkFailure);
+	}
 
 	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Backend client ready, base URL %s"), *BaseUrl);
 
@@ -433,10 +442,48 @@ void USpaceMMOBackendClient::RespawnAsServer(
 
 void USpaceMMOBackendClient::Deinitialize()
 {
+	if (GEngine != nullptr)
+	{
+		GEngine->OnNetworkFailure().Remove(NetworkFailureHandle);
+	}
+
 	// The token is deliberately not persisted anywhere, so dropping it here is the whole cleanup.
 	Session = FBackendSession();
 
 	Super::Deinitialize();
+}
+
+void USpaceMMOBackendClient::EndSession(const ESpaceMMOSessionEnd Reason)
+{
+	if (SessionEnd != ESpaceMMOSessionEnd::None || Reason == ESpaceMMOSessionEnd::None)
+	{
+		return;
+	}
+
+	SessionEnd = Reason;
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Session over: %s. This window will show why and not sign in again."),
+		*StaticEnum<ESpaceMMOSessionEnd>()->GetNameStringByValue(static_cast<int64>(Reason)));
+}
+
+bool USpaceMMOBackendClient::LosesTheServer(const bool bDriverIsServer, const FName DriverName)
+{
+	return !bDriverIsServer && (DriverName == NAME_GameNetDriver || DriverName == NAME_PendingNetDriver);
+}
+
+void USpaceMMOBackendClient::HandleNetworkFailure(
+	UWorld* World, UNetDriver* NetDriver, const ENetworkFailure::Type FailureType, const FString& Error)
+{
+	if (NetDriver == nullptr || !LosesTheServer(NetDriver->IsServer(), NetDriver->NetDriverName))
+	{
+		return;
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Lost the server (%s): %s"), ENetworkFailure::ToString(FailureType), *Error);
+
+	// Without this the engine loads its default map as a standalone game, which signs in from the credentials file
+	// and claims the character as its own server -- a second copy nobody can see (task 199, 17 October 03:19).
+	EndSession(ESpaceMMOSessionEnd::LostConnection);
 }
 
 void USpaceMMOBackendClient::SetBaseUrl(const FString& InBaseUrl)

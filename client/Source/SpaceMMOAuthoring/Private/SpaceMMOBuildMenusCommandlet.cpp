@@ -945,6 +945,42 @@ namespace SpaceMMOBuildMenus
 		AddV(Body, B.Button(TEXT("RespawnButton"), TEXT("Respawn"), true), FMargin(0, 22, 0, 0), HAlign_Center);
 	}
 
+	/**
+	 * Why a session ended (task 199), as Joe approved it on 18 October: the death panel's box, title, line and one
+	 * button, over a screen dark enough that the map behind -- the empty one a disconnected window falls back to --
+	 * reads as gone. The words are set at run time (USpaceMMOSessionEndedScreen).
+	 */
+	void BuildSessionEnded(const FBuilder& B)
+	{
+		UOverlay* Root = B.Make<UOverlay>(TEXT("Root"));
+		B.Blueprint->WidgetTree->RootWidget = Root;
+
+		UImage* Dark = B.Make<UImage>(TEXT("Dark"));
+		Dark->SetBrush(Solid(FLinearColor(0.004f, 0.005f, 0.008f, 1.0f), FVector2D(32.0, 32.0)));
+		AddO(Root, Dark);
+
+		UBorder* Box = B.Make<UBorder>(TEXT("Box"));
+		Box->SetBrush(SpaceMMO::Style::PromptGlass());
+		Box->SetPadding(FMargin(44.0f, 30.0f));
+		AddO(Root, Box, HAlign_Center, VAlign_Center);
+
+		UVerticalBox* Body = B.Make<UVerticalBox>(TEXT("Body"));
+		Box->AddChild(Body);
+
+		AddV(Body, B.Text(TEXT("TitleText"), TEXT("Signed in elsewhere"), 26.0f, TextPrimary, TEXT("Regular"), 0, true),
+			FMargin(), HAlign_Center);
+
+		UTextBlock* Note = B.Text(TEXT("NoteText"),
+			TEXT("This account was signed in from another window or computer, so this one has been disconnected."), 15.0f,
+			TextSecondary, TEXT("Regular"), 0, true);
+		Note->SetAutoWrapText(true);
+		Note->SetWrapTextAt(440.0f);
+		Note->SetJustification(ETextJustify::Center);
+		AddV(Body, Note, FMargin(0, 12, 0, 0), HAlign_Center);
+
+		AddV(Body, B.Button(TEXT("QuitButton"), TEXT("Quit"), true), FMargin(0, 22, 0, 0), HAlign_Center);
+	}
+
 	// ------------------------------------------------------------------------------------------------
 	// Making, saving and checking
 
@@ -1085,6 +1121,9 @@ int32 USpaceMMOBuildMenusCommandlet::Main(const FString& Params)
 		// Task 194.
 		{TEXT("WBP_CombatHud"), TEXT("/Script/SpaceMMOBackend.SpaceMMOCombatHud"), &BuildCombatHud, nullptr, nullptr, {},
 			TEXT("/Game/UI")},
+
+		// Task 199.
+		{TEXT("WBP_SessionEnded"), TEXT("/Script/SpaceMMOBackend.SpaceMMOSessionEndedScreen"), &BuildSessionEnded},
 	};
 
 	int32 Problems = 0;

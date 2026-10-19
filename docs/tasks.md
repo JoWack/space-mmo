@@ -10318,3 +10318,110 @@ the same Postgres; a re-run took 50 s with no test slower than 2.2 s, and the ca
 
 **For Joe:** turn the quest in from the station's Quests tab. Restart the API, or docking will not count again
 until it is: the running one predates the fix.
+
+## 198 — Shots feel late: measure the delay, and draw your own bolt at once
+
+**Stage 1 built, 18 October: measured, numbered, and your own bolt drawn at once; waiting on a fight to read the
+numbers from.** Belongs to **M6**, with 194. Joe's two-client fight on 17 October: "some lag in the
+combat and the damage appearing after 'shooting' each other".
+
+**Measured from the 17 October logs, before changing anything.** The server logs a hit when it traces it, before
+asking the API; the shooter's client logs "hit for N" when the answer arrives. All three logs share one clock.
+- Server trace to the shooter's confirmation: **105–141 ms** on localhost, and **547 ms for the first hit**.
+- `CombatService.HitAsync` alone, timed against the test database: **about 20 ms warm, 183 ms cold** (EF Core
+  compiling the hit's queries the first time). That is most of the first hit's stall.
+- HTTP to the API on localhost, timed with curl against a scratch copy: **about 1 ms**; a warm status call is 6 ms.
+- The engine's HTTP thread is the event-loop one on both client and server (`CreateHttpThread using
+  FCurlMultiPollEventLoopHttpThread` in both logs), so it has no 33 ms idle sleep. Its completions are handed to
+  the game thread, and the dedicated server ticks at 30 Hz: up to 33 ms there.
+- That accounts for about 60 ms of the 105–141. **The rest is unexplained**, and the leg from the click to the
+  server has never been logged at all.
+- **Ruled out:** the service-credential check (a byte compare), the HTTP thread's idle sleep (not the thread in
+  use), `localhost` resolution (curl times `localhost` and `127.0.0.1` alike).
+
+**The shooter's own bolt waited for the server**, too: drawn only from the server's multicast, so a round trip
+plus a server frame after the click, before anything about damage.
+
+### Decided by Joe, 18 October
+- **Your own bolt is drawn the moment you click**, along your own aim; everyone else still sees the server's.
+  Damage numbers still wait for the server. Offered against waiting for the server, as before.
+
+### Built, 18 October
+- **Every shot is numbered by the client that fired it**, and each machine logs it under that number:
+  - the shooter: `Combat: shot N sent.`, `shot N came back from the server X ms after the click.` (the server's bolt
+    arriving: the round trip), and `shot N hit for D, X ms after the click.` or `shot N refused, ...`;
+  - the server: `character C hit character T with shot N, ...` or `fired shot N; it stopped ...`, then `shot N
+    answered in X ms, Y ms after it arrived.` (the API as the game thread sees it, frame wait included), and
+    `shot N from character C dropped, X ms after the last.` -- a click the cooldown refused, which was silent and
+    looks exactly like lag from the other end;
+  - the target: `Combat: health H of M as of the last fight (was B).`, on its own machine.
+  All four logs share one clock, so the legs subtract.
+- **The shooter's own bolt is drawn on the click**: the client traces the shot the way the server does (one
+  function, `TraceShot`, for both) and draws it; the server's multicast skips the shooter's own screen.
+
+### Verified, and how
+- Client suite 321, against a build that said `Result: Succeeded`. Nothing here has a headless test: the numbering
+  is log lines, and the bolt drawn on the click needs two machines and a world. **Both are the playtest's to show.**
+- The shared trace is one function called from both places, so the shooter's bolt and the server's agree by
+  construction, give or take where each machine thinks the shooter is standing.
+
+### Still open
+- Where the unexplained 45–80 ms goes. The numbered logs above answer it from one fight.
+- The first hit's cold stall, once per API start.
+- The server's 30 Hz tick costs up to 33 ms twice per hit (the shot arriving, the API's answer arriving). It is
+  `NetServerMaxTickRate`, settable in the staged server's own `Saved/Config` without a re-cook: a switch, if the
+  numbers point at it.
+
+## 199 — One character in the world per account, and no offline game after a disconnect
+
+**Built 18 October; waiting on `join.bat a` twice.** Belongs to **M5**. Found by Joe on 17 October: `join.bat a` run twice put two
+copies of Ayla in the world, one per window.
+
+**The cause.** The dedicated server resolves a connection's character after it joins (`ServerIdentify`, then
+`AdoptIdentity`), and nothing asked whether that character, or anyone on the account, was already in the world.
+
+**The sibling, found looking for it.** When a client loses its server for any reason, the engine loads the default
+map, `/Engine/Maps/Entry`, as a **standalone game**: it signs in from the credentials file, claims the character
+as its own server would, and writes whereabouts to the real backend. `ClientA-backup-2026.10.17-03.56.21.log` shows
+it: the connection timed out at 03:19:05, and at 03:19:27 that window logged `Connection identified as character
+11 (Ayla1204) on account 8`. So "disconnect the older window" alone would still leave two Aylas: the bumped
+window would become an offline one the server cannot see.
+
+### Decided by Joe, 18 October
+Each offered against alternatives, Claude's suggestion first:
+- **The newest sign-in wins**: the earlier window is disconnected. Offered against refusing the second, which
+  locks a crashed client's owner out until the dead connection times out.
+- **One per account**, not per character: an account cannot run two of its characters at once.
+- **The window that loses shows a panel**, death-panel style, over a dark empty background: "SIGNED IN ELSEWHERE",
+  "This account was signed in from another window or computer, so this one has been disconnected.", and a Quit
+  button only (a Reconnect would bump the other window straight back). Offered against closing the window.
+- **Any other lost connection shows the same panel in its own words**: "DISCONNECTED", "The connection to the
+  server was lost.", Quit. Offered against adding Reconnect, and against quitting.
+
+### Built, 18 October
+- **Server:** the controller keeps the account it plays (`AccountId`). When a sign-in resolves, `EndEarlierSessions`
+  finds every other connection on the account (`EndedBySignIn`) and ends it: its whereabouts are recorded while
+  its pawn still exists (the engine's kick destroys the pawn first, and `Destroyed` would find nothing to read),
+  it is told why (`ClientSessionEnded`), and it is kicked. When it was the same character, **its pawn's position is
+  handed to the new connection**, fresher than the backend's record by up to the 15 s whereabouts interval.
+- **Client:** a reason for the session ending is held by the backend client, which outlives the map change: from
+  the server's `ClientSessionEnded`, or from any failure of the client's own game connection (`LosesTheServer`). The
+  first reason holds, so the drop after "signed in elsewhere" does not overwrite it. On the map it falls back to,
+  the controller shows `WBP_SessionEnded` and does nothing else: no HUD, and no sign-in.
+- `WBP_SessionEnded` is built by SpaceMMOBuildMenus. `SpaceMMOLookPanels SignedInElsewhere` and `Disconnected` show
+  it.
+
+### Verified, and how
+- Client suite 321 (4 new), against a build that said `Result: Succeeded`.
+- **Broken on purpose, each failing its own test and nothing else:** a connection still signing in ended by
+  anybody's sign-in (the zero check dropped); a server ending its own session when a client of its drops (the
+  server check dropped); the connection dropping after "signed in elsewhere" overwriting the reason.
+- **Rendered:** `SpaceMMOLookPanels SignedInElsewhere` and `Disconnected` match the approved mocks, the box centred
+  on a near-black screen. The engine's own green development messages still draw over it at top left, as over
+  everything in a development build.
+- **Not verified by anything but the playtest:** the server finding the earlier connection, the kick, the client
+  falling back and showing the panel, the position handed over, and that the bumped window never signs in again.
+
+### Known limits
+- **One game server.** The check is the dedicated server's own list of connections; with more than one server the
+  backend will have to hold who is online.

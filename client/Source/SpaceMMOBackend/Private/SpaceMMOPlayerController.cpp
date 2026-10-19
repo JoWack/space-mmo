@@ -6,6 +6,8 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/GameModeBase.h"
+#include "GameFramework/GameSession.h"
 #include "GameFramework/Pawn.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -26,6 +28,7 @@
 #include "SpaceMMOEquipmentScreen.h"
 #include "SpaceMMOInventoryScreen.h"
 #include "SpaceMMOLoginScreen.h"
+#include "SpaceMMOSessionEndedScreen.h"
 #include "SpaceMMODockingComponent.h"
 #include "SpaceMMODepositPrompt.h"
 #include "SpaceMMOGatheringComponent.h"
@@ -70,6 +73,13 @@ void ASpaceMMOPlayerController::BeginPlay()
 	// Only the machine sitting in front of the player has a token to present.
 	if (IsLocalController())
 	{
+		// A window whose session is over shows why and nothing else: no HUD, and above all no sign-in, which on the
+		// map a disconnected client falls back to would make it an offline game claiming the character (task 199).
+		if (ShowSessionEndedIfOver())
+		{
+			return;
+		}
+
 		// The HUD first. BeginIdentifying decides whether to ask for a sign-in, and it cannot ask on
 		// a screen that does not exist yet -- which is what happened when this ran the other way
 		// round: it logged "no login screen configured" and the screen was created 128 ms later.
@@ -1798,6 +1808,26 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 		}
 	}
 
+	// SignedInElsewhere and Disconnected: the panel a window shows once its session is over (task 199), made here
+	// as the fallback map makes it, since a look run has no server to lose. Over the HUD rather than instead of it,
+	// which the panel's dark background hides either way.
+	const bool bElsewhereLook = View.Equals(TEXT("SignedInElsewhere"), ESearchCase::IgnoreCase);
+
+	if (bElsewhereLook || View.Equals(TEXT("Disconnected"), ESearchCase::IgnoreCase))
+	{
+		if (SessionEndedScreen == nullptr)
+		{
+			SessionEndedScreen = CreateHudWidget<USpaceMMOSessionEndedScreen>(
+				this, GetDefault<USpaceMMOHudSettings>()->SessionEndedScreen, TEXT("session-ended screen"));
+		}
+
+		if (SessionEndedScreen != nullptr)
+		{
+			SessionEndedScreen->Show(
+				bElsewhereLook ? ESpaceMMOSessionEnd::SignedInElsewhere : ESpaceMMOSessionEnd::LostConnection);
+		}
+	}
+
 	// Gear: the equipment screen beside the inventory (task 193), and docked, so the station overlay is open
 	// underneath it and the capture shows it staying hidden.
 	const bool bGear = View.Equals(TEXT("Gear"), ESearchCase::IgnoreCase);
@@ -1952,7 +1982,12 @@ void ASpaceMMOPlayerController::ServerIdentify_Implementation(
 					return;
 				}
 
-				Controller->AdoptIdentity(Resolved);
+				// One character in the world per account, the newest sign-in winning (task 199). Before adopting, so
+				// a replaced copy of this same character can hand over where it stands.
+				FBackendResolvedCharacter Taking = Resolved;
+
+				Controller->EndEarlierSessions(Taking);
+				Controller->AdoptIdentity(Taking);
 
 				UE_LOG(LogSpaceMMOBackend, Log,
 					TEXT("Connection identified as character %d (%s) on account %d."),
@@ -1960,10 +1995,144 @@ void ASpaceMMOPlayerController::ServerIdentify_Implementation(
 			}));
 }
 
+void ASpaceMMOPlayerController::EndEarlierSessions(FBackendResolvedCharacter& Resolved)
+{
+	UWorld* World = GetWorld();
+
+	if (World == nullptr || !HasAuthority() || Resolved.AccountId == 0)
+	{
+		return;
+	}
+
+	// Gathered first: ending one destroys it, which is no time to be walking the list it is in.
+	TArray<ASpaceMMOPlayerController*> Earlier;
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		ASpaceMMOPlayerController* Other = Cast<ASpaceMMOPlayerController>(It->Get());
+
+		if (Other != nullptr && Other != this && EndedBySignIn(Other->AccountId, Resolved.AccountId))
+		{
+			Earlier.Add(Other);
+		}
+	}
+
+	for (ASpaceMMOPlayerController* Other : Earlier)
+	{
+		// The same character: where its pawn stands now, rather than the backend's record, which is up to a
+		// whereabouts interval old. A crashed window's pawn is still standing where it was.
+		if (Other->CharacterId == Resolved.CharacterId && Other->bPlacedForThisSession)
+		{
+			const APawn* Standing = Other->GetPawn();
+
+			if (const ASpaceMMOShipPawn* Ship = Cast<ASpaceMMOShipPawn>(Standing))
+			{
+				Resolved.bHasLastPosition = true;
+				Resolved.LastPositionKilometres = Ship->GetSystemPosition().Kilometres;
+				Resolved.bLastSeenFlying = true;
+			}
+			else if (const ASpaceMMOCharacterPawn* OnFoot = Cast<ASpaceMMOCharacterPawn>(Standing))
+			{
+				Resolved.bHasLastPosition = true;
+				Resolved.LastPositionKilometres = OnFoot->GetSystemPosition().Kilometres;
+				Resolved.bLastSeenFlying = false;
+			}
+		}
+
+		UE_LOG(LogSpaceMMOBackend, Log,
+			TEXT("Account %d signed in again as character %d; ending the earlier connection, playing character %d."),
+			Resolved.AccountId, Resolved.CharacterId, Other->CharacterId);
+
+		Other->EndSessionForNewerSignIn();
+	}
+}
+
+bool ASpaceMMOPlayerController::EndedBySignIn(const int32 PlayingAccountId, const int32 SigningInAccountId)
+{
+	return PlayingAccountId != 0 && PlayingAccountId == SigningInAccountId;
+}
+
+void ASpaceMMOPlayerController::EndSessionForNewerSignIn()
+{
+	// While the pawn is still here: the engine's kick destroys the pawn before this controller, and Destroyed then
+	// finds nothing to read a position from.
+	RecordWhereabouts();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(WhereaboutsTimer);
+	}
+
+	// Before the kick, so it is queued ahead of the connection closing. The client records it and leaves itself.
+	ClientSessionEnded(ESpaceMMOSessionEnd::SignedInElsewhere);
+
+	// Nothing more is recorded or done for the character from this connection: the newer one has it.
+	CharacterId = 0;
+	AccountId = 0;
+
+	const UWorld* World = GetWorld();
+	AGameModeBase* GameMode = World != nullptr ? World->GetAuthGameMode() : nullptr;
+
+	if (GameMode != nullptr && GameMode->GameSession != nullptr
+		&& GameMode->GameSession->KickPlayer(this, FText::FromString(TEXT("Signed in elsewhere"))))
+	{
+		return;
+	}
+
+	// A connection-less controller, which only a listen or standalone server has: nothing to kick, so just go.
+	Destroy();
+}
+
+void ASpaceMMOPlayerController::ClientSessionEnded_Implementation(const ESpaceMMOSessionEnd Reason)
+{
+	if (USpaceMMOBackendClient* Client = Backend())
+	{
+		Client->EndSession(Reason);
+	}
+
+	// Leaves the server the way the engine's own "return to main menu" does, to its default map, where BeginPlay
+	// finds the reason waiting and shows it.
+	if (UGameInstance* GameInstance = GetGameInstance())
+	{
+		GameInstance->ReturnToMainMenu();
+	}
+}
+
+bool ASpaceMMOPlayerController::ShowSessionEndedIfOver()
+{
+	const USpaceMMOBackendClient* Client = Backend();
+	const ESpaceMMOSessionEnd Reason = Client != nullptr ? Client->GetSessionEnd() : ESpaceMMOSessionEnd::None;
+
+	if (Reason == ESpaceMMOSessionEnd::None)
+	{
+		return false;
+	}
+
+	SessionEndedScreen = CreateHudWidget<USpaceMMOSessionEndedScreen>(
+		this, GetDefault<USpaceMMOHudSettings>()->SessionEndedScreen, TEXT("session-ended screen"));
+
+	if (SessionEndedScreen != nullptr)
+	{
+		SessionEndedScreen->Show(Reason);
+	}
+
+	// The cursor for Quit, and no keys reaching whatever the fallback map put under the screen.
+	FInputModeUIOnly Mode;
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	SetInputMode(Mode);
+	SetShowMouseCursor(true);
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Session over (%s): showing why, and not signing in again."),
+		*StaticEnum<ESpaceMMOSessionEnd>()->GetNameStringByValue(static_cast<int64>(Reason)));
+
+	return true;
+}
+
 void ASpaceMMOPlayerController::AdoptIdentity(const FBackendResolvedCharacter& Resolved)
 {
 	CharacterId = Resolved.CharacterId;
 	CharacterName = Resolved.CharacterName;
+	AccountId = Resolved.AccountId;
 
 	// Where they were left. Handed to the docking component below, which is the thing that can put
 	// the ship back there -- see USpaceMMODockingComponent::ResumeDockedAt and task 114.

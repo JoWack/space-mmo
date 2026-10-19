@@ -381,9 +381,49 @@ void USpaceMMOCombatComponent::RequestFire()
 
 	FVector Aim;
 
-	if (AimPoint(Aim))
+	if (!AimPoint(Aim))
 	{
-		ServerFire(Aim);
+		return;
+	}
+
+	const int32 Shot = ++ShotsSent;
+
+	ShotSentSeconds.Add(Shot, FPlatformTime::Seconds());
+
+	// A burst, not a history: an answer later than this is lost to the log anyway.
+	ShotSentSeconds.Remove(Shot - 32);
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: shot %d sent."), Shot);
+
+	DrawOwnBolt(Aim);
+	ServerFire(Aim, Shot);
+}
+
+double USpaceMMOCombatComponent::MillisecondsSinceSent(const int32 Shot) const
+{
+	const double* Sent = ShotSentSeconds.Find(Shot);
+
+	return Sent != nullptr ? (FPlatformTime::Seconds() - *Sent) * 1000.0 : -1.0;
+}
+
+void USpaceMMOCombatComponent::DrawOwnBolt(const FVector& AimPointKilometres)
+{
+	UWorld* World = GetWorld();
+
+	FTracedShot Traced;
+
+	if (World == nullptr || !TraceShot(AimPointKilometres, false, Traced))
+	{
+		return;
+	}
+
+	FActorSpawnParameters Spawn;
+	Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	if (ASpaceMMOBoltActor* Bolt = World->SpawnActor<ASpaceMMOBoltActor>(Spawn))
+	{
+		Bolt->Launch(
+			FSystemCoordinate(Traced.MuzzleKilometres), FSystemCoordinate(Traced.EndKilometres), Traced.bLanded);
 	}
 }
 
@@ -463,7 +503,7 @@ bool USpaceMMOCombatComponent::AimPoint(FVector& OutKilometres) const
 	return true;
 }
 
-void USpaceMMOCombatComponent::ServerFire_Implementation(const FVector AimPointKilometres)
+void USpaceMMOCombatComponent::ServerFire_Implementation(const FVector AimPointKilometres, const int32 Shot)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority() || bDead || CharacterId == 0 || WeaponName.IsEmpty())
 	{
@@ -479,12 +519,16 @@ void USpaceMMOCombatComponent::ServerFire_Implementation(const FVector AimPointK
 
 	if (LastShotServerSeconds >= 0.0 && Now - LastShotServerSeconds < WeaponCooldownMs * CooldownTolerance / 1000.0)
 	{
+		// Said, because a click the server drops looks exactly like lag from the other end (task 198).
+		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: shot %d from character %d dropped, %.0f ms after the last."),
+			Shot, CharacterId, (Now - LastShotServerSeconds) * 1000.0);
+
 		return;
 	}
 
 	LastShotServerSeconds = Now;
 
-	Fire(AimPointKilometres);
+	Fire(AimPointKilometres, Shot, FPlatformTime::Seconds());
 }
 
 double USpaceMMOCombatComponent::ClearDistanceMetres(
@@ -552,14 +596,15 @@ double USpaceMMOCombatComponent::ClearDistanceMetres(
 	return Clear;
 }
 
-void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres)
+bool USpaceMMOCombatComponent::TraceShot(
+	const FVector& AimPointKilometres, const bool bIdentifiedOnly, FTracedShot& Out) const
 {
 	const ASpaceMMOCharacterPawn* Pawn = Cast<ASpaceMMOCharacterPawn>(GetOwner());
 	UWorld* World = GetWorld();
 
 	if (Pawn == nullptr || World == nullptr)
 	{
-		return;
+		return false;
 	}
 
 	const FVector Up = Pawn->GetSurfaceNormal().GetSafeNormal();
@@ -588,7 +633,7 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres)
 		USpaceMMOCombatComponent* Combat =
 			Other != nullptr && Other != Pawn ? Other->FindComponentByClass<USpaceMMOCombatComponent>() : nullptr;
 
-		if (Combat == nullptr || Combat->bDead || Combat->CharacterId == 0)
+		if (Combat == nullptr || Combat->bDead || (bIdentifiedOnly && Combat->CharacterId == 0))
 		{
 			continue;
 		}
@@ -616,19 +661,39 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres)
 	const double Clear = ClearDistanceMetres(Muzzle, Direction, bMetSomebody ? Hit.DistanceMetres : Range);
 	const bool bLanded = bMetSomebody && Hit.DistanceMetres <= Clear + 0.01;
 
-	const FVector End = Muzzle + Direction * (bLanded ? Hit.DistanceMetres : Clear) / 1000.0;
+	Out.MuzzleKilometres = Muzzle;
+	Out.EndKilometres = Muzzle + Direction * (bLanded ? Hit.DistanceMetres : Clear) / 1000.0;
+	Out.bLanded = bLanded;
+	Out.bMetSomebody = bMetSomebody;
+	Out.ClearMetres = Clear;
+	Out.Hit = Hit;
+	Out.Target = bLanded ? Combatants[Hit.Index] : nullptr;
 
-	MulticastBolt(Muzzle, End, bLanded);
+	return true;
+}
 
-	if (!bLanded)
+void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres, const int32 Shot, const double ArrivedSeconds)
+{
+	FTracedShot Traced;
+
+	if (!TraceShot(AimPointKilometres, true, Traced))
 	{
-		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d fired; it stopped %.1f m out%s."),
-			CharacterId, Clear, bMetSomebody ? TEXT(", short of a target, against cover or ground") : TEXT(""));
+		return;
+	}
+
+	MulticastBolt(Traced.MuzzleKilometres, Traced.EndKilometres, Traced.bLanded, Shot);
+
+	if (!Traced.bLanded)
+	{
+		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d fired shot %d; it stopped %.1f m out%s."),
+			CharacterId, Shot, Traced.ClearMetres,
+			Traced.bMetSomebody ? TEXT(", short of a target, against cover or ground") : TEXT(""));
 
 		return;
 	}
 
-	USpaceMMOCombatComponent* TargetCombat = Combatants[Hit.Index];
+	const FSpaceMMOShotHit& Hit = Traced.Hit;
+	USpaceMMOCombatComponent* TargetCombat = Traced.Target;
 	USpaceMMOBackendClient* Client = Backend();
 
 	if (Client == nullptr)
@@ -636,8 +701,8 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres)
 		return;
 	}
 
-	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d hit character %d, %s from the %s, %.1f m."),
-		CharacterId, TargetCombat->CharacterId,
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d hit character %d with shot %d, %s from the %s, %.1f m."),
+		CharacterId, TargetCombat->CharacterId, Shot,
 		*StaticEnum<EBackendHitZone>()->GetNameStringByValue(static_cast<int64>(Hit.Zone)),
 		*StaticEnum<EBackendHitFacing>()->GetNameStringByValue(static_cast<int64>(Hit.Facing)),
 		Hit.DistanceMetres);
@@ -647,14 +712,15 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres)
 
 	const EBackendHitZone Zone = Hit.Zone;
 	const FVector Point = Hit.PointKilometres;
+	const double AskedSeconds = FPlatformTime::Seconds();
 
 	Client->HitAsServer(
 		CharacterId,
 		TargetCombat->CharacterId,
 		Hit.Zone,
 		Hit.Facing,
-		Muzzle,
-		[WeakThis, WeakTarget, Zone, Point](const FBackendHitResult& Result)
+		Traced.MuzzleKilometres,
+		[WeakThis, WeakTarget, Zone, Point, Shot, ArrivedSeconds, AskedSeconds](const FBackendHitResult& Result)
 		{
 			USpaceMMOCombatComponent* Self = WeakThis.Get();
 			USpaceMMOCombatComponent* Target = WeakTarget.Get();
@@ -664,11 +730,18 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres)
 				return;
 			}
 
+			// The API's answer as this game thread sees it, so including the wait for the next server frame; and
+			// from the shot arriving, which adds the trace (task 198).
+			const double Answered = FPlatformTime::Seconds();
+
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: shot %d answered in %.0f ms, %.0f ms after it arrived."),
+				Shot, (Answered - AskedSeconds) * 1000.0, (Answered - ArrivedSeconds) * 1000.0);
+
 			if (!Result.bLanded)
 			{
 				UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: refused, %s."), *Result.Refusal);
 
-				Self->ClientShotRefused(Result.Refusal);
+				Self->ClientShotRefused(Result.Refusal, Shot);
 
 				return;
 			}
@@ -700,7 +773,7 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres)
 			}
 
 			Self->ClientHitConfirmed(
-				Result.Damage, Zone, Point, Result.bKilled, Target != nullptr ? Target->GetOwner() : nullptr);
+				Result.Damage, Zone, Point, Result.bKilled, Target != nullptr ? Target->GetOwner() : nullptr, Shot);
 		},
 		[WeakThis](const FBackendFailure& Failure)
 		{
@@ -710,13 +783,23 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres)
 }
 
 void USpaceMMOCombatComponent::MulticastBolt_Implementation(
-	const FVector StartKilometres, const FVector EndKilometres, const bool bHitSomebody)
+	const FVector StartKilometres, const FVector EndKilometres, const bool bHitSomebody, const int32 Shot)
 {
 	UWorld* World = GetWorld();
 
 	// Nothing to draw on a server that draws nothing.
 	if (World == nullptr || World->GetNetMode() == NM_DedicatedServer)
 	{
+		return;
+	}
+
+	// The shooter drew this one on the click (task 198). Its arrival is the round trip to the server and back,
+	// which is worth the log line: it is the part of a shot's delay no other line measures.
+	if (const APawn* Pawn = Cast<APawn>(GetOwner()); Pawn != nullptr && Pawn->IsLocallyControlled())
+	{
+		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: shot %d came back from the server %.0f ms after the click."),
+			Shot, MillisecondsSinceSent(Shot));
+
 		return;
 	}
 
@@ -730,7 +813,8 @@ void USpaceMMOCombatComponent::MulticastBolt_Implementation(
 }
 
 void USpaceMMOCombatComponent::ClientHitConfirmed_Implementation(
-	const int32 Damage, const EBackendHitZone Zone, const FVector PointKilometres, const bool bKilled, AActor* Target)
+	const int32 Damage, const EBackendHitZone Zone, const FVector PointKilometres, const bool bKilled, AActor* Target,
+	const int32 Shot)
 {
 	const UWorld* World = GetWorld();
 	const double Now = World != nullptr ? World->GetRealTimeSeconds() : 0.0;
@@ -753,14 +837,16 @@ void USpaceMMOCombatComponent::ClientHitConfirmed_Implementation(
 	LastHitSeconds = Now;
 	bLastHitKilled = bKilled;
 
-	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: hit for %d%s."), Damage, bKilled ? TEXT(", and killed") : TEXT(""));
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: shot %d hit for %d%s, %.0f ms after the click."),
+		Shot, Damage, bKilled ? TEXT(", and killed") : TEXT(""), MillisecondsSinceSent(Shot));
 }
 
-void USpaceMMOCombatComponent::ClientShotRefused_Implementation(const FString& Refusal)
+void USpaceMMOCombatComponent::ClientShotRefused_Implementation(const FString& Refusal, const int32 Shot)
 {
 	const FString Message = RefusalMessage(Refusal);
 
-	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: shot refused, %s."), *Refusal);
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: shot %d refused, %s, %.0f ms after the click."),
+		Shot, *Refusal, MillisecondsSinceSent(Shot));
 
 	if (ASpaceMMOPlayerController* Controller = OwningController(); Controller != nullptr && !Message.IsEmpty())
 	{
@@ -780,6 +866,20 @@ void USpaceMMOCombatComponent::OnRep_Dead()
 	if (!bDead)
 	{
 		KillerName.Reset();
+	}
+}
+
+void USpaceMMOCombatComponent::OnRep_StoredHealth(const int32 Before)
+{
+	// Only on the character's own machine: the server's "hit ... with shot N" line, read against this one's time,
+	// is how long the target waited to see it (task 198). Every change, not only falls: the stored value is health
+	// as of the last fight, so a hit after regeneration can store more than before.
+	const APawn* Pawn = Cast<APawn>(GetOwner());
+
+	if (Pawn != nullptr && Pawn->IsLocallyControlled())
+	{
+		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: health %d of %d as of the last fight (was %d)."),
+			StoredHealth, MaxHealth, Before);
 	}
 }
 

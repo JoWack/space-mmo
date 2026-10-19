@@ -3,6 +3,7 @@
 #include "Components/ActorComponent.h"
 #include "CoreMinimal.h"
 #include "SpaceMMOBackendTypes.h"
+#include "SpaceMMOShot.h"
 
 #include "SpaceMMOCombatComponent.generated.h"
 
@@ -137,8 +138,9 @@ protected:
 	virtual void TickComponent(
 		float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+	/** @param Shot The client's number for it, so every machine's log names the same shot (task 198). */
 	UFUNCTION(Server, Reliable)
-	void ServerFire(FVector AimPointKilometres);
+	void ServerFire(FVector AimPointKilometres, int32 Shot);
 
 	UFUNCTION(Server, Reliable)
 	void ServerRespawn();
@@ -146,15 +148,19 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerRefreshLoadout();
 
-	/** Draws a bolt everywhere: from the muzzle to wherever it stopped. */
+	/**
+	 * Draws a bolt everywhere but on the shooter's own screen, which drew it on the click (task 198): from the muzzle
+	 * to wherever it stopped.
+	 */
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastBolt(FVector StartKilometres, FVector EndKilometres, bool bHitSomebody);
+	void MulticastBolt(FVector StartKilometres, FVector EndKilometres, bool bHitSomebody, int32 Shot);
 
 	UFUNCTION(Client, Reliable)
-	void ClientHitConfirmed(int32 Damage, EBackendHitZone Zone, FVector PointKilometres, bool bKilled, AActor* Target);
+	void ClientHitConfirmed(
+		int32 Damage, EBackendHitZone Zone, FVector PointKilometres, bool bKilled, AActor* Target, int32 Shot);
 
 	UFUNCTION(Client, Reliable)
-	void ClientShotRefused(const FString& Refusal);
+	void ClientShotRefused(const FString& Refusal, int32 Shot);
 
 	UFUNCTION(Client, Reliable)
 	void ClientKilled(const FString& Killer);
@@ -168,8 +174,12 @@ protected:
 	UFUNCTION()
 	void OnRep_Dead();
 
+	/** Logs a hit taken on the target's own machine, so its side of the delay can be read (task 198). */
+	UFUNCTION()
+	void OnRep_StoredHealth(int32 Before);
+
 	/** Health as of LastCombatServerSeconds. */
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_StoredHealth)
 	int32 StoredHealth = 0;
 
 	UPROPERTY(Replicated)
@@ -199,8 +209,43 @@ private:
 	/** Server: reads health and Weapon 1 from the API and replicates them. */
 	void FetchStatus();
 
+	/** What a shot meets, worked out the same way on the server and, for the shooter's own bolt, the client. */
+	struct FTracedShot
+	{
+		FVector MuzzleKilometres = FVector::ZeroVector;
+		FVector EndKilometres = FVector::ZeroVector;
+
+		/** Whether it reached somebody before cover or the ground. */
+		bool bLanded = false;
+
+		/** Somebody was in its path, whether or not it got there. */
+		bool bMetSomebody = false;
+
+		/** How far it got before cover or the ground, in metres. */
+		double ClearMetres = 0.0;
+
+		FSpaceMMOShotHit Hit;
+
+		/** Who it reached, when it did. */
+		USpaceMMOCombatComponent* Target = nullptr;
+	};
+
+	/**
+	 * The shot from the owner's chest towards where they aimed: people first, then buildings and the ground.
+	 *
+	 * @param bIdentifiedOnly Server: only characters the API knows. A client cannot tell, since the id is not sent,
+	 *   and does not need to: its answer only draws a bolt.
+	 */
+	bool TraceShot(const FVector& AimPointKilometres, bool bIdentifiedOnly, FTracedShot& Out) const;
+
 	/** Server: the shot, from the owner's chest towards where they aimed. */
-	void Fire(const FVector& AimPointKilometres);
+	void Fire(const FVector& AimPointKilometres, int32 Shot, double ArrivedSeconds);
+
+	/** Client: the shooter's own bolt, on the click rather than a round trip later (task 198). */
+	void DrawOwnBolt(const FVector& AimPointKilometres);
+
+	/** Milliseconds since this client sent a shot, for the log; negative when it is no longer remembered. */
+	double MillisecondsSinceSent(int32 Shot) const;
 
 	/** Server: how far a shot gets before a building or the ground stops it, in metres. */
 	double ClearDistanceMetres(const FVector& FromKilometres, const FVector& Direction, double WantedMetres) const;
@@ -222,6 +267,12 @@ private:
 	double LastShotServerSeconds = -1.0;
 
 	double LastRequestSeconds = -1.0;
+
+	/** Client: the last shot's number. Numbered from 1 for each pawn. */
+	int32 ShotsSent = 0;
+
+	/** Client: when each recent shot was sent, by its number, on FPlatformTime's clock. */
+	TMap<int32, double> ShotSentSeconds;
 
 	TWeakObjectPtr<class UInputComponent> BoundInput;
 

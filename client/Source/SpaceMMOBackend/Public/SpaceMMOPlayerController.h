@@ -204,7 +204,8 @@ public:
 	 *   SpaceMMOLookPanels Inventory|Station|Skills|Pair|Equipment|Gear|SignIn|Flight [Market|Industry|Quests|MyOrders|Ships] [prompt] [shot]
 	 *
 	 * Gear is the equipment screen beside the inventory (task 193). Combat and Dead are the combat HUD over sample
-	 * numbers (task 194).
+	 * numbers (task 194). SignedInElsewhere and Disconnected are the panel a window shows once its session is over
+	 * (task 199).
 	 *
 	 * With "shot", the screen is captured with its interface three seconds later -- once the rows have been
 	 * built -- to Saved/Screenshots/LookPanels_<view>.png, and the game quits two seconds after that. A dev
@@ -375,6 +376,10 @@ public:
 	/** The sign-in screen, or null when none is configured. */
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOLoginScreen> LoginScreen;
+
+	/** Why this window's session ended, shown instead of everything else once it has (task 199). */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOSessionEndedScreen> SessionEndedScreen;
 
 	/**
 	 * Whether the player still has to sign in.
@@ -586,6 +591,23 @@ private:
 	/** Applies a resolved identity and tells anything that was waiting for it. */
 	void AdoptIdentity(const FBackendResolvedCharacter& Resolved);
 
+	/**
+	 * Server: ends every other connection playing on this account, newest sign-in winning (task 199). When one of
+	 * them is this same character, its pawn's position is handed on in Resolved, which is fresher than the
+	 * backend's record by up to the whereabouts interval.
+	 */
+	void EndEarlierSessions(FBackendResolvedCharacter& Resolved);
+
+	/** Server: this connection has been replaced by a newer sign-in. Records where it was, says why, and leaves. */
+	void EndSessionForNewerSignIn();
+
+	/** Tells the client why its session is over; it records the reason and leaves the server itself. */
+	UFUNCTION(Client, Reliable)
+	void ClientSessionEnded(ESpaceMMOSessionEnd Reason);
+
+	/** Client: shows why the session ended, if it has, instead of the HUD and sign-in. True when it has. */
+	bool ShowSessionEndedIfOver();
+
 	/** Pushes the identity onto whatever the player is currently possessing. */
 	void RefreshPossessedPawn();
 
@@ -625,6 +647,13 @@ public:
 	 */
 	static ESpaceMMOShipPlacement DecideShipPlacement(
 		const struct FBackendActiveShip& Ship, bool bBecauseSummoned);
+
+	/**
+	 * Whether a sign-in ends a connection already playing (task 199): one character in the world per account, the
+	 * newest sign-in winning, so any connection on the same account -- whichever of its characters. Never one with
+	 * no account yet, which is still signing in itself.
+	 */
+	static bool EndedBySignIn(int32 PlayingAccountId, int32 SigningInAccountId);
 
 private:
 
@@ -829,6 +858,9 @@ private:
 
 	UPROPERTY(Replicated)
 	FString CharacterName;
+
+	/** Server: the account playing here, so a newer sign-in on it can find this connection (task 199). */
+	int32 AccountId = 0;
 
 	/** Which character the client intends to play, from -CharacterId= or the first one it owns. */
 	int32 DesiredCharacterId = 0;

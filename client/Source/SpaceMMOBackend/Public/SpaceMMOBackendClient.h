@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Net/Core/Connection/NetEnums.h"
 #include "SpaceMMOBackendTypes.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SpaceMMOBackendClient.generated.h"
@@ -51,6 +52,21 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
 	virtual void Deinitialize() override;
+
+	/**
+	 * Records that this window's session on the server is over, and why (task 199). The first reason holds: the
+	 * server says "signed in elsewhere" before the connection drops, and the drop must not overwrite it.
+	 */
+	void EndSession(ESpaceMMOSessionEnd Reason);
+
+	/** Why the session ended, or None while it has not. Survives the map change that follows a disconnect. */
+	ESpaceMMOSessionEnd GetSessionEnd() const { return SessionEnd; }
+
+	/**
+	 * Whether a network failure means this machine lost its server (task 199): a client's game connection, or the one
+	 * it was making. A server's failures are other people's connections, and a beacon or a replay is not the game.
+	 */
+	static bool LosesTheServer(bool bDriverIsServer, FName DriverName);
 
 	/** Where the API lives. Defaults to the local development server. */
 	UFUNCTION(BlueprintCallable, Category = "SpaceMMO|Backend")
@@ -622,6 +638,14 @@ public:
 	FOnBackendGathered OnGathered;
 
 private:
+	/** A client's connection to its server failed: recorded so the map it falls back to shows why (task 199). */
+	void HandleNetworkFailure(
+		UWorld* World, class UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& Error);
+
+	ESpaceMMOSessionEnd SessionEnd = ESpaceMMOSessionEnd::None;
+
+	FDelegateHandle NetworkFailureHandle;
+
 	/**
 	 * Drives login → characters → skills and inventory from the command line, logging each step.
 	 *
