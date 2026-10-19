@@ -1569,3 +1569,31 @@ def fall_arm_search(keys, frame, side, outs, swings, elbows):
     ok = [r for r in rows if r[0] >= -0.5]
     ok.sort(key=lambda r: r[1])
     return {"best": ok[:5], "tried": len(rows), "body_low_cm": rows[0][2]}
+
+
+# --- The backstep hop (195) -------------------------------------------------------------------------------------
+#
+# The dodge when standing still: a hop back, upright, still facing the target, half a second and about 1.5 m in
+# game (Joe, 19 October). In place like every clip: the character travels by the walk model. The air is in the clip,
+# 20 cm under the feet at its peak, because the character does not rise -- the first draft had none, and Joe asked
+# for some. Made with fall()'s keys and its ground guard:
+#
+#     fall("Dodge_Back", BACKSTEP); export(name, "Dodge_Back", name + "_Dodge_Back", maps=False)
+#
+# The moving dodge is the animation library's motion-captured roll, not made here: a roll keyed into the 0.5 s
+# ADR-0017 first gave it read as comical, and no person rolls that fast (task 195).
+BACKSTEP = [
+    (0, {}),
+    (3, dict(lean_x=5, hip_z=0.80, hip_y=-0.02, sp2=5, sp4=5, head=-4, out_l=-6, out_r=-6, swing_l=-16, swing_r=-14,
+             elbow_l=-32, elbow_r=-30, fy_l=0.0, fy_r=0.04)),
+    (5, dict(lean_x=-4, hip_z=1.09, hip_y=0.02, sp2=-2, sp4=-4, head=-2, out_l=16, out_r=14, swing_l=-28, swing_r=-24,
+             elbow_l=-42, elbow_r=-40, fy_l=-0.02, fy_r=0.02, fz_l=0.23, fz_r=0.21, toe_l=24, toe_r=22)),
+    (7, dict(lean_x=-6, hip_z=1.17, hip_y=0.03, sp2=0, sp4=-2, head=-2, out_l=18, out_r=16, swing_l=-30, swing_r=-26,
+             elbow_l=-44, elbow_r=-42, fy_l=-0.04, fy_r=0.0, fz_l=0.35, fz_r=0.33, toe_l=18, toe_r=16)),
+    (9, dict(lean_x=-4, hip_z=1.07, hip_y=0.02, sp2=2, sp4=0, out_l=14, out_r=12, swing_l=-24, swing_r=-20,
+             elbow_l=-40, elbow_r=-36, fy_l=-0.02, fy_r=0.02, fz_l=0.23, fz_r=0.21, toe_l=10, toe_r=8)),
+    (11, dict(lean_x=-2, hip_z=0.78, hip_y=0.0, sp2=7, sp4=7, head=2, out_l=10, out_r=8, swing_l=-16, swing_r=-14,
+              elbow_l=-34, elbow_r=-30, fy_l=0.0, fy_r=0.05)),
+    (15, dict(lean_x=0, hip_z=0.90, sp2=2, sp4=2, out_l=-8, out_r=-8, swing_l=-6, swing_r=-4, elbow_l=-18,
+              elbow_r=-16, fy_r=0.03)),
+]

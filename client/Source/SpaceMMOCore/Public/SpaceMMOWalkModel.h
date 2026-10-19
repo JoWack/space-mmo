@@ -4,6 +4,15 @@
 #include "SpaceMMOCoordinates.h"
 #include "SpaceMMOWalkModel.generated.h"
 
+/** Which dodge a character is in (task 195): a roll the way they were moving, or a hop back standing still. */
+UENUM()
+enum class EWalkDodge : uint8
+{
+	None = 0,
+	Roll = 1,
+	Hop = 2,
+};
+
 /**
  * What a person on foot is trying to do this frame.
  */
@@ -37,6 +46,13 @@ struct SPACEMMOCORE_API FWalkInput
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
 	bool bSprint = false;
+
+	/**
+	 * How many times dodge has been pressed (task 195). A count rather than a held flag: a tap that comes and goes
+	 * between two of the server's ticks would never be seen as a flag, and a dodge is one press, not a hold.
+	 */
+	UPROPERTY()
+	uint8 DodgePresses = 0;
 
 	/**
 	 * Which way the client faces after its own step, for the server to adopt (task 165).
@@ -79,6 +95,7 @@ struct SPACEMMOCORE_API FWalkInput
 		Result.Turn = FMath::Clamp(Turn, -1.0, 1.0);
 		Result.bJump = bJump;
 		Result.bSprint = bSprint;
+		Result.DodgePresses = DodgePresses;
 
 		// A facing that is not a rotation is no facing: the server keeps its own.
 		Result.bHasFacing =
@@ -146,6 +163,47 @@ struct SPACEMMOCORE_API FWalkConfig
 	{
 		return bSprint ? WalkSpeed * FMath::Max(1.0, SprintMultiplier) : WalkSpeed;
 	}
+
+	/**
+	 * The stamina pool (ADR-0017): 100 at stamina 1, 150 at 99. The server sets it from the character's level; 100
+	 * until the skill is seeded (task 101).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double StaminaMax = 100.0;
+
+	/** Refilled a second, once StaminaRegenDelaySeconds have passed without spending any. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double StaminaRegenPerSecond = 20.0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double StaminaRegenDelaySeconds = 1.0;
+
+	/** What sprinting spends a second: 10 s of sprint from a full pool at level 1 (Claude, 19 October; task 195). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double SprintStaminaPerSecond = 10.0;
+
+	/** What a dodge costs: four from a full pool at level 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double DodgeStaminaCost = 25.0;
+
+	/** How long into a dodge nothing can hit the dodger. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double DodgeUntouchableSeconds = 0.25;
+
+	/**
+	 * How much faster than captured the roll plays. The roll is the library's motion capture (ADR-0017, amended 19
+	 * October): 2.07 s as captured, played from its crouch at this rate. The character travels by RollProfile at
+	 * the same rate, so the clip and the ground agree; the importer logs the profile from the clip.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double RollPlayRate = 1.8;
+
+	/** The hop back when standing still: 0.5 s and about 1.5 m, its own clip's (task 195). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double HopSeconds = 0.5;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SpaceMMO|Walk")
+	double HopDistanceCentimetres = 150.0;
 };
 
 /**
@@ -159,6 +217,29 @@ struct SPACEMMOCORE_API FWalkState
 	/** Velocity in system-frame axes, centimetres per second. */
 	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|Walk")
 	FVector Velocity = FVector::ZeroVector;
+
+	/** What is left in the stamina pool (task 195). Starts full: Step clamps it to the config's maximum. */
+	double Stamina = TNumericLimits<double>::Max();
+
+	/** Seconds since stamina was last spent; it refills once StaminaRegenDelaySeconds have passed. */
+	double SinceSpentSeconds = 0.0;
+
+	/** Sprint ran the pool dry, and stays a run until the key is let go. */
+	bool bSprintSpent = false;
+
+	/** The dodge under way, and how long since it began. */
+	EWalkDodge Dodge = EWalkDodge::None;
+	double DodgeSeconds = 0.0;
+
+	/** Which way along the ground the dodge goes, in system-frame axes. */
+	FVector DodgeDirection = FVector::ZeroVector;
+
+	/** The last count of dodge presses taken from input, so each press is one dodge. */
+	uint8 DodgePressesSeen = 0;
+
+	/** Dodges begun, and refused for want of stamina: counts, so every machine can tell one from the next. */
+	uint8 DodgesStarted = 0;
+	uint8 DodgesRefused = 0;
 
 	/** Orientation, with Z aligned to whatever counts as up where the character is standing. */
 	UPROPERTY(BlueprintReadWrite, Category = "SpaceMMO|Walk")
@@ -187,6 +268,32 @@ public:
 	 * @param bOnGround     Whether the character was resting on the surface at the start of this
 	 *                      step. Grounded and airborne movement are genuinely different.
 	 */
+	/** How long a dodge lasts, in seconds. */
+	static double DodgeDuration(EWalkDodge Dodge, const FWalkConfig& Config);
+
+	/**
+	 * How far along the ground a dodge has carried the character after Seconds, in centimetres: the roll by its
+	 * clip's own root (RollProfile), the hop eased in and out.
+	 */
+	static double DodgeDistance(EWalkDodge Dodge, double Seconds, const FWalkConfig& Config);
+
+	/** Whether nothing can hit the character: the first DodgeUntouchableSeconds of a dodge (ADR-0017). */
+	static bool IsUntouchable(const FWalkState& State, const FWalkConfig& Config);
+
+	/** Whether sprint is actually running this step: held, moving, and stamina left (task 195). */
+	static bool IsSprinting(const FWalkState& State, const FWalkInput& Input);
+
+	/**
+	 * The roll's root, centimetres forward of where it began, at each of the clip's frames from its crouch (frame 3,
+	 * where it is played from) to standing: read off anim_Dodge_Roll by SpaceMMOImportClips, 19 October. A test checks
+	 * it against the clip.
+	 */
+	static const TArray<double>& RollProfile();
+
+	/** The frame of the captured roll its playing starts from, and the rate it was captured at. */
+	static constexpr int32 RollStartFrame = 3;
+	static constexpr double RollCaptureRate = 30.0;
+
 	static FWalkState Step(
 		const FWalkState& State,
 		const FWalkInput& Input,

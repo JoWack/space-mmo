@@ -215,6 +215,12 @@ void USpaceMMOCombatComponent::TickComponent(
 		}
 
 		LastCombatServerSeconds = ServerNowSeconds();
+
+		// And the stamina bar part-spent, as the mock showed it.
+		if (ASpaceMMOCharacterPawn* Sampled = Cast<ASpaceMMOCharacterPawn>(GetOwner()))
+		{
+			Sampled->HoldStaminaForLook(72.0);
+		}
 	}
 #endif
 
@@ -643,6 +649,14 @@ bool USpaceMMOCombatComponent::TraceShot(
 			continue;
 		}
 
+		// The start of a dodge, which nothing can hit (ADR-0017): the shot goes through where they are.
+		if (Other->IsUntouchable())
+		{
+			Out.DodgingCharacterId = Combat->CharacterId != 0 ? Combat->CharacterId : -1;
+
+			continue;
+		}
+
 		if (FVector::Distance(Other->GetSystemPosition().Kilometres, Muzzle) * 1000.0 > Range + 5.0)
 		{
 			continue;
@@ -690,9 +704,12 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres, const int
 
 	if (!Traced.bLanded)
 	{
-		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d fired shot %d; it stopped %.1f m out%s."),
+		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d fired shot %d; it stopped %.1f m out%s%s."),
 			CharacterId, Shot, Traced.ClearMetres,
-			Traced.bMetSomebody ? TEXT(", short of a target, against cover or ground") : TEXT(""));
+			Traced.bMetSomebody ? TEXT(", short of a target, against cover or ground") : TEXT(""),
+			Traced.DodgingCharacterId != 0
+				? *FString::Printf(TEXT("; character %d was dodging, and untouchable"), Traced.DodgingCharacterId)
+				: TEXT(""));
 
 		return;
 	}

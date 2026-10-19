@@ -921,6 +921,22 @@ namespace SpaceMMOBuildMenus
 		Bar->SetPercent(0.82f);
 		BarThickness->AddChild(Bar);
 
+		// Under it, stamina (task 195, Joe's choice on 19 October): the same width, about two-thirds the thickness,
+		// amber, its label and number on a line like health's. Indented to the health bar's inside edge, past its glow.
+		UHorizontalBox* StaminaWords = B.Make<UHorizontalBox>(TEXT("StaminaWords"));
+		AddV(HealthBody, StaminaWords, FMargin(0, 8, 0, 0));
+
+		AddH(StaminaWords, B.Text(TEXT("StaminaLabelText"), TEXT("Stamina"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), true);
+		AddH(StaminaWords, B.Text(TEXT("StaminaValueText"), TEXT("72 / 100"), 17.0f, TextPrimary, TEXT("Regular"), 0, true), false);
+
+		USizeBox* StaminaThickness = B.Make<USizeBox>(TEXT("StaminaBarThickness"));
+		StaminaThickness->SetHeightOverride(5.0f);
+		AddV(HealthBody, StaminaThickness, FMargin(3.0f, 4.0f, 3.0f, 0.0f));
+
+		UProgressBar* Stamina = B.Make<UProgressBar>(TEXT("StaminaBar"), true);
+		Stamina->SetPercent(0.72f);
+		StaminaThickness->AddChild(Stamina);
+
 		// The death panel: the world dimmed, and a box in the middle with one way back.
 		UOverlay* Death = B.Make<UOverlay>(TEXT("DeathPanel"), true);
 		Death->SetVisibility(ESlateVisibility::Collapsed);

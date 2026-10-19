@@ -10140,7 +10140,8 @@ prompt's red line over a real rock.
 
 ## 194 — The first weapon, end to end
 
-**Stage 1 built, 16 October; waiting on Joe's two-client playtest.** Stage 2 is 103's losses. Belongs to **M6**. The
+**Stage 1 built 16 October and passed Joe's two-client playtest on 18 October** ("All playtests passed!"). Stage 2 is
+103's losses. Belongs to **M6**. The
 build that ADR-0015, ADR-0016 and ADR-0017 were decided for: one weapon, fired on foot, doing damage that
 can kill, earning XP, with death costing what ADR-0016 says. Everything after it is more of the same.
 
@@ -10255,7 +10256,8 @@ seven), with no rifles yet. A rifle is a weaponcrafting job: 6 Structural Plate 
 
 ## 195 — Stamina, and a dodge roll
 
-**Pending, 16 October. Needs Joe's yes on its bar before that part is built.** Belongs to **M6** for the
+**Stage 1 built 19 October; waiting on Joe's playtest. Stage 2 is the pool's size and XP from the `stamina` skill.**
+Belongs to **M6** for the
 pool, and to **M5** for the key, as sprint (136) did. Decided in
 [ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md):
 
@@ -10269,6 +10271,72 @@ pool, and to **M5** for the key, as sprint (136) did. Decided in
 Needs a roll animation for every race, made the way 191's sprint was (Blender MCP), and a stamina bar
 (interface). The untouchable quarter-second only means something once something can hit (194), and in PvP
 the server and the client have to agree when a roll began.
+
+### Decided by Joe, 19 October
+Each offered against alternatives, Claude's suggestion first unless said:
+- **The bar: thin amber, with its number**, under health at bottom centre: the same width, about two-thirds its
+  thickness, amber so it never reads as health. Too little stamina for a roll flashes the bar once, nothing else.
+  Offered against a bar with no words, and against one matching health's thickness.
+- **Shown always, with health** -- Joe's choice against the suggestion of showing it only while not full.
+- **One roll, made once on the Humanoid man and played on every race**, as the falls and the jump are. Offered
+  against a roll per race (191's way).
+- **Standing still, the dodge is a backstep hop**: low, upright, still facing the target. Offered against a
+  backward roll.
+- **Sprint drains 10 stamina a second** -- chosen by Claude, as ADR-0017 gives no rate: 10 s of sprint from a full
+  pool at level 1, 15 s at 99. A config value; say if it is wrong.
+
+**Joe's look at the first renders, 19 October:** "The hop doesn't look like it gains any air ... it should gain a
+little air. The roll looks quite comical. It's so fast and unnatural. It should look as natural as possible." The
+hop was redone with 20 cm under the feet at its peak (it had none: the clip plays in place and the character does
+not rise, so the air has to be in the clip), and **approved**. The roll was a tucked ball turning once in 0.23 s; no
+roll in 0.5 s can look natural, which led to:
+- **The roll is the library's motion capture, about 1.1 s** (`anim_LandRoll_R`, 2.1 s as captured, played a little
+  under twice as fast from its crouch to standing). Offered against a 0.5 s dive-dash on the feet, and a hand-made
+  roll at about 0.8 s. **ADR-0017 is amended** for it.
+- **The dodges carry as far as their motions do**: the roll 2.9 m at the capture's own speed through it, the hop
+  about 1.5 m. Offered against 4 m for both (the body sliding about a metre mid-roll), and 4 m for the roll only.
+
+### Stage 1, built 19 October
+- **The walk model** (`FWalkState`, stepped by the server and predicted by the owning client): the pool, refilling
+  20 a second after 1 s without spending; sprint spending 10 a second and, run dry, staying a run until let go (so
+  the refill's trickle cannot flick it on and off); the dodge on a press **counter**, so a tap between two of the
+  server's ticks is not lost and one press is one dodge; a dodge refused for want of 25 stamina counted, for the bar's
+  flash. Through a dodge the character is carried along the ground by **the clip's own travel** -- the roll by
+  `RollProfile`, its root frame by frame from the capture, the hop eased over 1.5 m -- and nothing steers it or
+  jumps out of it. `IsUntouchable` is the first 0.25 s.
+- **The roll** is `anim_Dodge_Roll`, the library's `anim_LandRoll_R` copied and locked to its root by
+  `SpaceMMOImportClips` (which logs its root's travel, the profile's source), played from its crouch (frame 3) at
+  1.8x: 1.09 s and 2.86 m. **The hop** is `anim_HumanoidMale_Dodge_Back`, made in Blender (`rig_character.py`'s
+  `BACKSTEP`), 20 cm of air. Both play on every race from **a slot the importer added to `ABP_Human`** (each race's
+  blueprint inherits it), blended in over 0.08 s and out over 0.2, so the body returns to running rather than
+  restarting its blueprint.
+- **The pawn**: Left Ctrl counts a press; stamina and the dodge travel in `FCharacterNetState`; each machine plays a
+  dodge's clip once, the owner from its prediction and everyone else from the server's state; the roll faces the way
+  it goes from its first frame, and the hop keeps facing forward. **Presses while dead do nothing, then or on coming
+  back**: an empty input's count of none would have read as a press, and presses saved up would have fired at once.
+- **The server's shot goes through** anyone in the untouchable start of a dodge, and its log line says so
+  ("character N was dodging, and untouchable"), so a dodged shot is told from a missed one.
+- **The bar**: `StaminaLabelText`, `StaminaValueText` and `StaminaBar` under health in `WBP_CombatHud` (rebuilt by
+  SpaceMMOBuildMenus), amber, flashing once when a dodge is refused. The number rounds down: 24.9 is not a dodge.
+- **Not yet:** the pool's size from the `stamina` skill and XP for stamina spent (ADR-0017 decisions 6 and 7), which
+  need the skill seeded (101) and an API path; until then everybody's pool is 100, the level-1 size.
+
+### Verified, and how
+- Client suite 337 (10 new), against a build that said `Result: Succeeded`. The walk model's rules, step by step
+  on flat ground: ten seconds of sprint and then a run that stays one until let go; nothing back for a second, then
+  20 a second, never past full; refused at 24, spent at 25; the roll carrying its capture's 2.86 m in 1.09 s however
+  hard it is steered; standing still, 1.5 m back still facing forward; untouchable at 0.2 s and not at 0.3; one press
+  one dodge, a press mid-roll not queued, no jump mid-roll. **On a pawn standing on the planet, through the input
+  RPC the server takes:** the press dodges alive (the control) and does nothing dead or on coming back. **Against
+  the built assets:** both clips load, are locked to their roots and play on every race's skeleton, and the walk
+  model's profile is the roll clip's own root to within 0.1 cm.
+- **Broken on purpose, each failing its own tests:** presses while dead counted as dodges; sprint never running dry;
+  the refill with no wait (four tests, all of which count stamina exactly); untouchable for the whole dodge; the
+  roll's profile not taken from its crouch (the clip check and the roll's reach); the bar's number rounded up.
+- **Rendered:** `SpaceMMOLookPanels Combat` shows the bar as the mock had it, "STAMINA 72 / 100" under health.
+- **Not verified by anything but the playtest:** the key, a roll and a hop seen on both screens, the clips blending
+  in and out of running, the roll facing the way it goes, a shot passing through the roll's first quarter-second
+  (no headless test drives the server's shot), and the bar flashing on a refused dodge.
 
 ## 196 — Repair at a station
 
@@ -10576,7 +10644,8 @@ than under the harness's busy threads (61 ms against 39). The shooters saw damag
 
 ## 199 — One character in the world per account, and no offline game after a disconnect
 
-**Built 18 October; waiting on `join.bat a` twice.** Belongs to **M5**. Found by Joe on 17 October: `join.bat a` run twice put two
+**Done: built 18 October, passed Joe's playtest the same day** (`join.bat a` twice, and the server stopped under both
+clients). Belongs to **M5**. Found by Joe on 17 October: `join.bat a` run twice put two
 copies of Ayla in the world, one per window.
 
 **The cause.** The dedicated server resolves a connection's character after it joins (`ServerIdentify`, then

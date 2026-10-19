@@ -25,6 +25,13 @@ namespace
 	const FLinearColor HealthRed = SpaceMMO::Style::Srgb(214, 52, 52);
 	const FLinearColor HealthRedBright = SpaceMMO::Style::Srgb(255, 92, 72);
 
+	/** Stamina's amber (Joe, 19 October): never read as health. Brighter for the flash of a refused dodge. */
+	const FLinearColor StaminaAmber = SpaceMMO::Style::Srgb(232, 168, 58);
+	const FLinearColor StaminaFlash = SpaceMMO::Style::Srgb(255, 232, 170);
+
+	/** How long a refused dodge's flash takes to fade. */
+	constexpr double StaminaFlashSeconds = 0.35;
+
 	/** A head shot's number, so the aim that earned it shows. */
 	const FLinearColor HeadGold = SpaceMMO::Style::Srgb(242, 193, 78);
 
@@ -66,6 +73,22 @@ FString USpaceMMOCombatHud::DeathTitle(const FString& Killer)
 	return Killer.IsEmpty() ? FString(TEXT("Killed")) : FString::Printf(TEXT("Killed by %s"), *Killer);
 }
 
+FString USpaceMMOCombatHud::StaminaLine(const double Stamina, const double MaxStamina)
+{
+	return FString::Printf(TEXT("%d / %d"),
+		FMath::Max(FMath::FloorToInt32(Stamina), 0), FMath::Max(FMath::RoundToInt32(MaxStamina), 0));
+}
+
+FLinearColor USpaceMMOCombatHud::StaminaColour(const double SecondsSinceRefused)
+{
+	if (SecondsSinceRefused < 0.0 || SecondsSinceRefused >= StaminaFlashSeconds)
+	{
+		return StaminaAmber;
+	}
+
+	return FMath::Lerp(StaminaFlash, StaminaAmber, static_cast<float>(SecondsSinceRefused / StaminaFlashSeconds));
+}
+
 void USpaceMMOCombatHud::NativeConstruct()
 {
 	Super::NativeConstruct();
@@ -74,6 +97,14 @@ void USpaceMMOCombatHud::NativeConstruct()
 
 	PanelLook::Apply(HealthLabelText, Style::ETextRole::Column);
 	PanelLook::Apply(HealthValueText, Style::ETextRole::Body);
+	PanelLook::Apply(StaminaLabelText, Style::ETextRole::Column);
+	PanelLook::Apply(StaminaValueText, Style::ETextRole::Body);
+
+	if (StaminaBar != nullptr)
+	{
+		StaminaBar->SetWidgetStyle(BarStyle(FLinearColor::White));
+		StaminaBar->SetFillColorAndOpacity(StaminaAmber);
+	}
 	PanelLook::Apply(DeathTitleText, Style::ETextRole::Title);
 	PanelLook::Apply(DeathNoteText, Style::ETextRole::Note);
 
@@ -254,6 +285,32 @@ void USpaceMMOCombatHud::NativeTick(const FGeometry& Geometry, const float Delta
 		}
 
 		StyleBar(HealthBar, HealthGlow, Max > 0 ? static_cast<float>(Health) / Max : 0.0f, Now);
+
+		// Stamina, always with health (Joe, 19 October): the pool the owning client predicts, and a flash for each
+		// dodge it refused for want of it.
+		if (const ASpaceMMOCharacterPawn* Body = Cast<ASpaceMMOCharacterPawn>(Pawn))
+		{
+			const double Stamina = Body->GetStamina();
+			const double StaminaMax = Body->GetStaminaMax();
+
+			if (!bSeenRefusals || Body->GetDodgesRefused() != SeenRefusals)
+			{
+				RefusedAt = bSeenRefusals ? Now : -1.0;
+				SeenRefusals = Body->GetDodgesRefused();
+				bSeenRefusals = true;
+			}
+
+			if (StaminaValueText != nullptr)
+			{
+				StaminaValueText->SetText(FText::FromString(StaminaLine(Stamina, StaminaMax)));
+			}
+
+			if (StaminaBar != nullptr)
+			{
+				StaminaBar->SetPercent(StaminaMax > 0.0 ? static_cast<float>(Stamina / StaminaMax) : 0.0f);
+				StaminaBar->SetFillColorAndOpacity(StaminaColour(RefusedAt < 0.0 ? -1.0 : Now - RefusedAt));
+			}
+		}
 	}
 
 	// Dying, and coming back.

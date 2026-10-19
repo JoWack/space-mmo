@@ -249,4 +249,28 @@ bool FSpaceMMOBodyFallsAwayFromTheShotTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOStaminaBarSaysWhatIsThereTest,
+	"SpaceMMO.Combat.TheStaminaBarSaysWhatIsThereAndFlashesOnce",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOStaminaBarSaysWhatIsThereTest::RunTest(const FString& Parameters)
+{
+	// Task 195. Rounded down: 24.9 is not enough for a 25-stamina dodge, and must not read as 25.
+	TestEqual(TEXT("72 of 100"), USpaceMMOCombatHud::StaminaLine(72.0, 100.0), FString(TEXT("72 / 100")));
+	TestEqual(TEXT("24.9 reads 24"), USpaceMMOCombatHud::StaminaLine(24.9, 100.0), FString(TEXT("24 / 100")));
+	TestEqual(TEXT("A level-99 pool"), USpaceMMOCombatHud::StaminaLine(150.0, 150.0), FString(TEXT("150 / 150")));
+
+	// A refused dodge flashes the bar once, and it fades back to amber within a third of a second (Joe, 19 October).
+	const FLinearColor Amber = USpaceMMOCombatHud::StaminaColour(-1.0);
+	const FLinearColor Flash = USpaceMMOCombatHud::StaminaColour(0.0);
+
+	TestTrue(TEXT("The flash is brighter than amber"), Flash.GetLuminance() > Amber.GetLuminance() + 0.1f);
+	TestTrue(TEXT("Fading at 0.2 s"), USpaceMMOCombatHud::StaminaColour(0.2).GetLuminance() < Flash.GetLuminance()
+		&& USpaceMMOCombatHud::StaminaColour(0.2).GetLuminance() > Amber.GetLuminance());
+	TestTrue(TEXT("Amber again by 0.4 s"), USpaceMMOCombatHud::StaminaColour(0.4).Equals(Amber));
+
+	return true;
+}
+
 #endif

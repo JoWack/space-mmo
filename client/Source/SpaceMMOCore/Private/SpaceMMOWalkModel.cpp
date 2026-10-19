@@ -50,6 +50,83 @@ FQuat FCharacterWalkModel::AlignToSurface(const FQuat& Current, const FVector& S
 	return FRotationMatrix::MakeFromZX(Up, Forward.GetSafeNormal()).ToQuat();
 }
 
+const TArray<double>& FCharacterWalkModel::RollProfile()
+{
+	// Frames 3 to 62 of anim_Dodge_Roll's root, less frame 3's: as the importer logged it.
+	static const TArray<double> Profile = []
+	{
+		const double Captured[] = {
+			0.0, 0.2, 1.4, 5.1, 11.4, 18.4, 24.5, 28.5, 30.9, 32.6, 34.7, 38.0, 43.3, 50.0, 57.3, 64.6, 71.1, 76.8, 81.9,
+			86.3, 90.4, 95.3, 102.3, 112.9, 126.8, 138.5, 146.7, 154.7, 162.3, 169.8, 177.2, 184.4, 191.4, 197.9, 203.9,
+			209.3, 214.1, 217.9, 220.9, 223.2, 224.9, 226.2, 227.3, 228.5, 229.8, 231.4, 233.2, 235.4, 238.0, 241.1,
+			244.7, 248.6, 252.4, 255.8, 258.5, 260.4, 262.3, 264.9, 269.3, 275.9, 283.0, 288.8, 291.2};
+
+		TArray<double> Out;
+
+		for (int32 Frame = RollStartFrame; Frame < UE_ARRAY_COUNT(Captured); ++Frame)
+		{
+			Out.Add(Captured[Frame] - Captured[RollStartFrame]);
+		}
+
+		return Out;
+	}();
+
+	return Profile;
+}
+
+double FCharacterWalkModel::DodgeDuration(const EWalkDodge Dodge, const FWalkConfig& Config)
+{
+	switch (Dodge)
+	{
+	case EWalkDodge::Roll:
+		return (RollProfile().Num() - 1) / RollCaptureRate / FMath::Max(Config.RollPlayRate, 0.01);
+
+	case EWalkDodge::Hop:
+		return Config.HopSeconds;
+
+	default:
+		return 0.0;
+	}
+}
+
+double FCharacterWalkModel::DodgeDistance(const EWalkDodge Dodge, const double Seconds, const FWalkConfig& Config)
+{
+	const double Duration = DodgeDuration(Dodge, Config);
+
+	if (Duration <= 0.0)
+	{
+		return 0.0;
+	}
+
+	const double T = FMath::Clamp(Seconds, 0.0, Duration);
+
+	if (Dodge == EWalkDodge::Hop)
+	{
+		// Eased in and out: a push off, the flight, a landing.
+		const double U = T / Duration;
+
+		return Config.HopDistanceCentimetres * U * U * (3.0 - 2.0 * U);
+	}
+
+	const TArray<double>& Profile = RollProfile();
+	const double Frame = T * RollCaptureRate * Config.RollPlayRate;
+	const int32 Below = FMath::Clamp(FMath::FloorToInt32(Frame), 0, Profile.Num() - 1);
+	const int32 Above = FMath::Min(Below + 1, Profile.Num() - 1);
+
+	return FMath::Lerp(Profile[Below], Profile[Above], Frame - Below);
+}
+
+bool FCharacterWalkModel::IsUntouchable(const FWalkState& State, const FWalkConfig& Config)
+{
+	return State.Dodge != EWalkDodge::None && State.DodgeSeconds < Config.DodgeUntouchableSeconds;
+}
+
+bool FCharacterWalkModel::IsSprinting(const FWalkState& State, const FWalkInput& Input)
+{
+	return Input.bSprint && !State.bSprintSpent && State.Stamina > 0.0 && State.Dodge == EWalkDodge::None
+		&& !Input.Move.IsNearlyZero();
+}
+
 FWalkState FCharacterWalkModel::Step(
 	const FWalkState& State,
 	const FWalkInput& Input,
@@ -84,6 +161,70 @@ FWalkState FCharacterWalkModel::Step(
 	const FVector Forward = Result.Rotation.GetForwardVector();
 	const FVector Right = Result.Rotation.GetRightVector();
 
+	// Stamina and the dodge (task 195, ADR-0017). Simulated here, where the server and the owning client both step,
+	// so they agree on when sprint runs out and when a roll began -- the second is what decides a hit.
+	Result.Stamina = FMath::Clamp(Result.Stamina, 0.0, Config.StaminaMax);
+
+	bool bSpent = false;
+
+	if (Result.Dodge != EWalkDodge::None)
+	{
+		Result.DodgeSeconds += DeltaSeconds;
+
+		if (Result.DodgeSeconds >= DodgeDuration(Result.Dodge, Config))
+		{
+			Result.Dodge = EWalkDodge::None;
+			Result.DodgeSeconds = 0.0;
+		}
+	}
+
+	if (Clean.DodgePresses != Result.DodgePressesSeen)
+	{
+		Result.DodgePressesSeen = Clean.DodgePresses;
+
+		if (Result.Dodge == EWalkDodge::None && bOnGround)
+		{
+			if (Result.Stamina >= Config.DodgeStaminaCost)
+			{
+				const FVector Moving = (Forward * Clean.Move.X) + (Right * Clean.Move.Y);
+
+				// The way they were going, or straight back standing still.
+				Result.Dodge = Moving.IsNearlyZero() ? EWalkDodge::Hop : EWalkDodge::Roll;
+				Result.DodgeDirection = Moving.IsNearlyZero() ? -Forward : Moving.GetSafeNormal();
+				Result.DodgeSeconds = 0.0;
+				Result.Stamina -= Config.DodgeStaminaCost;
+				++Result.DodgesStarted;
+				bSpent = true;
+			}
+			else
+			{
+				++Result.DodgesRefused;
+			}
+		}
+	}
+
+	// Sprint at zero stays a run until the key is let go: otherwise the trickle of refill would flick it on and off.
+	if (!Clean.bSprint)
+	{
+		Result.bSprintSpent = false;
+	}
+
+	const bool bSprinting = IsSprinting(Result, Clean);
+
+	if (bSprinting)
+	{
+		Result.Stamina = FMath::Max(Result.Stamina - Config.SprintStaminaPerSecond * DeltaSeconds, 0.0);
+		Result.bSprintSpent = Result.Stamina <= 0.0;
+		bSpent = true;
+	}
+
+	Result.SinceSpentSeconds = bSpent ? 0.0 : Result.SinceSpentSeconds + DeltaSeconds;
+
+	if (Result.SinceSpentSeconds >= Config.StaminaRegenDelaySeconds)
+	{
+		Result.Stamina = FMath::Min(Result.Stamina + Config.StaminaRegenPerSecond * DeltaSeconds, Config.StaminaMax);
+	}
+
 	// Split velocity into the part along the ground and the part into or away from it. They obey
 	// completely different rules — one is under the player's control, the other is gravity's.
 	const double IntoSurface = FVector::DotProduct(Result.Velocity, Up);
@@ -98,7 +239,7 @@ FWalkState FCharacterWalkModel::Step(
 	// the instant they leave the ground decelerates mid-jump, and a jump that travels less far the
 	// faster you were going is the sort of thing that feels broken without being explicable. Air
 	// control is already a quarter of ground acceleration, so this changes very little up there.
-	const double TopSpeed = Config.TopSpeed(Clean.bSprint);
+	const double TopSpeed = Config.TopSpeed(bSprinting);
 
 	const FVector Wanted =
 		((Forward * Clean.Move.X) + (Right * Clean.Move.Y)).GetClampedToMaxSize(1.0)
@@ -108,7 +249,17 @@ FWalkState FCharacterWalkModel::Step(
 		? Config.GroundAcceleration
 		: Config.GroundAcceleration * FMath::Clamp(Config.AirControl, 0.0, 1.0);
 
-	if (!Wanted.IsNearlyZero())
+	if (Result.Dodge != EWalkDodge::None)
+	{
+		// The dodge carries them, at its own clip's speed through it, and nothing the player presses steers it. Laid
+		// along today's ground, which may have turned since it began.
+		const double Before = DodgeDistance(Result.Dodge, Result.DodgeSeconds - DeltaSeconds, Config);
+		const double After = DodgeDistance(Result.Dodge, Result.DodgeSeconds, Config);
+		const FVector Way = (Result.DodgeDirection - Up * FVector::DotProduct(Result.DodgeDirection, Up)).GetSafeNormal();
+
+		Along = Way * ((After - Before) / DeltaSeconds);
+	}
+	else if (!Wanted.IsNearlyZero())
 	{
 		// Accelerate toward the requested velocity rather than snapping to it, and never overshoot
 		// it in a single step — at low frame rates a fixed increment would sail past the target and
@@ -131,7 +282,7 @@ FWalkState FCharacterWalkModel::Step(
 		// frame after frame into a downward speed the character can never shed.
 		Away = FMath::Max(Away, 0.0);
 
-		if (Clean.bJump)
+		if (Clean.bJump && Result.Dodge == EWalkDodge::None)
 		{
 			Away = Config.JumpSpeed;
 		}
