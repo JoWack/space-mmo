@@ -5,6 +5,39 @@
 
 #include "SpaceMMOCombatHud.generated.h"
 
+struct FBackendDeathCosts;
+
+/** One line of the death panel's table of what a death cost (task 103). */
+struct SPACEMMOBACKEND_API FSpaceMMODeathLine
+{
+	enum class EKind : uint8
+	{
+		/** Column names, or the worn gear's heading: spaced capitals. */
+		Heading,
+
+		/** A material, how many dropped and how many were destroyed; or a worn item and its condition. */
+		Row,
+
+		/** A sentence: where the dropped half is, or why nothing was lost. */
+		Note,
+	};
+
+	EKind Kind = EKind::Note;
+
+	FString Name;
+
+	/** The middle column: dropped. */
+	FString Middle;
+
+	/** The right column: destroyed, or a worn item's condition before and after. */
+	FString Right;
+
+	bool operator==(const FSpaceMMODeathLine& Other) const
+	{
+		return Kind == Other.Kind && Name == Other.Name && Middle == Other.Middle && Right == Other.Right;
+	}
+};
+
 /**
  * What fighting puts on screen (task 194), as Joe approved the mock on 16 October: your health at bottom centre,
  * the name and a thin bar over whoever you are hitting, each hit's damage where it landed (gold for the head), and
@@ -37,6 +70,21 @@ public:
 
 	/** "KILLED BY ORENTHAL", or "KILLED" when nobody is named. */
 	static FString DeathTitle(const FString& Killer);
+
+	/**
+	 * The death panel's table of what the death cost (task 103), as Joe chose it on 19 October: each material lost,
+	 * how many dropped and how many were destroyed; then each worn item's condition before and after. Pure, for the
+	 * tests.
+	 *
+	 * <code>
+	 * LOST                       DROPPED  DESTROYED
+	 * Ferrite Ore                   5         5
+	 * Dropped where you fell for 10 minutes. Anyone can take it.
+	 * WORN GEAR                          -10 condition
+	 * Laser Rifle                       100 -> 90
+	 * </code>
+	 */
+	static TArray<FSpaceMMODeathLine> DeathLines(const FBackendDeathCosts& Report);
 
 	/** How long a damage number floats before it is gone, and how long a target's bar stays after the last hit. */
 	static constexpr double NumberSeconds = 0.9;
@@ -101,6 +149,18 @@ private:
 	void StyleBar(class UProgressBar* Bar, class UImage* Glow, float Fraction, double Now) const;
 
 	TArray<FTargetMark> Marks;
+
+	/**
+	 * Lays the table out again when what it shows has changed. Its box is made at run time, under the death panel's
+	 * title, rather than in the Blueprint: the HUD's asset is shared with work on its other parts, and a binary asset
+	 * changed in two places cannot be merged.
+	 */
+	void ShowDeathLines(const TArray<FSpaceMMODeathLine>& Lines);
+
+	UPROPERTY()
+	TObjectPtr<class UVerticalBox> DeathLossTable;
+
+	TArray<FSpaceMMODeathLine> ShownDeathLines;
 
 	UPROPERTY()
 	TArray<TObjectPtr<class UTextBlock>> Numbers;

@@ -27,6 +27,9 @@
 #include "SpaceMMOCombatComponent.h"
 #include "SpaceMMOCombatHud.h"
 #include "SpaceMMOEquipmentScreen.h"
+#include "SpaceMMOLootComponent.h"
+#include "SpaceMMOLootCrateActor.h"
+#include "SpaceMMOLootScreen.h"
 #include "SpaceMMOInventoryScreen.h"
 #include "SpaceMMOLoginScreen.h"
 #include "SpaceMMOSessionEndedScreen.h"
@@ -187,6 +190,10 @@ void ASpaceMMOPlayerController::CreateHud()
 	EquipmentScreen = CreateHudWidget<USpaceMMOEquipmentScreen>(
 		this, Settings->EquipmentScreen, TEXT("equipment screen"));
 
+	LootScreen = CreateHudWidget<USpaceMMOLootScreen>(this, Settings->LootScreen, TEXT("loot screen"));
+
+	LootPrompt = CreateHudWidget<USpaceMMOLootPrompt>(this, Settings->LootPrompt, TEXT("loot prompt"));
+
 	LoginScreen = CreateHudWidget<USpaceMMOLoginScreen>(
 		this, Settings->LoginScreen, TEXT("login screen"));
 
@@ -245,7 +252,7 @@ void ASpaceMMOPlayerController::ApplyMouseCapture()
 	UUserWidget* const Menu = MenuWidget(ActiveMenu);
 
 	const bool bScreenWantsCursor = bAwaitingSignIn || Menu != nullptr || bInventoryScreenOpen || bStationOverlayOpen
-		|| bEquipmentScreenOpen || bShowingDeath;
+		|| bEquipmentScreenOpen || bLootScreenOpen || bShowingDeath;
 
 	if (bMouseCaptured && !bScreenWantsCursor)
 	{
@@ -307,7 +314,7 @@ void ASpaceMMOPlayerController::ToggleMouseCapture()
 
 	// What actually happened, not what was asked for. An open screen keeps the cursor either way,
 	// and "Mouse captured" over a cursor still sitting on the screen reads as a broken key.
-	const bool bHeldByScreen = bInventoryScreenOpen || bStationOverlayOpen || bEquipmentScreenOpen;
+	const bool bHeldByScreen = bInventoryScreenOpen || bStationOverlayOpen || bEquipmentScreenOpen || bLootScreenOpen;
 
 	if (bMouseCaptured && bHeldByScreen)
 	{
@@ -854,6 +861,8 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 		Show(EquipmentScreen, false);
 		Show(CombatHud, false);
 		Show(StationOverlay, false);
+		Show(LootScreen, false);
+		Show(LootPrompt, false);
 
 		return;
 	}
@@ -884,12 +893,15 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// one is about whether the view still means anything, and this one is about whether the player
 	// is looking at the world at all.
 	Show(Crosshair,
-		!bSkillsScreenOpen && !bInventoryScreenOpen && !bStationOverlayOpen && !bEquipmentScreenOpen
+		!bSkillsScreenOpen && !bInventoryScreenOpen && !bStationOverlayOpen && !bEquipmentScreenOpen && !bLootScreenOpen
 			&& ActiveMenu == ESpaceMMOMenu::None);
 
 	// Gathering happens on foot — the component lives on the character pawn, and a ship has nothing
 	// to pick up with — so the prompt has nothing to say in flight whatever is beneath the ship.
 	Show(DepositPrompt, !bFlying);
+
+	// A crate's prompt (task 103), on foot as the deposit's, and not over its own window once that is open.
+	Show(LootPrompt, !bFlying && !bLootScreenOpen);
 
 	// Skills are global, so K works in the air as well as on the ground.
 	Show(SkillsScreen, bSkillsScreenOpen);
@@ -914,8 +926,11 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// The equipment screen takes the same left-hand place (task 193), and while it is open the station
 	// overlay is hidden under it rather than closed: three panels would cover the world, and Joe chose
 	// the screen just asked for over the one that was already there (16 October).
-	const bool bStationShows = bStationOverlayOpen && !bEquipmentScreenOpen;
-	const bool bLeftTaken = bStationShows || bEquipmentScreenOpen;
+	//
+	// A crate's window (task 103) takes the same place again, over both: it is what E was just pressed for.
+	const bool bEquipmentShows = bEquipmentScreenOpen && !bLootScreenOpen;
+	const bool bStationShows = bStationOverlayOpen && !bEquipmentScreenOpen && !bLootScreenOpen;
+	const bool bLeftTaken = bStationShows || bEquipmentShows || bLootScreenOpen;
 	const bool bPaired = bLeftTaken && bInventoryScreenOpen;
 
 	if (StationOverlay != nullptr)
@@ -933,8 +948,15 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 		InventoryScreen->SetSide(bPaired ? ESpaceMMOPanelSide::Right : ESpaceMMOPanelSide::Centre);
 	}
 
+	if (LootScreen != nullptr)
+	{
+		LootScreen->SetSide(bPaired ? ESpaceMMOPanelSide::Left : ESpaceMMOPanelSide::Centre);
+	}
+
+	Show(LootScreen, bLootScreenOpen, ESlateVisibility::SelfHitTestInvisible);
+
 	// SelfHitTestInvisible, as the inventory: its slots are dragged and dropped on, its empty half is not.
-	Show(EquipmentScreen, bEquipmentScreenOpen, ESlateVisibility::SelfHitTestInvisible);
+	Show(EquipmentScreen, bEquipmentShows, ESlateVisibility::SelfHitTestInvisible);
 
 	// Undocking closes the station overlay rather than leaving a station's market floating over open
 	// space — and it opens on docking, so arriving somewhere shows you where you have arrived.
@@ -955,7 +977,7 @@ void ASpaceMMOPlayerController::UpdateHudContext()
 	// two order buttons are all clicked, but the empty half of a full-screen root must not be.
 	//
 	// Recomputed after the docking checks above, which can close it, so a closed overlay is never shown.
-	Show(StationOverlay, bStationOverlayOpen && !bEquipmentScreenOpen, ESlateVisibility::SelfHitTestInvisible);
+	Show(StationOverlay, bStationOverlayOpen && !bEquipmentScreenOpen && !bLootScreenOpen, ESlateVisibility::SelfHitTestInvisible);
 }
 
 void ASpaceMMOPlayerController::ToggleStationOverlay()
@@ -989,7 +1011,51 @@ void ASpaceMMOPlayerController::ToggleStationOverlay()
 bool ASpaceMMOPlayerController::IsAnyScreenOpen() const
 {
 	return bAwaitingSignIn || ActiveMenu != ESpaceMMOMenu::None || bInventoryScreenOpen || bStationOverlayOpen
-		|| bEquipmentScreenOpen || bSkillsScreenOpen;
+		|| bEquipmentScreenOpen || bSkillsScreenOpen || bLootScreenOpen;
+}
+
+void ASpaceMMOPlayerController::OpenLootScreen(ASpaceMMOLootCrateActor* Crate)
+{
+	if (LootScreen == nullptr || Crate == nullptr)
+	{
+		return;
+	}
+
+	LootScreen->ShowCrate(Crate);
+	bLootScreenOpen = true;
+
+	// Beside the inventory, which is where what is taken goes (Joe, 19 October).
+	if (!bInventoryScreenOpen)
+	{
+		ToggleInventoryScreen();
+		bInventoryOpenedForLoot = true;
+	}
+
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("HUD: crate %lld opened (dropped by %s, %d stacks)."),
+		Crate->GetContainerId(), *Crate->GetDroppedBy(), Crate->GetItems().Num());
+
+	ApplyMouseCapture();
+	UpdateHudContext();
+}
+
+void ASpaceMMOPlayerController::CloseLootScreen()
+{
+	if (!bLootScreenOpen)
+	{
+		return;
+	}
+
+	bLootScreenOpen = false;
+
+	if (bInventoryOpenedForLoot && bInventoryScreenOpen)
+	{
+		ToggleInventoryScreen();
+	}
+
+	bInventoryOpenedForLoot = false;
+
+	ApplyMouseCapture();
+	UpdateHudContext();
 }
 
 void ASpaceMMOPlayerController::ToggleEquipmentScreen()
@@ -1646,6 +1712,14 @@ void ASpaceMMOPlayerController::HandleEscape()
 		bSkillsScreenOpen ? 1 : 0,
 		*UEnum::GetValueAsString(ActiveMenu));
 
+	// A crate's window first, with the inventory it opened beside it: the two came together.
+	if (bLootScreenOpen)
+	{
+		CloseLootScreen();
+
+		return;
+	}
+
 	// An open screen first, then the menu (Joe, 1 October).
 	if (bInventoryScreenOpen)
 	{
@@ -1807,6 +1881,62 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 		{
 			UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: no combat component on %s to show."), *GetNameSafe(GetPawn()));
 		}
+
+		// What the death cost, on the panel (task 103). Said when it cannot be, rather than leaving a panel with no
+		// table looking like a table that failed to draw.
+		if (bDeadLook)
+		{
+			if (USpaceMMOLootComponent* Loot =
+				GetPawn() != nullptr ? GetPawn()->FindComponentByClass<USpaceMMOLootComponent>() : nullptr)
+			{
+				Loot->ShowSampleDeathReportForLook();
+			}
+			else
+			{
+				UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: no loot component on %s to report a death."),
+					*GetNameSafe(GetPawn()));
+			}
+		}
+	}
+
+	// Crate and Loot (task 103): a dropped crate beside this character with sample contents -- the prompt over it,
+	// or its window beside the inventory. "far" stands it 22 m off so the beam is in view; "fading" gives it 30 s left.
+	const bool bCrateLook = View.Equals(TEXT("Crate"), ESearchCase::IgnoreCase);
+	const bool bLootLook = View.Equals(TEXT("Loot"), ESearchCase::IgnoreCase);
+
+	bLootScreenOpen = false;
+
+	if (const ASpaceMMOCharacterPawn* Beside = Cast<ASpaceMMOCharacterPawn>(GetPawn());
+		Beside != nullptr && (bCrateLook || bLootLook))
+	{
+		const bool bFar = Words.ContainsByPredicate([](const FString& W) { return W.Equals(TEXT("far"), ESearchCase::IgnoreCase); });
+		const bool bFading = Words.ContainsByPredicate([](const FString& W) { return W.Equals(TEXT("fading"), ESearchCase::IgnoreCase); });
+
+		ASpaceMMOLootCrateActor* Crate = nullptr;
+
+		for (TActorIterator<ASpaceMMOLootCrateActor> It(GetWorld()); It; ++It)
+		{
+			Crate = *It;
+		}
+
+		if (Crate == nullptr)
+		{
+			FActorSpawnParameters Spawn;
+			Spawn.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			Crate = GetWorld()->SpawnActor<ASpaceMMOLootCrateActor>(Spawn);
+		}
+
+		if (Crate != nullptr)
+		{
+			Crate->ShowSampleForLook(Beside, bFar ? 22.0 : 3.0, bFar ? 0.0 : 1.2, bFading ? 30.0 : 552.0);
+
+			if (bLootLook && LootScreen != nullptr)
+			{
+				LootScreen->ShowCrate(Crate);
+				bLootScreenOpen = true;
+			}
+		}
 	}
 
 	// SignedInElsewhere and Disconnected: the panel a window shows once its session is over (task 199), made here
@@ -1833,7 +1963,7 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 	// underneath it and the capture shows it staying hidden.
 	const bool bGear = View.Equals(TEXT("Gear"), ESearchCase::IgnoreCase);
 
-	bInventoryScreenOpen = bPair || bGear || View.Equals(TEXT("Inventory"), ESearchCase::IgnoreCase);
+	bInventoryScreenOpen = bPair || bGear || bLootLook || View.Equals(TEXT("Inventory"), ESearchCase::IgnoreCase);
 	bStationOverlayOpen = bPair || bGear || View.Equals(TEXT("Station"), ESearchCase::IgnoreCase);
 	bEquipmentScreenOpen = bGear || View.Equals(TEXT("Equipment"), ESearchCase::IgnoreCase);
 	bSkillsScreenOpen = View.Equals(TEXT("Skills"), ESearchCase::IgnoreCase);
@@ -1947,17 +2077,33 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 		return;
 	}
 
-	const FString Name = FString::Printf(TEXT("LookPanels_%s%s%s.png"), *View,
-		TabName.IsEmpty() ? TEXT("") : *(TEXT("_") + TabName), bPrompt ? TEXT("_prompt") : TEXT(""));
+	// A crate's variants each their own file (task 103): one name for all three kept only the last.
+	FString Variant;
+
+	for (const TCHAR* Word : {TEXT("far"), TEXT("fading")})
+	{
+		if (Words.ContainsByPredicate([Word](const FString& W) { return W.Equals(Word, ESearchCase::IgnoreCase); }))
+		{
+			Variant += FString(TEXT("_")) + Word;
+		}
+	}
+
+	const FString Name = FString::Printf(TEXT("LookPanels_%s%s%s%s.png"), *View,
+		TabName.IsEmpty() ? TEXT("") : *(TEXT("_") + TabName), bPrompt ? TEXT("_prompt") : TEXT(""), *Variant);
 	const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ScreenShotDir() / Name);
 
 	// Again just before the capture: without a server, a failed sign-in arrives a moment after start-up and
 	// puts the sign-in screen back over everything, which would be a screenshot of the wrong thing. Without
 	// "prompt", so a prompt opened above is left open rather than opened twice.
 	FTimerHandle Again;
-	GetWorldTimerManager().SetTimer(Again, [this, View, TabName]()
+	//
+	// A crate's variant word goes again too, in the tab's place (task 103): left out, the crate it set up was put back
+	// to the plain one before the capture, and "far" and "fading" captured the plain crate.
+	const FString AgainWord = Variant.IsEmpty() ? TabName : Variant.RightChop(1);
+
+	GetWorldTimerManager().SetTimer(Again, [this, View, AgainWord]()
 	{
-		SpaceMMOLookPanels(View, TabName, FString(), FString());
+		SpaceMMOLookPanels(View, AgainWord, FString(), FString());
 	}, 2.5f, false);
 
 	FTimerHandle Capture;

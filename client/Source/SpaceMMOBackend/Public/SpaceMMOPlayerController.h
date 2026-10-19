@@ -239,6 +239,15 @@ public:
 	void ToggleEquipmentScreen();
 
 	/**
+	 * Opens a dropped crate's window (task 103), beside the inventory as the station screen opens (Joe, 19 October),
+	 * which it opens too if it is closed. E on a crate in reach.
+	 */
+	void OpenLootScreen(class ASpaceMMOLootCrateActor* Crate);
+
+	/** Closes it, and the inventory with it when opening it was what opened the inventory. */
+	void CloseLootScreen();
+
+	/**
 	 * Whether a screen or menu is up (task 194): a click then belongs to it, and the fire key must not shoot
 	 * through an inventory at whoever is behind it.
 	 */
@@ -373,6 +382,13 @@ public:
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOEquipmentScreen> EquipmentScreen;
 
+	/** A dropped crate's window and the prompt over a crate (task 103), each null when not configured. */
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOLootScreen> LootScreen;
+
+	UPROPERTY()
+	TObjectPtr<class USpaceMMOLootPrompt> LootPrompt;
+
 	/** The sign-in screen, or null when none is configured. */
 	UPROPERTY()
 	TObjectPtr<class USpaceMMOLoginScreen> LoginScreen;
@@ -411,6 +427,12 @@ public:
 	 * closes: hidden is not closed.
 	 */
 	bool bEquipmentScreenOpen = false;
+
+	/** Whether a crate's window is open (task 103); it takes the left, as the equipment screen does. */
+	bool bLootScreenOpen = false;
+
+	/** Whether opening it opened the inventory, so closing it closes that too. */
+	bool bInventoryOpenedForLoot = false;
 
 	/** Task 110's screens, each null when not configured. */
 	UPROPERTY()

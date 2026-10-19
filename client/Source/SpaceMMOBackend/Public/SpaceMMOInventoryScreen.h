@@ -77,6 +77,10 @@ struct SPACEMMOBACKEND_API FSpaceMMOInventoryLine
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
 	EBackendEquipKind EquipsAs = EBackendEquipKind::Weapon;
 
+	/** Whether this line is in the pockets: the one place a stack dragged out of a dropped crate can go (task 103). */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|HUD")
+	bool bCarried = false;
+
 	/** Whether this line names something that can be picked up and moved. */
 	bool CanDrag() const
 	{

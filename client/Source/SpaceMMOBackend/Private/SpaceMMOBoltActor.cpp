@@ -3,8 +3,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
-#include "Materials/MaterialInstanceDynamic.h"
-#include "Materials/MaterialInterface.h"
+#include "SpaceMMOGlow.h"
 #include "SpaceMMORenderOrigin.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -65,16 +64,11 @@ void ASpaceMMOBoltActor::Launch(const FSystemCoordinate& Start, const FSystemCoo
 	bLaunched = true;
 	Elapsed = 0.0;
 
-	// The prototyping kit's glow: unlit, translucent, with a colour to set. One instance a bolt, so each can fade.
-	if (UMaterialInterface* Glow = LoadObject<UMaterialInterface>(
-		nullptr, TEXT("/Game/LevelPrototyping/Interactable/JumpPad/Assets/Materials/M_SimpleGlow.M_SimpleGlow")))
+	// The prototyping kit's glow, unlit and translucent. Its colour goes on the part, where the material reads it: set on
+	// a material instance, as it was from 194 until 19 October, it was ignored and the bolt drew grey-white (SpaceMMOGlow).
+	for (UStaticMeshComponent* Part : {Streak.Get(), Flash.Get()})
 	{
-		for (UStaticMeshComponent* Part : {Streak.Get(), Flash.Get()})
-		{
-			UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Glow, this);
-			Instance->SetVectorParameterValue(TEXT("Color"), BoltColour);
-			Part->SetMaterial(0, Instance);
-		}
+		SpaceMMO::Glow::Apply(Part, BoltColour);
 	}
 
 	Place();

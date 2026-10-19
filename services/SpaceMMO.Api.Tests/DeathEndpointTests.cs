@@ -76,8 +76,11 @@ public sealed class DeathEndpointTests(ApiDatabaseFixture fixture, ITestOutputHe
     {
         await KillIntruderAsync();
 
-        using JsonDocument body = await JsonAsync(await AsServer(
-            HttpMethod.Post, "/combat/deaths", new { characterId = _intruder, x = -180.25, y = 3.5, z = -1.125 }));
+        // As the game server writes it (FSpaceMMODeathWire::MakeDeathBody), to nine places.
+        using JsonDocument body = await JsonAsync(await AsServerRaw(
+            HttpMethod.Post,
+            "/combat/deaths",
+            $$"""{"characterId":{{_intruder}},"x":-180.250000000,"y":3.500000000,"z":-1.125000000}"""));
 
         JsonElement root = body.RootElement;
 
@@ -146,10 +149,11 @@ public sealed class DeathEndpointTests(ApiDatabaseFixture fixture, ITestOutputHe
         JsonElement crate = Assert.Single(list.RootElement.EnumerateArray());
         long id = crate.GetProperty("id").GetInt64();
 
-        // The plate, as the stack it fell as: Martian, 2.
-        using JsonDocument taken = await JsonAsync(await AsServer(
+        // The plate, as the stack it fell as: Martian, 2. Written as the game server writes it
+        // (FSpaceMMODeathWire::MakeLootBody), which the client's own test pins to the same string.
+        using JsonDocument taken = await JsonAsync(await AsServerRaw(
             HttpMethod.Post, $"/combat/containers/{id}/loot",
-            new { characterId = _local, items = new[] { new { itemDefId = _plateId, style = 2 } } }));
+            $$"""{"characterId":{{_local}},"items":[{"itemDefId":{{_plateId}},"style":2}]}"""));
 
         JsonElement root = taken.RootElement;
 
@@ -164,9 +168,9 @@ public sealed class DeathEndpointTests(ApiDatabaseFixture fixture, ITestOutputHe
             root.GetProperty("left").GetProperty("items").EnumerateArray()
                 .Select(t => (t.GetProperty("itemKey").GetString(), t.GetProperty("quantity").GetInt32())));
 
-        // Then the rest, which empties it.
-        using JsonDocument rest = await JsonAsync(await AsServer(
-            HttpMethod.Post, $"/combat/containers/{id}/loot", new { characterId = _local }));
+        // Then the rest, which empties it: nothing named takes everything.
+        using JsonDocument rest = await JsonAsync(await AsServerRaw(
+            HttpMethod.Post, $"/combat/containers/{id}/loot", $$"""{"characterId":{{_local}}}"""));
 
         Assert.Equal(JsonValueKind.Null, rest.RootElement.GetProperty("left").ValueKind);
 
@@ -237,6 +241,16 @@ public sealed class DeathEndpointTests(ApiDatabaseFixture fixture, ITestOutputHe
         HttpResponseMessage response = await _client.SendAsync(request);
 
         return response;
+    }
+
+    private async Task<HttpResponseMessage> AsServerRaw(HttpMethod method, string path, string json)
+    {
+        using var request = new HttpRequestMessage(method, new Uri(path, UriKind.Relative));
+
+        request.Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        request.Headers.Add("X-SpaceMMO-Service", ApiFactory.TestServiceSecret);
+
+        return await _client.SendAsync(request);
     }
 
     private async Task SeedAsync()

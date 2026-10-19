@@ -1614,8 +1614,9 @@ players have XP is a migration and an apology.
 ## 103 — Make death and insurance real
 
 **Decided 16 October: [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md), superseding ADR-0006.
-Now an implementation, blocked on 194**, since nothing can die until something can be shot. ADR-0006 was
-accepted and entirely inert; what is below was written before the decision and is kept as its context.
+Built 19 October on branch `claude/death-costs-103-e10afa`; waiting on Joe's say-so to merge, then a two-client
+playtest** (below). ADR-0006 was accepted and entirely inert; what is below was written before the decision and is
+kept as its context.
 
 Cause-based loot destruction and acquisition-value insurance are implemented in `SpaceMMO.Domain`
 and covered by tests, and nothing can currently die. The rules also cannot bite while everything a
@@ -1745,6 +1746,113 @@ container's row lock dropped (two looters at once); the dropped half carrying no
 finding no position; the respawn endpoint not costing; the position's axes swapped on the wire; the loot endpoint
 open to anyone. The first run of those plants was void and is not counted: a restored file kept its old timestamp,
 the build skipped it, and one plant rode along into the next seven runs.
+
+### Built, 19 October: the game server and client
+
+- **Costing a death** (`USpaceMMOLootSubsystem::CostDeath`): when a hit kills, the dedicated server puts the crate a
+  metre to the body's right, on the height function's ground (`ASpaceMMOLootCrateActor::BesideTheBody`), and asks
+  `/combat/deaths`. The answer spawns the crate and goes to the dead player (`USpaceMMOLootComponent`'s
+  `ClientDeathCosts`), whose inventory is refreshed; Weapon 1 is read again, since it may have broken.
+- **A respawn waits for its death to be costed**: otherwise the API would cost it itself, at the last whereabouts,
+  with no crate placed and nothing on the panel. After a respawn the server fetches the live crates again, so a crate
+  the respawn's fallback made is put in the world. A server starting up fetches them too.
+- **The crate** (`ASpaceMMOLootCrateActor`): spawned by the server and replicated -- unlike a deposit, it is a fact
+  only the server learns -- with its system position, up, expiry on the server's clock, and contents; each machine
+  places it from its own render origin, never from a replicated transform. Engine shapes: a 0.6 m dark cube, an
+  amber glowing band, a 15 m amber beam that fades and thins over the last minute. The server destroys it when the
+  API says it is empty or gone, or when its time is up.
+- **E**: the nearer of a crate and a deposit in reach (5 m for a crate) takes it (`CrateTakesE`); on a crate it opens
+  `WBP_LootScreen` beside the inventory, opening the inventory if it was closed and closing it again with the window.
+  The deposit prompt stands aside while a crate takes E, and `WBP_LootPrompt` floats over the crate.
+- **Taking**: Take all, a row double-clicked, or a row dragged onto the pockets (only the pockets light) go through
+  the server (`ServerLoot`), which checks the crate is within reach of where it has the character before asking the
+  API. "Took 3 Structural Plate", or "No room in your pockets", afterwards. The window redraws from the replicated
+  crate, so stacks taken by somebody else leave it, and it closes when the crate is gone, out of reach, or its
+  reader dies.
+- **The death panel's table** is built at run time into the panel's existing box (`ShowDeathLines`), so
+  `WBP_CombatHud.uasset` is unchanged: a binary asset changed on two branches cannot be merged. The three new
+  Blueprints are built by `SpaceMMOBuildMenus`.
+- `scripts/tests.ps1` runs the project beside it, not the main checkout's: from a worktree it tested whatever the
+  main checkout last built.
+- `SpaceMMOLookPanels Crate [far|fading] shot`, `Loot shot`, and `Dead shot` now with a sample of what a death cost.
+
+### Two faults the first render found, neither of which any test could have
+
+- **The glow ignored its colour, on the crate and on 194's bolt.** The crate's band and beam rendered a flat grey,
+  measured off the capture at (151, 151, 150): not a washed-out amber, which would read yellow-white. The log said the
+  colour was set on the material instance. Two experiments with the material's other parameter changed nothing;
+  reading the asset with the editor's Python ended it: `M_SimpleGlow`'s `Color` and `Custom Prim Switch` are both
+  **custom primitive data** (indices 1-4 and 0), so a material instance's `SetVectorParameterValue` is ignored
+  without a word, and at the switch's 0 the emissive is the particle colour, white on a mesh. **The bolt (194) set its
+  red-orange the same way and has drawn grey-white since 16 October.** Both now go through `SpaceMMOGlow`, which writes
+  the part's custom primitive data; the beam measures (241, 201, 78), amber, and fading at 30 s left (139, 83, 14).
+  `SpaceMMO.Glow.TheColourGoesWhereTheMaterialReadsIt` reads the parameters' indices out of the loaded asset and what a
+  part holds once it glows.
+- **No looting in a standalone game.** The loot component was attached only to pawns spawned after the world began
+  play; a standalone game's pawn exists before that, so the first look had no prompt over the crate and no table on
+  the death panel. The deposits' subsystem already covered both cases, with a comment saying so. On a dedicated server
+  players join later, so a two-client playtest would not have shown it. `Loot: attached to ...` is logged now, and the
+  look harness says when there is no component to report a death on.
+- And the look harness's own second call (2.5 s in) dropped the `far` and `fading` words, so all three crate captures
+  were the plain one until it passed them on.
+
+### Verified, and how
+
+- Suites: Domain 559, Data 320, API 121; client 336 (`scripts/tests.bat SpaceMMO 336`, from this worktree), against a
+  build that said `Result: Succeeded`.
+- **The client parses the API's own JSON**, captured from `DeathEndpointTests` (which writes each answer to its test
+  output): a death costed, one already costed, the live crates, a stack taken with ore left, the last taken, and a
+  crate gone. **The API test posts the client's exact bodies** (`MakeDeathBody`'s nine places, `MakeLootBody`'s stack
+  and style number), which the client's own test pins to the same strings.
+- **Broken on purpose, each failing its own test and nothing else** (client, each build checked for having compiled
+  the planted file): E going to the farther of a crate and a rock; a stack sent by the style it shows rather than its
+  stack's; a stack's style read from the shown style; the crate's note shown when nothing dropped; the crate not let
+  down onto the height function's ground; every inventory line taking loot rather than the pockets; the beam fading
+  over two minutes; the time rounding down; the glow's colour written at the wrong index; nothing written to the part,
+  as the bolt did.
+- **Rendered** (`SpaceMMOLookPanels`, rendered, `-BackendUrl=http://localhost:9`): the crate with its band, beam and
+  prompt (`LookPanels_Crate.png`); from 22 m, beam in view and no prompt (`Crate_far`); at 0:30 with the beam dimmed
+  (`Crate_fading`); the window beside the inventory (`Loot`); the death panel's table (`Dead`). Each matches the mock
+  Joe approved, but for the worn gear's heading, which the panels' heading style sets in capitals ("−10 CONDITION").
+- **The dedicated-server target was not compiled here.** From a fresh worktree it is a monolithic build of 1,013
+  actions, engine included, and holds the build mutex every other session's build waits on for most of an hour; it
+  was stopped at 136. It compiles incrementally in the main checkout after the merge, before the re-cook. The one
+  editor-only call found by reading was taken out: the table's first version used `InsertChildAt`, which exists only
+  in the editor.
+
+**Not verified by anything but a two-client playtest:** a kill costing the death and the crate appearing on both
+screens where the body fell; the panel's table arriving after the fall; E opening the crate, Take all, a double-click
+and a drag onto the pockets; a crate emptying and vanishing on both screens; somebody else taking from it while the
+window is open; respawning before the costs arrive; the crate fading and going at ten minutes; a crate surviving a
+server restart; the bolt in its red-orange.
+
+### Playtesting it
+
+**Needs Joe's say-so to merge** `claude/death-costs-103-e10afa` into main first: the playtest scripts run the main
+checkout's staged server. Then, in the main checkout: `--seed` (it applies the `DeathCosts` migration and marks every
+earlier death settled), build the editor and the server, re-cook the dedicated server, and restart the API with
+`scripts/api.bat`.
+
+Two characters of different factions, one carrying materials (ore and plate), both with a rifle in Weapon 1, on the
+local's homeworld, as in 194.
+
+1. **Kill the carrier.** Look for: the body falls (201), and a crate with an amber band and beam appears a metre to its
+   right on both screens. The dead player's panel lists each material with dropped and destroyed counts (an odd stack's
+   extra unit dropped), then each worn item 100 → 90. *How it fails:* no crate on either screen -- read the server log
+   for `Loot: costing the death` and `the death of character N cost`, and `Api.log` for `/combat/deaths`; no table --
+   `Loot: this death cost` in the dead client's log.
+2. **Inventory and equipment on the dead player**: the materials are gone from the pockets, the rifle and laser show
+   ten less condition. A spare laser carried in the pockets is still there, unworn.
+3. **The killer walks to the crate**: the prompt "DROPPED BY ..., 9:xx" over it, and E opens the window beside the
+   inventory. **Double-click one stack**: only that is taken ("Took 3 Structural Plate"), and it leaves the window on
+   both players' screens if the other has it open. **Drag a stack onto the pockets**: only the pockets light; dropping
+   on the hold does nothing. **Take all with the pockets nearly full**: what fits is taken, the rest stays. *How it
+   fails:* "Too far away to take from" standing at it means the server's position and the client's disagree -- read
+   `Loot: character N asked for a crate X m away`.
+4. **Respawn the dead player and run back** before ten minutes: their own goods come back to them.
+5. **Leave one crate alone**: the beam dims over its last minute and the crate goes at 0:00 on both screens.
+6. **Die docked at a station**: the panel says nothing was lost; nothing drops.
+7. **A shot's bolt** is red-orange now, not grey-white.
 
 ## 104 — Pairwise aggression and security zones
 
@@ -10180,8 +10288,8 @@ EQUIPMENT
 - **Only the mining slot can be filled in play.** No weapon or armour exists as content (192's are designs,
   179 is the armour). The weapon slots, the swap and armour fitting are proven by the tests and the sample
   look, not by play.
-- **Worn gear and death (103)**: whether a death drops what is worn is part of the rethink Joe opened on
-  15 October.
+- **Worn gear and death (103)**: settled by ADR-0016 -- what is worn is kept and loses 10 condition a death; built
+  19 October.
 - **The live figure** waits for armour to have something to show (179).
 
 ### Verified, and how
@@ -10325,12 +10433,16 @@ seven), with no rifles yet. A rifle is a weaponcrafting job: 6 Structural Plate 
 
 ### Not done, and why
 
-- **ADR-0016's costs** — half the materials dropped in a lootable container, 10% wear — are 103, stage 2.
+- **ADR-0016's costs** — half the materials dropped in a lootable container, 10% wear — are 103, stage 2, built
+  19 October.
 - **Heat, the focused beam, the trees** come once the loop is played.
 - **No rifle model, no aiming or firing animation**, and the dead stand where they fell: the streak leaves the
   chest, and nothing yet says a character is down except the bars and the panel.
 - **The XP rate** is ADR-0017's estimate until fights can be measured.
 - **Equipping "out of combat"** (193) can now be enforced, and is not yet.
+- **The bolt drew grey-white, not its red-orange**, from the start until 19 October: its colour was set on a material
+  instance, which `M_SimpleGlow` never reads (its colour is custom primitive data). Found by 103's crate, measured off a
+  render; fixed there for both (`SpaceMMOGlow`).
 
 
 ## 195 — Stamina, and a dodge roll
@@ -10362,8 +10474,9 @@ death, and to **M4**'s gear that matters. Decided in
 - A broken item (condition 0) is kept, and unusable until repaired: the tool gates already refuse it.
 
 Needs a maximum condition on every instance (a column), what each repair costs (content, per item or per
-category), and what "worn out" means at the bottom: unusable for good, or gone. Nothing wears an item yet,
-so it matters from the day 103's 10% a death lands; it can be built before then.
+category), and what "worn out" means at the bottom: unusable for good, or gone. **103's wear was built 19 October**:
+every death now takes 10 condition off what is worn, so a rifle worn ten deaths is broken, and stays broken until this
+exists.
 
 ## 197 — Docking never counted toward quests, so nobody could finish the main story
 

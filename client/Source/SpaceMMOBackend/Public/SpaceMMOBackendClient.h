@@ -222,6 +222,29 @@ public:
 		TFunction<void(const FBackendRespawn&)> OnRespawn,
 		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
 
+	/**
+	 * Takes what a character's death costs (task 103), with the dropped half's crate where the body fell. Service
+	 * only, as hits are. Defined in SpaceMMOBackendClientDeaths.cpp.
+	 */
+	void CostDeathAsServer(
+		int32 CharacterId,
+		const FVector& CratePositionKilometres,
+		TFunction<void(const struct FBackendDeathCosts&)> OnCosts,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
+	/** Every crate that can still be looted, for a game server putting them in the world. */
+	void FetchLootContainersAsServer(
+		TFunction<void(const TArray<struct FBackendLootContainer>&)> OnContainers,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
+	/** Takes from a crate into a character's pockets: the stacks named, or everything that fits when none are. */
+	void LootAsServer(
+		int64 ContainerId,
+		int32 CharacterId,
+		const TArray<struct FBackendLootItem>& Wanted,
+		TFunction<void(const struct FBackendLootResult&)> OnResult,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
 	/** True if a service secret was found, so the server can actually act. */
 	UFUNCTION(BlueprintPure, Category = "SpaceMMO|Backend")
 	bool HasServiceSecret() const { return !ServiceSecret.IsEmpty(); }

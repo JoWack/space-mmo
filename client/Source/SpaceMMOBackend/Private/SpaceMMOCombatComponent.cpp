@@ -11,6 +11,7 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOBoltActor.h"
 #include "SpaceMMOCharacterPawn.h"
+#include "SpaceMMOLootSubsystem.h"
 #include "SpaceMMOPlanetActor.h"
 #include "SpaceMMOPlanetTerrain.h"
 #include "SpaceMMOPlayerController.h"
@@ -783,6 +784,12 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres, const int
 
 					UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d killed character %d."),
 						Self->CharacterId, Target->CharacterId);
+
+					// What dying costs (task 103), taken now the hit's lock is let go, with the crate beside the body.
+					if (USpaceMMOLootSubsystem* Loot = Self->GetWorld()->GetSubsystem<USpaceMMOLootSubsystem>())
+					{
+						Loot->CostDeath(Target);
+					}
 				}
 			}
 
@@ -995,6 +1002,28 @@ void USpaceMMOCombatComponent::ServerRespawn_Implementation()
 		return;
 	}
 
+	// Not before the death is costed (task 103): the API would cost it itself, at the last recorded whereabouts,
+	// with no crate put in the world and nothing on the panel.
+	USpaceMMOLootSubsystem* Loot = GetWorld() != nullptr ? GetWorld()->GetSubsystem<USpaceMMOLootSubsystem>() : nullptr;
+
+	if (Loot != nullptr && Loot->IsCosting(CharacterId))
+	{
+		bRespawnPending = true;
+
+		TWeakObjectPtr<USpaceMMOCombatComponent> WeakSelf(this);
+
+		Loot->WhenCosted(CharacterId, [WeakSelf]()
+		{
+			if (USpaceMMOCombatComponent* Self = WeakSelf.Get())
+			{
+				Self->bRespawnPending = false;
+				Self->ServerRespawn_Implementation();
+			}
+		});
+
+		return;
+	}
+
 	bRespawnPending = true;
 
 	TWeakObjectPtr<USpaceMMOCombatComponent> WeakThis(this);
@@ -1052,6 +1081,12 @@ void USpaceMMOCombatComponent::ServerRespawn_Implementation()
 			Self->ClientRespawned(StationName);
 
 			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d came back at %s."), Self->CharacterId, *StationName);
+
+			// A respawn costs any death the server never did, with its crate where they were last seen (task 103).
+			if (USpaceMMOLootSubsystem* Crates = World != nullptr ? World->GetSubsystem<USpaceMMOLootSubsystem>() : nullptr)
+			{
+				Crates->SyncCrates();
+			}
 		},
 		[WeakThis](const FBackendFailure& Failure)
 		{

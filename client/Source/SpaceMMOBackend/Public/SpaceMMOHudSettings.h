@@ -104,6 +104,19 @@ public:
 	FSoftClassPath EquipmentScreen;
 
 	/**
+	 * What lies in a dropped crate, opened with E beside the inventory (task 103). Must derive from
+	 * <c>USpaceMMOLootScreen</c>. Built by the SpaceMMOBuildMenus commandlet.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOLootScreen"))
+	FSoftClassPath LootScreen;
+
+	/** The prompt over a crate in reach (task 103). Must derive from <c>USpaceMMOLootPrompt</c>. */
+	UPROPERTY(EditAnywhere, Config, Category = "HUD",
+		meta = (MetaClass = "/Script/SpaceMMOBackend.SpaceMMOLootPrompt"))
+	FSoftClassPath LootPrompt;
+
+	/**
 	 * The sign-in screen. Must derive from <c>USpaceMMOLoginScreen</c>.
 	 *
 	 * Unset means the game behaves exactly as it did before task 107: credentials come from

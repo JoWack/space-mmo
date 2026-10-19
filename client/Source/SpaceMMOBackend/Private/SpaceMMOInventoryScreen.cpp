@@ -7,6 +7,7 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOEquipmentScreen.h"
 #include "SpaceMMOItemStyleTag.h"
+#include "SpaceMMOLootScreen.h"
 #include "SpaceMMOPlayerController.h"
 
 namespace
@@ -162,6 +163,26 @@ bool USpaceMMOInventoryRow::NativeOnDrop(
 {
 	USpaceMMOInventoryScreen* Screen = OwningScreen.Get();
 
+	// Out of a dropped crate and into the pockets (task 103): taken from the crate, which the server does.
+	if (const USpaceMMOLootDrag* FromCrate = Cast<USpaceMMOLootDrag>(Operation))
+	{
+		if (Screen != nullptr)
+		{
+			Screen->SetDropTargetContainer(0);
+		}
+
+		USpaceMMOLootScreen* Window = FromCrate->Screen.Get();
+
+		if (!Line.bCarried || Window == nullptr)
+		{
+			return false;
+		}
+
+		Window->Take(FromCrate->Item);
+
+		return true;
+	}
+
 	// Out of a slot and into this container (task 193): taking it off, named where it goes.
 	if (const USpaceMMOEquipmentDrag* FromSlot = Cast<USpaceMMOEquipmentDrag>(Operation))
 	{
@@ -278,6 +299,7 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 		Line.ItemDefId = Stack.ItemDefId;
 		Line.Quantity = Stack.Quantity;
 		Line.Style = Stack.Style;
+		Line.bCarried = Stack.Kind == EBackendInventoryKind::CharacterCarried;
 
 		Group.Lines.Add(Line);
 	}
@@ -302,6 +324,7 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 		Line.Style = Instance.Style;
 		Line.bEquippable = Instance.bEquippable;
 		Line.EquipsAs = Instance.EquipsAs;
+		Line.bCarried = Instance.Kind == EBackendInventoryKind::CharacterCarried;
 
 		Group.Lines.Add(Line);
 	}
@@ -340,6 +363,7 @@ TArray<FSpaceMMOInventoryLine> USpaceMMOInventoryScreen::Build(
 		Heading.bIsHeading = true;
 		Heading.bReachable = Group.bReachable;
 		Heading.InventoryId = Group.InventoryId;
+		Heading.bCarried = Group.Order == 0;
 
 		Result.Add(Heading);
 		Result.Append(Group.Lines);
@@ -370,6 +394,14 @@ void USpaceMMOInventoryRow::NativeOnDragEnter(
 	if (Screen != nullptr && Cast<USpaceMMOEquipmentDrag>(Operation) != nullptr)
 	{
 		Screen->SetDropTargetContainer(USpaceMMOInventoryScreen::CanTakeOffInto(Line) ? Line.InventoryId : 0);
+
+		return;
+	}
+
+	// From a dropped crate, only the pockets light (task 103): taking goes nowhere else.
+	if (Screen != nullptr && Cast<USpaceMMOLootDrag>(Operation) != nullptr)
+	{
+		Screen->SetDropTargetContainer(Line.bCarried ? Line.InventoryId : 0);
 
 		return;
 	}

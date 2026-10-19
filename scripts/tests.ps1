@@ -48,12 +48,15 @@ $ErrorActionPreference = 'Stop'
 if ([string]::IsNullOrWhiteSpace($Filter)) { $Filter = 'SpaceMMO' }
 
 $editor = 'D:\Programming\UnrealEngineSource\Engine\Binaries\Win64\UnrealEditor-Cmd.exe'
-$project = 'D:\Programming\SpaceMMO\client\SpaceMMO.uproject'
+# The project beside this script, so a worktree's copy tests that worktree's build (task 103). It named the
+# main checkout, so a run from a worktree tested whatever the main checkout last built and said PASS.
+$client = Join-Path (Split-Path $PSScriptRoot -Parent) 'client'
+$project = Join-Path $client 'SpaceMMO.uproject'
 # The runner's own log, never SpaceMMO.log. A standalone playtest writes SpaceMMO.log, and this used
 # to delete it before every run: on 30 September a test run destroyed the log of the playtest being
 # diagnosed, backup and all, a quarter of an hour after it was written (task 164). Evidence of what
 # the game did is worth more than anything a test run prints.
-$log = 'D:\Programming\SpaceMMO\client\Saved\Logs\Tests.log'
+$log = Join-Path $client 'Saved\Logs\Tests.log'
 
 if (-not (Test-Path $editor)) { throw "No editor at $editor" }
 if (-not (Test-Path $project)) { throw "No project at $project" }

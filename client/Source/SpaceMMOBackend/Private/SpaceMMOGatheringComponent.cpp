@@ -10,6 +10,8 @@
 #include "SpaceMMOBackendLog.h"
 #include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMODepositActor.h"
+#include "SpaceMMOLootComponent.h"
+#include "SpaceMMOLootCrateActor.h"
 #include "SpaceMMOPlayerController.h"
 
 namespace
@@ -138,6 +140,22 @@ void USpaceMMOGatheringComponent::BindInput(UInputComponent* InputComponent)
 
 void USpaceMMOGatheringComponent::RequestGather()
 {
+	// A dropped crate nearer than any deposit takes E (task 103, Joe 19 October): it opens the crate's window beside
+	// the inventory instead of gathering.
+	if (const USpaceMMOLootComponent* Loot =
+		GetOwner() != nullptr ? GetOwner()->FindComponentByClass<USpaceMMOLootComponent>() : nullptr)
+	{
+		if (ASpaceMMOLootCrateActor* Crate = Loot->CrateForE())
+		{
+			if (ASpaceMMOPlayerController* Controller = OwningController())
+			{
+				Controller->OpenLootScreen(Crate);
+			}
+
+			return;
+		}
+	}
+
 	const UWorld* World = GetWorld();
 
 	if (World != nullptr)

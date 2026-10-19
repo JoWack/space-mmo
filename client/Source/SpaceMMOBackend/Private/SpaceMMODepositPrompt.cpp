@@ -7,6 +7,7 @@
 #include "SpaceMMOBackendClient.h"
 #include "SpaceMMODepositActor.h"
 #include "SpaceMMOHudPlacement.h"
+#include "SpaceMMOLootComponent.h"
 #include "SpaceMMOGatheringComponent.h"
 
 FSpaceMMODepositPromptText USpaceMMODepositPrompt::Build(
@@ -166,6 +167,14 @@ void USpaceMMODepositPrompt::NativeTick(const FGeometry& Geometry, const float D
 			Possessed->FindComponentByClass<USpaceMMOGatheringComponent>())
 		{
 			InReach = Gathering->FindDepositInRange();
+		}
+
+		// A dropped crate nearer than the rock takes E (task 103), and its own prompt says so; two prompts claiming
+		// one key would leave a player guessing which it works.
+		if (const USpaceMMOLootComponent* Loot = Possessed->FindComponentByClass<USpaceMMOLootComponent>();
+			Loot != nullptr && Loot->CrateForE() != nullptr)
+		{
+			InReach = nullptr;
 		}
 	}
 

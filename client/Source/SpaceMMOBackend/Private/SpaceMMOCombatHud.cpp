@@ -5,6 +5,8 @@
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
 #include "Components/Image.h"
 #include "Components/ProgressBar.h"
 #include "Components/SizeBox.h"
@@ -13,7 +15,9 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
 #include "SpaceMMOCombatComponent.h"
+#include "SpaceMMODeathWire.h"
 #include "SpaceMMOHudPlacement.h"
+#include "SpaceMMOLootComponent.h"
 #include "SpaceMMOPanelRow.h"
 #include "SpaceMMOPlayerController.h"
 #include "SpaceMMORenderOrigin.h"
@@ -64,6 +68,208 @@ FString USpaceMMOCombatHud::HealthLine(const int32 Health, const int32 MaxHealth
 FString USpaceMMOCombatHud::DeathTitle(const FString& Killer)
 {
 	return Killer.IsEmpty() ? FString(TEXT("Killed")) : FString::Printf(TEXT("Killed by %s"), *Killer);
+}
+
+TArray<FSpaceMMODeathLine> USpaceMMOCombatHud::DeathLines(const FBackendDeathCosts& Report)
+{
+	using EKind = FSpaceMMODeathLine::EKind;
+
+	auto Line = [](const EKind Kind, const FString& Name, const FString& Middle = FString(), const FString& Right = FString())
+	{
+		FSpaceMMODeathLine Made;
+		Made.Kind = Kind;
+		Made.Name = Name;
+		Made.Middle = Middle;
+		Made.Right = Right;
+
+		return Made;
+	};
+
+	TArray<FSpaceMMODeathLine> Lines;
+
+	if (Report.bAtStation)
+	{
+		Lines.Add(Line(EKind::Note, TEXT("You died at a station: nothing was lost.")));
+
+		return Lines;
+	}
+
+	if (Report.Lost.IsEmpty())
+	{
+		Lines.Add(Line(EKind::Note, TEXT("You carried no materials.")));
+	}
+	else
+	{
+		Lines.Add(Line(EKind::Heading, TEXT("Lost"), TEXT("Dropped"), TEXT("Destroyed")));
+
+		int32 Dropped = 0;
+
+		for (const FBackendDeathLoss& Loss : Report.Lost)
+		{
+			Lines.Add(Line(EKind::Row, Loss.Name, ASpaceMMOPlayerController::GroupDigits(Loss.Dropped),
+				ASpaceMMOPlayerController::GroupDigits(Loss.Destroyed)));
+
+			Dropped += Loss.Dropped;
+		}
+
+		// Only when something did drop: a death the world could not place a crate for destroys the lot.
+		if (Dropped > 0)
+		{
+			Lines.Add(Line(EKind::Note, TEXT("Dropped where you fell for 10 minutes. Anyone can take it.")));
+		}
+	}
+
+	if (!Report.Worn.IsEmpty())
+	{
+		Lines.Add(Line(EKind::Heading, TEXT("Worn gear"), FString(), TEXT("\u221210 condition")));
+
+		for (const FBackendWornLoss& Worn : Report.Worn)
+		{
+			Lines.Add(Line(EKind::Row, Worn.Name, FString(), FString::Printf(TEXT("%d \u2192 %d"), Worn.Before, Worn.After)));
+		}
+	}
+
+	return Lines;
+}
+
+void USpaceMMOCombatHud::ShowDeathLines(const TArray<FSpaceMMODeathLine>& Lines)
+{
+	if (Lines == ShownDeathLines && DeathLossTable != nullptr)
+	{
+		return;
+	}
+
+	ShownDeathLines = Lines;
+
+	// Made once, under the title, in the box the Blueprint lays the panel out in. The box is laid out again in order
+	// with the table second: a child can only be inserted part-way down a panel in the editor.
+	if (DeathLossTable == nullptr && DeathTitleText != nullptr && WidgetTree != nullptr)
+	{
+		if (UVerticalBox* Body = Cast<UVerticalBox>(DeathTitleText->GetParent()))
+		{
+			DeathLossTable = WidgetTree->ConstructWidget<UVerticalBox>();
+
+			struct FKept
+			{
+				UWidget* Widget = nullptr;
+				FMargin Padding;
+				EHorizontalAlignment Horizontal = HAlign_Fill;
+				EVerticalAlignment Vertical = VAlign_Fill;
+				FSlateChildSize Size;
+			};
+
+			TArray<FKept> Kept;
+
+			for (UWidget* Child : Body->GetAllChildren())
+			{
+				FKept Entry;
+				Entry.Widget = Child;
+
+				if (const UVerticalBoxSlot* Was = Cast<UVerticalBoxSlot>(Child->Slot))
+				{
+					Entry.Padding = Was->GetPadding();
+					Entry.Horizontal = Was->GetHorizontalAlignment();
+					Entry.Vertical = Was->GetVerticalAlignment();
+					Entry.Size = Was->GetSize();
+				}
+
+				Kept.Add(Entry);
+			}
+
+			Body->ClearChildren();
+
+			auto Put = [Body](UWidget* Widget, const FMargin& SlotPadding, const EHorizontalAlignment Horizontal,
+				const EVerticalAlignment Vertical, const FSlateChildSize& Size)
+			{
+				if (UVerticalBoxSlot* Placed = Body->AddChildToVerticalBox(Widget))
+				{
+					Placed->SetPadding(SlotPadding);
+					Placed->SetHorizontalAlignment(Horizontal);
+					Placed->SetVerticalAlignment(Vertical);
+					Placed->SetSize(Size);
+				}
+			};
+
+			for (const FKept& Entry : Kept)
+			{
+				Put(Entry.Widget, Entry.Padding, Entry.Horizontal, Entry.Vertical, Entry.Size);
+
+				if (Entry.Widget == DeathTitleText)
+				{
+					Put(DeathLossTable, FMargin(0.0f, 20.0f, 0.0f, 4.0f), HAlign_Fill, VAlign_Top,
+						FSlateChildSize(ESlateSizeRule::Automatic));
+				}
+			}
+		}
+	}
+
+	if (DeathLossTable == nullptr)
+	{
+		return;
+	}
+
+	DeathLossTable->ClearChildren();
+	DeathLossTable->SetVisibility(Lines.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
+
+	using namespace SpaceMMO;
+	using EKind = FSpaceMMODeathLine::EKind;
+
+	auto Text = [this](const FString& Value)
+	{
+		UTextBlock* Block = WidgetTree->ConstructWidget<UTextBlock>();
+		Block->SetText(FText::FromString(Value));
+
+		return Block;
+	};
+
+	for (int32 Index = 0; Index < Lines.Num(); ++Index)
+	{
+		const FSpaceMMODeathLine& Line = Lines[Index];
+
+		UWidget* Made = nullptr;
+
+		if (Line.Kind == EKind::Note)
+		{
+			UTextBlock* Note = Text(Line.Name);
+			PanelLook::Apply(Note, Style::ETextRole::Note);
+			Note->SetAutoWrapText(true);
+			Made = Note;
+		}
+		else
+		{
+			const Style::ETextRole Role = Line.Kind == EKind::Heading ? Style::ETextRole::Group : Style::ETextRole::Body;
+			const Style::ETextRole FigureRole = Line.Kind == EKind::Heading ? Style::ETextRole::Group : Style::ETextRole::Figure;
+
+			UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>();
+
+			UTextBlock* Name = Text(Line.Name);
+			PanelLook::Apply(Name, Role);
+
+			if (UHorizontalBoxSlot* NameSlot = Row->AddChildToHorizontalBox(Name))
+			{
+				NameSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+				NameSlot->SetVerticalAlignment(VAlign_Center);
+			}
+
+			UTextBlock* Middle = Text(Line.Middle);
+			PanelLook::ApplyFigure(Middle, FigureRole, 110.0f);
+			Row->AddChildToHorizontalBox(Middle)->SetVerticalAlignment(VAlign_Center);
+
+			UTextBlock* Right = Text(Line.Right);
+			PanelLook::ApplyFigure(Right, FigureRole, 150.0f);
+			Row->AddChildToHorizontalBox(Right)->SetVerticalAlignment(VAlign_Center);
+
+			Made = Row;
+		}
+
+		// A heading after the first opens a second part of the table, and stands off from the first.
+		const bool bOpensPart = Line.Kind == EKind::Heading && Index > 0;
+
+		if (UVerticalBoxSlot* LineSlot = DeathLossTable->AddChildToVerticalBox(Made))
+		{
+			LineSlot->SetPadding(FMargin(0.0f, bOpensPart ? 18.0f : (Line.Kind == EKind::Note ? 8.0f : 4.0f), 0.0f, 0.0f));
+		}
+	}
 }
 
 void USpaceMMOCombatHud::NativeConstruct()
@@ -267,6 +473,15 @@ void USpaceMMOCombatHud::NativeTick(const FGeometry& Geometry, const float Delta
 	if (bDead && DeathTitleText != nullptr)
 	{
 		DeathTitleText->SetText(FText::FromString(DeathTitle(Combat->GetKillerName())));
+	}
+
+	// What the death cost, once the server has said (task 103).
+	if (bDead)
+	{
+		const USpaceMMOLootComponent* Loot = Pawn != nullptr ? Pawn->FindComponentByClass<USpaceMMOLootComponent>() : nullptr;
+		const FBackendDeathCosts* Report = Loot != nullptr ? Loot->GetDeathReport() : nullptr;
+
+		ShowDeathLines(Report != nullptr ? DeathLines(*Report) : TArray<FSpaceMMODeathLine>());
 	}
 
 	if (MarksCanvas == nullptr || WidgetTree == nullptr)

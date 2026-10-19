@@ -984,6 +984,141 @@ namespace SpaceMMOBuildMenus
 	// ------------------------------------------------------------------------------------------------
 	// Making, saving and checking
 
+	// ------------------------------------------------------------------------------------------------
+	// Task 103: a dropped crate's window, its rows, and the prompt over it
+
+	/** One stack in a crate: name, world, how many -- the inventory's row, in this window. */
+	void BuildLootRow(const FBuilder& B)
+	{
+		UVerticalBox* Body = StationRowShell(B);
+
+		UHorizontalBox* Line = B.Make<UHorizontalBox>(TEXT("ItemLine"));
+		AddV(Body, Line);
+
+		AddH(Line, B.Text(TEXT("NameText"), TEXT("Ferrite Ore"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), true);
+		AddH(Line, B.Text(TEXT("StyleTagText"), TEXT("[TER]"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), false,
+			FMargin(10, 0, 0, 0));
+		AddH(Line, B.Text(TEXT("QuantityText"), TEXT("5"), 19.0f, TextPrimary, TEXT("Regular"), 0, true), false,
+			FMargin(16, 0, 0, 0));
+	}
+
+	/**
+	 * The window as Joe chose it on 19 October: who dropped it and the time left over a row per material, and
+	 * Take all, beside the inventory.
+	 *
+	 *     DROPPED BY AYLA1204   9:12
+	 *     --------------------------
+	 *     Ferrite Ore            5
+	 *     Structural Plate       3
+	 *           [ Take all ]
+	 *
+	 * A paired panel the equipment screen's size and frame, so it sits beside the inventory as that one does.
+	 */
+	void BuildLootScreen(const FBuilder& B)
+	{
+		UCanvasPanel* Root = B.Make<UCanvasPanel>(TEXT("Root"));
+		B.Blueprint->WidgetTree->RootWidget = Root;
+
+		UImage* Dim = B.Make<UImage>(TEXT("WorldDim"), true);
+		Dim->SetBrush(Solid(SpaceMMO::Style::WorldDim(), FVector2D(32.0, 32.0)));
+		Dim->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+		UCanvasPanelSlot* DimSlot = Root->AddChildToCanvas(Dim);
+		DimSlot->SetAnchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f));
+		DimSlot->SetOffsets(FMargin(0.0f));
+
+		UBorder* Panel = B.Make<UBorder>(TEXT("PanelRoot"), true);
+		Panel->SetBrush(SpaceMMO::Style::Glass());
+		Panel->SetPadding(FMargin(12.0f));
+
+		UCanvasPanelSlot* PanelSlot = Root->AddChildToCanvas(Panel);
+		PanelSlot->SetAnchors(FAnchors(0.5f, 0.5f));
+		PanelSlot->SetAlignment(FVector2D(0.0, 0.0));
+		PanelSlot->SetAutoSize(false);
+		PanelSlot->SetOffsets(FMargin(-420.0f, -430.0f, 840.0f, 860.0f));
+
+		UOverlay* Inside = B.Make<UOverlay>(TEXT("PanelOverlay"));
+		Panel->AddChild(Inside);
+
+		const TCHAR* Corners[] = {TEXT("TL"), TEXT("TR"), TEXT("BL"), TEXT("BR")};
+
+		for (const TCHAR* Corner : Corners)
+		{
+			const bool bLeft = Corner[1] == TEXT('L');
+			const bool bTop = Corner[0] == TEXT('T');
+
+			for (const bool bAcross : {true, false})
+			{
+				UImage* Bar = B.Make<UImage>(*FString::Printf(TEXT("Bracket%s%s"), Corner, bAcross ? TEXT("Across") : TEXT("Down")));
+				Bar->SetBrush(Solid(White(0.55f), bAcross ? FVector2D(20.0, 2.0) : FVector2D(2.0, 20.0)));
+				Bar->SetVisibility(ESlateVisibility::HitTestInvisible);
+				AddO(Inside, Bar, bLeft ? HAlign_Left : HAlign_Right, bTop ? VAlign_Top : VAlign_Bottom);
+			}
+		}
+
+		UVerticalBox* Body = B.Make<UVerticalBox>(TEXT("Body"));
+		AddO(Inside, Body, HAlign_Fill, VAlign_Fill, FMargin(36.0f, 28.0f));
+
+		// Who and how long, on one line; the panels' type is applied at run time (USpaceMMOLootScreen::NativeConstruct).
+		UHorizontalBox* Heading = B.Make<UHorizontalBox>(TEXT("HeadingLine"));
+		AddV(Body, Heading, FMargin(0, 0, 0, 14));
+
+		AddH(Heading, B.Text(TEXT("TitleText"), TEXT("Dropped by Ayla1204"), 28.0f, TextPrimary, TEXT("Regular"), 0, true), true);
+		AddH(Heading, B.Text(TEXT("TimeText"), TEXT("9:12"), 19.0f, TextSecondary, TEXT("Regular"), 0, true), false,
+			FMargin(16, 0, 0, 0));
+
+		UImage* Rule = B.Make<UImage>(TEXT("HeadingRule"));
+		Rule->SetBrush(Solid(White(0.16f), FVector2D(8.0, 1.0)));
+		AddV(Body, Rule, FMargin(0, 0, 0, 18));
+
+		UScrollBox* Rows = B.Make<UScrollBox>(TEXT("LootRows"), true);
+		UVerticalBoxSlot* RowsSlot = AddV(Body, Rows);
+		RowsSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+
+		AddV(Body, B.Button(TEXT("TakeAllButton"), TEXT("Take all"), true), FMargin(0, 24, 0, 0), HAlign_Center);
+	}
+
+	/**
+	 * Over a crate in reach, as the deposit's prompt is over a rock (Joe, 19 October):
+	 *
+	 *     DROPPED BY AYLA1204         9:12
+	 *     Ferrite Ore 5 · Structural Plate 3
+	 *     [E] open
+	 */
+	void BuildLootPrompt(const FBuilder& B)
+	{
+		UCanvasPanel* Root = B.Make<UCanvasPanel>(TEXT("Root"));
+		B.Blueprint->WidgetTree->RootWidget = Root;
+
+		UBorder* Prompt = B.Make<UBorder>(TEXT("PromptRoot"), true);
+		Prompt->SetBrush(SpaceMMO::Style::PromptGlass());
+		Prompt->SetPadding(FMargin(18.0f, 12.0f));
+
+		UCanvasPanelSlot* PromptSlot = Root->AddChildToCanvas(Prompt);
+		PromptSlot->SetAutoSize(true);
+		PromptSlot->SetAlignment(FVector2D(0.5, 1.0));
+
+		UVerticalBox* Body = B.Make<UVerticalBox>(TEXT("PromptBody"));
+		Prompt->AddChild(Body);
+
+		UHorizontalBox* Top = B.Make<UHorizontalBox>(TEXT("TopLine"));
+		AddV(Body, Top);
+
+		AddH(Top, B.Text(TEXT("TitleText"), TEXT("DROPPED BY AYLA1204"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), true);
+		AddH(Top, B.Text(TEXT("TimeText"), TEXT("9:12"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), false,
+			FMargin(28, 0, 0, 0));
+
+		AddV(Body, B.Text(TEXT("ContentsText"), TEXT("Ferrite Ore 5 \u00B7 Structural Plate 3"), 19.0f, TextPrimary,
+			TEXT("Regular"), 0, true), FMargin(0, 6, 0, 0));
+
+		UHorizontalBox* KeyLine = B.Make<UHorizontalBox>(TEXT("KeyLine"));
+		AddV(Body, KeyLine, FMargin(0, 8, 0, 0));
+
+		AddH(KeyLine, B.Text(TEXT("KeyText"), TEXT("[E]"), 15.0f, TextPrimary, TEXT("Regular"), 0, true), false);
+		AddH(KeyLine, B.Text(TEXT("ActionText"), TEXT("open"), 15.0f, TextSecondary, TEXT("Regular"), 0, true), false,
+			FMargin(8, 0, 0, 0));
+	}
+
 	struct FMenuAsset
 	{
 		const TCHAR* AssetName;
@@ -1124,6 +1259,14 @@ int32 USpaceMMOBuildMenusCommandlet::Main(const FString& Params)
 
 		// Task 199.
 		{TEXT("WBP_SessionEnded"), TEXT("/Script/SpaceMMOBackend.SpaceMMOSessionEndedScreen"), &BuildSessionEnded},
+
+		// Task 103. The row first, since the window names it.
+		{TEXT("WBP_LootRow"), TEXT("/Script/SpaceMMOBackend.SpaceMMOLootRow"), &BuildLootRow, nullptr, nullptr, {},
+			TEXT("/Game/UI")},
+		{TEXT("WBP_LootScreen"), TEXT("/Script/SpaceMMOBackend.SpaceMMOLootScreen"), &BuildLootScreen, TEXT("RowClass"),
+			TEXT("WBP_LootRow"), {}, TEXT("/Game/UI")},
+		{TEXT("WBP_LootPrompt"), TEXT("/Script/SpaceMMOBackend.SpaceMMOLootPrompt"), &BuildLootPrompt, nullptr, nullptr, {},
+			TEXT("/Game/UI")},
 	};
 
 	int32 Problems = 0;
