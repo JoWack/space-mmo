@@ -6,7 +6,6 @@ using SpaceMMO.Data.Progression;
 using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Combat;
 using SpaceMMO.Domain.Items;
-using SpaceMMO.Domain.Loss;
 using SpaceMMO.Domain.Progression;
 using SpaceMMO.Domain.Quests;
 using SpaceMMO.Domain.Universe;
@@ -273,19 +272,9 @@ public sealed class CombatService(SpaceMmoDbContext database)
 
         if (killed)
         {
-            _database.DeathRecords.Add(new DeathRecord
-            {
-                CharacterId = target.Id,
-                Cause = DeathCause.PersonalCombatPlanet,
-
-                // ADR-0016 has no roll in it: what a death costs follows from what was carried.
-                ResolutionSeed = 0,
-
-                // The system whose rules allowed it.
-                StarSystemId = rules.StarSystemId,
-                KillerCharacterId = attacker.Id,
-                OccurredAt = now,
-            });
+            // Only recorded here, in the save already being made; what it costs is taken once the lock is let go
+            // (task 103). The system is the one whose rules allowed it.
+            DeathCostService.RecordDeath(_database, target, attacker.Id, rules.StarSystemId, now);
         }
 
         await _database.SaveChangesAsync(cancellationToken);

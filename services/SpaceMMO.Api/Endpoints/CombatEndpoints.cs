@@ -159,6 +159,7 @@ public static class CombatEndpoints
         HttpContext context,
         ServiceCredential service,
         CombatService combat,
+        DeathCostService deaths,
         CancellationToken cancellation)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -167,6 +168,10 @@ public static class CombatEndpoints
         {
             return NotTheServer();
         }
+
+        // A death the game server never costed -- it crashed, or the call failed -- is costed now, where they were
+        // last seen, so no death goes free (task 103). Nothing, when it was.
+        await deaths.ApplyAsync(request.CharacterId, null, TimeProvider.System, cancellation);
 
         try
         {

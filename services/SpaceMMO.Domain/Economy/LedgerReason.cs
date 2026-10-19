@@ -48,11 +48,8 @@ public enum LedgerReason
     /// </remarks>
     StoryReward = 3,
 
-    /// <summary>
-    /// An insurance payout. Deliberately exempt from the daily faucet cap, and bounded by
-    /// production rather than by a budget (ADR-0006).
-    /// </summary>
-    InsurancePayout = 1,
+    // 1 was InsurancePayout and 15 InsurancePremium, until ADR-0016 retired insurance (task 103). Neither was ever
+    // written, and neither number is to be reused: a reason is stored by name, and a ledger is read for years.
 
     /// <summary>
     /// A manual correction by an operator. Should be vanishingly rare, and every occurrence
@@ -118,9 +115,6 @@ public enum LedgerReason
 
     /// <summary>Fuel consumed by warp and sublight burn. Scales with trade activity.</summary>
     FuelPurchase = 14,
-
-    /// <summary>An insurance premium. Partially offsets payouts.</summary>
-    InsurancePremium = 15,
 
     /// <summary>Materials and credits spent restoring a damaged item.</summary>
     RepairCost = 16,
@@ -191,7 +185,6 @@ public static class LedgerReasons
         LedgerReason.StoryReward or
         LedgerReason.StartingStake or
         LedgerReason.FactionPurchase or
-        LedgerReason.InsurancePayout or
         LedgerReason.AdminAdjustment => LedgerReasonKind.Faucet,
 
         LedgerReason.BrokerFee or
@@ -199,7 +192,6 @@ public static class LedgerReasons
         LedgerReason.IndustryFee or
         LedgerReason.StationRent or
         LedgerReason.FuelPurchase or
-        LedgerReason.InsurancePremium or
         LedgerReason.RepairCost => LedgerReasonKind.Sink,
 
         LedgerReason.MarketEscrowLocked or
@@ -227,8 +219,7 @@ public static class LedgerReasons
     /// <para>
     /// The rest are each bounded by something other than a budget:
     /// <see cref="LedgerReason.StoryReward"/> by each quest completing once per character,
-    /// <see cref="LedgerReason.StartingStake"/> by being paid once at creation,
-    /// <see cref="LedgerReason.InsurancePayout"/> by how many ships players can actually build, and
+    /// <see cref="LedgerReason.StartingStake"/> by being paid once at creation, and
     /// <see cref="LedgerReason.AdminAdjustment"/> by an operator deliberately doing it.
     /// </para>
     /// </remarks>

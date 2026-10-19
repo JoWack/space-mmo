@@ -30,14 +30,12 @@ public sealed class LedgerReasonTests
 
     [Theory]
     [InlineData(LedgerReason.QuestReward, LedgerReasonKind.Faucet)]
-    [InlineData(LedgerReason.InsurancePayout, LedgerReasonKind.Faucet)]
     [InlineData(LedgerReason.AdminAdjustment, LedgerReasonKind.Faucet)]
     [InlineData(LedgerReason.BrokerFee, LedgerReasonKind.Sink)]
     [InlineData(LedgerReason.SalesTax, LedgerReasonKind.Sink)]
     [InlineData(LedgerReason.IndustryFee, LedgerReasonKind.Sink)]
     [InlineData(LedgerReason.StationRent, LedgerReasonKind.Sink)]
     [InlineData(LedgerReason.FuelPurchase, LedgerReasonKind.Sink)]
-    [InlineData(LedgerReason.InsurancePremium, LedgerReasonKind.Sink)]
     [InlineData(LedgerReason.RepairCost, LedgerReasonKind.Sink)]
     [InlineData(LedgerReason.MarketEscrowLocked, LedgerReasonKind.Transfer)]
     [InlineData(LedgerReason.MarketEscrowReleased, LedgerReasonKind.Transfer)]
@@ -57,9 +55,8 @@ public sealed class LedgerReasonTests
         // standing order against deposits that respawn.
         //
         // The rest are bounded by something other than a budget. Story rewards complete once per
-        // character, the starting stake is paid once at creation, insurance payouts are exempt on
-        // purpose — losing a capital ship must not be throttled by a daily budget (ADR-0006) — and
-        // admin adjustments bypass the cap because bypassing it is the point of them.
+        // character, the starting stake is paid once at creation, and admin adjustments bypass the cap
+        // because bypassing it is the point of them.
         foreach (LedgerReason reason in AllReasons)
         {
             bool expected =

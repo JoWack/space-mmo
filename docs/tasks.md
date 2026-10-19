@@ -1666,6 +1666,86 @@ nothing**; **insurance is retired**.
 - **Open (ADR-0016):** what a disabled ship gives up when it is not destroyed, and whether faction space
   keeps a defended player's drop from third parties.
 
+### Decided by Joe, 19 October: how it looks
+
+Each offered against alternatives, Claude's suggestion first:
+
+- **The dropped container is a crate with a light beam**: a 0.6 m dark crate with an amber band, a metre
+  beside the body, and a thin amber beam about 15 m tall so it can be found from a distance on a corpse run,
+  fading over its last minute. Seen by everyone. Offered against the crate alone, and a satchel by the body.
+- **E opens a loot window** beside the inventory, the way the station screen opens: who dropped it and the
+  time left, a row per material, a **Take all** button, and a row double-clicked or dragged to take only that.
+  A prompt over the crate says what it is and "[E] open". Offered against E taking everything that fits at once.
+- **The death panel lists what was lost**: a table of each material, how many dropped and how many were
+  destroyed, then each worn item's condition before and after. "You carried no materials." when there were
+  none; "You died at a station: nothing was lost." when docked. Offered against a one-line total.
+- **An odd stack's extra unit drops** rather than being destroyed: 5 ore is 3 dropped and 2 destroyed, and a
+  single unit drops. Offered against rounding toward the sink, as money does.
+
+```
+DROPPED BY AYLA1204   9:12 |  INVENTORY
+-------------------------- |  POCKETS   3.2 / 6 m³
+Ferrite Ore            5   |  Scrap Alloy      10
+Structural Plate       3   |  ...
+      [ Take all ]         |
+
+             KILLED BY ORENTHAL
+
+LOST                       DROPPED  DESTROYED
+Ferrite Ore                   5         5
+Structural Plate              3         3
+Dropped where you fell for 10 minutes.
+Anyone can take it.
+
+WORN GEAR  -10 condition
+Laser Rifle               100 -> 90
+Crude Mining Laser         70 -> 60
+
+You'll come back at the station you last docked at.
+                [ Respawn ]
+```
+
+### Built, 19 October: the server
+
+- **The kill only records the death** (`DeathCostService.RecordDeath`, one call in `HitAsync`'s kill branch, added
+  to the save the hit makes anyway): no round trip under the pair's lock, so a killing hit holds it as long as any
+  other (198's `A_hit_holds_the_lock_for_one_read_its_save_and_its_commit` covers a kill and still counts three).
+  Docked at the time, the cause is `PersonalCombatStation`, which costs nothing.
+- **The costs are taken after the lock**, by `POST /combat/deaths` `{characterId, x, y, z}`: the game server says
+  where the body fell, and `DeathCostService.ApplyAsync` locks the dead character's row (as gathering, industry and
+  the market do), takes every carried material, puts the dropped half in a container at that position for ten
+  minutes, records each material's dropped and destroyed counts (`death_losses`, the sink EconSim will want), and
+  takes 10 condition off everything worn. It answers with the table the death panel shows and the container for
+  the game server to place. A death is costed once (`death_records.costs_applied_at`).
+- **No death goes free**: `/combat/respawn` costs any death still owed first, at the character's last recorded
+  whereabouts, for a game server that crashed or whose call failed.
+- **Looting**: `GET /combat/containers` (the live ones, for a game server starting up) and
+  `POST /combat/containers/{id}/loot` `{characterId, items?}` -- the stacks named, or all, as much of each as fits
+  in the pockets, the rest left lying. The container's row is locked, so two looters never take the same ore. A
+  looter gets the goods at no cost; the owner taking their own back gets their cost basis back. Refusals: `gone`
+  (expired, emptied), `dead`, `no_room`, `not_there`.
+- Pure rules in `SpaceMMO.Domain.Loss.DeathCosts`: the split, the wear, the station rule, the share of cost basis.
+- Migration `DeathCosts`: the three tables, `costs_applied_at`, and **every death before it marked settled** -- the
+  dev database holds the deaths of 194's and 198's fights, and left owing, each character's next respawn would have
+  taken their pockets for a fight long over.
+
+**ADR-0006's code, removed**: `DeathResolver`, `DeathRuleTable`, `OutcomeWeights`, `LootOutcome`, `DeathItem`,
+`ResolvedItem`, `Insurance` and `InsuranceTier`, their tests, the `InsurancePolicy` entity and its table, the
+`InsurancePayout` and `InsurancePremium` ledger reasons (never written; 1 and 15 are not to be reused), and the death
+record's resolution seed. **Kept**: `DeathCause`, which the record still carries; `StableHash` and `SplitMix64`,
+which EconSim uses; `acquisition_value`, as ADR-0016 says.
+
+**Not reachable yet:** a ship's hold lost with the ship, and a ship's wear, need a ship that can go down; nothing
+can shoot one.
+
+**Verified:** Domain 559, Data 320, API 121. **Broken on purpose, each failing its own test and nothing else**: the
+kill settling its costs at once; an odd stack's extra unit sent to the sink; no wear; a docked death costed; a
+looter given the owner's cost basis; the pockets' room ignored; expiry ignored; the dead allowed to loot; the
+container's row lock dropped (two looters at once); the dropped half carrying no cost basis; the respawn's fallback
+finding no position; the respawn endpoint not costing; the position's axes swapped on the wire; the loot endpoint
+open to anyone. The first run of those plants was void and is not counted: a restored file kept its old timestamp,
+the build skipped it, and one plant rode along into the next seven runs.
+
 ## 104 — Pairwise aggression and security zones
 
 **Faction space built 14 October; the attack record built 16 October by 194**, with the first weapon:

@@ -49,6 +49,7 @@ builder.Services.AddScoped<QuestService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<WhereaboutsService>();
 builder.Services.AddScoped<CombatService>();
+builder.Services.AddScoped<DeathCostService>();
 builder.Services.AddScoped<Caller>();
 
 // The Unreal dedicated server's own credential. Absent unless configured, and absent means every
@@ -319,6 +320,7 @@ app.MapGatheringEndpoints();
 app.MapDockingEndpoints();
 app.MapWhereaboutsEndpoints();
 app.MapCombatEndpoints();
+app.MapDeathEndpoints();
 app.MapShipEndpoints();
 app.MapIndustryEndpoints();
 app.MapMarketEndpoints();

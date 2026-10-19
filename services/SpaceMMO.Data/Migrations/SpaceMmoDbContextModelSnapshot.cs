@@ -480,6 +480,45 @@ namespace SpaceMMO.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SpaceMMO.Data.Entities.DeathLoss", b =>
+                {
+                    b.Property<long>("DeathRecordId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("death_record_id");
+
+                    b.Property<int>("ItemDefId")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_def_id");
+
+                    b.Property<string>("Style")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("style");
+
+                    b.Property<int>("Destroyed")
+                        .HasColumnType("integer")
+                        .HasColumnName("destroyed");
+
+                    b.Property<int>("Dropped")
+                        .HasColumnType("integer")
+                        .HasColumnName("dropped");
+
+                    b.HasKey("DeathRecordId", "ItemDefId", "Style")
+                        .HasName("pk_death_losses");
+
+                    b.HasIndex("ItemDefId")
+                        .HasDatabaseName("ix_death_losses_item_def_id");
+
+                    b.ToTable("death_losses", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_death_losses_destroyed_non_negative", "destroyed >= 0");
+
+                            t.HasCheckConstraint("ck_death_losses_dropped_non_negative", "dropped >= 0");
+
+                            t.HasCheckConstraint("ck_death_losses_something_lost", "dropped + destroyed > 0");
+                        });
+                });
+
             modelBuilder.Entity("SpaceMMO.Data.Entities.DeathRecord", b =>
                 {
                     b.Property<long>("Id")
@@ -503,6 +542,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("character_id");
 
+                    b.Property<DateTimeOffset?>("CostsAppliedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("costs_applied_at");
+
                     b.Property<int?>("KillerCharacterId")
                         .HasColumnType("integer")
                         .HasColumnName("killer_character_id");
@@ -511,16 +554,16 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("occurred_at");
 
-                    b.Property<long>("ResolutionSeed")
-                        .HasColumnType("bigint")
-                        .HasColumnName("resolution_seed");
-
                     b.Property<int>("StarSystemId")
                         .HasColumnType("integer")
                         .HasColumnName("star_system_id");
 
                     b.HasKey("Id")
                         .HasName("pk_death_records");
+
+                    b.HasIndex("CharacterId")
+                        .HasDatabaseName("ix_death_records_costs_owed")
+                        .HasFilter("costs_applied_at IS NULL");
 
                     b.HasIndex("KillerCharacterId")
                         .HasDatabaseName("ix_death_records_killer_character_id")
@@ -649,74 +692,6 @@ namespace SpaceMMO.Data.Migrations
                             t.HasCheckConstraint("ck_industry_job_inputs_cost_non_negative", "cost_basis >= 0");
 
                             t.HasCheckConstraint("ck_industry_job_inputs_quantity_positive", "quantity > 0");
-                        });
-                });
-
-            modelBuilder.Entity("SpaceMMO.Data.Entities.InsurancePolicy", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<int>("CharacterId")
-                        .HasColumnType("integer")
-                        .HasColumnName("character_id");
-
-                    b.Property<DateTimeOffset?>("ClaimedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("claimed_at");
-
-                    b.Property<DateTimeOffset>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<long>("InsuredValue")
-                        .HasColumnType("bigint")
-                        .HasColumnName("insured_value");
-
-                    b.Property<long>("ItemInstanceId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("item_instance_id");
-
-                    b.Property<long?>("PayoutAmount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("payout_amount");
-
-                    b.Property<long>("PremiumPaid")
-                        .HasColumnType("bigint")
-                        .HasColumnName("premium_paid");
-
-                    b.Property<DateTimeOffset>("PurchasedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("purchased_at");
-
-                    b.Property<string>("Tier")
-                        .IsRequired()
-                        .HasMaxLength(48)
-                        .HasColumnType("character varying(48)")
-                        .HasColumnName("tier");
-
-                    b.HasKey("Id")
-                        .HasName("pk_insurance_policies");
-
-                    b.HasIndex("CharacterId")
-                        .HasDatabaseName("ix_insurance_policies_character_id");
-
-                    b.HasIndex("ItemInstanceId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_insurance_policies_item_instance_id")
-                        .HasFilter("claimed_at IS NULL");
-
-                    b.ToTable("insurance_policies", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_insurance_policies_insured_value_non_negative", "insured_value >= 0");
-
-                            t.HasCheckConstraint("ck_insurance_policies_payout_below_insured_value", "payout_amount IS NULL OR payout_amount < insured_value");
-
-                            t.HasCheckConstraint("ck_insurance_policies_premium_non_negative", "premium_paid >= 0");
                         });
                 });
 
@@ -1020,6 +995,106 @@ namespace SpaceMMO.Data.Migrations
                         .HasDatabaseName("ix_ledger_entries_reason_created_at");
 
                     b.ToTable("ledger_entries", (string)null);
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.LootContainer", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("DeathRecordId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("death_record_id");
+
+                    b.Property<int>("DroppedByCharacterId")
+                        .HasColumnType("integer")
+                        .HasColumnName("dropped_by_character_id");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<int>("StarSystemId")
+                        .HasColumnType("integer")
+                        .HasColumnName("star_system_id");
+
+                    b.Property<double>("SystemX")
+                        .HasColumnType("double precision")
+                        .HasColumnName("system_x");
+
+                    b.Property<double>("SystemY")
+                        .HasColumnType("double precision")
+                        .HasColumnName("system_y");
+
+                    b.Property<double>("SystemZ")
+                        .HasColumnType("double precision")
+                        .HasColumnName("system_z");
+
+                    b.HasKey("Id")
+                        .HasName("pk_loot_containers");
+
+                    b.HasIndex("DeathRecordId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_loot_containers_death_record_id");
+
+                    b.HasIndex("DroppedByCharacterId")
+                        .HasDatabaseName("ix_loot_containers_dropped_by_character_id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_loot_containers_expires_at");
+
+                    b.HasIndex("StarSystemId")
+                        .HasDatabaseName("ix_loot_containers_star_system_id");
+
+                    b.ToTable("loot_containers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_loot_containers_expires_after_created", "expires_at > created_at");
+                        });
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.LootContainerItem", b =>
+                {
+                    b.Property<long>("LootContainerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("loot_container_id");
+
+                    b.Property<int>("ItemDefId")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_def_id");
+
+                    b.Property<string>("Style")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)")
+                        .HasColumnName("style");
+
+                    b.Property<long>("CostBasis")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cost_basis");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("LootContainerId", "ItemDefId", "Style")
+                        .HasName("pk_loot_container_items");
+
+                    b.HasIndex("ItemDefId")
+                        .HasDatabaseName("ix_loot_container_items_item_def_id");
+
+                    b.ToTable("loot_container_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_loot_container_items_cost_non_negative", "cost_basis >= 0");
+
+                            t.HasCheckConstraint("ck_loot_container_items_quantity_positive", "quantity > 0");
+                        });
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.MarketOrder", b =>
@@ -1990,6 +2065,27 @@ namespace SpaceMMO.Data.Migrations
                     b.Navigation("Skill");
                 });
 
+            modelBuilder.Entity("SpaceMMO.Data.Entities.DeathLoss", b =>
+                {
+                    b.HasOne("SpaceMMO.Data.Entities.DeathRecord", "DeathRecord")
+                        .WithMany()
+                        .HasForeignKey("DeathRecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_death_losses_death_records_death_record_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.ItemDef", "ItemDef")
+                        .WithMany()
+                        .HasForeignKey("ItemDefId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_death_losses_item_defs_item_def_id");
+
+                    b.Navigation("DeathRecord");
+
+                    b.Navigation("ItemDef");
+                });
+
             modelBuilder.Entity("SpaceMMO.Data.Entities.DeathRecord", b =>
                 {
                     b.HasOne("SpaceMMO.Data.Entities.Character", "Character")
@@ -2051,27 +2147,6 @@ namespace SpaceMMO.Data.Migrations
                     b.Navigation("IndustryJob");
 
                     b.Navigation("ItemDef");
-                });
-
-            modelBuilder.Entity("SpaceMMO.Data.Entities.InsurancePolicy", b =>
-                {
-                    b.HasOne("SpaceMMO.Data.Entities.Character", "Character")
-                        .WithMany()
-                        .HasForeignKey("CharacterId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_insurance_policies_characters_character_id");
-
-                    b.HasOne("SpaceMMO.Data.Entities.ItemInstance", "ItemInstance")
-                        .WithMany()
-                        .HasForeignKey("ItemInstanceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_insurance_policies_item_instances_item_instance_id");
-
-                    b.Navigation("Character");
-
-                    b.Navigation("ItemInstance");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.Inventory", b =>
@@ -2164,6 +2239,55 @@ namespace SpaceMMO.Data.Migrations
                         .HasConstraintName("fk_ledger_entries_characters_character_id");
 
                     b.Navigation("Character");
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.LootContainer", b =>
+                {
+                    b.HasOne("SpaceMMO.Data.Entities.DeathRecord", "DeathRecord")
+                        .WithMany()
+                        .HasForeignKey("DeathRecordId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_loot_containers_death_records_death_record_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.Character", "DroppedByCharacter")
+                        .WithMany()
+                        .HasForeignKey("DroppedByCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_loot_containers_characters_dropped_by_character_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.StarSystem", null)
+                        .WithMany()
+                        .HasForeignKey("StarSystemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_loot_containers_star_systems_star_system_id");
+
+                    b.Navigation("DeathRecord");
+
+                    b.Navigation("DroppedByCharacter");
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.LootContainerItem", b =>
+                {
+                    b.HasOne("SpaceMMO.Data.Entities.ItemDef", "ItemDef")
+                        .WithMany()
+                        .HasForeignKey("ItemDefId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_loot_container_items_item_defs_item_def_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.LootContainer", "LootContainer")
+                        .WithMany("Items")
+                        .HasForeignKey("LootContainerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_loot_container_items_loot_containers_loot_container_id");
+
+                    b.Navigation("ItemDef");
+
+                    b.Navigation("LootContainer");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.MarketOrder", b =>
@@ -2411,6 +2535,11 @@ namespace SpaceMMO.Data.Migrations
                     b.Navigation("Instances");
 
                     b.Navigation("StackedItems");
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.LootContainer", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.QuestDef", b =>

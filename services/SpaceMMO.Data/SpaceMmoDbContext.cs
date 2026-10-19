@@ -86,9 +86,13 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
     public DbSet<CharacterFaucetDaily> CharacterFaucetDailies => Set<CharacterFaucetDaily>();
 
-    public DbSet<InsurancePolicy> InsurancePolicies => Set<InsurancePolicy>();
-
     public DbSet<DeathRecord> DeathRecords => Set<DeathRecord>();
+
+    public DbSet<DeathLoss> DeathLosses => Set<DeathLoss>();
+
+    public DbSet<LootContainer> LootContainers => Set<LootContainer>();
+
+    public DbSet<LootContainerItem> LootContainerItems => Set<LootContainerItem>();
 
     public DbSet<AttackRecord> AttackRecords => Set<AttackRecord>();
 
@@ -655,7 +659,7 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
         });
     }
 
-    // ── Ledger, faucet, insurance, deaths ────────────────────────────────────
+    // ── Ledger, faucet, deaths ───────────────────────────────────────────────
 
     private static void ConfigureLedger(ModelBuilder modelBuilder)
     {
@@ -682,34 +686,6 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
                 "ck_character_faucet_daily_non_negative", "credits_granted >= 0"));
         });
 
-        modelBuilder.Entity<InsurancePolicy>(entity =>
-        {
-            entity.HasOne(e => e.ItemInstance).WithMany().HasForeignKey(e => e.ItemInstanceId);
-            entity.HasOne(e => e.Character).WithMany().HasForeignKey(e => e.CharacterId);
-
-            // At most one live policy per hull. A partial unique index expresses this exactly:
-            // stacking policies would multiply the payout on a single loss.
-            entity.HasIndex(e => e.ItemInstanceId)
-                .IsUnique()
-                .HasFilter("claimed_at IS NULL");
-
-            entity.HasIndex(e => e.CharacterId);
-
-            entity.ToTable(t =>
-            {
-                t.HasCheckConstraint(
-                    "ck_insurance_policies_premium_non_negative", "premium_paid >= 0");
-                t.HasCheckConstraint(
-                    "ck_insurance_policies_insured_value_non_negative", "insured_value >= 0");
-
-                // The core anti-fraud invariant, enforced in the database as well as in code:
-                // a payout can never exceed the value it was pegged to (ADR-0006).
-                t.HasCheckConstraint(
-                    "ck_insurance_policies_payout_below_insured_value",
-                    "payout_amount IS NULL OR payout_amount < insured_value");
-            });
-        });
-
         modelBuilder.Entity<AttackRecord>(entity =>
         {
             // One row a pair, in one direction: who last attacked whom, and when (ADR-0009).
@@ -725,6 +701,56 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
             entity.HasIndex(e => new { e.CharacterId, e.OccurredAt });
             entity.HasIndex(e => e.KillerCharacterId).HasFilter("killer_character_id IS NOT NULL");
+
+            // What is still owed, found by the character it belongs to (task 103).
+            entity.HasIndex(e => e.CharacterId)
+                .HasDatabaseName("ix_death_records_costs_owed")
+                .HasFilter("costs_applied_at IS NULL");
+        });
+
+        modelBuilder.Entity<DeathLoss>(entity =>
+        {
+            entity.HasKey(e => new { e.DeathRecordId, e.ItemDefId, e.Style });
+
+            entity.HasOne(e => e.DeathRecord).WithMany().HasForeignKey(e => e.DeathRecordId);
+            entity.HasOne(e => e.ItemDef).WithMany().HasForeignKey(e => e.ItemDefId);
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_death_losses_dropped_non_negative", "dropped >= 0");
+                t.HasCheckConstraint("ck_death_losses_destroyed_non_negative", "destroyed >= 0");
+                t.HasCheckConstraint("ck_death_losses_something_lost", "dropped + destroyed > 0");
+            });
+        });
+
+        modelBuilder.Entity<LootContainer>(entity =>
+        {
+            // One container a death: a second would be the dropped half twice.
+            entity.HasOne(e => e.DeathRecord).WithMany().HasForeignKey(e => e.DeathRecordId);
+            entity.HasIndex(e => e.DeathRecordId).IsUnique();
+
+            entity.HasOne(e => e.DroppedByCharacter).WithMany().HasForeignKey(e => e.DroppedByCharacterId);
+            entity.HasOne<StarSystem>().WithMany().HasForeignKey(e => e.StarSystemId);
+
+            // The live ones are asked for by when they end.
+            entity.HasIndex(e => e.ExpiresAt);
+
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_loot_containers_expires_after_created", "expires_at > created_at"));
+        });
+
+        modelBuilder.Entity<LootContainerItem>(entity =>
+        {
+            entity.HasKey(e => new { e.LootContainerId, e.ItemDefId, e.Style });
+
+            entity.HasOne(e => e.LootContainer).WithMany(c => c.Items).HasForeignKey(e => e.LootContainerId);
+            entity.HasOne(e => e.ItemDef).WithMany().HasForeignKey(e => e.ItemDefId);
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_loot_container_items_quantity_positive", "quantity > 0");
+                t.HasCheckConstraint("ck_loot_container_items_cost_non_negative", "cost_basis >= 0");
+            });
         });
     }
 }
