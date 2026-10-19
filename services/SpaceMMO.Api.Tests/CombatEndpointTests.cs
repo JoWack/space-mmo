@@ -148,20 +148,24 @@ public sealed class CombatEndpointTests(ApiDatabaseFixture fixture) : IAsyncLife
                 await File.ReadAllLinesAsync(log),
                 l => l.Contains($"SpaceMMO.Combat: Hit by {_local} on {_intruder}, landed:", StringComparison.Ordinal));
 
-            // Stamped as Unreal stamps its logs, and the parts named; the lock is one round trip, so the list holds
-            // the others and it.
+            // Stamped as Unreal stamps its logs, and the parts named, each with its count of round trips.
             Match parts = Regex.Match(
                 line,
-                @"^\[\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}:\d{3}\] Information SpaceMMO\.Combat: .* ms in all = [\d.]+ taking the lock"
-                + @" \+ (?<others>\d+) other round trips [\d.]+ \+ connecting [\d.]+ \+ between -?[\d.]+\. Round trips, ms: (?<trips>[\d. ]+)\.");
+                @"^\[\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}:\d{3}\] Information SpaceMMO\.Combat: .* ms in all ="
+                + @" [\d.]+ reading first \((?<reads>\d+) round trips\) \+ [\d.]+ taking the lock"
+                + @" \+ [\d.]+ holding it \((?<holding>\d+) round trips\) \+ connecting [\d.]+ \+ between -?[\d.]+\."
+                + @" Round trips, ms: (?<trips>[\d. ]+)\.");
 
             Assert.True(parts.Success, line);
 
-            int others = int.Parse(parts.Groups["others"].Value, CultureInfo.InvariantCulture);
+            int reads = int.Parse(parts.Groups["reads"].Value, CultureInfo.InvariantCulture);
+            int holding = int.Parse(parts.Groups["holding"].Value, CultureInfo.InvariantCulture);
             string[] trips = parts.Groups["trips"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-            Assert.True(others > 0, line);
-            Assert.Equal(others + 1, trips.Length);
+            // The lock is one round trip; the list holds it and the others. And the API's own hit, as the game server
+            // sends it, holds the lock for three (task 198): a read, the save and the commit.
+            Assert.Equal(reads + 1 + holding, trips.Length);
+            Assert.Equal(3, holding);
         }
         finally
         {

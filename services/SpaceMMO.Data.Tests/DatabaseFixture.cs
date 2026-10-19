@@ -22,11 +22,12 @@ public sealed class DatabaseFixture : IAsyncLifetime
 {
     private const string TestDatabaseName = "spacemmo_test";
 
+    // 127.0.0.1, not localhost: infra/docker-compose.yml says why.
     private const string AdminConnectionString =
-        "Host=localhost;Port=5432;Database=postgres;Username=spacemmo;Password=devonly";
+        "Host=127.0.0.1;Port=5432;Database=postgres;Username=spacemmo;Password=devonly";
 
     public string ConnectionString { get; } =
-        $"Host=localhost;Port=5432;Database={TestDatabaseName};Username=spacemmo;Password=devonly";
+        $"Host=127.0.0.1;Port=5432;Database={TestDatabaseName};Username=spacemmo;Password=devonly";
 
     public async Task InitializeAsync()
     {

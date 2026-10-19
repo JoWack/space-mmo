@@ -108,7 +108,9 @@ public static class CombatEndpoints
                 request.Zone,
                 request.Facing,
                 new SystemPosition(request.X, request.Y, request.Z)),
-            arrived,
+
+            // A clock, read once the hit holds its lock: a hit that queued is judged when it is decided (task 198).
+            TimeProvider.System,
             cancellation);
 
         if (result.Timing is { } timing)
@@ -135,18 +137,22 @@ public static class CombatEndpoints
     }
 
     /// <summary>
-    /// Where a hit's time went, as parts that add up to the whole: <c>30.0 ms in all = 2.0 taking the lock + 15 other
-    /// round trips 20.0 + connecting 0.0 + between 8.0</c>, then every round trip in order and when it arrived.
+    /// Where a hit's time went, as parts that add up to the whole: <c>30.0 ms in all = 8.0 reading first (4 round
+    /// trips) + 2.0 taking the lock + 6.0 holding it (2 round trips) + connecting 0.0 + between 14.0</c>, then every
+    /// round trip in order and when the hit arrived.
     /// </summary>
     private static string Breakdown(HitTiming timing, DateTimeOffset arrived) =>
         string.Create(
             CultureInfo.InvariantCulture,
-            $"{timing.Total.TotalMilliseconds:0.0} ms in all = {timing.Locking.TotalMilliseconds:0.0} taking the lock"
-            + $" + {timing.RoundTrips.Count - timing.LockRoundTrips} other round trips"
-            + $" {timing.Querying.TotalMilliseconds:0.0} + connecting {timing.Connecting.TotalMilliseconds:0.0}"
-            + $" + between {timing.Between.TotalMilliseconds:0.0}. Round trips, ms:"
-            + $" {string.Join(' ', timing.RoundTrips.Select(t => t.TotalMilliseconds.ToString("0.0", CultureInfo.InvariantCulture)))}."
+            $"{timing.Total.TotalMilliseconds:0.0} ms in all = {timing.Reading.TotalMilliseconds:0.0} reading first"
+            + $" ({timing.ReadsBeforeLock} round trips) + {timing.Locking.TotalMilliseconds:0.0} taking the lock"
+            + $" + {timing.Holding.TotalMilliseconds:0.0} holding it ({timing.HoldingRoundTrips} round trips)"
+            + $" + connecting {timing.Connecting.TotalMilliseconds:0.0} + between {timing.Between.TotalMilliseconds:0.0}."
+            + $" Round trips, ms: {string.Join(' ', timing.RoundTrips.Select(Milliseconds))}."
             + $" Arrived {arrived:HH.mm.ss:fff}.");
+
+    private static string Milliseconds(TimeSpan span) =>
+        span.TotalMilliseconds.ToString("0.0", CultureInfo.InvariantCulture);
 
     private static async Task<IResult> RespawnAsync(
         RespawnRequest request,

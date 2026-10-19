@@ -67,7 +67,7 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
     {
         await using SpaceMmoDbContext context = _fixture.CreateContext();
 
-        return await Service(context).HitAsync(new HitRequest(attacker, target, zone, facing, where), when);
+        return await Service(context).HitAsync(new HitRequest(attacker, target, zone, facing, where), new Clock(when));
     }
 
     // ── A hit that lands ─────────────────────────────────────────────────────
@@ -323,7 +323,7 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         await using SpaceMmoDbContext context = CountingContext(sent);
 
         HitResult hit = await Service(context).HitAsync(
-            new HitRequest(_orc, _ayla, HitZone.Body, HitFacing.Front, InBsHalf), T0);
+            new HitRequest(_orc, _ayla, HitZone.Body, HitFacing.Front, InBsHalf), new Clock(T0));
 
         Assert.True(hit.Landed, hit.Refusal);
 
@@ -377,7 +377,135 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
 
         Assert.True(hit.Landed, hit.Refusal);
         Assert.True(timing.Locking >= held, $"The wait went somewhere else: {timing}");
-        Assert.True(timing.Querying < timing.Locking, $"The wait went somewhere else: {timing}");
+        Assert.True(timing.Reading + timing.Holding < timing.Locking, $"The wait went somewhere else: {timing}");
+    }
+
+    // ── Holding the lock briefly (task 198) ──────────────────────────────────
+
+    [Fact]
+    public async Task A_hit_holds_the_lock_for_one_read_its_save_and_its_commit()
+    {
+        // The first hit, before Orc has a row for any skill it pays; another once he has; and a kill.
+        HitTiming first = await CountedHitAsync(T0);
+        HitTiming again = await CountedHitAsync(T0.AddSeconds(1));
+
+        await SetHealthAsync(_ayla, 30, T0.AddSeconds(1));
+
+        HitTiming kill = await CountedHitAsync(T0.AddSeconds(2));
+
+        // Three, where it was fifteen: every round trip holding the lock is one every hit queued behind it waits out.
+        // The read cannot ride in the lock's own statement (A_hit_queued_behind_another_keeps_what_that_hit_wrote).
+        Assert.All(
+            new[] { first, again, kill },
+            timing => Assert.Equal(3, timing.HoldingRoundTrips));
+    }
+
+    [Fact]
+    public async Task A_hit_queued_behind_another_keeps_what_that_hit_wrote()
+    {
+        HitResult second;
+
+        await using (SpaceMmoDbContext other = _fixture.CreateContext())
+        {
+            // Orc's first shot on Ayla, held open, writing what a first hit writes -- the attack, and Orc's first rifle,
+            // pistol and constitution XP -- while his second waits behind it.
+            await using var holding = await other.Database.BeginTransactionAsync();
+
+            await other.Characters
+                .FromSqlInterpolated(
+                    $"SELECT * FROM characters WHERE id IN ({_ayla}, {_orc}) ORDER BY id FOR UPDATE")
+                .ToListAsync();
+
+            Dictionary<string, int> skills = await other.Skills.ToDictionaryAsync(s => s.Key, s => s.Id);
+
+            other.AttackRecords.Add(new AttackRecord { AttackerCharacterId = _orc, TargetCharacterId = _ayla, AttackedAt = T0 });
+            other.CharacterSkills.AddRange(
+                new CharacterSkill { CharacterId = _orc, SkillId = skills["laser_rifle"], Xp = 6 },
+                new CharacterSkill { CharacterId = _orc, SkillId = skills["laser_pistol"], Xp = 1 },
+                new CharacterSkill { CharacterId = _orc, SkillId = skills["constitution"], Xp = 2 });
+
+            await other.SaveChangesAsync();
+
+            Task<HitResult> waiting = HitAsync(_orc, _ayla, InBsHalf, T0.AddSeconds(1));
+
+            await BlockedOnALockAsync();
+            await holding.CommitAsync();
+
+            second = await waiting;
+        }
+
+        Assert.True(second.Landed, second.Refusal);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        // Both shots' XP, where a read from before the first committed would overwrite it or insert its rows again.
+        Assert.Equal(12, await XpAsync(verify, _orc, "laser_rifle"));
+        Assert.Equal(2, await XpAsync(verify, _orc, "laser_pistol"));
+        Assert.Equal(4, await XpAsync(verify, _orc, "constitution"));
+        Assert.Equal(T0.AddSeconds(1), (await verify.AttackRecords.SingleAsync()).AttackedAt);
+    }
+
+    [Fact]
+    public async Task A_hit_that_queued_is_judged_when_it_takes_the_lock()
+    {
+        // Orc, the local, fires first; Ayla, the intruder, may answer for the retaliation window after his last shot.
+        Assert.True((await HitAsync(_orc, _ayla, InBsHalf, T0)).Landed);
+
+        var clock = new Clock(T0.AddSeconds(1));
+        HitResult answer;
+
+        await using (SpaceMmoDbContext other = _fixture.CreateContext())
+        {
+            // Orc's next shot, at two seconds, holds the pair while Ayla's answer, arrived at one, waits behind it.
+            await using var holding = await other.Database.BeginTransactionAsync();
+
+            await other.Characters
+                .FromSqlInterpolated(
+                    $"SELECT * FROM characters WHERE id IN ({_ayla}, {_orc}) ORDER BY id FOR UPDATE")
+                .ToListAsync();
+
+            await other.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE attack_records SET attacked_at = {T0.AddSeconds(2)} WHERE attacker_character_id = {_orc}");
+
+            await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+            Task<HitResult> waiting = Service(context).HitAsync(
+                new HitRequest(_ayla, _orc, HitZone.Body, HitFacing.Front, InBsHalf), clock);
+
+            await BlockedOnALockAsync();
+
+            clock.Now = T0.AddSeconds(3);
+            await holding.CommitAsync();
+
+            answer = await waiting;
+        }
+
+        // Judged at one second, the provocation would be in its future, and refused.
+        Assert.True(answer.Landed, answer.Refusal);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.Equal(T0.AddSeconds(3), (await verify.Characters.SingleAsync(c => c.Id == _ayla)).LastCombatAt);
+        Assert.Equal(T0.AddSeconds(3), (await verify.Characters.SingleAsync(c => c.Id == _orc)).LastCombatAt);
+    }
+
+    /// <summary>One hit by Orc on Ayla, counted from outside, and that EF made no savepoint for it.</summary>
+    private async Task<HitTiming> CountedHitAsync(DateTimeOffset when)
+    {
+        var sent = new StatementsSent();
+
+        await using SpaceMmoDbContext context = CountingContext(sent);
+
+        HitResult hit = await Service(context).HitAsync(
+            new HitRequest(_orc, _ayla, HitZone.Body, HitFacing.Front, InBsHalf), new Clock(when));
+
+        Assert.True(hit.Landed, hit.Refusal);
+        Assert.Equal(sent.Count, hit.Timing!.RoundTrips.Count);
+
+        // A savepoint is two round trips the tally cannot see: EF sends it through the transaction, not as a command.
+        Assert.Equal(0, sent.Savepoints);
+
+        return hit.Timing;
     }
 
     private async Task BlockedOnALockAsync()
@@ -417,10 +545,13 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
     private sealed class StatementsSent : DbCommandInterceptor
     {
         private int _count;
+        private int _savepoints;
 
         public StatementsSent() => Commits = new CommitsSent(this);
 
         public int Count => _count;
+
+        public int Savepoints => _savepoints;
 
         public IInterceptor Commits { get; }
 
@@ -461,9 +592,25 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
 
                 return ValueTask.FromResult(result);
             }
+
+            public override ValueTask<InterceptionResult> CreatingSavepointAsync(
+                DbTransaction transaction, TransactionEventData eventData, InterceptionResult result,
+                CancellationToken cancellationToken = default)
+            {
+                Interlocked.Increment(ref owner._savepoints);
+
+                return ValueTask.FromResult(result);
+            }
         }
     }
 
+    /// <summary>A clock the test sets: a hit reads it once it holds its lock.</summary>
+    private sealed class Clock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
 
     private async Task SetHealthAsync(int characterId, int health, DateTimeOffset lastCombat)
     {

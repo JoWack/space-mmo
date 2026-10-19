@@ -72,4 +72,45 @@ public static class SkillAwards
 
         skill.Xp += xp;
     }
+
+    /// <summary>
+    /// Adds XP to a skill whose row the caller has already loaded if it exists, so it never asks the database.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For work holding a lock other work queues behind (task 198): a hit loads the attacker's skill rows with the
+    /// lock, and <see cref="AwardAsync"/> would go to the database for a skill not yet earned, a round trip every
+    /// queued hit waits out. The same rule otherwise: the tracker first, then a new row.
+    /// </para>
+    /// <para>
+    /// <strong>Only where the caller's read covers the skill.</strong> A row that exists and was not loaded is
+    /// added again, and the save fails on its key: loudly, not with XP lost.
+    /// </para>
+    /// </remarks>
+    public static void AwardTracked(SpaceMmoDbContext database, int characterId, int skillId, long xp)
+    {
+        ArgumentNullException.ThrowIfNull(database);
+
+        if (xp <= 0)
+        {
+            return;
+        }
+
+        CharacterSkill? skill = database.CharacterSkills.Local
+            .FirstOrDefault(s => s.CharacterId == characterId && s.SkillId == skillId);
+
+        if (skill is null)
+        {
+            database.CharacterSkills.Add(new CharacterSkill
+            {
+                CharacterId = characterId,
+                SkillId = skillId,
+                Xp = xp,
+            });
+
+            return;
+        }
+
+        skill.Xp += xp;
+    }
 }

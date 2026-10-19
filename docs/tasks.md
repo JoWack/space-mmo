@@ -10321,9 +10321,10 @@ until it is: the running one predates the fix.
 
 ## 198 — Shots feel late: measure the delay, and draw your own bolt at once
 
-**Stage 1 built and played, 18 October. Stage 2 measured, 18 October: the backend's delay is a lock queue that
-load turns on; a fix proposed, waiting on Joe's choice.** Belongs to **M6**, with 194. Joe's two-client fight on 17 October: "some lag in the
-combat and the damage appearing after 'shooting' each other".
+**Stage 1 built and played, 18 October. Stage 2 measured 18 October and fixed 19 October: the backend's delay was
+a lock queue that load turned on; under the same load a hit now takes 0.44 s where it took 10.3. Waiting on a
+two-client fight.** Belongs to **M6**, with 194. Joe's two-client fight on 17 October: "some lag in the combat and the
+damage appearing after 'shooting' each other".
 
 **Measured from the 17 October logs, before changing anything.** The server logs a hit when it traces it, before
 asking the API; the shooter's client logs "hit for N" when the answer arrives. All three logs share one clock.
@@ -10439,10 +10440,12 @@ as the fight lasts, and the wait is spent in the lock.
 - **`RoundTripTally`** (`SpaceMMO.Data/Diagnostics/RoundTrips.cs`): every statement and commit a piece of work sends,
   as long as each took, plus the time spent opening the connection, counted by interceptors every
   `SpaceMmoDbContext` carries into whichever tally is open on the current async flow.
-- **`HitResult.Timing`**: each hit says where its time went, total = connecting + taking the lock + the other round
-  trips + between (the API itself). The endpoint logs it, one line a hit:
-  `Hit by <attacker> on <target>, <landed or the refusal>: <total> ms in all = <ms> taking the lock + <n> other
-  round trips <ms> + connecting <ms> + between <ms>. Round trips, ms: <each, in order>. Arrived <HH.mm.ss:fff>.`
+- **`HitResult.Timing`**: each hit says where its time went. The endpoint logs it, one line a hit; since the fix
+  below, its parts are the reads before the lock, taking the lock, the round trips holding it, connecting, and
+  between (the API itself):
+  `Hit by <attacker> on <target>, <landed or the refusal>: <total> ms in all = <ms> reading first (<n> round trips)
+  + <ms> taking the lock + <ms> holding it (<n> round trips) + connecting <ms> + between <ms>. Round trips, ms:
+  <each, in order>. Arrived <HH.mm.ss:fff>.`
 - **`client/Saved/Logs/Api.log`**: the API's log as a file beside the game's, stamped in UTC as Unreal stamps its
   own, so the server's `shot N answered in` and the API's line subtract. `scripts/api.bat` sets the path
   (`Logging__File__Path`); the file gets the API's own lines and each request's start and finish, not every SQL
@@ -10475,8 +10478,79 @@ Tests that fail against the old behaviour, if built: a hit holds the lock for at
 the claim, asserted through the instrument); a hit queued behind another is judged at the time it took the lock (an
 intruder's answer, queued behind its provocation's later shot, lands); the connection strings name `127.0.0.1`.
 
+### Decided by Joe, 19 October
+- **1, 2 and 3 together**, with tests that fail against the old behaviour. 4 not now.
+
+### Built, 19 October: the fix
+- **`127.0.0.1` in all five connection strings** (`appsettings.json`, `DesignTimeDbContextFactory`, both test fixtures'
+  two each), and `infra/docker-compose.yml` says why beside the port it publishes.
+- **`HitAsync` holds the lock for three round trips, not fifteen** -- one more than proposed, and the proposal was
+  wrong in a way worth keeping. One statement cannot lock both characters *and* read their skill rows and attack
+  records: a statement sees the database as it was when it began, and while the rows it locks are fetched again
+  once the lock is granted, the rows it joins are not. Built that way first, a hit queued behind another read the
+  rows from before it, and `A_hit_queued_behind_another_keeps_what_that_hit_wrote` failed on a duplicate attack
+  record (`23505`); it would equally have overwritten the first hit's XP and judged an answer by an old attack.
+  So: four reads before the lock that no hit changes (the weapon in Weapon 1; faction space and its system, one
+  query; protection, one query; the skill list), then the lock, then **one read** of both characters' skill rows
+  and the attacks between them (one query), the save and the commit. Eight round trips in all, from sixteen.
+- XP goes into the rows that read already holds (`SkillAwards.AwardTracked`): `AwardAsync` would ask the database
+  for a skill never earned before, under the lock.
+- **EF's automatic savepoints are off for the hit.** EF wrapped every save in an open transaction in `SAVEPOINT` and
+  `RELEASE`, two round trips the tally could not see (they go through the transaction, not as commands), protecting
+  nothing: a failed save abandons the hit.
+- **The clock is read once the lock is held**: `HitAsync` takes a `TimeProvider`, not a time.
+- The death record's system is the one whose rules allowed the kill, from the same read as the rules, where it was
+  the first system found by a query of its own. There is one system.
+
+### Verified, and how
+- **The same scratch fight, before and after**, the old code built from `122b9b8` against the same harness; real
+  55-damage shots, both fighters at constitution 99 so nobody dies; old on `localhost` as the API ran, new on
+  `127.0.0.1`:
+
+  | | unloaded, before | after | 8 busy threads, before | after | 12 busy threads, before | after |
+  |---|---|---|---|---|---|---|
+  | a hit, p50 | 34 ms | 18 ms | 2.6 s | 0.22 s | **10.3 s** | **0.44 s** |
+  | a hit, p90 | 2.1 s | 28 ms | 3.9 s | 0.30 s | 16.7 s | 0.66 s |
+  | a hit, worst | 2.3 s | 0.31 s | 5.9 s | 0.58 s | 17.5 s | 1.1 s |
+  | waiting for the lock, p50 | 4 ms | 2 ms | 1.6 s | 52 ms | 8.4 s | 64 ms |
+  | round trips holding it | 15 | 3 | 15 | 3 | 15 | 3 |
+  | answers wrongly refused | 5 | 0 | 11 | 0 | 14 | 0 |
+
+  The 12-thread run is the playtest's condition (each round trip about 38 ms; it was 44 in the measurement above).
+  What is left of a loaded hit is its eight round trips at 40–70 ms each, not a queue.
+- Suites: Domain 618, Data 306, API 117.
+- **New tests, each failing against the old behaviour:**
+  - `A_hit_holds_the_lock_for_one_read_its_save_and_its_commit`: three round trips holding it on a first hit, a later
+    one and a kill, counted from outside as well, and no savepoint.
+  - `A_hit_queued_behind_another_keeps_what_that_hit_wrote`: a hit waiting behind one that writes the first attack
+    record and XP rows keeps both hits' XP and one record. Fails on the duplicate key with the one-statement read.
+  - `A_hit_that_queued_is_judged_when_it_takes_the_lock`: an intruder's answer, queued behind a later shot of its
+    provoker, lands, and both characters' fight clocks read when it was decided.
+  - `The_API_connects_to_Postgres_by_address_not_by_localhost`, from the `appsettings.json` built beside the tests.
+  - The endpoint's log line now names the round trips holding the lock, and asserts three for a hit as the game
+    server sends it.
+- **Broken on purpose, each failing its own test:** the clock read on arrival (`not_allowed`); XP awarded through
+  `AwardAsync` (5 held, not 3); protection read under the lock (4); savepoints left on; the read joined to the lock's
+  statement (duplicate key); `localhost` back in `appsettings.json`.
+- **Not verified by anything but a fight:** the delay as two players see it. Nothing changed on the client or the
+  dedicated server, so no re-cook: **restart the API** with `scripts/api.bat`.
+
+### For Joe: what to look at
+- **Damage numbers within about half a second of the click**, all fight long, on both machines. Before, they fell
+  further behind the longer the fight went on: that was the queue.
+- **`client/Saved/Logs/Api.log`** has a line per hit. `holding it (3 round trips)` on every landed hit;
+  `taking the lock` in tens of milliseconds, not seconds. If it is seconds again, the queue is back, and the line
+  says whether the round trips themselves slowed (`Round trips, ms`) or something held the lock.
+- **The intruder's answers land** while both are firing. A `not_allowed` on the intruder after the local has fired
+  is the stale clock again.
+- If the file is not there, the API was not started by `scripts/api.bat`: the console says `Logging to ... as well.`
+  when it is.
+
 ### Still open
-- **The fix above**, by Joe's choice.
+- **Each round trip is still about 40 ms on a full machine**, and a hit makes eight. Fewer would mean folding the four
+  reads before the lock into one query, or Postgres outside Docker's virtual machine. Neither needed unless the
+  fight says so.
+- **The game server answering the shooter before the database** (4 above): not now.
 - The first hit's cold stall, once per API start.
 - The server's 30 Hz tick costs up to 33 ms twice per hit (the shot arriving, the API's answer arriving). It is
   `NetServerMaxTickRate`, settable in the staged server's own `Saved/Config` without a re-cook: a switch, if the

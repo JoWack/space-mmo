@@ -22,6 +22,10 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     ports:
       # Bound to localhost only. Never expose a dev database on 0.0.0.0.
+      #
+      # IPv4 only, so connect to 127.0.0.1 and never to "localhost": localhost resolves to ::1
+      # first, and Windows takes 2-4 s to give up on the refused IPv6 attempt before trying IPv4.
+      # Every new connection paid that, and a fight's hits open them in bursts (task 198).
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data

@@ -20,10 +20,11 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<SpaceMmoDb
 
     /// <summary>
     /// Matches the defaults in <c>infra/.env.example</c>, so the tooling works against the
-    /// local compose stack with no extra configuration.
+    /// local compose stack with no extra configuration. <c>127.0.0.1</c>, not <c>localhost</c>, as
+    /// <c>infra/docker-compose.yml</c> explains.
     /// </summary>
     private const string LocalDevelopmentConnectionString =
-        "Host=localhost;Port=5432;Database=spacemmo;Username=spacemmo;Password=devonly";
+        "Host=127.0.0.1;Port=5432;Database=spacemmo;Username=spacemmo;Password=devonly";
 
     public SpaceMmoDbContext CreateDbContext(string[] args)
     {
