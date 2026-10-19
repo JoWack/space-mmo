@@ -94,6 +94,8 @@ void USpaceMMOCombatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProper
 	DOREPLIFETIME(USpaceMMOCombatComponent, MaxHealth);
 	DOREPLIFETIME(USpaceMMOCombatComponent, LastCombatServerSeconds);
 	DOREPLIFETIME(USpaceMMOCombatComponent, bDead);
+	DOREPLIFETIME(USpaceMMOCombatComponent, DeathFall);
+	DOREPLIFETIME(USpaceMMOCombatComponent, DeathVariant);
 	DOREPLIFETIME(USpaceMMOCombatComponent, DisplayName);
 
 	// What they hold is theirs to know.
@@ -320,6 +322,9 @@ void USpaceMMOCombatComponent::FetchStatus()
 		{
 			Pawn->SetMovementLocked(Self->bDead);
 		}
+
+		// Found dead at sign-in, on a machine that draws: lying down already (task 201).
+		Self->ShowDeathOnBody();
 
 		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d has %d/%d health%s, holding %s."),
 			Self->CharacterId, Status.Health, Status.MaxHealth, Self->bDead ? TEXT(" (dead)") : TEXT(""),
@@ -714,13 +719,19 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres, const int
 	const FVector Point = Hit.PointKilometres;
 	const double AskedSeconds = FPlatformTime::Seconds();
 
+	// Away from the shot, if this one kills (task 201): decided now, while the target stands where it was hit.
+	const ESpaceMMOFall Fall = FallFrom(
+		Hit.Facing,
+		(Traced.EndKilometres - Traced.MuzzleKilometres).GetSafeNormal(),
+		TargetCombat->GetOwner() != nullptr ? TargetCombat->GetOwner()->GetActorRightVector() : FVector::RightVector);
+
 	Client->HitAsServer(
 		CharacterId,
 		TargetCombat->CharacterId,
 		Hit.Zone,
 		Hit.Facing,
 		Traced.MuzzleKilometres,
-		[WeakThis, WeakTarget, Zone, Point, Shot, ArrivedSeconds, AskedSeconds](const FBackendHitResult& Result)
+		[WeakThis, WeakTarget, Zone, Point, Shot, ArrivedSeconds, AskedSeconds, Fall](const FBackendHitResult& Result)
 		{
 			USpaceMMOCombatComponent* Self = WeakThis.Get();
 			USpaceMMOCombatComponent* Target = WeakTarget.Get();
@@ -758,7 +769,10 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres, const int
 
 				if (Result.bKilled)
 				{
+					Target->DeathFall = Fall;
+					Target->DeathVariant = static_cast<uint8>(FMath::RandRange(0, 255));
 					Target->bDead = true;
+					Target->ShowDeathOnBody();
 
 					if (ASpaceMMOCharacterPawn* Fallen = Cast<ASpaceMMOCharacterPawn>(Target->GetOwner()))
 					{
@@ -866,6 +880,49 @@ void USpaceMMOCombatComponent::OnRep_Dead()
 	if (!bDead)
 	{
 		KillerName.Reset();
+	}
+
+	ShowDeathOnBody();
+}
+
+void USpaceMMOCombatComponent::ShowDeathOnBody()
+{
+	const UWorld* World = GetWorld();
+	ASpaceMMOCharacterPawn* Pawn = Cast<ASpaceMMOCharacterPawn>(GetOwner());
+
+	if (Pawn == nullptr || World == nullptr || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	if (!bDead)
+	{
+		Pawn->EndDeath();
+
+		return;
+	}
+
+	// From when the fight ended: the fall, for anyone watching it happen; the body already down, for anyone
+	// arriving later or signing in to find themselves dead.
+	const double Since = LastCombatServerSeconds >= 0.0 ? ServerNowSeconds() - LastCombatServerSeconds : 3600.0;
+
+	Pawn->ShowDeath(DeathFall, DeathVariant, Since);
+}
+
+ESpaceMMOFall USpaceMMOCombatComponent::FallFrom(
+	const EBackendHitFacing Facing, const FVector& ShotDirection, const FVector& TargetRight)
+{
+	switch (Facing)
+	{
+	case EBackendHitFacing::Front:
+		return ESpaceMMOFall::Backward;
+
+	case EBackendHitFacing::Back:
+		return ESpaceMMOFall::Forward;
+
+	default:
+		// Travelling toward their right is coming from their left, and pushes them right.
+		return FVector::DotProduct(ShotDirection, TargetRight) > 0.0 ? ESpaceMMOFall::ToRight : ESpaceMMOFall::ToLeft;
 	}
 }
 
@@ -985,6 +1042,7 @@ void USpaceMMOCombatComponent::ServerRespawn_Implementation()
 			Self->StoredHealth = Respawn.Health;
 			Self->LastCombatServerSeconds = -1.0;
 			Self->bDead = false;
+			Self->ShowDeathOnBody();
 
 			if (Pawn != nullptr)
 			{

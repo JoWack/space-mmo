@@ -2,6 +2,7 @@
 
 #include "SpaceMMOUserSettings.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimSequence.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -1017,6 +1018,7 @@ void ASpaceMMOCharacterPawn::PublishNetState()
 	NetState.Rotation = WalkState.Rotation;
 	NetState.bOnGround = bOnGround;
 	NetState.FacingEpoch = FacingEpoch;
+	NetState.PlacementEpoch = PlacementEpoch;
 
 	const UWorld* World = GetWorld();
 
@@ -1058,10 +1060,22 @@ void ASpaceMMOCharacterPawn::ReconcileWithServer(const double DeltaSeconds)
 		SeenFacingEpoch = NetState.FacingEpoch;
 	}
 
-	Navigation.SystemPosition = FShipFlightModel::ReconcilePosition(
-		Navigation.SystemPosition, NetState.SystemPosition, Reconciliation, DeltaSeconds);
+	// Somewhere the server put them on purpose is taken at once, not blended toward (task 200).
+	const bool bPlaced = NetState.PlacementEpoch != SeenPlacementEpoch;
+
+	SeenPlacementEpoch = NetState.PlacementEpoch;
+
+	Navigation.SystemPosition = FollowOwnPosition(
+		Navigation.SystemPosition, NetState.SystemPosition, Reconciliation, DeltaSeconds, bPlaced);
 
 	WalkState.Velocity = NetState.Velocity;
+}
+
+FSystemCoordinate ASpaceMMOCharacterPawn::FollowOwnPosition(
+	const FSystemCoordinate& Predicted, const FSystemCoordinate& Server, const FShipReconciliation& Rules,
+	const double DeltaSeconds, const bool bPlacedOnPurpose)
+{
+	return bPlacedOnPurpose ? Server : FShipFlightModel::ReconcilePosition(Predicted, Server, Rules, DeltaSeconds);
 }
 
 void ASpaceMMOCharacterPawn::FollowServerState(const double DeltaSeconds)
@@ -1098,6 +1112,15 @@ void ASpaceMMOCharacterPawn::FollowServerState(const double DeltaSeconds)
 
 		LastAppliedServerTime = NetState.ServerTimeSeconds;
 		LastNetStateReceivedAt = Now;
+
+		// Put somewhere on purpose (task 200): started afresh there, with nothing of the old drawing to ease out.
+		if (NetState.PlacementEpoch != SeenPlacementEpoch)
+		{
+			SeenPlacementEpoch = NetState.PlacementEpoch;
+			RemoteFollower.bHasState = false;
+			Navigation.SystemPosition = NetState.SystemPosition;
+		}
+
 		RemoteFollower.Receive(NetState.SystemPosition, NetState.Velocity, Now, RemoteSnapKilometres);
 	}
 
@@ -1442,6 +1465,9 @@ void ASpaceMMOCharacterPawn::ResumeAt(const FSystemCoordinate& Where)
 
 	SetSystemPosition(Where);
 
+	// So every client jumps here rather than sliding across whatever lies between (task 200).
+	++PlacementEpoch;
+
 	// Said out loud, because a restore that silently did not happen looks exactly like a character
 	// who never went anywhere -- and this is the one line that tells the two apart in a log.
 	UE_LOG(LogSpaceMMO, Log,
@@ -1486,6 +1512,9 @@ bool ASpaceMMOCharacterPawn::StartAt(
 	}
 
 	SetSystemPosition(FSystemCoordinate(Ground));
+
+	// As ResumeAt: a jump, not a slide from wherever the pawn first spawned (task 200).
+	++PlacementEpoch;
 
 	// The one line that says a new character went home. A new character with no such line, standing
 	// at the Capital, is a start that never ran -- otherwise indistinguishable from one that ran with
@@ -2012,6 +2041,9 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 		}
 	}
 
+	// A body put on a character already dead -- their race arriving after the fall -- lies down too (task 201).
+	ApplyDeathPose();
+
 	// The authored height is named as well as the applied scale, because a model that needs a large
 	// multiplier is a model exported at the wrong scale, and that is worth being told rather than
 	// silently corrected forever.
@@ -2027,6 +2059,94 @@ void ASpaceMMOCharacterPawn::ApplyCharacterMesh()
 		GetBodyHeightCentimetres(),
 		Eyes.X,
 		Eyes.Y);
+}
+
+const FSpaceMMODeathClip* ASpaceMMOCharacterPawn::ChooseDeathClip(
+	const TArray<FSpaceMMODeathClip>& Clips, const ESpaceMMOFall Fall, const uint8 Variant)
+{
+	TArray<const FSpaceMMODeathClip*> Falling;
+
+	for (const FSpaceMMODeathClip& Clip : Clips)
+	{
+		if (Clip.Fall == Fall)
+		{
+			Falling.Add(&Clip);
+		}
+	}
+
+	// A fall nothing is authored for -- or None, from a character found dead -- still lies down.
+	if (Falling.IsEmpty())
+	{
+		for (const FSpaceMMODeathClip& Clip : Clips)
+		{
+			Falling.Add(&Clip);
+		}
+	}
+
+	return Falling.IsEmpty() ? nullptr : Falling[Variant % Falling.Num()];
+}
+
+void ASpaceMMOCharacterPawn::ShowDeath(const ESpaceMMOFall Fall, const uint8 Variant, const double SecondsSince)
+{
+	const UWorld* World = GetWorld();
+
+	bShowingDeath = true;
+	DeathFall = Fall;
+	DeathVariant = Variant;
+	DeathBeganSeconds = (World != nullptr ? World->GetTimeSeconds() : 0.0) - FMath::Max(SecondsSince, 0.0);
+
+	ApplyDeathPose();
+}
+
+void ASpaceMMOCharacterPawn::ApplyDeathPose()
+{
+	if (!bShowingDeath || BodyMesh == nullptr || BodyMesh->GetSkeletalMeshAsset() == nullptr)
+	{
+		return;
+	}
+
+	const FSpaceMMODeathClip* const Chosen = ChooseDeathClip(DeathClips, DeathFall, DeathVariant);
+	UAnimSequence* const Clip = Chosen != nullptr ? Cast<UAnimSequence>(Chosen->Clip.TryLoad()) : nullptr;
+
+	if (Clip == nullptr)
+	{
+		// Said, because a body that stays standing looks exactly like a death nobody told it about.
+		UE_LOG(LogSpaceMMO, Warning, TEXT("%s: no death clip loads for fall %d; the body stays standing."),
+			*GetName(), static_cast<int32>(DeathFall));
+
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	const double Into = FMath::Clamp(
+		(World != nullptr ? World->GetTimeSeconds() : 0.0) - DeathBeganSeconds, 0.0, Clip->GetPlayLength());
+
+	// The body leaves its blueprint for the one clip, which holds its last frame once played: lying where they
+	// fell until EndDeath.
+	BodyMesh->PlayAnimation(Clip, false);
+	BodyMesh->SetPosition(static_cast<float>(Into), false);
+
+	UE_LOG(LogSpaceMMO, Log, TEXT("%s: falls %s, playing %s from %.2f s of %.2f."),
+		*GetName(), *StaticEnum<ESpaceMMOFall>()->GetNameStringByValue(static_cast<int64>(DeathFall)),
+		*Clip->GetName(), Into, Clip->GetPlayLength());
+}
+
+void ASpaceMMOCharacterPawn::EndDeath()
+{
+	if (!bShowingDeath)
+	{
+		return;
+	}
+
+	bShowingDeath = false;
+
+	// The blueprint again, made afresh from the class the body was given.
+	if (BodyMesh != nullptr && BodyMesh->GetAnimationMode() != EAnimationMode::AnimationBlueprint)
+	{
+		BodyMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	}
+
+	UE_LOG(LogSpaceMMO, Log, TEXT("%s: up again, back to its animation blueprint."), *GetName());
 }
 
 void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

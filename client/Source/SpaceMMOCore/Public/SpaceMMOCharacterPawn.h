@@ -48,6 +48,38 @@ struct FCharacterNetState
 	/** Bumped when the server turns the character on purpose; see FWalkInput::FacingEpoch. */
 	UPROPERTY()
 	uint8 FacingEpoch = 0;
+
+	/**
+	 * Bumped when the server puts the character somewhere on purpose -- a respawn, a restore, a home start -- so
+	 * every client jumps there rather than blending across the ground between (task 200).
+	 */
+	UPROPERTY()
+	uint8 PlacementEpoch = 0;
+};
+
+/** Which way a body goes down (task 201): away from the shot that killed it. */
+UENUM()
+enum class ESpaceMMOFall : uint8
+{
+	/** Not known: a character found dead at sign-in. Any clip will do; they are already lying down. */
+	None = 0,
+	Backward = 1,
+	Forward = 2,
+	ToLeft = 3,
+	ToRight = 4,
+};
+
+/** A death clip as config names it, and which way the body goes in it (task 201). */
+USTRUCT()
+struct FSpaceMMODeathClip
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Config)
+	ESpaceMMOFall Fall = ESpaceMMOFall::Backward;
+
+	UPROPERTY(EditAnywhere, Config)
+	FSoftObjectPath Clip;
 };
 
 /**
@@ -286,6 +318,26 @@ public:
 	const TArray<FSpaceMMOCharacterBody>& GetRaceBodies() const { return RaceBodies; }
 
 	/**
+	 * Plays the death, or shows it already played (task 201): a clip of the body falling Fall's way, Variant
+	 * choosing among several, SecondsSince into it -- so a client arriving after the fall sees the body lying, not
+	 * falling again. Held on its last frame until EndDeath. Drawing only: nothing the server simulates moves.
+	 */
+	void ShowDeath(ESpaceMMOFall Fall, uint8 Variant, double SecondsSince);
+
+	/** Back to the body's animation blueprint: they came back (task 201). */
+	void EndDeath();
+
+	/** Whether the body is showing a death. */
+	bool IsShowingDeath() const { return bShowingDeath; }
+
+	/** Which clip a fall plays: one of those falling that way, chosen by Variant; any, if none does. Pure. */
+	static const FSpaceMMODeathClip* ChooseDeathClip(
+		const TArray<FSpaceMMODeathClip>& Clips, ESpaceMMOFall Fall, uint8 Variant);
+
+	/** The death clips config names, for the tests to check every fall has one. */
+	const TArray<FSpaceMMODeathClip>& GetDeathClips() const { return DeathClips; }
+
+	/**
 	 * Uniform scale that stands a model of a given height at a target height.
 	 *
 	 * Pure and static so the arithmetic can be checked without a mesh, a world or an editor — the
@@ -449,6 +501,24 @@ private:
 	void PublishNetState();
 	void ReconcileWithServer(double DeltaSeconds);
 	void FollowServerState(double DeltaSeconds);
+
+public:
+	/**
+	 * Where this client draws a character it moves itself, given where the server says it is: blended toward it,
+	 * or taken at once when the server put it there on purpose (task 200). Pure, for the tests.
+	 *
+	 * The blend is for disagreement -- a prediction a little off. A respawn is not disagreement, and blending
+	 * one slid the character across the planet to the station for a second (Joe, 18 October): the snap threshold
+	 * is a kilometre, inherited from ships, and a station is usually nearer than that.
+	 */
+	static FSystemCoordinate FollowOwnPosition(
+		const FSystemCoordinate& Predicted, const FSystemCoordinate& Server, const FShipReconciliation& Rules,
+		double DeltaSeconds, bool bPlacedOnPurpose);
+
+	/** How many times the server has put this character somewhere on purpose (task 200). */
+	uint8 GetPlacementEpoch() const { return PlacementEpoch; }
+
+private:
 
 	void PublishRenderOrigin();
 	void ApplyWorldTransform();
@@ -733,6 +803,24 @@ protected:
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
 	TArray<FSpaceMMOCharacterBody> RaceBodies;
 
+	/**
+	 * The death clips (task 201): Epic's mannequin deaths, copied onto the skeleton every race's body is on, so one
+	 * set plays on all of them. Several may fall the same way; a death chooses among them.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	TArray<FSpaceMMODeathClip> DeathClips;
+
+	/** The death being shown, so a body applied after it -- a race arriving late -- shows it too. */
+	bool bShowingDeath = false;
+	ESpaceMMOFall DeathFall = ESpaceMMOFall::None;
+	uint8 DeathVariant = 0;
+
+	/** When the fall began, on this world's clock. */
+	double DeathBeganSeconds = 0.0;
+
+	/** Puts the death being shown on the body as it is now. */
+	void ApplyDeathPose();
+
 	/** The race being drawn; INDEX_NONE until the owning client says (SetBodyRace). */
 	UPROPERTY(ReplicatedUsing = OnRep_BodyRace)
 	int32 BodyRace = INDEX_NONE;
@@ -866,6 +954,12 @@ protected:
 
 	/** The client's: the latest of those it has taken. */
 	uint8 SeenFacingEpoch = 0;
+
+	/** The server's: how many times it has put this character somewhere on purpose (task 200). */
+	uint8 PlacementEpoch = 0;
+
+	/** The client's: the latest of those it has jumped to. */
+	uint8 SeenPlacementEpoch = 0;
 
 	FVector SurfaceNormal = FVector::UpVector;
 

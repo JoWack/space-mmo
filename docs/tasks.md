@@ -10365,8 +10365,25 @@ plus a server frame after the click, before anything about damage.
 - The shared trace is one function called from both places, so the shooter's bolt and the server's agree by
   construction, give or take where each machine thinks the shooter is standing.
 
+### Joe's playtest, 18 October: passed, and the logs say where the delay is
+Joe: "All playtests passed!" The numbered shots, read from the staged server's log and both clients':
+- **Click to the server's bolt coming back: 16–80 ms** (the first shot 257 ms). The network and the trace are fine.
+- **The API's answer, as the server waited for it: 0.6 to 11 seconds**, answered strictly one after another, and
+  so out of order between the two shooters; the shooter saw damage **0.7–2.7 s** after the click. Refusals were
+  as slow as hits, and a refusal stops before writing anything.
+- The dedicated server ran at **about 21 frames a second**, not its usual 30: the machine was loaded.
+- **The same `HitAsync`, timed again with the game closed: 17–24 ms** (180 cold), as on 17 October.
+
+So the remaining delay is the backend, and only under the game's load. Each hit makes 15–20 database round trips
+inside a transaction that locks both characters (`FOR UPDATE`), so hits on one pair queue behind each other, and
+any slowness in each round trip is multiplied by the count. **Not yet known:** why each round trip is slow while
+the game runs -- Postgres in Docker's virtual machine starved for CPU is the leading suspect, and the same
+pattern as the unexplained 7-minute data test run in 197. The next measurement is inside the API: the time a hit
+spends waiting for its lock against the time it spends in queries, logged where the game server can read it.
+
 ### Still open
-- Where the unexplained 45–80 ms goes. The numbered logs above answer it from one fight.
+- **Why the backend is slow under load** (above), and then whether to cut the hit to one or two round trips, stop
+  holding the lock across them, or let the game server answer the shooter before the database does.
 - The first hit's cold stall, once per API start.
 - The server's 30 Hz tick costs up to 33 ms twice per hit (the shot arriving, the API's answer arriving). It is
   `NetServerMaxTickRate`, settable in the staged server's own `Saved/Config` without a re-cook: a switch, if the
@@ -10425,3 +10442,80 @@ Each offered against alternatives, Claude's suggestion first:
 ### Known limits
 - **One game server.** The check is the dedicated server's own list of connections; with more than one server the
   backend will have to hold who is online.
+
+## 200 — A respawn slid the character across the planet
+
+**Built 18 October; waiting on a death to watch.** Belongs to **M6**, with 194. Joe, 18 October: "after dying and
+respawning, the character 'slides' across the planet to the respawn point. It should be more of a teleportation."
+
+**The cause.** The owning client draws its own character where it predicts, and blends toward the server's
+position when they disagree, snapping only past `FShipReconciliation::SnapThresholdKilometres` -- a kilometre,
+inherited from ships, at 5 a second. A respawn is not a disagreement, and a station is usually nearer than a
+kilometre, so it was blended: about a second of sliding along the straight line to the station. Other players'
+windows already jumped (remote smoothing, on by default, snaps anything past 2 m); with it off they would have
+slid too.
+
+**The siblings:** every move the server makes on purpose goes through `ResumeAt` (respawn, and restoring where a
+character was at sign-in) or `StartAt` (a new character's home start). Both now mark it.
+
+**The fix.** A placement epoch, beside 145's facing epoch: the server bumps it in `ResumeAt` and `StartAt`, it
+travels in `FCharacterNetState`, and a client seeing a new one takes the position at once
+(`FollowOwnPosition`) -- or, drawing another player, starts its follower afresh there.
+
+**Verified:** client suite 324, against a build that said `Result: Succeeded`. `SpaceMMO.Placement` checks that a
+placement is jumped to while a disagreement of the same size still blends (a frame in, over 90% of the way left),
+and, on a pawn spawned in a test world, that `ResumeAt` and `StartAt` each mark one. **Broken on purpose, each
+failing its own test:** a placement blended like a disagreement; `ResumeAt` not marking; `StartAt` not marking.
+**Not verified by anything but the playtest:** that the respawning player's own window jumps, and that nothing
+else -- the camera, the render origin -- slides after it.
+
+## 201 — A dying animation for every race
+
+**In progress, 18 October.** Belongs to **M6**, with 194 and 103. Joe, 18
+October: "I would like a dying animation for each race."
+
+**What is there.** Nothing plays on death: the dead stand where they fell, movement locked (194's "Not done").
+Every race's body is on the animation library's `SK_Mannequin`, each playing its own child of `ABP_Human` (191).
+The project also has Epic's mannequin death clips from the third-person template --
+`Characters/Mannequins/Anims/Death/MM_Death_Front_01`-`03`, `Back_01`, `Left_01`, `Right_01` -- on that template's
+own `SK_Mannequin`, a different asset with the same UE5 mannequin bones. Measured by reading the assets' package
+references, 18 October; not yet played on any race.
+
+### Decided by Joe, 18 October
+Each offered against alternatives, Claude's suggestion first:
+- **Epic's clips on every race**, retargeted onto the library skeleton, each race measured lying down and rendered
+  for Joe before it is wired in. Offered against a clip authored per race in Blender (191's way, days of work), and
+  against Epic's now with Blender later.
+- **The fall follows the killing shot**: from the front backward, from behind forward, from a side to the other
+  side. Offered against one fall always.
+- **The body lies there until Respawn**, seen by everyone. Offered against fading after a few seconds.
+
+### Epic's clips never reach the ground (measured 18 October)
+Copied onto the library skeleton by a commandlet and measured on every race's body as the game draws it, then
+rendered on the Humanoid: **at the last frame the pelvis is still 80–112 cm up and the head 80–154 cm**, only the
+feet on the ground -- doubled over, or staggering, never lying. Measured again on Epic's own mannequin with the
+original clips: the same, 83–93 cm for the pelvis throughout. So the copy was faithful and the clips are what they
+are: hit reactions that hand over to a ragdoll part-way. A ragdoll cannot finish them here: the terrain has no
+collision (ADR-0013), and physics' gravity is world -Z, which is "down" at one point on a round planet.
+
+The library's own clips, measured the same way on the Humanoid: `anim_Finisher_Victim_05` ends flat (pelvis and head
+12 cm) after a three-second take-down; `anim_Stand_To_Prone` and `anim_Prone_Idle` lie face down, as a deliberate
+lie-down; `anim_Downed_Idle_R` is propped on an elbow (head 51 cm). Nothing goes from shot to lying, in any direction.
+
+The copies and the commandlet that made them were removed again; this paragraph is what they found.
+
+**Decided by Joe, 18 October, on that:** four falls -- backward, forward, to each side -- each ending flat on the
+ground, **authored once in Blender on the Humanoid's rig and played on every race** as the library's clips are,
+measured lying on each body, with renders for his yes before anything is imported. Offered against a set per race
+(191's way), and against the library's finisher collapse for every death as a stopgap.
+
+### How it is built
+- The pawn plays a death without touching any animation blueprint: `ShowDeath` plays the clip on the body mesh and
+  holds its last frame; `EndDeath` hands the body back to its blueprint. A client arriving after the fall, or a
+  body applied late, shows it already lying. The clips and which way each falls are config (`DeathClips`), empty
+  until the Blender falls exist; until then a death logs that no clip loads and leaves the body standing.
+- `SpaceMMOLookPanels Fall <Backward|Forward|ToLeft|ToRight> shot`, with `SpaceMMO.ForceBodyRace`, captures a fall
+  at four moments without the HUD, for looking at the clips on each race.
+- The server decides the fall when a shot kills (`FallFrom`, from the hit's facing and which side it came from)
+  and a variant among that fall's clips, both replicated with `bDead`, so every machine plays the same one.
+

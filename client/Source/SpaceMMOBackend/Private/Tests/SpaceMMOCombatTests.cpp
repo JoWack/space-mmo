@@ -224,4 +224,29 @@ bool FSpaceMMOCombatHealthBarsGlowAsHealthFallsTest::RunTest(const FString& Para
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOBodyFallsAwayFromTheShotTest,
+	"SpaceMMO.Combat.ABodyFallsAwayFromTheShotThatKilledIt",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOBodyFallsAwayFromTheShotTest::RunTest(const FString& Parameters)
+{
+	// Task 201. A target facing +X, so its right is +Y, shot by somebody somewhere around it.
+	const FVector Right = FVector::RightVector;
+
+	TestEqual(TEXT("Shot from the front: backward"),
+		USpaceMMOCombatComponent::FallFrom(EBackendHitFacing::Front, FVector(-1, 0, 0), Right), ESpaceMMOFall::Backward);
+	TestEqual(TEXT("Shot from behind: forward"),
+		USpaceMMOCombatComponent::FallFrom(EBackendHitFacing::Back, FVector(1, 0, 0), Right), ESpaceMMOFall::Forward);
+
+	// From their left the shot travels toward +Y, their right, and pushes them that way.
+	TestEqual(TEXT("Shot from their left: to the right"),
+		USpaceMMOCombatComponent::FallFrom(EBackendHitFacing::Side, FVector(0, 1, 0), Right), ESpaceMMOFall::ToRight);
+	TestEqual(TEXT("Shot from their right: to the left"),
+		USpaceMMOCombatComponent::FallFrom(EBackendHitFacing::Side, FVector(0.1, -1, 0).GetSafeNormal(), Right),
+		ESpaceMMOFall::ToLeft);
+
+	return true;
+}
+
 #endif

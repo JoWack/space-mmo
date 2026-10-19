@@ -3,6 +3,7 @@
 #include "Components/ActorComponent.h"
 #include "CoreMinimal.h"
 #include "SpaceMMOBackendTypes.h"
+#include "SpaceMMOCharacterPawn.h"
 #include "SpaceMMOShot.h"
 
 #include "SpaceMMOCombatComponent.generated.h"
@@ -123,6 +124,15 @@ public:
 	/** What the weapon in hand is called, or empty for nothing that fires. Owning client. */
 	const FString& GetWeaponName() const { return WeaponName; }
 
+	/**
+	 * Which way a body goes down, from where the killing shot met it (task 201): away from it. From the front,
+	 * backward; from behind, forward; from a side, toward the other. Pure, for the tests.
+	 *
+	 * @param ShotDirection Which way the shot was travelling.
+	 * @param TargetRight The target's right, in the same space.
+	 */
+	static ESpaceMMOFall FallFrom(EBackendHitFacing Facing, const FVector& ShotDirection, const FVector& TargetRight);
+
 #if !UE_BUILD_SHIPPING
 	/**
 	 * SpaceMMOLookPanels Combat and Dead: sample numbers to look at the HUD with, no server needed -- health at a
@@ -192,6 +202,13 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_Dead)
 	bool bDead = false;
 
+	/** Which way the body went down, and which of that way's clips: chosen once, by the server, so all agree. */
+	UPROPERTY(Replicated)
+	ESpaceMMOFall DeathFall = ESpaceMMOFall::None;
+
+	UPROPERTY(Replicated)
+	uint8 DeathVariant = 0;
+
 	UPROPERTY(Replicated)
 	FString DisplayName;
 
@@ -249,6 +266,9 @@ private:
 
 	/** Server: how far a shot gets before a building or the ground stops it, in metres. */
 	double ClearDistanceMetres(const FVector& FromKilometres, const FVector& Direction, double WantedMetres) const;
+
+	/** Shows the death, or its end, on this machine's copy of the body -- not on a server that draws nothing. */
+	void ShowDeathOnBody();
 
 	/** Server: health now becomes stored, and the clock restarts: dealing or taking damage. */
 	void MarkInCombat(double ServerNow, int32 HealthNow);

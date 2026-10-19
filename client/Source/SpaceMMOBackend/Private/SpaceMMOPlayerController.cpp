@@ -9,6 +9,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "GameFramework/GameSession.h"
 #include "GameFramework/Pawn.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/Paths.h"
@@ -1899,6 +1900,50 @@ void ASpaceMMOPlayerController::SpaceMMOLookPanels(
 
 	if (!bShot)
 	{
+		return;
+	}
+
+	// Fall <Backward|Forward|ToLeft|ToRight> shot: the death played on this character, captured without the HUD
+	// as it goes down and once it lies still (task 201), for looking at the clips on each race
+	// (SpaceMMO.ForceBodyRace). Its own timings, so the fall starts after the sign-in screen has been cleared.
+	if (View.Equals(TEXT("Fall"), ESearchCase::IgnoreCase))
+	{
+		const int64 FallValue = StaticEnum<ESpaceMMOFall>()->GetValueByNameString(TabOrShot);
+		const ESpaceMMOFall Fall = FallValue == INDEX_NONE ? ESpaceMMOFall::Backward : static_cast<ESpaceMMOFall>(FallValue);
+		const FString FallName = StaticEnum<ESpaceMMOFall>()->GetNameStringByValue(static_cast<int64>(Fall));
+		const FString Race = FString::FromInt(IConsoleManager::Get().FindConsoleVariable(TEXT("SpaceMMO.ForceBodyRace"))->GetInt());
+
+		FTimerHandle Begin;
+		GetWorldTimerManager().SetTimer(Begin, [this, Fall]()
+		{
+			bAwaitingSignIn = false;
+			ShowMenu(ESpaceMMOMenu::None);
+
+			if (ASpaceMMOCharacterPawn* Body = Cast<ASpaceMMOCharacterPawn>(GetPawn()))
+			{
+				Body->ShowDeath(Fall, 0, 0.0);
+			}
+		}, 2.5f, false);
+
+		const float Frames[] = {0.3f, 0.7f, 1.2f, 4.0f};
+
+		for (int32 Frame = 0; Frame < UE_ARRAY_COUNT(Frames); ++Frame)
+		{
+			const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ScreenShotDir() /
+				FString::Printf(TEXT("LookPanels_Fall_%s_race%s_%d.png"), *FallName, *Race, Frame));
+
+			FTimerHandle Capture;
+			GetWorldTimerManager().SetTimer(Capture, [Path]()
+			{
+				FScreenshotRequest::RequestScreenshot(Path, false, false);
+
+				UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Look: captured %s."), *Path);
+			}, 2.5f + Frames[Frame], false);
+		}
+
+		FTimerHandle Leave;
+		GetWorldTimerManager().SetTimer(Leave, [this]() { QuitGame(); }, 8.0f, false);
+
 		return;
 	}
 
