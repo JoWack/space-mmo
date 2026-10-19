@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Data;
 using SpaceMMO.Data.Entities;
@@ -122,6 +124,49 @@ public sealed class CombatEndpointTests(ApiDatabaseFixture fixture) : IAsyncLife
         Assert.Equal("laser_rifle", weapon.GetProperty("skillKey").GetString());
         Assert.Equal(500, weapon.GetProperty("cooldownMs").GetInt32());
         Assert.Equal(150, weapon.GetProperty("rangeMetres").GetInt32());
+    }
+
+    [Fact]
+    public async Task Every_hit_is_logged_with_where_its_time_went()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), $"spacemmo-log-{Guid.NewGuid():N}");
+        string log = Path.Combine(folder, "Api.log");
+
+        try
+        {
+            using (var logged = new ApiFactory(_fixture.ConnectionString, ApiFactory.TestServiceSecret) { LogFile = log })
+            using (HttpClient client = logged.CreateClient())
+            using (var request = new HttpRequestMessage(HttpMethod.Post, new Uri("/combat/hits", UriKind.Relative)))
+            {
+                request.Content = JsonContent.Create(Hit(zone: 1, facing: 0));
+                request.Headers.Add("X-SpaceMMO-Service", ApiFactory.TestServiceSecret);
+
+                Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(request)).StatusCode);
+            }
+
+            string line = Assert.Single(
+                await File.ReadAllLinesAsync(log),
+                l => l.Contains($"SpaceMMO.Combat: Hit by {_local} on {_intruder}, landed:", StringComparison.Ordinal));
+
+            // Stamped as Unreal stamps its logs, and the parts named; the lock is one round trip, so the list holds
+            // the others and it.
+            Match parts = Regex.Match(
+                line,
+                @"^\[\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}:\d{3}\] Information SpaceMMO\.Combat: .* ms in all = [\d.]+ taking the lock"
+                + @" \+ (?<others>\d+) other round trips [\d.]+ \+ connecting [\d.]+ \+ between -?[\d.]+\. Round trips, ms: (?<trips>[\d. ]+)\.");
+
+            Assert.True(parts.Success, line);
+
+            int others = int.Parse(parts.Groups["others"].Value, CultureInfo.InvariantCulture);
+            string[] trips = parts.Groups["trips"].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            Assert.True(others > 0, line);
+            Assert.Equal(others + 1, trips.Length);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
     private object Hit(int zone, int facing) => new

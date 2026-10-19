@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SpaceMMO.Api.Auth;
+using SpaceMMO.Api.Diagnostics;
 using SpaceMMO.Api.Endpoints;
 using SpaceMMO.Data;
 using SpaceMMO.Data.Combat;
@@ -20,6 +21,10 @@ using SpaceMMO.Domain.Items;
 // transactions in SpaceMMO.Data, so nothing in this project decides a game outcome.
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+
+// The log as a file too, beside the game's, so the two can be read side by side (task 198). scripts/api.bat sets the
+// path in Logging:File:Path; with none, the provider writes nothing.
+builder.Logging.Services.AddSingleton<ILoggerProvider, FileLoggerProvider>();
 
 builder.Services.AddDbContext<SpaceMmoDbContext>(options =>
     options

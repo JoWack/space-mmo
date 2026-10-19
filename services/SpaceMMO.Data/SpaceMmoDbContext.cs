@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SpaceMMO.Data.Conversions;
+using SpaceMMO.Data.Diagnostics;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Domain.Economy;
 
@@ -90,6 +91,19 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
     public DbSet<DeathRecord> DeathRecords => Set<DeathRecord>();
 
     public DbSet<AttackRecord> AttackRecords => Set<AttackRecord>();
+
+    /// <summary>
+    /// Every context counts its round trips (task 198), so a tally works the same in the API, the tests and the
+    /// seed, whichever of them built the options.
+    /// </summary>
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        ArgumentNullException.ThrowIfNull(optionsBuilder);
+
+        optionsBuilder.AddInterceptors(RoundTripInterceptors.All);
+
+        base.OnConfiguring(optionsBuilder);
+    }
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

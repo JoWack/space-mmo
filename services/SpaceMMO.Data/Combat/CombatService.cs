@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using SpaceMMO.Data.Diagnostics;
 using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Progression;
 using SpaceMMO.Domain.Characters;
@@ -36,7 +38,36 @@ public sealed record HitResult(
 {
     public bool Landed => Refusal is null;
 
+    /// <summary>Where the time went in deciding this, for the log (task 198).</summary>
+    public HitTiming? Timing { get; init; }
+
     public static HitResult Refused(string reason) => new(reason, 0, 0, 0, false, null, 0);
+}
+
+/// <summary>
+/// Where one hit's time went (task 198): a hit took 17–24 ms with the game closed and seconds while it ran.
+/// </summary>
+/// <param name="Total">From being asked to answering.</param>
+/// <param name="Connecting">Opening the connection, from the pool or new.</param>
+/// <param name="LockRoundTrips">
+/// How many of the first <paramref name="RoundTrips"/> it took to hold both characters' rows. That statement's time
+/// is its round trip plus however long another hit on either character kept them.
+/// </param>
+/// <param name="RoundTrips">Every statement and commit, in order, as long as each took to answer.</param>
+public sealed record HitTiming(
+    TimeSpan Total, TimeSpan Connecting, int LockRoundTrips, IReadOnlyList<TimeSpan> RoundTrips)
+{
+    /// <summary>Taking the pair's lock, waiting included.</summary>
+    public TimeSpan Locking => Sum(RoundTrips.Take(LockRoundTrips));
+
+    /// <summary>Every round trip but the lock's.</summary>
+    public TimeSpan Querying => Sum(RoundTrips.Skip(LockRoundTrips));
+
+    /// <summary>What is left: the API itself, between one round trip and the next.</summary>
+    public TimeSpan Between => Total - Connecting - Locking - Querying;
+
+    private static TimeSpan Sum(IEnumerable<TimeSpan> spans) =>
+        spans.Aggregate(TimeSpan.Zero, (sum, span) => sum + span);
 }
 
 /// <summary>The weapon a character would fire: what is in Weapon 1 (task 194).</summary>
@@ -99,9 +130,21 @@ public sealed class CombatService(SpaceMmoDbContext database)
     public async Task<HitResult> HitAsync(
         HitRequest request, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
+        long started = Stopwatch.GetTimestamp();
+        using RoundTripTally tally = RoundTripTally.Begin();
+        int lockRoundTrips = 0;
+
+        // Every answer says where its time went (task 198). A refusal is stamped before its rollback, which is one
+        // more round trip than it counts.
+        HitResult Timed(HitResult result) => result with
+        {
+            Timing = new HitTiming(
+                Stopwatch.GetElapsedTime(started), tally.Connecting, lockRoundTrips, [.. tally.RoundTrips]),
+        };
+
         if (request.AttackerCharacterId == request.TargetCharacterId)
         {
-            return HitResult.Refused("self");
+            return Timed(HitResult.Refused("self"));
         }
 
         await using var transaction = await _database.Database.BeginTransactionAsync(cancellationToken);
@@ -109,6 +152,8 @@ public sealed class CombatService(SpaceMmoDbContext database)
         // Both locked, lower id first, so two players shooting each other at the same moment cannot deadlock.
         (Character attacker, Character target) = await LockPairAsync(
             request.AttackerCharacterId, request.TargetCharacterId, cancellationToken);
+
+        lockRoundTrips = tally.RoundTrips.Count;
 
         int attackerMax = await MaxHealthAsync(attacker.Id, cancellationToken);
         int targetMax = await MaxHealthAsync(target.Id, cancellationToken);
@@ -118,26 +163,26 @@ public sealed class CombatService(SpaceMmoDbContext database)
 
         if (attackerHealth <= 0)
         {
-            return HitResult.Refused("attacker_dead");
+            return Timed(HitResult.Refused("attacker_dead"));
         }
 
         if (targetHealth <= 0)
         {
-            return HitResult.Refused("target_dead");
+            return Timed(HitResult.Refused("target_dead"));
         }
 
         WeaponLoadout? weapon = await LoadoutAsync(attacker.Id, cancellationToken);
 
         if (weapon is null)
         {
-            return HitResult.Refused("no_weapon");
+            return Timed(HitResult.Refused("no_weapon"));
         }
 
         FactionSpace? space = await FactionSpaceAsync(cancellationToken);
 
         if (space is null)
         {
-            return HitResult.Refused("no_rules");
+            return Timed(HitResult.Refused("no_rules"));
         }
 
         DateTimeOffset? targetAttackedAttacker = await _database.AttackRecords
@@ -157,7 +202,7 @@ public sealed class CombatService(SpaceMmoDbContext database)
 
         if (!Pvp.CanAttack(space, attempt))
         {
-            return HitResult.Refused("not_allowed");
+            return Timed(HitResult.Refused("not_allowed"));
         }
 
         await RecordAttackAsync(attacker.Id, target.Id, now, cancellationToken);
@@ -196,7 +241,7 @@ public sealed class CombatService(SpaceMmoDbContext database)
         await _database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return new HitResult(null, dealt, targetAfter, targetMax, killed, weapon.SkillKey, weaponXp);
+        return Timed(new HitResult(null, dealt, targetAfter, targetMax, killed, weapon.SkillKey, weaponXp));
     }
 
     /// <summary>

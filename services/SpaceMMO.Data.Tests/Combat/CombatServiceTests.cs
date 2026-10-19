@@ -1,4 +1,6 @@
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using SpaceMMO.Data.Combat;
 using SpaceMMO.Data.Docking;
 using SpaceMMO.Data.Entities;
@@ -311,7 +313,157 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.Equal(_aStationId, (await Service(context).RespawnAsync(_ayla, T0)).StationId);
     }
 
+    // ── Where a hit's time went (task 198) ───────────────────────────────────
+
+    [Fact]
+    public async Task A_hit_counts_every_round_trip_it_sent_and_which_took_the_lock()
+    {
+        var sent = new StatementsSent();
+
+        await using SpaceMmoDbContext context = CountingContext(sent);
+
+        HitResult hit = await Service(context).HitAsync(
+            new HitRequest(_orc, _ayla, HitZone.Body, HitFacing.Front, InBsHalf), T0);
+
+        Assert.True(hit.Landed, hit.Refusal);
+
+        HitTiming timing = hit.Timing!;
+
+        // Counted through a different hook from the tally's, so neither a missed kind of statement nor one counted
+        // twice gets past.
+        Assert.Equal(sent.Count, timing.RoundTrips.Count);
+        Assert.Equal(1, timing.LockRoundTrips);
+        Assert.All(timing.RoundTrips, trip => Assert.True(trip > TimeSpan.Zero));
+        Assert.True(timing.Between >= TimeSpan.Zero, $"The parts add up to more than the whole: {timing}");
+    }
+
+    [Fact]
+    public async Task A_refusal_that_needs_no_database_makes_no_round_trips()
+    {
+        HitResult self = await HitAsync(_orc, _orc, InBsHalf, T0);
+
+        Assert.Equal("self", self.Refusal);
+        Assert.Empty(self.Timing!.RoundTrips);
+    }
+
+    [Fact]
+    public async Task Waiting_for_another_hit_on_the_pair_is_counted_as_taking_the_lock()
+    {
+        TimeSpan held = TimeSpan.FromMilliseconds(500);
+
+        HitResult hit;
+
+        // Another transaction holds the target, as a hit on them from somebody else would.
+        await using (SpaceMmoDbContext other = _fixture.CreateContext())
+        {
+            await using var holding = await other.Database.BeginTransactionAsync();
+
+            await other.Characters
+                .FromSqlInterpolated($"SELECT * FROM characters WHERE id = {_ayla} FOR UPDATE")
+                .ToListAsync();
+
+            Task<HitResult> waiting = HitAsync(_orc, _ayla, InBsHalf, T0);
+
+            // Released only once the hit is queued behind it, however long its connection took to open (2 s from
+            // localhost, task 198), and then held a known while longer.
+            await BlockedOnALockAsync();
+            await Task.Delay(held);
+            await holding.CommitAsync();
+
+            hit = await waiting;
+        }
+
+        HitTiming timing = hit.Timing!;
+
+        Assert.True(hit.Landed, hit.Refusal);
+        Assert.True(timing.Locking >= held, $"The wait went somewhere else: {timing}");
+        Assert.True(timing.Querying < timing.Locking, $"The wait went somewhere else: {timing}");
+    }
+
+    private async Task BlockedOnALockAsync()
+    {
+        await using SpaceMmoDbContext watcher = _fixture.CreateContext();
+
+        for (int tries = 0; tries < 200; tries++)
+        {
+            int blocked = await watcher.Database
+                .SqlQuery<int>($"""
+                    SELECT count(*)::int AS "Value" FROM pg_stat_activity
+                    WHERE datname = current_database() AND wait_event_type = 'Lock'
+                    """)
+                .SingleAsync();
+
+            if (blocked > 0)
+            {
+                return;
+            }
+
+            await Task.Delay(50);
+        }
+
+        Assert.Fail("The hit never queued behind the held lock.");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private SpaceMmoDbContext CountingContext(StatementsSent sent) =>
+        new(new DbContextOptionsBuilder<SpaceMmoDbContext>()
+            .UseNpgsql(_fixture.ConnectionString)
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(sent, sent.Commits)
+            .Options);
+
+    /// <summary>Statements and commits as they leave, the other end from the tally's.</summary>
+    private sealed class StatementsSent : DbCommandInterceptor
+    {
+        private int _count;
+
+        public StatementsSent() => Commits = new CommitsSent(this);
+
+        public int Count => _count;
+
+        public IInterceptor Commits { get; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _count);
+
+            return ValueTask.FromResult(result);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _count);
+
+            return ValueTask.FromResult(result);
+        }
+
+        public override ValueTask<InterceptionResult<object>> ScalarExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<object> result,
+            CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _count);
+
+            return ValueTask.FromResult(result);
+        }
+
+        private sealed class CommitsSent(StatementsSent owner) : DbTransactionInterceptor
+        {
+            public override ValueTask<InterceptionResult> TransactionCommittingAsync(
+                DbTransaction transaction, TransactionEventData eventData, InterceptionResult result,
+                CancellationToken cancellationToken = default)
+            {
+                Interlocked.Increment(ref owner._count);
+
+                return ValueTask.FromResult(result);
+            }
+        }
+    }
+
 
     private async Task SetHealthAsync(int characterId, int health, DateTimeOffset lastCombat)
     {

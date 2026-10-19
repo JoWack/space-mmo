@@ -1,3 +1,4 @@
+using System.Globalization;
 using SpaceMMO.Api.Auth;
 using SpaceMMO.Data.Combat;
 using SpaceMMO.Domain.Combat;
@@ -67,11 +68,22 @@ public static class CombatEndpoints
             detail: "Only the simulation knows what a shot hit.",
             statusCode: StatusCodes.Status401Unauthorized);
 
+    /// <summary>
+    /// One line per hit, saying where its time went (task 198): the game server waited 0.6–11 s for hits that took
+    /// 20 ms with the game closed. "Between" is the API itself, between one round trip and the next.
+    /// </summary>
+    private static readonly Action<ILogger, int, int, string, string, Exception?> LogHitTiming =
+        LoggerMessage.Define<int, int, string, string>(
+            LogLevel.Information,
+            new EventId(1, nameof(LogHitTiming)),
+            "Hit by {Attacker} on {Target}, {Outcome}: {Breakdown}");
+
     private static async Task<IResult> HitAsync(
         HitRequestBody request,
         HttpContext context,
         ServiceCredential service,
         CombatService combat,
+        ILoggerFactory loggers,
         CancellationToken cancellation)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -87,6 +99,8 @@ public static class CombatEndpoints
             return Results.BadRequest(new { error = "A hit needs a zone, a facing and a position." });
         }
 
+        DateTimeOffset arrived = DateTimeOffset.UtcNow;
+
         HitResult result = await combat.HitAsync(
             new HitRequest(
                 request.AttackerCharacterId,
@@ -94,8 +108,19 @@ public static class CombatEndpoints
                 request.Zone,
                 request.Facing,
                 new SystemPosition(request.X, request.Y, request.Z)),
-            DateTimeOffset.UtcNow,
+            arrived,
             cancellation);
+
+        if (result.Timing is { } timing)
+        {
+            LogHitTiming(
+                loggers.CreateLogger("SpaceMMO.Combat"),
+                request.AttackerCharacterId,
+                request.TargetCharacterId,
+                result.Refusal ?? "landed",
+                Breakdown(timing, arrived),
+                null);
+        }
 
         // 200 either way: a refused hit is an answer the server acts on (no damage, no bolt flash), not a fault.
         return Results.Ok(new HitResponse(
@@ -108,6 +133,20 @@ public static class CombatEndpoints
             result.WeaponSkillKey,
             result.WeaponXp));
     }
+
+    /// <summary>
+    /// Where a hit's time went, as parts that add up to the whole: <c>30.0 ms in all = 2.0 taking the lock + 15 other
+    /// round trips 20.0 + connecting 0.0 + between 8.0</c>, then every round trip in order and when it arrived.
+    /// </summary>
+    private static string Breakdown(HitTiming timing, DateTimeOffset arrived) =>
+        string.Create(
+            CultureInfo.InvariantCulture,
+            $"{timing.Total.TotalMilliseconds:0.0} ms in all = {timing.Locking.TotalMilliseconds:0.0} taking the lock"
+            + $" + {timing.RoundTrips.Count - timing.LockRoundTrips} other round trips"
+            + $" {timing.Querying.TotalMilliseconds:0.0} + connecting {timing.Connecting.TotalMilliseconds:0.0}"
+            + $" + between {timing.Between.TotalMilliseconds:0.0}. Round trips, ms:"
+            + $" {string.Join(' ', timing.RoundTrips.Select(t => t.TotalMilliseconds.ToString("0.0", CultureInfo.InvariantCulture)))}."
+            + $" Arrived {arrived:HH.mm.ss:fff}.");
 
     private static async Task<IResult> RespawnAsync(
         RespawnRequest request,

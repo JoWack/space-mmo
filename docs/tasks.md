@@ -10321,8 +10321,8 @@ until it is: the running one predates the fix.
 
 ## 198 — Shots feel late: measure the delay, and draw your own bolt at once
 
-**Stage 1 built, 18 October: measured, numbered, and your own bolt drawn at once; waiting on a fight to read the
-numbers from.** Belongs to **M6**, with 194. Joe's two-client fight on 17 October: "some lag in the
+**Stage 1 built and played, 18 October. Stage 2 measured, 18 October: the backend's delay is a lock queue that
+load turns on; a fix proposed, waiting on Joe's choice.** Belongs to **M6**, with 194. Joe's two-client fight on 17 October: "some lag in the
 combat and the damage appearing after 'shooting' each other".
 
 **Measured from the 17 October logs, before changing anything.** The server logs a hit when it traces it, before
@@ -10381,9 +10381,102 @@ the game runs -- Postgres in Docker's virtual machine starved for CPU is the lea
 pattern as the unexplained 7-minute data test run in 197. The next measurement is inside the API: the time a hit
 spends waiting for its lock against the time it spends in queries, logged where the game server can read it.
 
+### Stage 2, 18 October: where the backend's time goes
+Measured inside the API with a new instrument, against Postgres's own log of the playtest, and reproduced without
+the game by a scratch fight under CPU load.
+
+**The cause.** Not Postgres doing work: under load its own execute times stayed at **p50 0.03 ms, p90 0.4 ms**.
+What slows is each round trip *between* processes. A statement goes from the API through Docker Desktop's port
+proxy into the WSL2 virtual machine and back, and on a machine whose 8 cores are full each of those has to wait for
+a turn: **about 40 ms a round trip instead of about 1**. A hit that earns XP makes **16 round trips**, and **15 of
+them hold the pair's lock** (`FOR UPDATE` on both characters). So under load the lock is held about 0.6 s a hit,
+which serves at most **1.7 hits a second** for the pair while two rifles offer 4. The queue then grows for as long
+as the fight lasts, and the wait is spent in the lock.
+
+- **Postgres's own log of the playtest** (`log_min_duration_statement` is 200 ms in `infra/docker-compose.yml`; read
+  with `docker logs spacemmo-postgres`): the pair's lock statement waited **0.3–10.9 s**, and the whereabouts
+  `UPDATE characters` waited up to **11 s** behind it. A few statements were slow in Postgres itself (a parse of
+  0.75 s, a bind of 0.45 s, the kill's `INSERT` 1.3 s, a `COMMIT` 0.37 s), and **at least 8 new backends** opened
+  mid-fight, each a new connection (below).
+- **Reproduced without the game.** A scratch harness (two shooters each firing every 500 ms without waiting for the
+  answer, every hit in its own context through the real `CombatService`, a scratch database) with 8 busy threads,
+  one per core:
+
+  | | unloaded | 8 busy threads | Joe's fight |
+  |---|---|---|---|
+  | a hit, as its caller waited | 45 ms p50 | **8.7 s p50, 17 s max** | 0.6–11 s |
+  | each round trip after the lock | 1.2 ms | **44 ms p50, 324 max** | -- |
+  | the lock held (querying + between) | 25 ms | **610 ms** | -- |
+  | waiting for the lock | 5 ms | **7.2 s p50, 14 s max** | 0.3–10.9 s |
+  | the API between round trips | 6 ms | 73 ms | -- |
+
+  With statement logging on for the scratch database, Postgres's execute times in the loaded run were the
+  0.03 / 0.4 ms above: the 44 ms is the trip, not the work.
+- **`localhost` costs 2–4 s for every new connection.** Docker publishes `127.0.0.1:5432` only; `localhost`
+  resolves to `::1` first, and Windows takes seconds to give up on the refused IPv6 attempt before trying IPv4. A
+  probe opening unpooled connections: **4.1 s each on `localhost`, 16–28 ms on `127.0.0.1`** (170 ms under load).
+  A pooled reopen costs nothing, so only a pool that has to grow pays -- which is what concurrent hits make it do:
+  in the scratch fight every hit that needed a new connection waited 2.0–2.7 s for it. All five connection strings
+  say `localhost` (`appsettings.json`, `DesignTimeDbContextFactory`, both test fixtures). It is not what makes the
+  test suites slow: the Data suite took 55 s on `127.0.0.1` against 58 s on `localhost`.
+- **A queued hit is judged by the clock it arrived with.** `now` is taken when the request arrives. By the time a
+  queued hit holds the lock, later hits have recorded the attack at later times, so an intruder's answer sees the
+  provocation "in the future" and is refused `not_allowed` (`Pvp.WasProvoked` refuses a negative elapsed time), and
+  `last_combat_at` can be written backwards. The unloaded scratch fight refused Ayla's answers this way for its
+  first two seconds; the loaded one refused 16 of 49. Joe's fight's refusals were not this: Ayla's nine came before
+  Orenthal had fired, when she was the intruder.
+
+**Ruled out, and how:**
+- Postgres's own work: its execute times under load, above.
+- The engine queueing requests: 251 concurrent, 16 to a host (`Creating http thread with maximum 251 concurrent
+  requests` in the logs; `HttpMaxConnectionsPerServer` 16 in `HttpModule.cpp`).
+- The API process between round trips: 73 ms of a loaded hit against 600 ms in round trips. This is the bucket
+  console logging would land in; it was measured in the harness, not in Joe's terminal.
+- 197's 7-minute data run is consistent with the same per-round-trip inflation (about ×35, and the suite is
+  thousands of sequential round trips) under the game's load, but was not re-measured.
+
+### Built, 18 October: the instrument, kept
+- **`RoundTripTally`** (`SpaceMMO.Data/Diagnostics/RoundTrips.cs`): every statement and commit a piece of work sends,
+  as long as each took, plus the time spent opening the connection, counted by interceptors every
+  `SpaceMmoDbContext` carries into whichever tally is open on the current async flow.
+- **`HitResult.Timing`**: each hit says where its time went, total = connecting + taking the lock + the other round
+  trips + between (the API itself). The endpoint logs it, one line a hit:
+  `Hit by <attacker> on <target>, <landed or the refusal>: <total> ms in all = <ms> taking the lock + <n> other
+  round trips <ms> + connecting <ms> + between <ms>. Round trips, ms: <each, in order>. Arrived <HH.mm.ss:fff>.`
+- **`client/Saved/Logs/Api.log`**: the API's log as a file beside the game's, stamped in UTC as Unreal stamps its
+  own, so the server's `shot N answered in` and the API's line subtract. `scripts/api.bat` sets the path
+  (`Logging__File__Path`); the file gets the API's own lines and each request's start and finish, not every SQL
+  statement. The previous run's file is kept as `Api-backup-<time>.log`. The API tests blank the path, so a test
+  run never writes into a playtest's log.
+
+**Verified:** Domain 618, Data 303, API 116. The tally is compared with statements counted through a different
+hook; a self-hit makes none; a lock held by another transaction until the hit is seen waiting in
+`pg_stat_activity` lands in `Locking`, not elsewhere. **Broken on purpose, each failing its own tests:** the lock
+never marked (2 tests); the interceptors not registered (2); the file stamped in local time; the previous file not
+kept; the endpoint not logging. **Not verified by anything but a playtest:** the line in `Api.log` during a real
+fight. The running API predates all of this: restart it with `scripts/api.bat` to get the file.
+
+### Proposed, waiting on Joe
+1. **`127.0.0.1` in every connection string**, the five above. Removes the 2–4 s on each new connection. No design
+   question in it.
+2. **Hold the lock for two round trips, not fifteen.** One statement locks both characters and reads everything
+   that depends on them (health, last fight, constitution, the attack record both ways, their skill rows); the
+   save and the commit are the other two. What does not depend on them -- the weapon in Weapon 1, faction space,
+   protection, the skill list -- is read before the lock, where its round trips delay only this hit and not the
+   queue. Estimated, not measured: the lock held about 3 × 40 ms under load, so about 8 hits a second for a pair
+   against 4 offered, and no queue; a loaded hit about 0.3 s instead of 8.7. The harness measures it once built.
+3. **The clock read once the lock is held**, so a hit that waited is judged at the time it is decided. Needed with
+   2: a shorter queue only narrows the window.
+4. **Not proposed now: the game server answering the shooter before the database.** It would make damage numbers
+   independent of the backend, and it moves deciding what a hit did out of the API, against ADR-0003: an ADR of its
+   own, if 1–3 are not enough.
+
+Tests that fail against the old behaviour, if built: a hit holds the lock for at most two round trips (16 → 2 is
+the claim, asserted through the instrument); a hit queued behind another is judged at the time it took the lock (an
+intruder's answer, queued behind its provocation's later shot, lands); the connection strings name `127.0.0.1`.
+
 ### Still open
-- **Why the backend is slow under load** (above), and then whether to cut the hit to one or two round trips, stop
-  holding the lock across them, or let the game server answer the shooter before the database does.
+- **The fix above**, by Joe's choice.
 - The first hit's cold stall, once per API start.
 - The server's 30 Hz tick costs up to 33 ms twice per hit (the shot arriving, the API's answer arriving). It is
   `NetServerMaxTickRate`, settable in the staged server's own `Saved/Config` without a re-cook: a switch, if the

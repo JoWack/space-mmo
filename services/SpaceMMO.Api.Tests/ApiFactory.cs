@@ -28,6 +28,12 @@ public sealed class ApiFactory(string connectionString, string? serviceSecret = 
 
     private readonly string _connectionString = connectionString;
 
+    /// <summary>
+    /// Where the API writes its log file. Nowhere unless a test asks: the suite runs as Development, whose path is
+    /// the playtest's own log beside the game's.
+    /// </summary>
+    public string? LogFile { get; init; }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
@@ -47,6 +53,8 @@ public sealed class ApiFactory(string connectionString, string? serviceSecret = 
                 // it, and the test that proves an unconfigured credential refuses everything would
                 // pass or fail depending on whose laptop it ran on.
                 ["SpaceMMO:ServiceSecretFile"] = string.Empty,
+
+                ["Logging:File:Path"] = LogFile ?? string.Empty,
             }));
     }
 }
