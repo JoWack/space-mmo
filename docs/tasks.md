@@ -10321,9 +10321,9 @@ until it is: the running one predates the fix.
 
 ## 198 — Shots feel late: measure the delay, and draw your own bolt at once
 
-**Stage 1 built and played, 18 October. Stage 2 measured 18 October and fixed 19 October: the backend's delay was
-a lock queue that load turned on; under the same load a hit now takes 0.44 s where it took 10.3. Waiting on a
-two-client fight.** Belongs to **M6**, with 194. Joe's two-client fight on 17 October: "some lag in the combat and the
+**Stage 1 built and played, 18 October. Stage 2 measured 18 October, fixed and played 19 October: the queue is
+gone, "much better" in Joe's fight; what is left is each round trip's cost under load, task 202.** Belongs to
+**M6**, with 194. Joe's two-client fight on 17 October: "some lag in the combat and the
 damage appearing after 'shooting' each other".
 
 **Measured from the 17 October logs, before changing anything.** The server logs a hit when it traces it, before
@@ -10546,12 +10546,30 @@ intruder's answer, queued behind its provocation's later shot, lands); the conne
 - If the file is not there, the API was not started by `scripts/api.bat`: the console says `Logging to ... as well.`
   when it is.
 
+### Joe's fight, 19 October: "much better"
+Joe: "It's much better now ... I think we'll have to further fine tune it later, because it should be as
+instantaneous as possible for smooth gameplay." Read from `client/Saved/Logs/Api.log` (71 hits, 17:34–17:38 UTC),
+the staged server's log and both clients':
+
+| | p50 | p90 | worst |
+|---|---|---|---|
+| the server's wait for the API | 958 ms | 2.3 s | 5.4 s |
+| a hit in the API | 859 ms | 1.8 s | 4.9 s |
+| the 4 reads before the lock | 302 ms | 678 ms | 2.0 s |
+| waiting for the lock | **64 ms** | 443 ms | 2.1 s |
+| the 3 round trips holding it | 273 ms | 681 ms | 2.8 s |
+| the API between round trips | 87 ms | 192 ms | 3.8 s (the first hit, cold) |
+| **each round trip** | **61 ms** | **267 ms** | 2.5 s |
+
+Every landed hit held the lock for three round trips; refusals for one. The queue is gone -- the lock wait was
+seconds and is tens of milliseconds -- and what is left is eight round trips that cost more under the real game
+than under the harness's busy threads (61 ms against 39). The shooters saw damage 0.7 s (Orenthal) and 1.1 s
+(Ayla) after the click, typically. That is task 202.
+
 ### Still open
-- **Each round trip is still about 40 ms on a full machine**, and a hit makes eight. Fewer would mean folding the four
-  reads before the lock into one query, or Postgres outside Docker's virtual machine. Neither needed unless the
-  fight says so.
-- **The game server answering the shooter before the database** (4 above): not now.
-- The first hit's cold stall, once per API start.
+- **As instantaneous as possible**: task 202.
+- The first hit's cold stall, once per API start: 4.9 s in this fight, nearly all of it between round trips (EF
+  compiling the hit's queries, measured at 183 ms unloaded on 17 October).
 - The server's 30 Hz tick costs up to 33 ms twice per hit (the shot arriving, the API's answer arriving). It is
   `NetServerMaxTickRate`, settable in the staged server's own `Saved/Config` without a re-cook: a switch, if the
   numbers point at it.
@@ -10727,3 +10745,36 @@ free-fall time, the back or front landing, a settle, then held -- 1.3 s to lying
 - **Not verified by anything but the playtest:** a death between two clients, the body lying where it fell on both
   screens, the fall matching the side the killing shot came from, a late-joining or re-signing client seeing the
   body already down, and Respawn bringing it back standing.
+
+## 202 — Damage as instantaneous as possible
+
+**Pending, 19 October; nothing decided.** Belongs to **M6**, with 194 and 198. Joe, after 198's fix: "it should be
+as instantaneous as possible for smooth gameplay."
+
+**Where it stands** (198, Joe's fight of 19 October): the click reaches the server and its bolt comes back in
+about 50 ms (p50 48 and 55 ms on the two clients); the server then waits for the API **958 ms typically, 2.3 s at p90**. Inside the API a hit is eight
+round trips to Postgres, and on a machine running two clients and the server each costs **61 ms typically and
+267 ms at p90**, against about 1 ms with the game closed -- not Postgres's work, which stays under 0.1 ms, but the
+trip from the API through Docker Desktop's port proxy into its WSL2 virtual machine and back, each hop waiting for a
+core. The pair's lock is no longer the problem (64 ms typically).
+
+**What is known about each way forward**, none of it measured yet:
+1. **Fewer round trips.** The four reads before the lock (the weapon; faction space; protection; the skill list)
+   can be one query: eight round trips to five, about 180 ms of the 860 at the fight's p50. The three under the lock
+   cannot be fewer as long as the read must follow the lock (198) and EF commits separately from its save.
+2. **Cheaper round trips.** Postgres outside Docker's virtual machine -- installed on Windows, or the API and
+   Postgres both inside it -- takes the proxy and the VM out of every trip. How much that saves under load is the
+   open question, and the scratch fight harness of 198 can answer it against a second Postgres before anything is
+   moved. Joe's dev setup, `infra/docker-compose.yml` and `docs/setup.md` all change with it.
+3. **Not waiting for the database at all.** The game server already replicates health and knows the weapon in hand;
+   it could show the damage number and the bar the moment it traces the hit and let the API's answer confirm or
+   correct it. The only way to instantaneous whatever the backend costs, and the only one that changes who decides
+   what a hit did -- the API, by ADR-0003 -- so it needs an ADR, and a rule for a correction (a refused hit already
+   drawn, a kill the API did not grant).
+4. **The server's 30 Hz tick** costs up to 33 ms twice per hit (`NetServerMaxTickRate`, settable in the staged
+   server's `Saved/Config` without a re-cook). Small beside the rest.
+
+**Blocked on:** Joe's choice of which to try. Measuring 2 needs no decision; 3 needs an ADR first.
+
+**Ruled out:** the lock queue (fixed in 198); `localhost` resolution (fixed in 198); the engine's HTTP queue (251
+concurrent, 16 to a host); Postgres's own execution time.
