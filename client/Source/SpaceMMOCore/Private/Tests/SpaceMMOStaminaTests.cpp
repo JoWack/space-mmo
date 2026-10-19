@@ -1,4 +1,6 @@
+#if WITH_EDITOR
 #include "Animation/AnimData/IAnimationDataModel.h"
+#endif
 #include "Animation/AnimSequence.h"
 #include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
@@ -380,8 +382,10 @@ bool FSpaceMMODodgeClipsTest::RunTest(const FString& Parameters)
 		}
 	}
 
+#if WITH_EDITOR
 	// The walk model carries the character by the roll's own root, frame by frame from its crouch: read here off the
-	// clip, so a clip re-captured or re-trimmed cannot leave the walk model moving to the old one.
+	// clip, so a clip re-captured or re-trimmed cannot leave the walk model moving to the old one. The clip's data model
+	// is the editor's; a dedicated server build compiles these tests and has none, and never runs them.
 	const IAnimationDataModel* const Model = Roll->GetDataModel();
 	const TArray<double>& Profile = FCharacterWalkModel::RollProfile();
 	const FName Root(TEXT("root"));
@@ -401,6 +405,7 @@ bool FSpaceMMODodgeClipsTest::RunTest(const FString& Parameters)
 	}
 
 	TestTrue(FString::Printf(TEXT("The profile is the clip's (worst %.2f cm apart)"), Worst), Worst < 0.1);
+#endif
 
 	return true;
 }
