@@ -245,6 +245,9 @@ private:
 
 		/** Who it reached, when it did. */
 		USpaceMMOCombatComponent* Target = nullptr;
+
+		/** Somebody in reach was in the untouchable start of a dodge, and was left out (task 195). */
+		int32 DodgingCharacterId = 0;
 	};
 
 	/**

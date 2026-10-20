@@ -2,6 +2,7 @@
 
 **Status:** Accepted · 2026-10-16 · Joe's answers of 16 October · resolves design-bible §10's open question
 on `constitution` and `stamina` XP (task 102), and the damage scale ADR-0015 and task 192 waited on
+· **Amended 2026-10-19** (decision 9, the dodge's timing and reach; Joe's answers, task 195)
 
 ## Context
 
@@ -52,6 +53,14 @@ suggestion first.
 9. **The dodge roll is new, on Left Ctrl**: a roll in the direction of movement (backwards if standing),
    about 4 m over 0.5 s, untouchable for the first 0.25 s, costing 25 stamina, so four from a full pool at
    level 1. New World's dodge. Left Ctrl is free on foot; in a ship it is thrust down, and nobody is both.
+
+   **Amended 19 October (task 195).** Made in Blender, a roll squeezed into 0.5 s read as "comical ... so fast and
+   unnatural" (Joe): no person rolls in half a second. So **the roll is the animation library's motion-captured
+   roll** over the shoulder and up, about **1.1 s**, carrying the character **2.9 m** at the capture's own speed
+   through it, so the body never slides on the ground; the dodger is committed until it ends. **Standing still it is
+   a backstep hop**, 0.5 s and about **1.5 m** back, made in Blender with 20 cm of air. Still untouchable for the
+   first 0.25 s, still 25 stamina. Offered against keeping 4 m for both (with the slide), and against keeping 0.5 s
+   with a dive-dash in place of the roll.
 
 ### The XP rate
 

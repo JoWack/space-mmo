@@ -86,6 +86,15 @@ public:
 	 */
 	static TArray<FSpaceMMODeathLine> DeathLines(const FBackendDeathCosts& Report);
 
+	/** "72 / 100": what is left of the stamina pool, rounded down, so a dodge's 25 never shows as there when it is not. */
+	static FString StaminaLine(double Stamina, double MaxStamina);
+
+	/**
+	 * The stamina bar's colour, Seconds after a dodge was refused for want of stamina: a flash, back to amber over a
+	 * third of a second (Joe, 19 October: the bar flashes once, nothing else). Negative for never.
+	 */
+	static FLinearColor StaminaColour(double SecondsSinceRefused);
+
 	/** How long a damage number floats before it is gone, and how long a target's bar stays after the last hit. */
 	static constexpr double NumberSeconds = 0.9;
 	static constexpr double TargetBarSeconds = 5.0;
@@ -113,6 +122,16 @@ protected:
 	/** The glow behind the bar. */
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<class UImage> HealthGlow;
+
+	/** Under health: your stamina (task 195), thin and amber, always shown with it. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StaminaLabelText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UTextBlock> StaminaValueText;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<class UProgressBar> StaminaBar;
 
 	/** Centre: shown while dead. */
 	UPROPERTY(meta = (BindWidgetOptional))
@@ -161,6 +180,11 @@ private:
 	TObjectPtr<class UVerticalBox> DeathLossTable;
 
 	TArray<FSpaceMMODeathLine> ShownDeathLines;
+
+	/** The pawn's count of refused dodges as last seen, and when the last one came, for the flash. */
+	uint8 SeenRefusals = 0;
+	bool bSeenRefusals = false;
+	double RefusedAt = -1.0;
 
 	UPROPERTY()
 	TArray<TObjectPtr<class UTextBlock>> Numbers;

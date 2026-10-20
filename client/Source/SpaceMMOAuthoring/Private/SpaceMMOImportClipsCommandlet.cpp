@@ -1,6 +1,8 @@
 #include "SpaceMMOImportClipsCommandlet.h"
 
 #include "AnimGraphNode_BlendSpaceGraphBase.h"
+#include "AnimGraphNode_Root.h"
+#include "AnimGraphNode_Slot.h"
 #include "AnimGraphNode_SequencePlayer.h"
 #include "AnimationBlueprintLibrary.h"
 #include "AnimationRuntime.h"
@@ -26,6 +28,7 @@
 #include "HAL/FileManager.h"
 #include "HAL/IConsoleManager.h"
 #include "IAssetTools.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
@@ -115,6 +118,10 @@ namespace SpaceMMOImportClips
 			TEXT("anim_HumanoidMale_Death_Forward"), Mannequin, nullptr, nullptr, 41, 13.0, 94.0, HumanoidMale},
 		{TEXT("RawContent/Characters/HumanoidMale/HumanoidMale_Death_ToLeft.fbx"), TEXT("/Game/Characters/Humanoid"),
 			TEXT("anim_HumanoidMale_Death_ToLeft"), Mannequin, nullptr, nullptr, 41, 15.0, 94.0, HumanoidMale},
+		// The dodge when standing still (task 195): a hop back, made on the Humanoid man by rig_character.py and
+		// played on every race from ABP_Human's slot. The other dodge, the roll, is the library's (AdoptRoll below).
+		{TEXT("RawContent/Characters/HumanoidMale/HumanoidMale_Dodge_Back.fbx"), TEXT("/Game/Characters/Humanoid"),
+			TEXT("anim_HumanoidMale_Dodge_Back"), Mannequin, nullptr, nullptr, 16, 76.0, 119.0, HumanoidMale},
 		{TEXT("RawContent/Characters/HumanoidMale/HumanoidMale_Death_ToRight.fbx"), TEXT("/Game/Characters/Humanoid"),
 			TEXT("anim_HumanoidMale_Death_ToRight"), Mannequin, nullptr, nullptr, 41, 15.0, 94.0, HumanoidMale},
 	};
@@ -940,6 +947,157 @@ namespace SpaceMMOImportClips
 		return Problems;
 	}
 
+	/** The slot every race's blueprint plays a short clip over its locomotion from: the dodges (task 195). */
+	const FName DodgeSlot(TEXT("DefaultSlot"));
+
+	/**
+	 * Puts a slot between ABP_Human's locomotion and its output, unless one is there. Every race's blueprint is a child
+	 * of it, so each plays from the same slot. Compiled and saved with the rest of BuildLocomotion.
+	 */
+	int32 EnsureSlot(UAnimBlueprint* Human)
+	{
+		UEdGraph* AnimGraph = nullptr;
+
+		for (UEdGraph* Graph : Human->FunctionGraphs)
+		{
+			if (Graph != nullptr && Graph->GetFName() == TEXT("AnimGraph"))
+			{
+				AnimGraph = Graph;
+			}
+		}
+
+		UAnimGraphNode_Root* Root = nullptr;
+
+		if (AnimGraph != nullptr)
+		{
+			for (UEdGraphNode* Node : AnimGraph->Nodes)
+			{
+				Root = Root != nullptr ? Root : Cast<UAnimGraphNode_Root>(Node);
+			}
+		}
+
+		UEdGraphPin* const Into = Root != nullptr ? Root->FindPin(TEXT("Result")) : nullptr;
+
+		if (Into == nullptr || Into->LinkedTo.Num() != 1)
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Clips: %s has no AnimGraph output with one thing feeding it."),
+				*Human->GetName());
+
+			return 1;
+		}
+
+		if (const UAnimGraphNode_Slot* Already = Cast<UAnimGraphNode_Slot>(Into->LinkedTo[0]->GetOwningNode()))
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %s already plays its output through slot %s."),
+				*Human->GetName(), *Already->Node.SlotName.ToString());
+
+			return Already->Node.SlotName == DodgeSlot ? 0 : 1;
+		}
+
+		// The skeleton has to know the slot's name, or nothing plays in it.
+		if (USkeleton* const Skeleton = Human->TargetSkeleton; Skeleton != nullptr && !Skeleton->ContainsSlotName(DodgeSlot))
+		{
+			Skeleton->Modify();
+			Skeleton->RegisterSlotNode(DodgeSlot);
+			Save(Skeleton);
+		}
+
+		Human->Modify();
+		AnimGraph->Modify();
+
+		FGraphNodeCreator<UAnimGraphNode_Slot> Creator(*AnimGraph);
+		UAnimGraphNode_Slot* const Slot = Creator.CreateNode();
+		Slot->Node.SlotName = DodgeSlot;
+		Slot->NodePosX = Root->NodePosX - 260;
+		Slot->NodePosY = Root->NodePosY;
+		Creator.Finalize();
+
+		UEdGraphPin* const Moving = Into->LinkedTo[0];
+		UEdGraphPin* const SlotIn = Slot->FindPin(TEXT("Source"));
+		UEdGraphPin* const SlotOut = Slot->FindPin(TEXT("Pose"));
+
+		if (SlotIn == nullptr || SlotOut == nullptr)
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Clips: the slot node has no Source or Pose pin."));
+
+			return 1;
+		}
+
+		Into->BreakAllPinLinks();
+		Moving->MakeLinkTo(SlotIn);
+		SlotOut->MakeLinkTo(Into);
+
+		FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Human);
+
+		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %s's locomotion now passes through slot %s on its way out."),
+			*Human->GetName(), *DodgeSlot.ToString());
+
+		return 0;
+	}
+
+	const TCHAR* const LibraryRoll = TEXT("/Game/FreeAnimationLibrary/Animations/LandingRoll/anim_LandRoll_R.anim_LandRoll_R");
+	const TCHAR* const DodgeRollFolder = TEXT("/Game/Characters/Shared");
+	const TCHAR* const DodgeRollName = TEXT("anim_Dodge_Roll");
+
+	/**
+	 * The moving dodge (task 195): the library's motion-captured landing roll, copied so it can be locked to its root
+	 * -- the character travels by the walk model, as with every clip here -- without changing the library's own. Logs
+	 * how far the root has gone at every frame, which is the walk model's roll profile: the character moves at the
+	 * capture's own speed through the roll, so the body never slides on the ground.
+	 */
+	int32 AdoptRoll()
+	{
+		const FString CopyPath = FString::Printf(TEXT("%s/%s.%s"), DodgeRollFolder, DodgeRollName, DodgeRollName);
+		UAnimSequence* Copy = LoadObject<UAnimSequence>(nullptr, *CopyPath, nullptr, LOAD_NoWarn | LOAD_Quiet);
+
+		if (Copy == nullptr)
+		{
+			UAnimSequence* const Source = LoadObject<UAnimSequence>(nullptr, LibraryRoll);
+
+			if (Source == nullptr)
+			{
+				UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Clips: could not load %s."), LibraryRoll);
+
+				return 1;
+			}
+
+			Copy = Cast<UAnimSequence>(FAssetToolsModule::GetModule().Get().DuplicateAsset(DodgeRollName, DodgeRollFolder, Source));
+		}
+
+		if (Copy == nullptr)
+		{
+			UE_LOG(LogSpaceMMOAuthoring, Error, TEXT("Clips: could not copy %s to %s."), LibraryRoll, *CopyPath);
+
+			return 1;
+		}
+
+		Copy->Modify();
+		Copy->bEnableRootMotion = false;
+		Copy->bForceRootLock = true;
+
+		int32 Problems = Save(Copy) ? 0 : 1;
+
+		const IAnimationDataModel* const Model = Copy->GetDataModel();
+		const int32 Keys = Model->GetNumberOfKeys();
+		const double Rate = Model->GetFrameRate().AsDecimal();
+		const FName Root(TEXT("root"));
+		const FVector Start = Model->GetBoneTrackTransform(Root, FFrameNumber(0)).GetLocation();
+
+		FString Profile;
+
+		for (int32 Frame = 0; Frame < Keys; ++Frame)
+		{
+			const FVector At = Model->GetBoneTrackTransform(Root, FFrameNumber(Frame)).GetLocation() - Start;
+			Profile += FString::Printf(TEXT("%s%.1f"), Frame == 0 ? TEXT("") : TEXT(","), At.Y);
+		}
+
+		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %s, %d keys at %.2f a second, %.3f s; locked to its root %d."),
+			*Copy->GetPathName(), Keys, Rate, Copy->GetPlayLength(), Copy->bForceRootLock ? 1 : 0);
+		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: the roll's root, forward of where it began, cm by frame: %s"), *Profile);
+
+		return Problems;
+	}
+
 	/** Each race's sprint where its body's blueprint plays it, and each race's blueprint (task 191). */
 	int32 BuildLocomotion()
 	{
@@ -958,6 +1116,9 @@ namespace SpaceMMOImportClips
 
 			return 1;
 		}
+
+		// Before the sprint is placed, which compiles and saves it, and each race's child after it.
+		Problems += EnsureSlot(Human);
 
 		UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: sprint at %.2f m/s, run at %.2f."), SprintSpeed, RunSpeed);
 
@@ -1097,6 +1258,7 @@ int32 USpaceMMOImportClipsCommandlet::Main(const FString& Params)
 		}
 	}
 
+	Problems += AdoptRoll();
 	Problems += BuildLocomotion();
 
 	UE_LOG(LogSpaceMMOAuthoring, Display, TEXT("Clips: %d problem(s). Result: %s"),

@@ -93,6 +93,8 @@ namespace
 	constexpr double FirstPersonEyeCentimetres = 165.0;
 }
 
+const FName ASpaceMMOCharacterPawn::DodgeSlot(TEXT("DefaultSlot"));
+
 FSystemCoordinate FRemoteFollower::Projected(const double Now) const
 {
 	return FShipFlightModel::Extrapolate(Position, VelocityCentimetres, Now - ReceivedAt);
@@ -984,10 +986,19 @@ void ASpaceMMOCharacterPawn::SimulateStep(const double DeltaSeconds)
 	// push against before it can decide what this step does.
 	ResolveSurface();
 
-	// Locked, nothing pressed moves them (task 194); gravity and the ground still act, so they stay on it.
-	WalkState = FCharacterWalkModel::Step(
-		WalkState, bMovementLocked ? FWalkInput() : PendingInput, WalkConfig, SurfaceNormal, Gravity, bOnGround,
-		DeltaSeconds);
+	// Locked, nothing pressed moves them (task 194); gravity and the ground still act, so they stay on it. Dodges
+	// pressed while locked are taken as seen and do nothing: an empty input's count of none would read as a press, and
+	// presses saved up while dead would dodge the moment they came back (task 195).
+	FWalkInput Input = PendingInput;
+
+	if (bMovementLocked)
+	{
+		Input = FWalkInput();
+		Input.DodgePresses = PendingInput.DodgePresses;
+		WalkState.DodgePressesSeen = PendingInput.DodgePresses;
+	}
+
+	WalkState = FCharacterWalkModel::Step(WalkState, Input, WalkConfig, SurfaceNormal, Gravity, bOnGround, DeltaSeconds);
 
 	const FSystemCoordinate Before = Navigation.SystemPosition;
 
@@ -1019,6 +1030,11 @@ void ASpaceMMOCharacterPawn::PublishNetState()
 	NetState.bOnGround = bOnGround;
 	NetState.FacingEpoch = FacingEpoch;
 	NetState.PlacementEpoch = PlacementEpoch;
+	NetState.Stamina = static_cast<float>(FMath::Min(WalkState.Stamina, WalkConfig.StaminaMax));
+	NetState.StaminaMax = static_cast<float>(WalkConfig.StaminaMax);
+	NetState.Dodge = WalkState.Dodge;
+	NetState.DodgeSeconds = static_cast<float>(WalkState.DodgeSeconds);
+	NetState.DodgesStarted = WalkState.DodgesStarted;
 
 	const UWorld* World = GetWorld();
 
@@ -1069,6 +1085,15 @@ void ASpaceMMOCharacterPawn::ReconcileWithServer(const double DeltaSeconds)
 		Navigation.SystemPosition, NetState.SystemPosition, Reconciliation, DeltaSeconds, bPlaced);
 
 	WalkState.Velocity = NetState.Velocity;
+
+	// The pool is the server's: this client predicts it between states, and takes the server's when they part by
+	// more than the prediction can account for (task 195). Its size comes from the character's stamina level.
+	WalkConfig.StaminaMax = NetState.StaminaMax;
+
+	if (FMath::Abs(NetState.Stamina - WalkState.Stamina) > 2.0)
+	{
+		WalkState.Stamina = NetState.Stamina;
+	}
 }
 
 FSystemCoordinate ASpaceMMOCharacterPawn::FollowOwnPosition(
@@ -1154,6 +1179,13 @@ void ASpaceMMOCharacterPawn::FollowServerState(const double DeltaSeconds)
 
 	WalkState.Velocity = NetState.Velocity;
 	bOnGround = NetState.bOnGround;
+
+	// Another player's dodge, as the server has it: which clip to play, and whether a shot from here can touch them.
+	WalkState.Stamina = NetState.Stamina;
+	WalkConfig.StaminaMax = NetState.StaminaMax;
+	WalkState.Dodge = NetState.Dodge;
+	WalkState.DodgeSeconds = NetState.DodgeSeconds;
+	WalkState.DodgesStarted = NetState.DodgesStarted;
 
 	// Which way is up where they are drawn, by the call their own client and the server take it from (task
 	// 182). Nothing else told this copy: it kept the up BeginPlay found at the system origin, where it began
@@ -1262,6 +1294,18 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 	else
 	{
 		FollowServerState(DeltaSeconds);
+	}
+
+	// A dodge begun since the last frame plays its clip, on every machine that draws: the owner's from its own
+	// prediction, everyone else's from the server's state (task 195).
+	if (WalkState.DodgesStarted != PlayedDodges)
+	{
+		PlayedDodges = WalkState.DodgesStarted;
+
+		if (WalkState.Dodge != EWalkDodge::None && GetNetMode() != NM_DedicatedServer)
+		{
+			PlayDodge(WalkState.Dodge);
+		}
 	}
 
 	if (IsLocallyControlled())
@@ -1885,10 +1929,18 @@ void ASpaceMMOCharacterPawn::UpdateMeshFacing(const double DeltaSeconds)
 		return;
 	}
 
+	const bool bTravelling = GetGroundSpeedMetresPerSecond() >= CharacterFacingSpeedThresholdMetresPerSecond;
+
+	// A dodge (task 195): the roll faces the way it goes from its first frame, not after a swing round; the hop
+	// goes backwards facing forward, and turning to face the way it goes would spin them round, so it turns nothing.
+	if (WalkState.Dodge == EWalkDodge::Roll && bTravelling)
+	{
+		MeshFacingDegrees = GetMoveDirectionDegrees();
+	}
 	// Only while actually going somewhere. Below the threshold there is no direction of travel to
 	// face, and reading one out of a velocity that is basically noise would have the body twitching
 	// round while the character stands still.
-	if (GetGroundSpeedMetresPerSecond() >= CharacterFacingSpeedThresholdMetresPerSecond)
+	else if (WalkState.Dodge != EWalkDodge::Hop && bTravelling)
 	{
 		MeshFacingDegrees = TurnTowards(
 			MeshFacingDegrees,
@@ -2178,6 +2230,9 @@ void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerIn
 		TEXT("Board"), IE_Pressed, this, &ASpaceMMOCharacterPawn::RequestEmbark);
 
 	PlayerInputComponent->BindAction(
+		TEXT("WalkDodge"), IE_Pressed, this, &ASpaceMMOCharacterPawn::PressDodge);
+
+	PlayerInputComponent->BindAction(
 		TEXT("WalkSprint"), IE_Pressed, this, &ASpaceMMOCharacterPawn::StartSprint);
 	PlayerInputComponent->BindAction(
 		TEXT("WalkSprint"), IE_Released, this, &ASpaceMMOCharacterPawn::StopSprint);
@@ -2191,6 +2246,43 @@ void ASpaceMMOCharacterPawn::SetupPlayerInputComponent(UInputComponent* PlayerIn
 }
 
 void ASpaceMMOCharacterPawn::StartSprint() { PendingInput.bSprint = true; }
+
+void ASpaceMMOCharacterPawn::PressDodge()
+{
+	++PendingInput.DodgePresses;
+}
+
+void ASpaceMMOCharacterPawn::PlayDodge(const EWalkDodge Dodge)
+{
+	UAnimInstance* const Anim = BodyMesh != nullptr ? BodyMesh->GetAnimInstance() : nullptr;
+
+	// The dead play their fall, not a roll; and a body not on its blueprint has no slot to play it in.
+	if (Anim == nullptr || bShowingDeath)
+	{
+		return;
+	}
+
+	const bool bRoll = Dodge == EWalkDodge::Roll;
+	UAnimSequenceBase* const Clip = Cast<UAnimSequenceBase>((bRoll ? DodgeRollClip : DodgeHopClip).TryLoad());
+
+	if (Clip == nullptr)
+	{
+		UE_LOG(LogSpaceMMO, Warning, TEXT("%s: no %s clip loads; the dodge moves them without one."),
+			*GetName(), bRoll ? TEXT("roll") : TEXT("hop"));
+
+		return;
+	}
+
+	// The roll from its crouch, at the rate the walk model carries them at; the hop as made. Blended in and out over
+	// the running underneath, so the body goes back to it rather than restarting its blueprint.
+	const float Rate = bRoll ? static_cast<float>(WalkConfig.RollPlayRate) : 1.0f;
+	const float From = bRoll ? static_cast<float>(FCharacterWalkModel::RollStartFrame / FCharacterWalkModel::RollCaptureRate) : 0.0f;
+
+	Anim->PlaySlotAnimationAsDynamicMontage(Clip, DodgeSlot, 0.08f, 0.2f, Rate, 1, -1.0f, From);
+
+	UE_LOG(LogSpaceMMO, Log, TEXT("%s: dodges (%s), playing %s from %.2f s at %.2fx."),
+		*GetName(), bRoll ? TEXT("roll") : TEXT("hop"), *Clip->GetName(), From, Rate);
+}
 void ASpaceMMOCharacterPawn::StopSprint() { PendingInput.bSprint = false; }
 
 void ASpaceMMOCharacterPawn::StartOrbit() { View.bOrbiting = true; }

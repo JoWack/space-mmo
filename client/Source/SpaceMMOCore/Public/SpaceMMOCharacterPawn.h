@@ -55,6 +55,22 @@ struct FCharacterNetState
 	 */
 	UPROPERTY()
 	uint8 PlacementEpoch = 0;
+
+	/** The stamina pool and the dodge, as the server stepped them (task 195): the owner's bar, everyone's clips. */
+	UPROPERTY()
+	float Stamina = 100.0f;
+
+	UPROPERTY()
+	float StaminaMax = 100.0f;
+
+	UPROPERTY()
+	EWalkDodge Dodge = EWalkDodge::None;
+
+	UPROPERTY()
+	float DodgeSeconds = 0.0f;
+
+	UPROPERTY()
+	uint8 DodgesStarted = 0;
 };
 
 /** Which way a body goes down (task 201): away from the shot that killed it. */
@@ -336,6 +352,32 @@ public:
 
 	/** The death clips config names, for the tests to check every fall has one. */
 	const TArray<FSpaceMMODeathClip>& GetDeathClips() const { return DeathClips; }
+
+	/** What is left in the stamina pool, and its size (task 195): the owner's prediction, the server's elsewhere. */
+	double GetStamina() const { return FMath::Min(WalkState.Stamina, WalkConfig.StaminaMax); }
+	double GetStaminaMax() const { return WalkConfig.StaminaMax; }
+
+	/** How many dodges were refused for want of stamina, so the bar can flash once for each. */
+	uint8 GetDodgesRefused() const { return WalkState.DodgesRefused; }
+
+	/** Whether nothing can hit this character: the start of a dodge (ADR-0017). */
+	bool IsUntouchable() const { return FCharacterWalkModel::IsUntouchable(WalkState, WalkConfig); }
+
+	/** The two dodge clips config names, for the tests to check they load. */
+	const FSoftObjectPath& GetDodgeRollClip() const { return DodgeRollClip; }
+	const FSoftObjectPath& GetDodgeHopClip() const { return DodgeHopClip; }
+
+	/** The slot every race's blueprint plays the dodges from (task 195). */
+	static const FName DodgeSlot;
+
+#if !UE_BUILD_SHIPPING
+	/** SpaceMMOLookPanels Combat: the stamina bar part-spent, held there every tick. */
+	void HoldStaminaForLook(const double Stamina)
+	{
+		WalkState.Stamina = Stamina;
+		WalkState.SinceSpentSeconds = 0.0;
+	}
+#endif
 
 	/**
 	 * Uniform scale that stands a model of a given height at a target height.
@@ -730,6 +772,15 @@ protected:
 	void StartSprint();
 	void StopSprint();
 
+	/** Left Ctrl: one dodge (task 195). */
+	void PressDodge();
+
+	/** Plays a dodge's clip on the body, over its locomotion, from ABP_Human's slot. */
+	void PlayDodge(EWalkDodge Dodge);
+
+	/** The last dodge a clip was played for, by WalkState.DodgesStarted, so each plays once. */
+	uint8 PlayedDodges = 0;
+
 	void MoveForward(float Value);
 	void MoveRight(float Value);
 	void TurnRight(float Value);
@@ -809,6 +860,16 @@ protected:
 	 */
 	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
 	TArray<FSpaceMMODeathClip> DeathClips;
+
+	/**
+	 * The dodges (task 195): the library's motion-captured roll, played from its crouch at WalkConfig.RollPlayRate,
+	 * and the hop back made on the Humanoid man. Both play on every race, from ABP_Human's slot.
+	 */
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	FSoftObjectPath DodgeRollClip;
+
+	UPROPERTY(EditAnywhere, Config, Category = "SpaceMMO|Character")
+	FSoftObjectPath DodgeHopClip;
 
 	/** The death being shown, so a body applied after it -- a race arriving late -- shows it too. */
 	bool bShowingDeath = false;
