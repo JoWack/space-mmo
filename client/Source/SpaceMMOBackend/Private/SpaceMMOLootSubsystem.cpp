@@ -17,7 +17,7 @@
 
 namespace
 {
-	USpaceMMOBackendClient* BackendOf(const UWorld* World)
+	USpaceMMOBackendClient* LootBackendOf(const UWorld* World)
 	{
 		const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
 
@@ -55,7 +55,7 @@ void USpaceMMOLootSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 	// Crates already lying about, once the world has its planets: a server restarted within ten minutes of a death
 	// still has the crate to show. Only a machine that can speak for the server asks; a client has none to ask with.
-	const USpaceMMOBackendClient* Backend = BackendOf(&InWorld);
+	const USpaceMMOBackendClient* Backend = LootBackendOf(&InWorld);
 
 	if (InWorld.GetNetMode() != NM_Client && Backend != nullptr && Backend->HasServiceSecret())
 	{
@@ -116,7 +116,7 @@ FVector USpaceMMOLootSubsystem::UpAt(const FSystemCoordinate& Where) const
 void USpaceMMOLootSubsystem::CostDeath(USpaceMMOCombatComponent* Dead)
 {
 	const ASpaceMMOCharacterPawn* Body = Dead != nullptr ? Cast<ASpaceMMOCharacterPawn>(Dead->GetOwner()) : nullptr;
-	USpaceMMOBackendClient* Backend = BackendOf(GetWorld());
+	USpaceMMOBackendClient* Backend = LootBackendOf(GetWorld());
 
 	if (Body == nullptr || Backend == nullptr || !Body->HasAuthority() || Dead->GetCharacterId() == 0)
 	{
@@ -247,7 +247,7 @@ ASpaceMMOLootCrateActor* USpaceMMOLootSubsystem::SpawnCrate(const FBackendLootCo
 
 void USpaceMMOLootSubsystem::SyncCrates()
 {
-	USpaceMMOBackendClient* Backend = BackendOf(GetWorld());
+	USpaceMMOBackendClient* Backend = LootBackendOf(GetWorld());
 
 	if (Backend == nullptr)
 	{

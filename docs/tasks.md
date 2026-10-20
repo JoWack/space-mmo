@@ -1799,7 +1799,15 @@ the build skipped it, and one plant rode along into the next seven runs.
 ### Verified, and how
 
 - Suites: Domain 559, Data 320, API 121; client 336 (`scripts/tests.bat SpaceMMO 336`, from this worktree), against a
-  build that said `Result: Succeeded`.
+  build that said `Result: Succeeded`. **Then with main merged in** (195's stamina and dodge, which met this in the combat
+  HUD; both sides kept): client 346, which is 195's 337 and these 9, against a build with every file in its unity blob
+  (below). The death panel rendered again over 195's rebuilt `WBP_CombatHud`, the stamina bar under it.
+- **A fault only a committed file shows.** The first build after the merge failed: committed files go into Unreal's unity
+  blobs, and `SpaceMMODeathWire.cpp`'s file-local `ParseObject` and `ReadInt64` met the protocol file's in one
+  translation unit. Every earlier build had compiled the new files alone, because uncommitted files sit in the
+  adaptive build's working set outside the blobs -- so it would have failed first in the main checkout, after a merge.
+  The new files' helpers have names of their own now (the crate's `MeshUnits` and `MakePart` were the bolt's too), and
+  the check is a build with `-DisableAdaptiveUnity`, which puts every file in its blob as a later build will.
 - **The client parses the API's own JSON**, captured from `DeathEndpointTests` (which writes each answer to its test
   output): a death costed, one already costed, the live crates, a stack taken with ore left, the last taken, and a
   crate gone. **The API test posts the client's exact bodies** (`MakeDeathBody`'s nine places, `MakeLootBody`'s stack
@@ -1829,7 +1837,7 @@ server restart; the bolt in its red-orange.
 ### Playtesting it
 
 **Needs Joe's say-so to merge** `claude/death-costs-103-e10afa` into main first: the playtest scripts run the main
-checkout's staged server. Then, in the main checkout: `--seed` (it applies the `DeathCosts` migration and marks every
+checkout's staged server. Main as of 195's `5448023` is already merged into the branch, so it goes in as a fast-forward. Then, in the main checkout: `--seed` (it applies the `DeathCosts` migration and marks every
 earlier death settled), build the editor and the server, re-cook the dedicated server, and restart the API with
 `scripts/api.bat`.
 

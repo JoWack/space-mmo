@@ -18,21 +18,21 @@
 namespace
 {
 	/** The engine's cube and cylinder are 100 units across. */
-	constexpr double MeshUnits = 100.0;
+	constexpr double CrateMeshUnits = 100.0;
 
 	/** The crate's dark grey, lit like the ground around it. */
-	const FLinearColor CrateColour(0.035f, 0.038f, 0.042f, 1.0f);
+	const FLinearColor CrateBodyColour(0.035f, 0.038f, 0.042f, 1.0f);
 
 	/** Amber, bright enough to glow: the band and the beam. Linear, and over 1. */
-	const FLinearColor Amber(5.0f, 2.1f, 0.25f, 1.0f);
+	const FLinearColor CrateAmber(5.0f, 2.1f, 0.25f, 1.0f);
 
 	/** The beam's thickness: thin, a line in the sky rather than a pillar. */
-	constexpr double BeamCentimetres = 6.0;
+	constexpr double CrateBeamCentimetres = 6.0;
 
 	/** The band round the crate's middle. */
-	constexpr double BandCentimetres = 7.0;
+	constexpr double CrateBandCentimetres = 7.0;
 
-	UStaticMeshComponent* MakePart(AActor* Owner, const TCHAR* Name, UStaticMesh* Mesh, USceneComponent* Parent)
+	UStaticMeshComponent* MakeCratePart(AActor* Owner, const TCHAR* Name, UStaticMesh* Mesh, USceneComponent* Parent)
 	{
 		UStaticMeshComponent* Part = Owner->CreateDefaultSubobject<UStaticMeshComponent>(Name);
 		Part->SetStaticMesh(Mesh);
@@ -67,19 +67,19 @@ ASpaceMMOLootCrateActor::ASpaceMMOLootCrateActor()
 	RootComponent = Root;
 
 	// Local Z is up, the ground's normal; the root stands on the ground.
-	Crate = MakePart(this, TEXT("Crate"), Cube.Object, Root);
+	Crate = MakeCratePart(this, TEXT("Crate"), Cube.Object, Root);
 	Crate->SetRelativeLocation(FVector(0.0, 0.0, CrateMetres * 50.0));
-	Crate->SetRelativeScale3D(FVector(CrateMetres * 100.0 / MeshUnits));
+	Crate->SetRelativeScale3D(FVector(CrateMetres * 100.0 / CrateMeshUnits));
 
-	Band = MakePart(this, TEXT("Band"), Cube.Object, Root);
+	Band = MakeCratePart(this, TEXT("Band"), Cube.Object, Root);
 	Band->SetRelativeLocation(FVector(0.0, 0.0, CrateMetres * 50.0));
 	Band->SetRelativeScale3D(FVector(
-		(CrateMetres * 100.0 + 2.0) / MeshUnits, (CrateMetres * 100.0 + 2.0) / MeshUnits, BandCentimetres / MeshUnits));
+		(CrateMetres * 100.0 + 2.0) / CrateMeshUnits, (CrateMetres * 100.0 + 2.0) / CrateMeshUnits, CrateBandCentimetres / CrateMeshUnits));
 	Band->SetCastShadow(false);
 
-	Beam = MakePart(this, TEXT("Beam"), Cylinder.Object, Root);
+	Beam = MakeCratePart(this, TEXT("Beam"), Cylinder.Object, Root);
 	Beam->SetRelativeLocation(FVector(0.0, 0.0, CrateMetres * 100.0 + BeamMetres * 50.0));
-	Beam->SetRelativeScale3D(FVector(BeamCentimetres / MeshUnits, BeamCentimetres / MeshUnits, BeamMetres * 100.0 / MeshUnits));
+	Beam->SetRelativeScale3D(FVector(CrateBeamCentimetres / CrateMeshUnits, CrateBeamCentimetres / CrateMeshUnits, BeamMetres * 100.0 / CrateMeshUnits));
 	Beam->SetCastShadow(false);
 }
 
@@ -114,14 +114,14 @@ void ASpaceMMOLootCrateActor::BeginPlay()
 	Super::BeginPlay();
 
 	// The prototyping kit's glow, as the bolt's: its colour goes on the part, where the material reads it (SpaceMMOGlow).
-	SpaceMMO::Glow::Apply(Band, Amber);
-	SpaceMMO::Glow::Apply(Beam, Amber);
+	SpaceMMO::Glow::Apply(Band, CrateAmber);
+	SpaceMMO::Glow::Apply(Beam, CrateAmber);
 
 	if (UMaterialInterface* Shape = LoadObject<UMaterialInterface>(
 		nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
 	{
 		UMaterialInstanceDynamic* Body = UMaterialInstanceDynamic::Create(Shape, this);
-		Body->SetVectorParameterValue(TEXT("Color"), CrateColour);
+		Body->SetVectorParameterValue(TEXT("Color"), CrateBodyColour);
 		Crate->SetMaterial(0, Body);
 	}
 
@@ -262,11 +262,11 @@ void ASpaceMMOLootCrateActor::Tick(const float DeltaSeconds)
 		Beam->SetVisibility(Strength > 0.0f);
 
 		// Dimmer and, through its alpha, fainter.
-		SpaceMMO::Glow::SetColour(Beam, FLinearColor(Amber.R * Strength, Amber.G * Strength, Amber.B * Strength, Strength));
+		SpaceMMO::Glow::SetColour(Beam, FLinearColor(CrateAmber.R * Strength, CrateAmber.G * Strength, CrateAmber.B * Strength, Strength));
 
 		// Thinner as well as dimmer: a glow material may not dim to nothing against a bright sky.
-		const double Width = BeamCentimetres * (0.35 + 0.65 * Strength) / MeshUnits;
-		Beam->SetRelativeScale3D(FVector(Width, Width, BeamMetres * 100.0 / MeshUnits));
+		const double Width = CrateBeamCentimetres * (0.35 + 0.65 * Strength) / CrateMeshUnits;
+		Beam->SetRelativeScale3D(FVector(Width, Width, BeamMetres * 100.0 / CrateMeshUnits));
 	}
 }
 

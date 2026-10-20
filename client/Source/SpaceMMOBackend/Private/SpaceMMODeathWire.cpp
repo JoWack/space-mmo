@@ -6,7 +6,7 @@
 
 namespace
 {
-	TSharedPtr<FJsonObject> ParseObject(const FString& Json)
+	TSharedPtr<FJsonObject> WireParseObject(const FString& Json)
 	{
 		TSharedPtr<FJsonObject> Object;
 		const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(Json);
@@ -15,13 +15,13 @@ namespace
 	}
 
 	/** Largest integer a double represents exactly: 2^53 - 1. */
-	constexpr int64 MaxExactJsonInteger = 9007199254740991LL;
+	constexpr int64 WireMaxExactInteger = 9007199254740991LL;
 
 	/**
 	 * An integer field, read as the protocol's own reader does (its is private to it): by the value's JSON type, a
 	 * string accepted too, and a number refused past what a double holds exactly rather than read as the wrong one.
 	 */
-	bool ReadInt64(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, int64& OutValue)
+	bool WireReadInt64(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, int64& OutValue)
 	{
 		const TSharedPtr<FJsonValue> Value = Object.IsValid() ? Object->TryGetField(Field) : nullptr;
 
@@ -42,7 +42,7 @@ namespace
 
 		const double AsDouble = Value->AsNumber();
 
-		if (FMath::Abs(AsDouble) > static_cast<double>(MaxExactJsonInteger) || AsDouble != FMath::TruncToDouble(AsDouble))
+		if (FMath::Abs(AsDouble) > static_cast<double>(WireMaxExactInteger) || AsDouble != FMath::TruncToDouble(AsDouble))
 		{
 			return false;
 		}
@@ -52,30 +52,30 @@ namespace
 		return true;
 	}
 
-	int32 ReadInt(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
+	int32 WireReadInt(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
 	{
 		int64 Value = 0;
 
-		return ReadInt64(Object, Field, Value) ? static_cast<int32>(Value) : 0;
+		return WireReadInt64(Object, Field, Value) ? static_cast<int32>(Value) : 0;
 	}
 
 	/** A style number, held to the members there are, so an unknown one cannot index off the end. */
-	EBackendItemStyle ReadStyle(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
+	EBackendItemStyle WireReadStyle(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
 	{
-		const int32 Value = ReadInt(Object, Field);
+		const int32 Value = WireReadInt(Object, Field);
 
 		return Value >= 0 && Value <= static_cast<int32>(EBackendItemStyle::Grimhold)
 			? static_cast<EBackendItemStyle>(Value)
 			: EBackendItemStyle::Common;
 	}
 
-	FBackendLootItem ReadItem(const TSharedPtr<FJsonObject>& Object)
+	FBackendLootItem WireReadItem(const TSharedPtr<FJsonObject>& Object)
 	{
 		FBackendLootItem Item;
-		Item.ItemDefId = ReadInt(Object, TEXT("itemDefId"));
-		Item.Style = ReadStyle(Object, TEXT("style"));
-		Item.ShownStyle = ReadStyle(Object, TEXT("shownStyle"));
-		Item.Quantity = ReadInt(Object, TEXT("quantity"));
+		Item.ItemDefId = WireReadInt(Object, TEXT("itemDefId"));
+		Item.Style = WireReadStyle(Object, TEXT("style"));
+		Item.ShownStyle = WireReadStyle(Object, TEXT("shownStyle"));
+		Item.Quantity = WireReadInt(Object, TEXT("quantity"));
 		Object->TryGetStringField(TEXT("itemKey"), Item.ItemKey);
 		Object->TryGetStringField(TEXT("name"), Item.Name);
 		Object->TryGetNumberField(TEXT("volumeM3"), Item.VolumeM3);
@@ -83,7 +83,7 @@ namespace
 		return Item;
 	}
 
-	TArray<TSharedPtr<FJsonObject>> Objects(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
+	TArray<TSharedPtr<FJsonObject>> WireObjects(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
 	{
 		TArray<TSharedPtr<FJsonObject>> Result;
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
@@ -102,14 +102,14 @@ namespace
 		return Result;
 	}
 
-	bool ReadContainer(const TSharedPtr<FJsonObject>& Object, FBackendLootContainer& Out)
+	bool WireReadContainer(const TSharedPtr<FJsonObject>& Object, FBackendLootContainer& Out)
 	{
-		if (!Object.IsValid() || !ReadInt64(Object, TEXT("id"), Out.Id))
+		if (!Object.IsValid() || !WireReadInt64(Object, TEXT("id"), Out.Id))
 		{
 			return false;
 		}
 
-		Out.DroppedByCharacterId = ReadInt(Object, TEXT("droppedByCharacterId"));
+		Out.DroppedByCharacterId = WireReadInt(Object, TEXT("droppedByCharacterId"));
 		Object->TryGetStringField(TEXT("droppedBy"), Out.DroppedBy);
 		Object->TryGetNumberField(TEXT("x"), Out.PositionKilometres.X);
 		Object->TryGetNumberField(TEXT("y"), Out.PositionKilometres.Y);
@@ -118,16 +118,16 @@ namespace
 
 		Out.Items.Reset();
 
-		for (const TSharedPtr<FJsonObject>& Item : Objects(Object, TEXT("items")))
+		for (const TSharedPtr<FJsonObject>& Item : WireObjects(Object, TEXT("items")))
 		{
-			Out.Items.Add(ReadItem(Item));
+			Out.Items.Add(WireReadItem(Item));
 		}
 
 		return true;
 	}
 
 	/** A field holding an object, or null when it is absent or JSON null. */
-	TSharedPtr<FJsonObject> ObjectField(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
+	TSharedPtr<FJsonObject> WireObjectField(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
 	{
 		const TSharedPtr<FJsonValue> Value = Object.IsValid() ? Object->TryGetField(Field) : nullptr;
 
@@ -137,7 +137,7 @@ namespace
 
 bool FSpaceMMODeathWire::ParseDeathCosts(const FString& Json, FBackendDeathCosts& Out)
 {
-	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+	const TSharedPtr<FJsonObject> Object = WireParseObject(Json);
 
 	if (!Object.IsValid() || !Object->TryGetBoolField(TEXT("applied"), Out.bApplied))
 	{
@@ -149,32 +149,32 @@ bool FSpaceMMODeathWire::ParseDeathCosts(const FString& Json, FBackendDeathCosts
 	Out.Lost.Reset();
 	Out.Worn.Reset();
 
-	for (const TSharedPtr<FJsonObject>& Line : Objects(Object, TEXT("lost")))
+	for (const TSharedPtr<FJsonObject>& Line : WireObjects(Object, TEXT("lost")))
 	{
 		FBackendDeathLoss Loss;
-		Loss.ItemDefId = ReadInt(Line, TEXT("itemDefId"));
-		Loss.Style = ReadStyle(Line, TEXT("style"));
-		Loss.Dropped = ReadInt(Line, TEXT("dropped"));
-		Loss.Destroyed = ReadInt(Line, TEXT("destroyed"));
+		Loss.ItemDefId = WireReadInt(Line, TEXT("itemDefId"));
+		Loss.Style = WireReadStyle(Line, TEXT("style"));
+		Loss.Dropped = WireReadInt(Line, TEXT("dropped"));
+		Loss.Destroyed = WireReadInt(Line, TEXT("destroyed"));
 		Line->TryGetStringField(TEXT("itemKey"), Loss.ItemKey);
 		Line->TryGetStringField(TEXT("name"), Loss.Name);
 
 		Out.Lost.Add(Loss);
 	}
 
-	for (const TSharedPtr<FJsonObject>& Line : Objects(Object, TEXT("worn")))
+	for (const TSharedPtr<FJsonObject>& Line : WireObjects(Object, TEXT("worn")))
 	{
 		FBackendWornLoss Worn;
-		ReadInt64(Line, TEXT("itemInstanceId"), Worn.ItemInstanceId);
-		Worn.Before = ReadInt(Line, TEXT("before"));
-		Worn.After = ReadInt(Line, TEXT("after"));
+		WireReadInt64(Line, TEXT("itemInstanceId"), Worn.ItemInstanceId);
+		Worn.Before = WireReadInt(Line, TEXT("before"));
+		Worn.After = WireReadInt(Line, TEXT("after"));
 		Line->TryGetStringField(TEXT("itemKey"), Worn.ItemKey);
 		Line->TryGetStringField(TEXT("name"), Worn.Name);
 
 		Out.Worn.Add(Worn);
 	}
 
-	Out.bHasContainer = ReadContainer(ObjectField(Object, TEXT("container")), Out.Container);
+	Out.bHasContainer = WireReadContainer(WireObjectField(Object, TEXT("container")), Out.Container);
 
 	return true;
 }
@@ -195,7 +195,7 @@ bool FSpaceMMODeathWire::ParseContainers(const FString& Json, TArray<FBackendLoo
 	{
 		FBackendLootContainer Container;
 
-		if (Value.IsValid() && Value->Type == EJson::Object && ReadContainer(Value->AsObject(), Container))
+		if (Value.IsValid() && Value->Type == EJson::Object && WireReadContainer(Value->AsObject(), Container))
 		{
 			Out.Add(Container);
 		}
@@ -206,7 +206,7 @@ bool FSpaceMMODeathWire::ParseContainers(const FString& Json, TArray<FBackendLoo
 
 bool FSpaceMMODeathWire::ParseLootResult(const FString& Json, FBackendLootResult& Out)
 {
-	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+	const TSharedPtr<FJsonObject> Object = WireParseObject(Json);
 
 	if (!Object.IsValid() || !Object->TryGetBoolField(TEXT("took"), Out.bTook))
 	{
@@ -218,12 +218,12 @@ bool FSpaceMMODeathWire::ParseLootResult(const FString& Json, FBackendLootResult
 
 	Out.Taken.Reset();
 
-	for (const TSharedPtr<FJsonObject>& Line : Objects(Object, TEXT("taken")))
+	for (const TSharedPtr<FJsonObject>& Line : WireObjects(Object, TEXT("taken")))
 	{
-		Out.Taken.Add(ReadItem(Line));
+		Out.Taken.Add(WireReadItem(Line));
 	}
 
-	Out.bHasLeft = ReadContainer(ObjectField(Object, TEXT("left")), Out.Left);
+	Out.bHasLeft = WireReadContainer(WireObjectField(Object, TEXT("left")), Out.Left);
 
 	return true;
 }

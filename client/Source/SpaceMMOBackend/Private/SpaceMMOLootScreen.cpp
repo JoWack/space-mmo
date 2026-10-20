@@ -17,7 +17,7 @@
 
 namespace
 {
-	USpaceMMOLootComponent* LootOf(const UUserWidget* Widget)
+	USpaceMMOLootComponent* LootComponentOf(const UUserWidget* Widget)
 	{
 		const APlayerController* Controller = Widget != nullptr ? Widget->GetOwningPlayer() : nullptr;
 		const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
@@ -25,7 +25,7 @@ namespace
 		return Pawn != nullptr ? Pawn->FindComponentByClass<USpaceMMOLootComponent>() : nullptr;
 	}
 
-	void Set(UTextBlock* Block, const FString& Value)
+	void SetLootText(UTextBlock* Block, const FString& Value)
 	{
 		if (Block != nullptr)
 		{
@@ -49,8 +49,8 @@ void USpaceMMOLootRow::SetItem(const FBackendLootItem& InItem, USpaceMMOLootScre
 	Item = InItem;
 	Screen = InScreen;
 
-	Set(NameText, Item.Name);
-	Set(QuantityText, ASpaceMMOPlayerController::GroupDigits(Item.Quantity));
+	SetLootText(NameText, Item.Name);
+	SetLootText(QuantityText, ASpaceMMOPlayerController::GroupDigits(Item.Quantity));
 
 	SpaceMMO::ItemStyleTag::Apply(StyleTagText, Item.ShownStyle);
 
@@ -160,7 +160,7 @@ void USpaceMMOLootScreen::HandleTakeAll()
 void USpaceMMOLootScreen::Take(const TOptional<FBackendLootItem>& Item)
 {
 	ASpaceMMOLootCrateActor* Shown = Crate.Get();
-	USpaceMMOLootComponent* Loot = LootOf(this);
+	USpaceMMOLootComponent* Loot = LootComponentOf(this);
 
 	if (Shown == nullptr || Loot == nullptr)
 	{
@@ -205,7 +205,7 @@ void USpaceMMOLootScreen::Rebuild()
 
 	ShownRevision = Shown->GetItemsRevision();
 
-	Set(TitleText, Title(Shown->GetDroppedBy()));
+	SetLootText(TitleText, Title(Shown->GetDroppedBy()));
 
 	LootRows->ClearChildren();
 
@@ -259,7 +259,7 @@ void USpaceMMOLootScreen::NativeTick(const FGeometry& Geometry, const float Delt
 		Rebuild();
 	}
 
-	Set(TimeText, TimeLeft(Shown->SecondsLeft()));
+	SetLootText(TimeText, TimeLeft(Shown->SecondsLeft()));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -296,7 +296,7 @@ void USpaceMMOLootPrompt::NativeTick(const FGeometry& Geometry, const float Delt
 
 	// Never SetVisibility on this widget itself: UpdateHudContext owns that. Its root is this one's to show.
 	APlayerController* Controller = GetOwningPlayer();
-	const USpaceMMOLootComponent* Loot = LootOf(this);
+	const USpaceMMOLootComponent* Loot = LootComponentOf(this);
 	const ASpaceMMOLootCrateActor* Crate = Loot != nullptr ? Loot->CrateForE() : nullptr;
 
 	const UWorld* World = GetWorld();
@@ -330,12 +330,12 @@ void USpaceMMOLootPrompt::NativeTick(const FGeometry& Geometry, const float Delt
 
 	SpaceMMO::Hud::PlaceAt(PromptRoot, Position);
 
-	Set(TitleText, USpaceMMOLootScreen::Title(Crate->GetDroppedBy()).ToUpper());
-	Set(TimeText, USpaceMMOLootScreen::TimeLeft(Crate->SecondsLeft()));
-	Set(ContentsText, Contents(Crate->GetItems()));
+	SetLootText(TitleText, USpaceMMOLootScreen::Title(Crate->GetDroppedBy()).ToUpper());
+	SetLootText(TimeText, USpaceMMOLootScreen::TimeLeft(Crate->SecondsLeft()));
+	SetLootText(ContentsText, Contents(Crate->GetItems()));
 
 	const FString Key = USpaceMMODepositPrompt::FindGatherKey();
 
-	Set(KeyText, Key.IsEmpty() ? FString() : FString::Printf(TEXT("[%s]"), *Key));
-	Set(ActionText, TEXT("open"));
+	SetLootText(KeyText, Key.IsEmpty() ? FString() : FString::Printf(TEXT("[%s]"), *Key));
+	SetLootText(ActionText, TEXT("open"));
 }
