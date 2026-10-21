@@ -1614,8 +1614,8 @@ players have XP is a migration and an apology.
 ## 103 — Make death and insurance real
 
 **Decided 16 October: [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md), superseding ADR-0006.
-Built 19 October on branch `claude/death-costs-103-e10afa`; waiting on Joe's say-so to merge, then a two-client
-playtest** (below). ADR-0006 was accepted and entirely inert; what is below was written before the decision and is
+Built 19 October on branch `claude/death-costs-103-e10afa`, merged into main 20 October (`16aa12f`) with the
+`DeathCosts` migration applied; waiting on a two-client playtest** (below). ADR-0006 was accepted and entirely inert; what is below was written before the decision and is
 kept as its context.
 
 Cause-based loot destruction and acquisition-value insurance are implemented in `SpaceMMO.Domain`
@@ -1836,10 +1836,12 @@ server restart; the bolt in its red-orange.
 
 ### Playtesting it
 
-**Needs Joe's say-so to merge** `claude/death-costs-103-e10afa` into main first: the playtest scripts run the main
-checkout's staged server. Main as of 195's `5448023` is already merged into the branch, so it goes in as a fast-forward. Then, in the main checkout: `--seed` (it applies the `DeathCosts` migration and marks every
-earlier death settled), build the editor and the server, re-cook the dedicated server, and restart the API with
-`scripts/api.bat`.
+**Merged 20 October** on Joe's say-so, as a fast-forward to `16aa12f` (the playtest scripts run the main checkout's
+staged server). `--seed` then applied the `DeathCosts` migration and marked the six earlier deaths settled; the
+editor and the server were built and the dedicated server re-cooked. **The server target compiled** (all three
+`SpaceMMOBackend` blobs and `SpaceMMOCore`, so the new files in their unity blobs), which the worktree never did;
+the cook had 0 errors, `check-staged-server.ps1` passed, and the client suite in main passed 346. Restart the API with `scripts/api.bat` before
+playing: one already running is the code from before the merge, which costs no death and drops no crate.
 
 Two characters of different factions, one carrying materials (ore and plate), both with a rifle in Weapon 1, on the
 local's homeworld, as in 194.
@@ -10456,7 +10458,8 @@ seven), with no rifles yet. A rifle is a weaponcrafting job: 6 Structural Plate 
 
 ## 195 — Stamina, and a dodge roll
 
-**Stage 1 built 19 October; waiting on Joe's playtest. Stage 2 is the pool's size and XP from the `stamina` skill.**
+**Stage 1 built 19 October and passed Joe's playtest 20 October** (below). **Stage 2 is the pool's size and XP from
+the `stamina` skill**, blocked on 101.
 Belongs to **M6** for the
 pool, and to **M5** for the key, as sprint (136) did. Decided in
 [ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md):
@@ -10537,6 +10540,12 @@ roll in 0.5 s can look natural, which led to:
 - **Not verified by anything but the playtest:** the key, a roll and a hop seen on both screens, the clips blending
   in and out of running, the roll facing the way it goes, a shot passing through the roll's first quarter-second
   (no headless test drives the server's shot), and the bar flashing on a refused dodge.
+
+### Joe's playtest, 20 October
+*"Dodging and sprint look good now with stamina."* **Passed**: the key, the roll and the hop, sprint spending the
+pool. Not reported either way, so still only as verified as the list above says: a shot passing through the roll's
+first quarter-second (the server log's "was dodging, and untouchable" line is how to tell it from a miss), and the
+bar's flash on a refused dodge.
 
 ## 196 — Repair at a station
 
