@@ -11027,7 +11027,8 @@ free-fall time, the back or front landing, a settle, then held -- 1.3 s to lying
 
 ## 202 — Damage as instantaneous as possible
 
-**Pending, 19 October; nothing decided.** Belongs to **M6**, with 194 and 198. Joe, after 198's fix: "it should be
+**Pending, 19 October. Option 2 measured 20 October: worth doing, and first; waiting on Joe's yes to move his
+Postgres out of Docker.** Belongs to **M6**, with 194 and 198. Joe, after 198's fix: "it should be
 as instantaneous as possible for smooth gameplay."
 
 **Where it stands** (198, Joe's fight of 19 October): the click reaches the server and its bolt comes back in
@@ -11037,14 +11038,15 @@ round trips to Postgres, and on a machine running two clients and the server eac
 trip from the API through Docker Desktop's port proxy into its WSL2 virtual machine and back, each hop waiting for a
 core. The pair's lock is no longer the problem (64 ms typically).
 
-**What is known about each way forward**, none of it measured yet:
+**What is known about each way forward**, only 2 measured so far (below):
 1. **Fewer round trips.** The four reads before the lock (the weapon; faction space; protection; the skill list)
    can be one query: eight round trips to five, about 180 ms of the 860 at the fight's p50. The three under the lock
    cannot be fewer as long as the read must follow the lock (198) and EF commits separately from its save.
 2. **Cheaper round trips.** Postgres outside Docker's virtual machine -- installed on Windows, or the API and
    Postgres both inside it -- takes the proxy and the VM out of every trip. How much that saves under load is the
    open question, and the scratch fight harness of 198 can answer it against a second Postgres before anything is
-   moved. Joe's dev setup, `infra/docker-compose.yml` and `docs/setup.md` all change with it.
+   moved. Joe's dev setup, `infra/docker-compose.yml` and `docs/setup.md` all change with it. **Measured 20 October,
+   below: a hit under load 4–11 times shorter against a Postgres on Windows.**
 3. **Not waiting for the database at all.** The game server already replicates health and knows the weapon in hand;
    it could show the damage number and the bar the moment it traces the hit and let the API's answer confirm or
    correct it. The only way to instantaneous whatever the backend costs, and the only one that changes who decides
@@ -11053,7 +11055,87 @@ core. The pair's lock is no longer the problem (64 ms typically).
 4. **The server's 30 Hz tick** costs up to 33 ms twice per hit (`NetServerMaxTickRate`, settable in the staged
    server's `Saved/Config` without a re-cook). Small beside the rest.
 
-**Blocked on:** Joe's choice of which to try. Measuring 2 needs no decision; 3 needs an ADR first.
+**Blocked on:** Joe's yes to moving his Postgres out of Docker (2, recommended below). 3 needs an ADR first; 1 is
+small once 2 is done.
 
 **Ruled out:** the lock queue (fixed in 198); `localhost` resolution (fixed in 198); the engine's HTTP queue (251
 concurrent, 16 to a host); Postgres's own execution time.
+
+### Option 2 measured, 20 October: a Postgres on Windows against the one in Docker
+**Under load, a round trip to a Postgres running on Windows costs 4 to 26 times less than one through Docker, and a
+hit in the API 4 to 11 times less.** 198's scratch fight (two shooters each firing every 500 ms without
+waiting, every hit in its own context through the real `CombatService.HitAsync`, a scratch database `spacemmo_load`)
+was pointed in turn at the Docker Postgres on `127.0.0.1:5432` and at a second one run by hand on Windows on
+`127.0.0.1:5433`. Both were the same 17.10, the Windows one from EnterpriseDB's binaries zip, initialised and configured
+as `infra/docker-compose.yml` does it (`--locale=C`, UTF8, `shared_buffers` 256MB, 100 connections, statements logged
+over 200 ms). Each run was 30 s, with 25-damage shots so nobody dies, and every run names the server that answered it.
+There were two rounds, back to back at each load, with the order swapped in the second, between 03:46 and 03:54 UTC.
+Before every run the CPU was at 9–12% with nothing else above 2%, read from performance counters, which see Defender
+and Docker's VM.
+
+Each cell is round 1 / round 2, in ms. "Each round trip" is every statement but the one waiting for the lock.
+
+| | no load: Docker | Windows | 8 busy threads: Docker | Windows | 12 busy threads: Docker | Windows |
+|---|---|---|---|---|---|---|
+| a hit in the API, p50 | 15 / 16 | 10 / 7 | 200 / 213 | 20 / 19 | **377 / 442** | **92 / 49** |
+| a hit in the API, p90 | 24 / 24 | 15 / 14 | 292 / 309 | 38 / 38 | 516 / 572 | 153 / 141 |
+| each round trip, p50 | 1.1 / 1.1 | 0.4 / 0.4 | 18 / 19 | 0.7 / 0.7 | **35 / 42** | **8.3 / 3.5** |
+| each round trip, p90 | 2.2 / 2.1 | 0.7 / 0.7 | 34 / 36 | 7.2 / 7.4 | 60 / 62 | 17 / 17 |
+| waiting for the lock, p50 | 1.8 / 1.9 | 1.7 / 1.7 | 37 / 43 | 0.4 / 0.5 | 51 / 58 | 15 / 8 |
+| the commit, p50 | 2.2 / 2.2 | 0.2 / 0.2 | 31 / 34 | 1.3 / 0.9 | 65 / 66 | 11 / 4 |
+| the worst hit | 311 / 299 | 335 / 327 | 607 / 553 | 500 / 497 | 835 / 999 | 607 / 686 |
+
+- **With nothing else running, both are fast.** Either would be invisible in a fight.
+- **At 8 busy threads, a Docker trip goes from 1 ms to 18; a Windows trip stays under 1.** A hit takes 200 ms against
+  20.
+- **12 busy threads is 198's stand-in for the playtest.** Docker's 35–42 ms a trip is where 198 measured it (38), and
+  below the fight's 61. A hit takes 377–442 ms against 49–92. Windows's trips slow down too, to 3.5–8 ms, because with
+  more threads than cores everything waits.
+- **Why, consistent with this but not proven:** a trip into Docker passes through several processes in turn: Npgsql,
+  Docker Desktop's port proxy on Windows, the VM's virtual CPU, the forwarding inside the VM, Postgres, and back. Each
+  one has to get a core, and the VM's virtual CPUs are themselves threads competing with Windows's. On Windows the
+  trip is the API and Postgres over loopback.
+- **The worst hit barely moves**, about 0.3 s unloaded on both. With nothing else running that can only be the API's
+  own cold start (198's "first hit's cold stall"), which no move of the database touches.
+- **Part of the commit's difference is not the trip.** Unloaded, a commit takes 0.2 ms on Windows and 2.2 ms in
+  Docker. Windows flushes the WAL with `open_datasync` on NTFS; the VM uses `fdatasync` through its virtual disk. A
+  dev box loses nothing by that, and it is 2 ms against the 30–60 ms that load adds to Docker's trips.
+- **What it would make of Joe's fight: estimated, not measured.** The fight's trips (61 ms) cost more than the
+  harness's at 12 threads, so the game loads the machine harder than 12 busy threads do. If Windows keeps the same
+  advantage there, a hit in the API goes from about 0.86 s to 0.1–0.2 s, and the server's wait from about 0.96 s to
+  0.2–0.3 s.
+
+**Ruled out, and how:**
+- **Something else loading the machine:** the counters before every run, above. A first attempt that overlapped an
+  editor build is not used here. It pointed the same way (at 8 threads, Docker 45 ms a trip against Windows 0.9). An
+  unidentified load held the CPU at 80–100% from 01:24 to 02:48 UTC that night. It was not a build, and nothing like
+  it appeared during the runs.
+- **A difference in Postgres:** both were 17.10 with the same settings. The only differences were the platform's own
+  defaults (`wal_sync_method`, above).
+- **198's harness numbers being an artefact of its statement logging:** 198 logged every statement; these runs log
+  only those over 200 ms, as Joe's database does. Docker's 12-thread trips came out the same (35–42 ms here, 38 in
+  198).
+
+**Not measured:**
+- **Docker's port proxy against the VM itself.** Moving Postgres removes both, so the decision does not need the split.
+- **Option 2's other form, the API and Postgres both inside the VM.** It needs the API built and run under Linux, and
+  it leaves the VM's virtual CPUs competing with the game.
+- **A real fight against a Windows Postgres.** The busy threads are a lighter stand-in for the game. Only a fight on
+  the moved setup says what Joe sees.
+
+### Recommendation: do 2, before 1
+**Move Joe's Postgres out of Docker onto Windows.** It is the biggest cut available without a design decision: a
+loaded hit in the harness gets 4–11 times shorter, and no code changes. It also shrinks option 1 to almost nothing. At
+3.5–8 ms a trip, folding the four reads before the lock into one query saves 10–25 ms; in Docker it saves about 110.
+Whether option 3 is still wanted is for a fight on the moved setup to say.
+
+**What the move is, if Joe says yes** (not done; about an hour of a session's work):
+- **Install PostgreSQL 17 on Windows as a service:** `winget install PostgreSQL.PostgreSQL.17`, EnterpriseDB's
+  installer, 374 MB. `docs/setup.md` already lists it as the alternative to Docker. Initialise the cluster with
+  `--locale=C -E UTF8` and the `spacemmo` role, listening on `127.0.0.1` only, with the compose file's settings.
+- **Move the dev database across** with `pg_dump` and `pg_restore`, keeping Joe's account and characters.
+- **Take over port 5432 once the Docker container is stopped** (`docker compose down`, keeping its volume as a
+  fallback). Then none of the five connection strings change.
+- **Make the native install the primary path in `docs/setup.md`.** `infra/docker-compose.yml` stays for a machine
+  that prefers Docker. Nothing in `scripts/` names Docker, and there is no CI.
+- **Then fight, and read `Api.log`:** `Round trips, ms` should read single digits where it read 61.
