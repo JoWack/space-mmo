@@ -1614,8 +1614,8 @@ players have XP is a migration and an apology.
 ## 103 — Make death and insurance real
 
 **Decided 16 October: [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md), superseding ADR-0006.
-Built 19 October on branch `claude/death-costs-103-e10afa`, merged into main 20 October (`16aa12f`) with the
-`DeathCosts` migration applied; waiting on a two-client playtest** (below). ADR-0006 was accepted and entirely inert; what is below was written before the decision and is
+Done: built 19 October, merged into main 20 October (`16aa12f`) with the `DeathCosts` migration applied, and
+passed Joe's two-client playtest** (reported 24 October as "Played, all passed", the whole checklist below). ADR-0006 was accepted and entirely inert; what is below was written before the decision and is
 kept as its context.
 
 Cause-based loot destruction and acquisition-value insurance are implemented in `SpaceMMO.Domain`
@@ -10338,8 +10338,8 @@ prompt's red line over a real rock.
 
 ## 194 — The first weapon, end to end
 
-**Stage 1 built 16 October and passed Joe's two-client playtest on 18 October** ("All playtests passed!"). Stage 2 is
-103's losses. Belongs to **M6**. The
+**Done: stage 1 built 16 October and passed Joe's two-client playtest on 18 October** ("All playtests passed!");
+**stage 2 is 103's losses, which passed with 103** (reported 24 October). Belongs to **M6**. The
 build that ADR-0015, ADR-0016 and ADR-0017 were decided for: one weapon, fired on foot, doing damage that
 can kill, earning XP, with death costing what ADR-0016 says. Everything after it is more of the same.
 
@@ -10909,7 +10909,8 @@ Each offered against alternatives, Claude's suggestion first:
 
 ## 200 — A respawn slid the character across the planet
 
-**Built 18 October; waiting on a death to watch.** Belongs to **M6**, with 194. Joe, 18 October: "after dying and
+**Done: built 18 October (`4dd9521`), passed in 103's two-client playtest** (reported 24 October; its step 4
+respawns and runs back). Belongs to **M6**, with 194. Joe, 18 October: "after dying and
 respawning, the character 'slides' across the planet to the respawn point. It should be more of a teleportation."
 
 **The cause.** The owning client draws its own character where it predicts, and blends toward the server's
@@ -10935,7 +10936,8 @@ else -- the camera, the render origin -- slides after it.
 
 ## 201 — A dying animation for every race
 
-**Built 18 October; waiting on a death in play.** Belongs to **M6**, with 194 and 103. Joe, 18
+**Done: built 18 October (`4dd9521`, `2014479`), passed in 103's two-client playtest** (reported 24 October; its
+step 1 is a kill). Belongs to **M6**, with 194 and 103. Joe, 18
 October: "I would like a dying animation for each race."
 
 **What is there.** Nothing plays on death: the dead stand where they fell, movement locked (194's "Not done").
