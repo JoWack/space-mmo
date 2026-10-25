@@ -10575,9 +10575,10 @@ Each offered against alternatives, Claude's suggestion first:
 - **The maximum lost is in proportion to what is restored**: 2 per 100, so topping up 90 to 98 costs almost
   nothing. Offered against a flat 2 per repair (the preview's), which makes never repairing until broken the thrifty
   play, so near-broken gear would be carried into fights. Needs the maximum kept finer than whole points (or the
-  fraction carried) so small repairs are not rounded to nothing or to a whole point. **The rate is open, and it
-  sets the lifetime** (worked in ADR-0016's amendment): at 2 per 100 an item lasts about 450 deaths, nine times the
-  preview's 50; about 18 per 100 keeps 50. Asked of Joe 24 October; a config value either way.
+  fraction carried) so small repairs are not rounded to nothing or to a whole point. **The rate sets the
+  lifetime** (worked in ADR-0016's amendment), so it was asked separately: **18 per 100, about 50 deaths**, keeping
+  the preview's lifetime (Joe, 24 October). Offered against 10 per 100 (about 90) and 2 per 100 (about 450, which
+  the mock's "max 100 → 98" had shown). A full repair from 0 takes 18; one death's top-up about 2. A config value.
 - **Worn out is gone**: when its maximum is used up the item is destroyed, and the repair that will do it says so on
   its button first. Offered against kept but never repairable, and scrapped for some of its materials.
 - **Not asked, Claude's default, for Joe to overrule**: a full repair (0 to the maximum) costs a quarter of the item's
@@ -11050,8 +11051,8 @@ free-fall time, the back or front landing, a settle, then held -- 1.3 s to lying
 
 ## 202 — Damage as instantaneous as possible
 
-**Pending, 19 October. Option 2 measured 20 October: worth doing, and first; waiting on Joe's yes to move his
-Postgres out of Docker.** Belongs to **M6**, with 194 and 198. Joe, after 198's fix: "it should be
+**In progress. Option 2 measured 20 October and done 25 October: Joe's Postgres runs on Windows now (below);
+waiting on a fight to say what it made of a hit.** Belongs to **M6**, with 194 and 198. Joe, after 198's fix: "it should be
 as instantaneous as possible for smooth gameplay."
 
 **Where it stands** (198, Joe's fight of 19 October): the click reaches the server and its bolt comes back in
@@ -11078,8 +11079,8 @@ core. The pair's lock is no longer the problem (64 ms typically).
 4. **The server's 30 Hz tick** costs up to 33 ms twice per hit (`NetServerMaxTickRate`, settable in the staged
    server's `Saved/Config` without a re-cook). Small beside the rest.
 
-**Blocked on:** Joe's yes to moving his Postgres out of Docker (2, recommended below). 3 needs an ADR first; 1 is
-small once 2 is done.
+**Blocked on:** a fight on the moved setup (2 is done, below), which says whether 1 or 3 is still wanted. 3 needs
+an ADR first; 1 is small.
 
 **Ruled out:** the lock queue (fixed in 198); `localhost` resolution (fixed in 198); the engine's HTTP queue (251
 concurrent, 16 to a host); Postgres's own execution time.
@@ -11152,7 +11153,27 @@ loaded hit in the harness gets 4–11 times shorter, and no code changes. It als
 3.5–8 ms a trip, folding the four reads before the lock into one query saves 10–25 ms; in Docker it saves about 110.
 Whether option 3 is still wanted is for a fight on the moved setup to say.
 
-**What the move is, if Joe says yes** (not done; about an hour of a session's work):
+### Option 2 done, 25 October: Postgres on Windows
+**Joe said yes on 24 October**, and approved the download, the installer's license and its admin prompt. As
+planned below, with these differences: the container was `stop`ped rather than `down`ed, so the container is kept
+as well as its volume; and pgAdmin and Stack Builder were left out. `docs/setup.md` §1 has how it was installed, how
+to check it, and how to go back.
+- **What runs:** PostgreSQL 17.11 (Docker had 17.10) from EnterpriseDB's installer through winget, hash-checked,
+  service `postgresql-x64-17` starting with Windows as NetworkService. Superuser `spacemmo` with the dev password,
+  cluster `--locale C`, UTF8. `ALTER SYSTEM` gave it the compose file's `max_connections` 100, `shared_buffers`
+  256MB and `log_min_duration_statement` 200ms, and `listen_addresses` `127.0.0.1` (the installer listens on every
+  interface). The installer opened no firewall rule.
+- **Checked after, not assumed:** every database UTF8 with `C` collation and ctype; the settings live after the
+  restart; one listener, `127.0.0.1:5432`.
+- **The data:** `pg_dump -Fc` of `spacemmo` from the container (122 KB, 31 tables), restored into a database
+  created UTF8/`C` from `template0`. **All 31 tables' row counts identical** before and after, latest migration
+  `DeathCosts` on both. The test databases were not moved; their fixtures create them.
+- **Verified against it:** `--seed` connects and finds no migration to apply; the Data suite 320 and the API suite
+  121, both of which create their own databases on it, pass.
+- **Not verified:** what it makes of a hit in a real fight. Read `Api.log` after one: `Round trips, ms` should read
+  single digits where it read 61, and the hit's total well under 0.86 s. That decides 1 and 3.
+
+**What the move was** (the plan as written before it, 20 October):
 - **Install PostgreSQL 17 on Windows as a service:** `winget install PostgreSQL.PostgreSQL.17`, EnterpriseDB's
   installer, 374 MB. `docs/setup.md` already lists it as the alternative to Docker. Initialise the cluster with
   `--locale=C -E UTF8` and the `spacemmo` role, listening on `127.0.0.1` only, with the compose file's settings.

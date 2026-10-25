@@ -41,10 +41,10 @@ Decided by Joe on 16 October, each offered against the alternatives below, Claud
 
    **Amended 24 October (task 196).** The maximum lost is **in proportion to the condition restored**, 2 per 100,
    rather than 2 a repair: a flat cost makes never repairing until broken the thrifty play, so gear would be carried
-   into fights one death from breaking. Topping up 90 to 98 now costs almost nothing. **The rate sets the lifetime,
-   and is open:** an item wears out after about 90 / (10 × rate per point) deaths whatever its owner does, so 2 per
-   100 is about **450 deaths**, against the preview's flat 2, which was about 50 repaired after every death and
-   about 255 repaired only when broken. About 18 per 100 keeps the preview's 50. **Worn out is gone**: when the maximum is used up the item is destroyed, and the
+   into fights one death from breaking. A top-up costs only its share. **The rate sets the lifetime:** an item wears
+   out after about 90 / (10 × rate per point) deaths whatever its owner does. Joe chose **18 per 100**, about **50
+   deaths**, the preview's lifetime (a flat 2 had given about 50 repaired after every death and about 255 repaired
+   only when broken); offered against 10 per 100 (about 90) and 2 per 100 (about 450). **Worn out is gone**: when the maximum is used up the item is destroyed, and the
    repair that will do it says so first. Offered against a flat 2; and, for worn out, against kept but never
    repairable, and scrapped for some of its materials.
 5. **Repair is a station service anyone can use**, at any station's industry bay, for materials (some of
@@ -119,5 +119,5 @@ the skill must find a crafter, and nothing yet lets one player hand an item to a
 
 - What a disabled ship gives up when it is not destroyed: whether its hold can be looted, and by whom.
 - Whether faction space keeps a defended player's drop from third parties.
-- The materials and credits a repair costs, per item; the wear per death and maximum lost per 100 restored are
-  Joe's preview numbers (10% and 2) until EconSim says otherwise.
+- The materials and credits a repair costs, per item; the wear per death (10%, Joe's preview) and maximum lost
+  per 100 restored (18, Joe's of 24 October) stand until EconSim says otherwise.

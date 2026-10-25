@@ -9,7 +9,8 @@ Detected state of this machine as of 2026-07-29:
 | Node 20.10 | ✅ installed (not needed yet) |
 | Python 3.12.1 | ✅ installed (not needed yet) |
 | .NET SDK 10.0.302 | ✅ installed — solution builds, 176 tests pass |
-| Docker Desktop 29.6.2 | ✅ installed — Postgres 17.10 running and healthy |
+| PostgreSQL 17.11 | ✅ installed on Windows as a service, since 25 October (§1, task 202) |
+| Docker Desktop 29.6.2 | ✅ installed — its Postgres container is stopped and kept as a fallback (§1) |
 | VS Build Tools 2022 (MSVC 14.44) | ✅ installed — this is what compiles UE C++ |
 | Windows SDK 10.0.26100 | ✅ installed |
 | Unreal Engine 5.8.1 | ✅ `D:\Programming\UnrealEngine\UE_5.8` |
@@ -34,7 +35,69 @@ dotnet test services/SpaceMMO.Server.sln
 `<TargetFramework>` in `Directory.Build.props` at the repo root — rather than editing every
 `.csproj`. That file exists for exactly this reason.
 
-## 1. Docker Desktop — already done
+## 1. PostgreSQL — on Windows, as a service
+
+**The database runs on Windows, not in Docker, since 25 October (task 202).** Under the load of two
+clients and a server, every round trip from the API into Docker's Postgres passed through Docker
+Desktop's port proxy and its WSL2 virtual machine, each hop waiting for a core: 35–42 ms a trip
+against 3.5–8 ms to the same Postgres on Windows, and a combat hit 4–11 times slower. With nothing
+else running both are fast, which is why it went unnoticed until fights.
+
+It listens where the container did, `127.0.0.1:5432`, with the same database, user and password,
+so no connection string changed. It starts with Windows (service `postgresql-x64-17`).
+
+**How it was installed**, from an elevated PowerShell, should it ever need doing again:
+
+```powershell
+winget install --id PostgreSQL.PostgreSQL.17 --exact --silent --accept-package-agreements --override "--mode unattended --unattendedmodeui none --superaccount spacemmo --superpassword <the dev password in infra/.env> --serverport 5432 --locale C --servicename postgresql-x64-17 --enable-components server,commandlinetools --disable-components pgAdmin,stackbuilder"
+```
+
+then the compose file's settings, and localhost only (the installer listens on every interface),
+followed by `Restart-Service postgresql-x64-17`:
+
+```sql
+ALTER SYSTEM SET listen_addresses = '127.0.0.1';
+ALTER SYSTEM SET max_connections = 100;
+ALTER SYSTEM SET shared_buffers = '256MB';
+ALTER SYSTEM SET log_min_duration_statement = '200ms';
+```
+
+and the database itself, which `--seed` does not create:
+
+```sql
+CREATE DATABASE spacemmo OWNER spacemmo ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0;
+```
+
+**`psql` is not on the PATH.** It is at `C:\Program Files\PostgreSQL\17\bin\psql.exe`, and it asks
+for the password unless `PGPASSWORD` is set:
+
+```bash
+"/c/Program Files/PostgreSQL/17/bin/psql.exe" -h 127.0.0.1 -U spacemmo -d spacemmo -c "select version();"
+```
+
+Collation must be `C` on every database (`select datname, datcollate from pg_database;`), or
+`ORDER BY` differs between machines. The cluster was initialised with `--locale C`, so databases the
+test fixtures create inherit it.
+
+Windows writes its log under `C:\Program Files\PostgreSQL\17\data\log`; statements over 200 ms
+appear there, as they did in `docker compose logs`.
+
+### Docker, the fallback
+
+The container `spacemmo-postgres` is **stopped, not removed**, and its volume holds the data as it
+was when it was dumped across, late on 24 October. Both cannot have port 5432, so going back is:
+
+```powershell
+Stop-Service postgresql-x64-17
+```
+
+```bash
+docker compose -f infra/docker-compose.yml start
+```
+
+and anything written to the Windows database since is not in the container's. A machine without
+the Windows install can still use Docker as below. Docker Desktop itself can be quit when nothing
+needs it; whether its idle virtual machine costs the game anything has not been measured.
 
 Installed and verified: Postgres 17.10 comes up healthy in about a second, with `C`
 collation applied as intended.
@@ -86,11 +149,6 @@ That must return `C`. If it returns anything else, the volume was created before
 `POSTGRES_INITDB_ARGS` was set — `initdb` only runs on an empty volume, so the fix is
 `docker compose -f infra/docker-compose.yml down -v` to destroy the data and let it
 re-initialize.
-
-**Alternative if you'd rather not run Docker:** a native Postgres 17 install works
-identically — `winget install PostgreSQL.PostgreSQL.17`. Match the credentials in
-`infra/.env.example`, and initialize the cluster with `--locale=C` to match the
-compose file, or `ORDER BY` results will differ between your machine and CI.
 
 ## 2. Unreal toolchain
 

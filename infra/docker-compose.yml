@@ -1,5 +1,9 @@
 # Local development database. Not a production topology.
 #
+# The fallback, since 25 October: Joe's machine runs the same Postgres on Windows as a service, because
+# every round trip through Docker's port proxy and VM cost 4-26 times more under a fight's load (task 202,
+# docs/setup.md section 1). This file stays for a machine that prefers Docker. Both cannot hold port 5432.
+#
 #   docker compose -f infra/docker-compose.yml up -d
 #   docker compose -f infra/docker-compose.yml logs -f postgres
 #   docker compose -f infra/docker-compose.yml down          # keeps data
