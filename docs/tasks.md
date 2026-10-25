@@ -10549,7 +10549,7 @@ bar's flash on a refused dodge.
 
 ## 196 — Repair at a station
 
-**Pending, 16 October. Needs Joe's yes on how it looks in the station screen.** Belongs to **M6**, with
+**In progress: the look and the open rules decided by Joe, 24 October (below).** Belongs to **M6**, with
 death, and to **M4**'s gear that matters. Decided in
 [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md):
 
@@ -10562,6 +10562,27 @@ Needs a maximum condition on every instance (a column), what each repair costs (
 category), and what "worn out" means at the bottom: unusable for good, or gone. **103's wear was built 19 October**:
 every death now takes 10 condition off what is worn, so a rifle worn ten deaths is broken, and stays broken until this
 exists.
+
+### Decided by Joe, 24 October
+Each offered against alternatives, Claude's suggestion first:
+- **A REPAIRS section in the Industry tab**, under JOBS: every damaged item the character wears, carries, or has in
+  this station's hangar, with where it is (worn, pockets, hangar), a condition bar and "40 / 98", BROKEN in red at 0.
+  Clicking one opens it like a recipe row, showing the materials it needs against what is here and the credits; the
+  bottom bar's note says what the maximum falls to ("max 100 → 98") and its button becomes "Repair Mining Laser
+  250 cr", without the runs count. Offered against a sixth tab, and against a Repair button on the item in the
+  inventory and equipment screens while docked. The mock is the ASCII one Joe approved, in this session's question.
+- **Instant**: pay and it is done. Offered against a timed job in JOBS.
+- **The maximum lost is in proportion to what is restored**: 2 per 100, so topping up 90 to 98 costs almost
+  nothing. Offered against a flat 2 per repair (the preview's), which makes never repairing until broken the thrifty
+  play, so near-broken gear would be carried into fights. Needs the maximum kept finer than whole points (or the
+  fraction carried) so small repairs are not rounded to nothing or to a whole point. **The rate is open, and it
+  sets the lifetime** (worked in ADR-0016's amendment): at 2 per 100 an item lasts about 450 deaths, nine times the
+  preview's 50; about 18 per 100 keeps 50. Asked of Joe 24 October; a config value either way.
+- **Worn out is gone**: when its maximum is used up the item is destroyed, and the repair that will do it says so on
+  its button first. Offered against kept but never repairable, and scrapped for some of its materials.
+- **Not asked, Claude's default, for Joe to overrule**: a full repair (0 to the maximum) costs a quarter of the item's
+  recipe inputs and credits by tier, scaled down with the damage and rounded up, as one rule in `data/` with per-item
+  overrides; an item with no recipe needs an authored cost.
 
 ## 197 — Docking never counted toward quests, so nobody could finish the main story
 

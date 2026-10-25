@@ -1,7 +1,8 @@
 # ADR-0016 — Death costs the materials you carry; gear and ships are kept, and wear
 
 **Status:** Accepted · 2026-10-16 · Joe's direction of 15 October and his answers of 16 October ·
-supersedes [ADR-0006](0006-death-and-insurance.md)
+supersedes [ADR-0006](0006-death-and-insurance.md) · **Amended 2026-10-24** (decisions 4 and 5, how a repair
+takes the maximum, what worn out means, and that a repair is instant; Joe's answers, task 196)
 
 ## Context
 
@@ -37,8 +38,18 @@ Decided by Joe on 16 October, each offered against the alternatives below, Claud
 4. **Repairs never quite undo it.** Repairing restores an item's condition to its maximum and lowers that
    maximum a little, so gear eventually wears out and has to be replaced. In Joe's preview, 2 points a
    repair: a rifle that dies and is repaired sixty-odd times is worn out.
+
+   **Amended 24 October (task 196).** The maximum lost is **in proportion to the condition restored**, 2 per 100,
+   rather than 2 a repair: a flat cost makes never repairing until broken the thrifty play, so gear would be carried
+   into fights one death from breaking. Topping up 90 to 98 now costs almost nothing. **The rate sets the lifetime,
+   and is open:** an item wears out after about 90 / (10 × rate per point) deaths whatever its owner does, so 2 per
+   100 is about **450 deaths**, against the preview's flat 2, which was about 50 repaired after every death and
+   about 255 repaired only when broken. About 18 per 100 keeps the preview's 50. **Worn out is gone**: when the maximum is used up the item is destroyed, and the
+   repair that will do it says so first. Offered against a flat 2; and, for worn out, against kept but never
+   repairable, and scrapped for some of its materials.
 5. **Repair is a station service anyone can use**, at any station's industry bay, for materials (some of
    what the item is made of) and credits. A repair skill may come later; nothing here needs one.
+   **Amended 24 October (task 196): instant**, paid and done, against a timed job like crafting.
 6. **You come back at the station you last docked at.** A ship that went down is put away in that
    station's hangar, damaged, as a ship docked there is (task 153).
 7. **Dying at a station costs nothing**, as in ADR-0006: hubs stay safe, or they become gank-farms.
@@ -108,5 +119,5 @@ the skill must find a crafter, and nothing yet lets one player hand an item to a
 
 - What a disabled ship gives up when it is not destroyed: whether its hold can be looted, and by whom.
 - Whether faction space keeps a defended player's drop from third parties.
-- The materials and credits a repair costs, per item; the wear per death and maximum lost per repair are
+- The materials and credits a repair costs, per item; the wear per death and maximum lost per 100 restored are
   Joe's preview numbers (10% and 2) until EconSim says otherwise.
