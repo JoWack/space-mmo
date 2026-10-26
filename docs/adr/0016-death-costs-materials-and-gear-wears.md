@@ -119,5 +119,8 @@ the skill must find a crafter, and nothing yet lets one player hand an item to a
 
 - What a disabled ship gives up when it is not destroyed: whether its hold can be looted, and by whom.
 - Whether faction space keeps a defended player's drop from third parties.
-- The materials and credits a repair costs, per item; the wear per death (10%, Joe's preview) and maximum lost
-  per 100 restored (18, Joe's of 24 October) stand until EconSim says otherwise.
+- The wear per death (10%, Joe's preview) and maximum lost per 100 restored (18, Joe's of 24 October) stand until
+  EconSim says otherwise. **What a repair costs was decided by Joe on 25 October** (task 196): a quarter of the item's
+  recipe for a full repair, its share for less, with the fractions carried on a tab for each item; and the industry
+  bay's fee for one run, its share for less, rounded to the credit. "Used up" was read by Claude as a maximum below one
+  death's wear, the threshold the 50 deaths were worked from (task 196 says why, and the other reading).

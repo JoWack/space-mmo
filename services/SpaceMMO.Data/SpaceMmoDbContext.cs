@@ -56,6 +56,8 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
 
     public DbSet<ItemInstance> ItemInstances => Set<ItemInstance>();
 
+    public DbSet<RepairTab> RepairTabs => Set<RepairTab>();
+
     public DbSet<StarSystem> StarSystems => Set<StarSystem>();
 
     public DbSet<Body> Bodies => Set<Body>();
@@ -477,11 +479,30 @@ public class SpaceMmoDbContext(DbContextOptions<SpaceMmoDbContext> options) : Db
                 t.HasCheckConstraint(
                     "ck_item_instances_condition_in_range", "condition BETWEEN 0 AND 100");
 
+                // Task 196. Condition never above the maximum's whole part: a repair brings it there, and a death
+                // only takes it down.
+                t.HasCheckConstraint(
+                    "ck_item_instances_max_condition_in_range", "max_condition_hundredths BETWEEN 0 AND 10000");
+                t.HasCheckConstraint(
+                    "ck_item_instances_condition_within_max", "condition * 100 <= max_condition_hundredths");
+
                 // Insurance payouts are pegged to this value, so a negative one would be an
                 // exploit rather than merely odd data (ADR-0006).
                 t.HasCheckConstraint(
                     "ck_item_instances_acquisition_non_negative", "acquisition_value >= 0");
             });
+        });
+
+        modelBuilder.Entity<RepairTab>(entity =>
+        {
+            entity.HasKey(e => new { e.ItemInstanceId, e.ItemDefId });
+
+            entity.HasOne(e => e.ItemInstance).WithMany().HasForeignKey(e => e.ItemInstanceId);
+            entity.HasOne(e => e.ItemDef).WithMany().HasForeignKey(e => e.ItemDefId);
+
+            // Under a whole unit: a whole one is charged the moment it is owed (task 196).
+            entity.ToTable(t => t.HasCheckConstraint(
+                "ck_repair_tabs_owed_under_a_unit", "owed_ten_thousandths BETWEEN 0 AND 9999"));
         });
     }
 

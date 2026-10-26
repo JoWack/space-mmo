@@ -87,6 +87,54 @@ public sealed record IndustryJobResponse(
     /// <summary>The style the output will have, decided when the job started (task 187).</summary>
     ItemStyle OutputStyle = ItemStyle.Common);
 
+public sealed record RepairRequest(int CharacterId, int StationId, long ItemInstanceId);
+
+/// <summary>One material a repair takes, against what the hangar and pockets hold together.</summary>
+/// <param name="Units">Whole units this repair charges.</param>
+/// <param name="OwedAfterTenThousandths">What stays on the item's tab after, in ten-thousandths of a unit.</param>
+public sealed record RepairMaterialResponse(
+    int ItemDefId, string ItemKey, string Name, int Units, int Held, int OwedAfterTenThousandths);
+
+/// <summary>
+/// One row of the REPAIRS section (task 196): a damaged item, what repairing it does, and what it costs.
+/// </summary>
+/// <remarks>
+/// <strong>Every number is the server's.</strong> The maximum's fall, the tab's carried fractions and the rounding of
+/// the credits are rules a client would have to copy exactly to show the right price, and a copy that drifted would
+/// show a button that charges something else.
+/// </remarks>
+/// <param name="Kind">Where it is: Equipped (worn), CharacterCarried (pockets) or StationHangar (this station's).</param>
+/// <param name="WornOut">This repair destroys it instead, and charges nothing: what the button warns of.</param>
+/// <param name="Priced">False when nothing makes the item, so nothing prices its repair and it is refused.</param>
+public sealed record RepairQuoteResponse(
+    long ItemInstanceId,
+    int ItemDefId,
+    string ItemKey,
+    string Name,
+    ItemCategory Category,
+    ItemStyle Style,
+    InventoryKind Kind,
+    int Condition,
+    int MaxConditionHundredths,
+    int ConditionAfter,
+    int MaxConditionAfterHundredths,
+    bool WornOut,
+    bool Priced,
+    IReadOnlyList<RepairMaterialResponse> Materials,
+    long CreditsMinorUnits);
+
+/// <summary>Whole units of one material a repair took. The quote it answers has the names.</summary>
+public sealed record RepairChargedResponse(int ItemDefId, int Units);
+
+/// <param name="Destroyed">Worn out: the item is gone and nothing was charged.</param>
+public sealed record RepairResultResponse(
+    long ItemInstanceId,
+    bool Destroyed,
+    int Condition,
+    int MaxConditionHundredths,
+    IReadOnlyList<RepairChargedResponse> Charged,
+    long CreditsMinorUnits);
+
 /// <summary>
 /// Time-gated manufacturing jobs.
 /// </summary>
@@ -110,6 +158,103 @@ public static class IndustryEndpoints
         group.MapPost("/jobs", StartAsync);
         group.MapPost("/jobs/claim", ClaimAsync);
         group.MapPost("/jobs/cancel", CancelAsync);
+
+        // Task 196: what the REPAIRS section lists, and the instant repair its button does.
+        group.MapGet("/repairs", RepairsAsync);
+        group.MapPost("/repairs", RepairAsync);
+    }
+
+    /// <summary>Every damaged item the character could repair at this station, priced.</summary>
+    /// <remarks>409 <c>not_docked</c> unless docked there: the bay is inside the station.</remarks>
+    private static async Task<IResult> RepairsAsync(
+        int characterId,
+        int stationId,
+        HttpContext context,
+        Caller caller,
+        RepairService repairs,
+        CancellationToken cancellation)
+    {
+        OwnershipResult owned = await caller.OwnedCharacterAsync(context, characterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        try
+        {
+            IReadOnlyList<RepairQuote> quotes = await repairs.QuoteAsync(characterId, stationId, cancellation);
+
+            return Results.Ok(quotes
+                .Select(q => new RepairQuoteResponse(
+                    q.ItemInstanceId,
+                    q.ItemDefId,
+                    q.ItemKey,
+                    q.Name,
+                    q.Category,
+                    q.Style,
+                    q.Kind,
+                    q.Condition,
+                    q.MaxConditionHundredths,
+                    q.ConditionAfter,
+                    q.MaxAfterHundredths,
+                    q.WornOut,
+                    q.Priced,
+                    [.. q.Materials.Select(m => new RepairMaterialResponse(
+                        m.ItemDefId, m.ItemKey, m.Name, m.Units, m.Held, m.OwedAfterTenThousandths))],
+                    q.Credits.MinorUnits))
+                .ToList());
+        }
+        catch (RepairRefusedException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = ex.Reason });
+        }
+    }
+
+    /// <summary>Repairs one item at once, or destroys it when worn out.</summary>
+    /// <remarks>
+    /// 409 with a reason a client can act on: <c>not_docked</c>, <c>not_here</c>, <c>not_damaged</c>, <c>no_recipe</c>,
+    /// <c>insufficient_items</c> or <c>insufficient_funds</c>, matching a job's start.
+    /// </remarks>
+    private static async Task<IResult> RepairAsync(
+        RepairRequest request,
+        HttpContext context,
+        Caller caller,
+        RepairService repairs,
+        CancellationToken cancellation)
+    {
+        OwnershipResult owned = await caller.OwnedCharacterAsync(context, request.CharacterId, cancellation);
+
+        if (owned.Status != OwnershipStatus.Owned)
+        {
+            return owned.ToProblem();
+        }
+
+        try
+        {
+            RepairResult result = await repairs.RepairAsync(
+                request.CharacterId, request.StationId, request.ItemInstanceId, cancellation);
+
+            return Results.Ok(new RepairResultResponse(
+                result.ItemInstanceId,
+                result.Destroyed,
+                result.Condition,
+                result.MaxConditionHundredths,
+                [.. result.Charged.Select(c => new RepairChargedResponse(c.ItemDefId, c.Units))],
+                result.Credits.MinorUnits));
+        }
+        catch (RepairRefusedException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = ex.Reason });
+        }
+        catch (InsufficientItemsException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = "insufficient_items" });
+        }
+        catch (InsufficientFundsException ex)
+        {
+            return Results.Conflict(new { error = ex.Message, reason = "insufficient_funds" });
+        }
     }
 
     private static async Task<IResult> RecipesAsync(

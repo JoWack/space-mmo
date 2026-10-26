@@ -1,4 +1,5 @@
 using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Industry;
 using SpaceMMO.Domain.Items;
 
 namespace SpaceMMO.Data.Entities;
@@ -295,6 +296,17 @@ public class ItemInstance
     public int Condition { get; set; }
 
     /// <summary>
+    /// The most condition a repair can bring it back to, in hundredths of a point: 10000 new (task 196).
+    /// </summary>
+    /// <remarks>
+    /// Every repair lowers it in proportion to what it restored (ADR-0016 as amended), and a repair that would leave
+    /// it below one death's wear destroys the item instead. Hundredths, so a top-up of a few points is charged its
+    /// share rather than rounded to nothing or to a whole point. <see cref="Condition"/> stays whole points, and a
+    /// repair brings it to this maximum's whole part; a check constraint keeps it there or below.
+    /// </remarks>
+    public int MaxConditionHundredths { get; set; } = Repairs.NewMaxHundredths;
+
+    /// <summary>
     /// Which world's look this item has, decided when it was made (task 187).
     /// </summary>
     public ItemStyle Style { get; set; }
@@ -369,4 +381,26 @@ public class ItemInstance
 
     /// <summary>Set when death resolution or salvage destroys the instance.</summary>
     public DateTimeOffset? DestroyedAt { get; set; }
+}
+
+/// <summary>
+/// What one item owes of one material towards its repairs, in ten-thousandths of a unit (task 196).
+/// </summary>
+/// <remarks>
+/// A repair adds its share of the item's recipe to the tab and charges the whole units the tab reaches, leaving what
+/// is under a unit for the next one (Joe, 25 October), so ten top-ups cost exactly what one full repair does. Never a
+/// whole unit: that is charged the moment it is owed. A row for each item and material, made by the first repair to
+/// owe it; an item never repaired has none.
+/// </remarks>
+public class RepairTab
+{
+    public long ItemInstanceId { get; set; }
+
+    public ItemInstance? ItemInstance { get; set; }
+
+    public int ItemDefId { get; set; }
+
+    public ItemDef? ItemDef { get; set; }
+
+    public int OwedTenThousandths { get; set; }
 }

@@ -42,6 +42,7 @@ builder.Services.AddDbContext<SpaceMmoDbContext>(options =>
 builder.Services.AddScoped<MarketService>();
 builder.Services.AddScoped<FactionOrderService>();
 builder.Services.AddScoped<IndustryService>();
+builder.Services.AddScoped<RepairService>();
 builder.Services.AddScoped<GatheringService>();
 builder.Services.AddScoped<DockingService>();
 builder.Services.AddScoped<ShipService>();

@@ -926,6 +926,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("item_def_id");
 
+                    b.Property<int>("MaxConditionHundredths")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_condition_hundredths");
+
                     b.Property<string>("Style")
                         .IsRequired()
                         .HasMaxLength(48)
@@ -951,6 +955,10 @@ namespace SpaceMMO.Data.Migrations
                             t.HasCheckConstraint("ck_item_instances_acquisition_non_negative", "acquisition_value >= 0");
 
                             t.HasCheckConstraint("ck_item_instances_condition_in_range", "condition BETWEEN 0 AND 100");
+
+                            t.HasCheckConstraint("ck_item_instances_condition_within_max", "condition * 100 <= max_condition_hundredths");
+
+                            t.HasCheckConstraint("ck_item_instances_max_condition_in_range", "max_condition_hundredths BETWEEN 0 AND 10000");
                         });
                 });
 
@@ -1448,6 +1456,32 @@ namespace SpaceMMO.Data.Migrations
                     b.ToTable("recipe_inputs", null, t =>
                         {
                             t.HasCheckConstraint("ck_recipe_inputs_quantity_positive", "quantity > 0");
+                        });
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.RepairTab", b =>
+                {
+                    b.Property<long>("ItemInstanceId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("item_instance_id");
+
+                    b.Property<int>("ItemDefId")
+                        .HasColumnType("integer")
+                        .HasColumnName("item_def_id");
+
+                    b.Property<int>("OwedTenThousandths")
+                        .HasColumnType("integer")
+                        .HasColumnName("owed_ten_thousandths");
+
+                    b.HasKey("ItemInstanceId", "ItemDefId")
+                        .HasName("pk_repair_tabs");
+
+                    b.HasIndex("ItemDefId")
+                        .HasDatabaseName("ix_repair_tabs_item_def_id");
+
+                    b.ToTable("repair_tabs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_repair_tabs_owed_under_a_unit", "owed_ten_thousandths BETWEEN 0 AND 9999");
                         });
                 });
 
@@ -2411,6 +2445,27 @@ namespace SpaceMMO.Data.Migrations
                     b.Navigation("ItemDef");
 
                     b.Navigation("Recipe");
+                });
+
+            modelBuilder.Entity("SpaceMMO.Data.Entities.RepairTab", b =>
+                {
+                    b.HasOne("SpaceMMO.Data.Entities.ItemDef", "ItemDef")
+                        .WithMany()
+                        .HasForeignKey("ItemDefId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_repair_tabs_item_defs_item_def_id");
+
+                    b.HasOne("SpaceMMO.Data.Entities.ItemInstance", "ItemInstance")
+                        .WithMany()
+                        .HasForeignKey("ItemInstanceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_repair_tabs_item_instances_item_instance_id");
+
+                    b.Navigation("ItemDef");
+
+                    b.Navigation("ItemInstance");
                 });
 
             modelBuilder.Entity("SpaceMMO.Data.Entities.ResourceNode", b =>

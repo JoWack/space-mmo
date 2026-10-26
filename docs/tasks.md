@@ -1575,8 +1575,8 @@ any list, and each says which document it comes from so the next reader can chec
 
 ## 101 — Seed the combat and pilot skills
 
-**Stamina built 25 October (below), which is 195's stage 2; waiting on a playtest. The pilot skills and the rest of
-the crafting tree stay unseeded until something awards them**, as this task always said.
+**Stamina built 25 October and passed Joe's playtest the same day (below), which is 195's stage 2. The pilot
+skills and the rest of the crafting tree stay unseeded until something awards them**, as this task always said.
 
 `data/skills/core.json` holds five skills — gathering, mining, refining, toolcrafting, shipcrafting
 — and the design bible §2 defines eight more that do not exist anywhere: `guns`, `melee`,
@@ -1634,7 +1634,12 @@ skills on the skills screen that cannot move.
 - **Seeded** into Joe's database on 25 October: migration `StaminaSkill` applied, `stamina` in Combat at 100.
 - **Seen once and not explained:** a first full API run failed five tests in `AccountAndCharacterTests` (not touched
   here, `Health_reports_ok` among them) while an editor build was compiling beside it; the one rerun alone and the
-  full rerun passed, and the messages were not kept. If it comes back, keep the output.
+  full rerun passed, and the messages were not kept. If it comes back, keep the output. **It came back with 196,
+  was explained and fixed**: a consequence of 202's move, written up there.
+
+**Joe's playtest, 25 October: passed.** "Tested, things look good." The staged server's log has the reports arriving
+every 30 s while sprinting and rolling, and character 11 reaching level 2 and its pool 101 (`Stamina: character 11
+spent 45, earning 45 XP: level 2, a pool of 101.`).
 
 **Not verified by anything but a playtest:** the 30 s reports arriving (`Stamina: character N spent X, earning Y XP`
 in the server log), the skills screen showing Stamina, the bar's maximum rising as it levels, and the owner's
@@ -10505,7 +10510,11 @@ seven), with no rifles yet. A rifle is a weaponcrafting job: 6 Structural Plate 
 ## 195 — Stamina, and a dodge roll
 
 **Stage 1 built 19 October and passed Joe's playtest 20 October** (below). **Stage 2, the pool's size and XP from
-the `stamina` skill, built 25 October with 101** (see 101); waiting on a playtest.
+the `stamina` skill, built with 101 and passed Joe's playtest 25 October** (see 101). **One thing is still unseen: a
+shot through the first quarter-second of a roll.** Joe, 25 October: not something one person can do while managing two
+windows, so it waits for "a playtest from you, or a manual test later with 2 real players". A switch that makes one
+client roll on a timer would let one person shoot a rolling target, and the server's log already says "was dodging,
+and untouchable" when it refuses such a hit; not built.
 Belongs to **M6** for the
 pool, and to **M5** for the key, as sprint (136) did. Decided in
 [ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md):
@@ -10595,8 +10604,9 @@ bar's flash on a refused dodge.
 
 ## 196 — Repair at a station
 
-**In progress: the look and the open rules decided by Joe, 24 October (below).** Belongs to **M6**, with
-death, and to **M4**'s gear that matters. Decided in
+**In progress: the look and the open rules decided by Joe, 24 October (below); the backend built 25 October (below).
+Next, the client's REPAIRS section, to the mock Joe approved, which needs the game closed to build.** Belongs to
+**M6**, with death, and to **M4**'s gear that matters. Decided in
 [ADR-0016](adr/0016-death-costs-materials-and-gear-wears.md):
 
 - Any station's industry bay repairs an item, for materials (some of what it is made of) and credits.
@@ -10635,6 +10645,67 @@ Each offered against alternatives, Claude's suggestion first:
   industry bay's crafting fee for one run** (`IndustryFees.ForJob(1)`, 15 cr at the draft rates) for a full repair, its
   share for less, rounded to the credit. Offered against a price authored per item, and materials only. An item with
   no recipe needs an authored cost; none exists yet.
+
+### Backend built, 25 October
+Joe, 25 October: "start on 196's backend".
+- **The rules** (`Repairs`, Domain). Every item keeps a maximum in hundredths of a point (`item_instances.
+  max_condition_hundredths`, 10000 new; every existing item migrated at 10000). A repair restores the whole points
+  between the condition and the maximum's whole part, takes 18 hundredths off the maximum for each, and brings the
+  condition to the new maximum's whole part. 18 per 100 is exactly 18 hundredths a point, so nothing rounds. Each
+  item keeps a tab per material in ten-thousandths of a unit (`repair_tabs`): a quarter of the recipe per 100 points
+  goes on it, and whole units are charged as it reaches them. Credits are `IndustryFees.ForJob(1)` times the points
+  over 100, to the nearest credit, half up, so three points or fewer is free.
+- **The service** (`RepairService`). Only docked at the station; only what the character wears, carries, or has put
+  away in that station's hangar. Materials come from the hangar first and then the pockets, in any style, the item's
+  own first. Credits are a `RepairCost` ledger entry naming the item. The character is locked and then the item, so
+  two repairs of one item at once charge once. **Worn out**: the item is destroyed, taken out of its inventory and its
+  slot so another can be equipped there, its tab deleted, and nothing charged.
+- **The API.** `GET /industry/repairs?characterId=&stationId=` lists every damaged item there, worn first, then
+  pockets, then hangar, each with its condition and maximum before and after, `wornOut`, `priced`, the materials
+  (units now, held here, owed after) and `creditsMinorUnits`. `POST /industry/repairs` with `characterId`,
+  `stationId` and `itemInstanceId` repairs it. Refusals are 409s with a reason, as a job's start is: `not_docked`,
+  `not_here`, `not_damaged`, `no_recipe`, `insufficient_items`, `insufficient_funds`. Every item in
+  `/characters/{id}/inventory` now carries `maxConditionHundredths` too, for "40 / 98" wherever an item is shown.
+
+**Decided by Claude where Joe's answers left it open, each a line to change:**
+- **"Worn out" is a maximum below 10, one death's wear**, so the next death would break it whatever its owner did.
+  It is the threshold the "about 50 deaths" Joe chose was worked from: repaired after every death, an item comes back
+  from 50 and the 51st repair destroys it. The other reading of "used up", below one point, keeps a few more repairs
+  in which an item breaks on every death, about 60 deaths in all (`Repairs.WornOutBelowHundredths`).
+- **The repair that wears an item out charges nothing**, since nothing comes back for it.
+- **Only whole points restored are charged against the maximum.** A maximum of 98.20 allows 98, and the fifth of a
+  point it never gives back costs nothing.
+- **The item's acquisition value is unchanged by a repair**: upkeep, not cost.
+- **A ship standing outside is not in the bay**: put it away first.
+- **An item nothing makes is listed unpriced and refused** (`no_recipe`). None ships, and a test against the pack
+  keeps it so. Where several recipes make one item, the current one prices it, then the first made; none do.
+
+**Verified, and how** (25 October):
+- Suites: Domain 609 (29 new), Data 343 (16 new), API 131 (5 new).
+- **Against the shipped pack:** `EveryItemThatWearsCanBeRepairedTests` loads `data/`, gives a character a broken one
+  of every item that wears, and quotes them through the service: every one priced, 15 cr, and each material exactly
+  a quarter of its recipe, charged and on the tab together. Counted against the pack, never a literal.
+- **The wire:** `RepairEndpointTests` writes what the API sends to its test output. A broken mining laser:
+  `{"itemInstanceId":1,"itemDefId":2,"itemKey":"crude_mining_laser","name":"Crude Mining Laser","category":4,
+  "style":0,"kind":0,"condition":0,"maxConditionHundredths":10000,"conditionAfter":82,"maxConditionAfterHundredths":
+  8200,"wornOut":false,"priced":true,"materials":[{"itemDefId":1,"itemKey":"scrap_alloy","name":"Scrap Alloy",
+  "units":2,"held":5,"owedAfterTenThousandths":0}],"creditsMinorUnits":1500}`, and the repair's answer
+  `{"itemInstanceId":1,"destroyed":false,"condition":82,"maxConditionHundredths":8200,"charged":[{"itemDefId":1,
+  "units":2}],"creditsMinorUnits":1500}`. Enums are numbers, as everywhere else on the wire.
+- **Broken on purpose, each failing tests:** a flat 2 a repair (8 tests); the tab not carried (4); units rounded up
+  (5); credits floored (3); worn out at 10 rather than below it (2), or below one point (2); the maximum charged for
+  its fraction too (3); the pockets before the hangar (1); the slot kept by a worn-out item (1); a ship standing
+  outside listed (2); the new maximum not saved (3); **both locks taken out** (the two-at-once test: both repairs
+  charged). Either lock alone passes that test, as each serialises the two.
+- **Seeded** into Joe's database on 25 October: migration `Repair` applied, all 11 items at a maximum of 100.00 and
+  none outside the new constraint. His rifle and mining laser are at 90 from the evening's fight: a top-up each.
+
+**Not verified:**
+- **Nothing on screen**: the client half is not built.
+- **A repaired weapon in the game server's hands.** The server reads the loadout only when a character joins or asks
+  it to (`RequestLoadoutRefresh`, which equipping uses), and fires nothing while it holds no weapon name
+  (`SpaceMMOCombatComponent.cpp`, the shot's first check). A broken rifle reads as nothing in hand, so the REPAIRS
+  button must ask for a refresh, or a repaired rifle stays silent until the next sign-in.
 
 ## 197 — Docking never counted toward quests, so nobody could finish the main story
 
@@ -11102,9 +11173,9 @@ free-fall time, the back or front landing, a settle, then held -- 1.3 s to lying
 
 ## 202 — Damage as instantaneous as possible
 
-**In progress. Option 2 measured 20 October and done 25 October: Joe's Postgres runs on Windows now (below);
-waiting on a fight to say what it made of a hit.** Belongs to **M6**, with 194 and 198. Joe, after 198's fix: "it should be
-as instantaneous as possible for smooth gameplay."
+**In progress. Option 2 done 25 October and fought on the same day: a hit's wait less than halved, not the
+single-digit round trips predicted (below). Whether to do 1, 3, both or neither is Joe's.** Belongs to **M6**, with 194
+and 198. Joe, after 198's fix: "it should be as instantaneous as possible for smooth gameplay."
 
 **Where it stands** (198, Joe's fight of 19 October): the click reaches the server and its bolt comes back in
 about 50 ms (p50 48 and 55 ms on the two clients); the server then waits for the API **958 ms typically, 2.3 s at p90**. Inside the API a hit is eight
@@ -11130,8 +11201,8 @@ core. The pair's lock is no longer the problem (64 ms typically).
 4. **The server's 30 Hz tick** costs up to 33 ms twice per hit (`NetServerMaxTickRate`, settable in the staged
    server's `Saved/Config` without a re-cook). Small beside the rest.
 
-**Blocked on:** a fight on the moved setup (2 is done, below), which says whether 1 or 3 is still wanted. 3 needs
-an ADR first; 1 is small.
+**Blocked on:** Joe's choice between 1 and 3, now that the fight on the moved setup is read (below). 3 needs an ADR
+first; 1 is small.
 
 **Ruled out:** the lock queue (fixed in 198); `localhost` resolution (fixed in 198); the engine's HTTP queue (251
 concurrent, 16 to a host); Postgres's own execution time.
@@ -11222,7 +11293,49 @@ to check it, and how to go back.
 - **Verified against it:** `--seed` connects and finds no migration to apply; the Data suite 320 and the API suite
   121, both of which create their own databases on it, pass.
 - **Not verified:** what it makes of a hit in a real fight. Read `Api.log` after one: `Round trips, ms` should read
-  single digits where it read 61, and the hit's total well under 0.86 s. That decides 1 and 3.
+  single digits where it read 61, and the hit's total well under 0.86 s. That decides 1 and 3. **Fought 25 October,
+  next section.**
+
+### Joe's fight on the moved setup, 25 October
+**A hit's wait is a little over halved; the round trips are not single digits.** Joe: "Tested, things look good." Read
+from that session's `Api.log` (18 hits, 142 round trips, every one against the Windows Postgres: no Docker container
+was running) and the staged server's `SpaceMMO.log`, against 198's fight of 19 October through Docker:
+
+| | Docker, 19 October | Windows, 25 October |
+|---|---|---|
+| a round trip, p50 | 61 ms | **17 ms** |
+| a round trip, p90 | 267 ms | **75 ms** |
+| a hit in the API, p50 | about 860 ms | **334 ms** (17 hits; 103 to 1,044) |
+| a hit in the API, p90 | | 656 ms |
+| the server's wait, p50 | 958 ms | **415 ms** |
+| the server's wait, p90 | 2.3 s | 857 ms |
+
+- **Better by about 2.5 times, where the harness promised 4 to 11.** The harness's 12 busy threads gave Windows trips
+  of 3.5–8 ms; the fight's are 17. So the game loads the machine harder than 12 threads did, as 20 October guessed
+  from Docker's 61 against 38, and a trip waits for a core whatever it crosses.
+- **What 1 would buy now:** three of eight trips, about 50 ms of a 334 ms hit at the fight's p50. Smaller than it
+  was, and the only one that needs no decision.
+- **What 3 would buy:** the number and the bar the moment the server traces the hit, whatever the API costs. Still
+  the only way to instantaneous on one machine running two clients, the server, the API and Postgres; and with
+  players on their own machines, most of the load that makes these trips slow would presumably not be on the API's.
+- **Not measured:** the same fight with one client, which would say how much of the 17 ms is the second client.
+
+### What the move did to the test suites, found and fixed 25 October
+**The API suite failed every test in its collection when it ran straight after the Data suite**: 127 of 131, each in
+a millisecond, with "Could not reach Postgres ... need the local container running". The 101 run's five failures were
+the same thing, smaller. Reproduced on the second try with the output kept, and Postgres's own log
+(`C:\Program Files\PostgreSQL\17\data\log`) says why:
+- **On Windows, `DROP DATABASE` forces an immediate checkpoint**, which waits for every file touched since the last
+  one to be synced. After a full Data run (343 tests, every one truncating every table) that was **53,886 files: sync
+  29.4 s, 35.1 s in all**, twice in two runs. Npgsql gives up on a command at 30 s, so the API fixture's drop timed out
+  and its catch reported the timeout as an unreachable server. The Data fixture's own drop took 13.5 s in the same run.
+- **Not seen under Docker**, where 198's and 202's runs dropped the same databases. Consistent with Linux syncing small
+  files far faster than NTFS; not measured there.
+- **The fix, in both fixtures:** the drop may take five minutes, and the message says what the exception said and
+  names the native Postgres, not a container that is no longer how it runs. Postgres's settings are untouched: making
+  checkpoints cheaper (`fsync`, `full_page_writes`) would cost Joe's own database its safety to save the tests 35 s.
+- **Verified in the same sequence that failed:** Data 343 and then API 131, all passing, with the API fixture's drop
+  taking 34.1 s (53,930 files) in Postgres's log, past the old limit.
 
 **What the move was** (the plan as written before it, 20 October):
 - **Install PostgreSQL 17 on Windows as a service:** `winget install PostgreSQL.PostgreSQL.17`, EnterpriseDB's

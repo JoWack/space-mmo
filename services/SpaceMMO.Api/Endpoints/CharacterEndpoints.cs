@@ -6,6 +6,7 @@ using SpaceMMO.Data.Entities;
 using SpaceMMO.Data.Inventories;
 using SpaceMMO.Domain.Characters;
 using SpaceMMO.Domain.Economy;
+using SpaceMMO.Domain.Industry;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
 
@@ -168,7 +169,13 @@ public sealed record ItemInstanceResponse(
     EquipmentSlot? EquippedSlot = null,
 
     /// <summary>What slot it goes in, for a weapon, armour or tool; null for anything not worn.</summary>
-    EquipKind? EquipsAs = null);
+    EquipKind? EquipsAs = null,
+
+    /// <summary>
+    /// The most condition a repair can bring it back to, in hundredths of a point: 10000 new, lower with every
+    /// repair (task 196). Condition is whole points, so "40 / 98" is the whole part of this.
+    /// </summary>
+    int MaxConditionHundredths = Repairs.NewMaxHundredths);
 
 /// <summary>
 /// Everything a character owns, in the two shapes owning something can take.
@@ -479,7 +486,8 @@ public static class CharacterEndpoints
                 i.DeployedSystemX != null,
                 i.Style,
                 i.EquippedSlot,
-                i.ItemDef.EquipsAs))
+                i.ItemDef.EquipsAs,
+                i.MaxConditionHundredths))
             .ToListAsync(cancellation);
 
         // Every container, not only the ones holding something. Transfer is addressed by inventory

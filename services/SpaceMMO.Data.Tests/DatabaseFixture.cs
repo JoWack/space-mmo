@@ -134,8 +134,12 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
             // The database name is a compile-time constant, and CREATE/DROP DATABASE cannot take
             // parameters in any case.
+            //
+            // Five minutes, not Npgsql's thirty seconds. On Windows a DROP DATABASE forces an immediate checkpoint,
+            // and after a full Data run that checkpoint syncs every file the run's truncations touched: 53,886 files
+            // and 35 s on 25 October, which failed every API test as "could not reach Postgres".
             await using (NpgsqlCommand drop = new(
-                $"DROP DATABASE IF EXISTS \"{TestDatabaseName}\" WITH (FORCE)", connection))
+                $"DROP DATABASE IF EXISTS \"{TestDatabaseName}\" WITH (FORCE)", connection) { CommandTimeout = 300 })
             {
                 await drop.ExecuteNonQueryAsync();
             }
@@ -149,11 +153,10 @@ public sealed class DatabaseFixture : IAsyncLifetime
         }
         catch (NpgsqlException error)
         {
+            // What went wrong, first: this said "could not reach Postgres" for a timeout on a server that was up.
             throw new InvalidOperationException(
-                "Could not reach Postgres. These are integration tests and need the local "
-                + "container running:\n\n"
-                + "    docker compose -f infra/docker-compose.yml up -d\n\n"
-                + "See docs/setup.md if docker is not on your PATH.",
+                $"Could not recreate the test database: {error.Message} These are integration tests and need the "
+                + "local Postgres on 127.0.0.1:5432; docs/setup.md §1 says how to start and check it.",
                 error);
         }
     }
