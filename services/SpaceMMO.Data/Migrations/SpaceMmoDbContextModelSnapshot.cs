@@ -1646,6 +1646,10 @@ namespace SpaceMMO.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("xp_per_hundred_damage");
 
+                    b.Property<int?>("XpPerHundredStaminaSpent")
+                        .HasColumnType("integer")
+                        .HasColumnName("xp_per_hundred_stamina_spent");
+
                     b.HasKey("Id")
                         .HasName("pk_skills");
 

@@ -270,6 +270,95 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.Equal(1_500, status.Health);
     }
 
+    // ── Stamina (task 101) ───────────────────────────────────────────────────
+
+    private async Task<StaminaSpentResult?> SpendAsync(int characterId, int spent)
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        return await Service(context).SpendStaminaAsync(characterId, spent);
+    }
+
+    private async Task<long> StaminaXpAsync(int characterId)
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        return await context.CharacterSkills
+            .Where(s => s.CharacterId == characterId && s.Skill!.Key == "stamina")
+            .Select(s => s.Xp)
+            .SingleOrDefaultAsync();
+    }
+
+    [Fact]
+    public async Task A_new_character_has_level_1s_pool()
+    {
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+
+        Assert.Equal(100, (await Service(context).StatusAsync(_ayla, T0))!.MaxStamina);
+    }
+
+    [Fact]
+    public async Task Stamina_spent_earns_its_rate_and_a_level_grows_the_pool()
+    {
+        // Just short of level 50, then the 100 points that reach it: the pool is 125 there (ADR-0017).
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            int stamina = await context.Skills.Where(s => s.Key == "stamina").Select(s => s.Id).SingleAsync();
+
+            context.CharacterSkills.Add(new CharacterSkill
+            {
+                CharacterId = _ayla, SkillId = stamina, Xp = SkillCurve.XpForLevel(50) - 100,
+            });
+
+            await context.SaveChangesAsync();
+        }
+
+        StaminaSpentResult spent = (await SpendAsync(_ayla, 100))!;
+
+        Assert.Equal(100, spent.XpAwarded);
+        Assert.Equal(50, spent.Level);
+        Assert.Equal(125, spent.MaxStamina);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.Equal(125, (await Service(verify).StatusAsync(_ayla, T0))!.MaxStamina);
+    }
+
+    [Fact]
+    public async Task The_first_spend_makes_the_skill_and_the_next_adds_to_it()
+    {
+        Assert.Equal(250, (await SpendAsync(_mars, 250))!.XpAwarded);
+        Assert.Equal(40, (await SpendAsync(_mars, 40))!.XpAwarded);
+
+        Assert.Equal(290, await StaminaXpAsync(_mars));
+    }
+
+    [Fact]
+    public async Task Reports_that_arrive_together_all_count()
+    {
+        // Each award writes the skill's new total: without the character's lock, two at once both read the old one
+        // and the second write loses the first's.
+        await SpendAsync(_orc, 1);
+
+        await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => SpendAsync(_orc, 10)));
+
+        Assert.Equal(101, await StaminaXpAsync(_orc));
+    }
+
+    [Fact]
+    public async Task Nothing_spent_earns_nothing_and_still_says_the_pool()
+    {
+        StaminaSpentResult spent = (await SpendAsync(_newbie, 0))!;
+
+        Assert.Equal(0, spent.XpAwarded);
+        Assert.Equal(1, spent.Level);
+        Assert.Equal(100, spent.MaxStamina);
+    }
+
+    [Fact]
+    public async Task Nobody_spends_for_a_character_that_does_not_exist() =>
+        Assert.Null(await SpendAsync(999_999, 50));
+
     // ── Coming back ──────────────────────────────────────────────────────────
 
     [Fact]
@@ -690,6 +779,9 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         context.Skills.AddRange(rifleSkill, pistolSkill, new Skill
         {
             Key = "constitution", Name = "Constitution", Category = SkillCategory.Combat,
+        }, new Skill
+        {
+            Key = "stamina", Name = "Stamina", Category = SkillCategory.Combat, XpPerHundredStaminaSpent = 100,
         });
 
         await context.SaveChangesAsync();

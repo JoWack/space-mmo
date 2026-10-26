@@ -178,6 +178,7 @@ public sealed class ContentLoader(SpaceMmoDbContext database)
             skill.WeaponType = content.Weapon?.Type;
             skill.WeaponMount = content.Weapon?.Mount;
             skill.XpPerHundredDamage = content.Weapon?.XpPerHundredDamage;
+            skill.XpPerHundredStaminaSpent = content.Pool?.XpPerHundredSpent;
         }
 
         await _database.SaveChangesAsync(cancellationToken);

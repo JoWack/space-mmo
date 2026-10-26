@@ -13,6 +13,7 @@ using SpaceMMO.Domain.Economy;
 using SpaceMMO.Domain.Items;
 using SpaceMMO.Domain.Progression;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace SpaceMMO.Api.Tests;
 
@@ -26,9 +27,12 @@ namespace SpaceMMO.Api.Tests;
 /// those, not as some other member.
 /// </remarks>
 [Collection(SharedApiDatabase.Name)]
-public sealed class CombatEndpointTests(ApiDatabaseFixture fixture) : IAsyncLifetime, IDisposable
+public sealed class CombatEndpointTests(ApiDatabaseFixture fixture, ITestOutputHelper output) : IAsyncLifetime, IDisposable
 {
     private readonly ApiDatabaseFixture _fixture = fixture;
+
+    /// <summary>Where the stamina answers are written whole, for the client's parser tests to use (task 101).</summary>
+    private readonly ITestOutputHelper _output = output;
 
     private ApiFactory _factory = null!;
     private HttpClient _client = null!;
@@ -125,6 +129,67 @@ public sealed class CombatEndpointTests(ApiDatabaseFixture fixture) : IAsyncLife
         Assert.Equal(500, weapon.GetProperty("cooldownMs").GetInt32());
         Assert.Equal(150, weapon.GetProperty("rangeMetres").GetInt32());
     }
+
+    // ── Stamina (task 101) ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Nobody_but_the_game_server_may_report_stamina_spent()
+    {
+        HttpResponseMessage response = await _client.PostAsJsonAsync(
+            new Uri("/combat/stamina", UriKind.Relative), new { characterId = _local, spent = 5_000 });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Assert.False(await verify.CharacterSkills.AnyAsync(s => s.CharacterId == _local && s.Skill!.Key == "stamina"));
+    }
+
+    [Fact]
+    public async Task Stamina_spent_earns_XP_and_the_server_is_told_the_pool()
+    {
+        // 250 at one XP a point is level 3 on the curve, whose pool is 101.
+        HttpResponseMessage spent = await AsServer(
+            HttpMethod.Post, "/combat/stamina", new { characterId = _local, spent = 250 });
+        string spentText = await spent.Content.ReadAsStringAsync();
+        _output.WriteLine($"POST /combat/stamina: {spentText}");
+
+        Assert.Equal(HttpStatusCode.OK, spent.StatusCode);
+
+        using (JsonDocument body = JsonDocument.Parse(spentText))
+        {
+            Assert.Equal(_local, body.RootElement.GetProperty("characterId").GetInt32());
+            Assert.Equal(250, body.RootElement.GetProperty("xpAwarded").GetInt64());
+            Assert.Equal(3, body.RootElement.GetProperty("level").GetInt32());
+            Assert.Equal(101, body.RootElement.GetProperty("maxStamina").GetInt32());
+        }
+
+        // And what the server reads on joining says the same.
+        HttpResponseMessage status = await AsServer(HttpMethod.Get, $"/combat/{_local}");
+        string statusText = await status.Content.ReadAsStringAsync();
+        _output.WriteLine($"GET /combat/{_local}: {statusText}");
+
+        using JsonDocument statusBody = JsonDocument.Parse(statusText);
+
+        Assert.Equal(101, statusBody.RootElement.GetProperty("maxStamina").GetInt32());
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(10_001)]
+    public async Task A_report_outside_what_one_could_spend_is_refused(int spent)
+    {
+        HttpResponseMessage response = await AsServer(
+            HttpMethod.Post, "/combat/stamina", new { characterId = _local, spent });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_report_for_nobody_is_not_found() =>
+        Assert.Equal(
+            HttpStatusCode.NotFound,
+            (await AsServer(HttpMethod.Post, "/combat/stamina", new { characterId = 999_999, spent = 10 })).StatusCode);
 
     [Fact]
     public async Task Every_hit_is_logged_with_where_its_time_went()
@@ -226,7 +291,10 @@ public sealed class CombatEndpointTests(ApiDatabaseFixture fixture) : IAsyncLife
             XpPerHundredDamage = 12,
         };
 
-        context.Skills.AddRange(rifleSkill, new Skill { Key = "constitution", Name = "Constitution", Category = SkillCategory.Combat });
+        context.Skills.AddRange(
+            rifleSkill,
+            new Skill { Key = "constitution", Name = "Constitution", Category = SkillCategory.Combat },
+            new Skill { Key = "stamina", Name = "Stamina", Category = SkillCategory.Combat, XpPerHundredStaminaSpent = 100 });
 
         var account = new Account { Email = "server@local.test", PasswordHash = "x", CreatedAt = DateTimeOffset.UtcNow };
 

@@ -1320,6 +1320,29 @@ struct SPACEMMOBACKEND_API FBackendCombatStatus
 
 	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
 	FBackendWeapon Weapon;
+
+	/** The stamina pool their stamina level gives them (task 101); 0 when the answer did not say. */
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 MaxStamina = 0;
+};
+
+/** What stamina a character spent earned, and the pool their stamina level now gives them (task 101). */
+USTRUCT(BlueprintType)
+struct SPACEMMOBACKEND_API FBackendStaminaSpent
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 CharacterId = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int64 XpAwarded = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 Level = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "SpaceMMO|Backend")
+	int32 MaxStamina = 0;
 };
 
 /**

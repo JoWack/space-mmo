@@ -9,11 +9,26 @@ namespace SpaceMMO.Domain.Content;
 
 /// <summary>A skill, as authored in <c>data/skills/</c>.</summary>
 /// <param name="Weapon">What makes it a weapon's skill (ADR-0015), or null for every other skill.</param>
-public sealed record SkillContent(string Key, string Name, SkillCategory Category, WeaponSkillContent? Weapon = null)
+/// <param name="Pool">What makes it the stamina pool's skill (ADR-0017), or null for every other skill.</param>
+public sealed record SkillContent(
+    string Key, string Name, SkillCategory Category, WeaponSkillContent? Weapon = null, PoolSkillContent? Pool = null)
 {
     /// <summary>A weapon skill's family, type, mount and XP rate, or null for any other skill.</summary>
     public WeaponSkillContent? Weapon { get; init; } = Weapon;
+
+    /// <summary>The stamina skill's XP rate, or null for any other skill.</summary>
+    public PoolSkillContent? Pool { get; init; } = Pool;
 }
+
+/// <summary>
+/// What the stamina skill says about itself (ADR-0017, task 101): what spending the pool is worth. The pool's size
+/// by level is a rule, <see cref="StaminaPool.Max"/>, not content.
+/// </summary>
+/// <param name="XpPerHundredSpent">
+/// XP per hundred points of stamina spent, sprinting or dodging. Per hundred so a rate below one a point is a whole
+/// number, as a weapon's is.
+/// </param>
+public sealed record PoolSkillContent(int XpPerHundredSpent);
 
 /// <summary>
 /// What a weapon's skill says about itself (ADR-0015, task 194): which weapons share its XP, and what damage is

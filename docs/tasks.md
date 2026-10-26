@@ -1575,7 +1575,8 @@ any list, and each says which document it comes from so the next reader can chec
 
 ## 101 — Seed the combat and pilot skills
 
-**Pending.**
+**Stamina built 25 October (below), which is 195's stage 2; waiting on a playtest. The pilot skills and the rest of
+the crafting tree stay unseeded until something awards them**, as this task always said.
 
 `data/skills/core.json` holds five skills — gathering, mining, refining, toolcrafting, shipcrafting
 — and the design bible §2 defines eight more that do not exist anywhere: `guns`, `melee`,
@@ -1593,6 +1594,51 @@ list; `constitution` and `stamina` still wait on 102.
 so nothing here waits on a decision any more. Seed with the first things that award them: the Laser Rifle's
 skill, `weaponcrafting` and `constitution` with the first weapon (194), `stamina` with its pool (195).
 **`laser_rifle`, `weaponcrafting` and `constitution` were seeded by 194 the same day.**
+
+### Stamina, built 25 October
+Joe chose 101 next on 24 October. What was left of it with anything to award it was `stamina`; `ship_handling`,
+`warp`, the ship weapons (192), `armorcrafting` and `construction` have no action yet, and seeding them would put
+skills on the skills screen that cannot move.
+- **The rules** (`StaminaPool`, Domain): the pool is 100 at level 1 to 150 at 99, linear and rounded as health is
+  (ADR-0017); XP is the points spent times the skill's rate per hundred, rounded half up.
+- **The rate is content**: `pool.xpPerHundredSpent` on the `stamina` skill in `data/skills/core.json`, carried to a
+  new `skills.xp_per_hundred_stamina_spent` column (migration `StaminaSkill`). **100, one XP a point, chosen by
+  Claude** as ADR-0017 gives none: sprinting without a break earns 36,000 an hour, so ordinary play should reach 70
+  in something like 70–100 hours, beside a weapon's 50 hours of fighting. Unmeasured; a content number to set
+  against real play, as the sprint drain was. The validator holds only `stamina` to a pool block, in Combat, earning
+  something.
+- **The API**: `GET /combat/{id}` says `maxStamina`; `POST /combat/stamina` (service only, as hits are) takes whole
+  points spent, awards the XP under the character's lock, and answers with the level and the pool. More than
+  10,000 in one report is refused, as a counting bug rather than a cheat (the server is the only caller).
+- **The game server**: the walk model counts every point that actually leaves the pool (`FWalkState::StaminaSpent`:
+  sprint at empty adds nothing, a refused dodge nothing); the combat component reports the whole points every 30 s,
+  one report at a time, counting them as reported once sent and taking them back if the report fails, and reports
+  the rest when the pawn ends. The pool's size comes from the status on joining and from each report's answer, and
+  travels to the clients in the net state, so the owner predicts with the server's size.
+- **No new interface.** Stamina appears on the skills screen as content, as every skill does; combat XP shows no
+  message, so neither does this. The bar's number reads "/ 101" and so on as the pool grows.
+
+**Verified, and how** (25 October):
+- Suites: Domain 580 (21 new: the pool's size at 1, 2, 50, 70 and 99 and clamped outside; XP rounding; the validator's
+  five cases), Data 327 (7 new), API 126 (5 new), client 350 (4 new), against builds that said `Result: Succeeded`.
+- **Against real values:** the loader test reads the rate from the authored pack, not a restated 100; the client
+  parses the API's own answers, captured from `CombatEndpointTests` (which writes them to its test output), and its
+  request body is pinned to what that test posts. A status from before this change still parses, as a pool of 0,
+  which the pawn ignores.
+- **Broken on purpose, each failing its own test and nothing else:** the character's lock taken out (10 to 20 of 101
+  points lost, three runs of three); the loader not carrying the rate (null); the pool's size not set on the pawn
+  (100 where 125, and a hop leaving 75); the report rounding rather than flooring (138 where 137). **Sprint counting
+  the drain asked for rather than what left the pool passed the first version of its test**, because a full hundred
+  empties in a whole number of frames, so the clamp never cut a frame short; the test now also sprints from 50.05,
+  and fails that (50.17).
+- **Seeded** into Joe's database on 25 October: migration `StaminaSkill` applied, `stamina` in Combat at 100.
+- **Seen once and not explained:** a first full API run failed five tests in `AccountAndCharacterTests` (not touched
+  here, `Health_reports_ok` among them) while an editor build was compiling beside it; the one rerun alone and the
+  full rerun passed, and the messages were not kept. If it comes back, keep the output.
+
+**Not verified by anything but a playtest:** the 30 s reports arriving (`Stamina: character N spent X, earning Y XP`
+in the server log), the skills screen showing Stamina, the bar's maximum rising as it levels, and the owner's
+prediction agreeing with the server about a pool bigger than 100 (a mismatch would show as the bar jumping back).
 
 ## 102 — Decide where `constitution` and `stamina` XP comes from
 
@@ -10458,8 +10504,8 @@ seven), with no rifles yet. A rifle is a weaponcrafting job: 6 Structural Plate 
 
 ## 195 — Stamina, and a dodge roll
 
-**Stage 1 built 19 October and passed Joe's playtest 20 October** (below). **Stage 2 is the pool's size and XP from
-the `stamina` skill**, blocked on 101.
+**Stage 1 built 19 October and passed Joe's playtest 20 October** (below). **Stage 2, the pool's size and XP from
+the `stamina` skill, built 25 October with 101** (see 101); waiting on a playtest.
 Belongs to **M6** for the
 pool, and to **M5** for the key, as sprint (136) did. Decided in
 [ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md):
@@ -10581,9 +10627,14 @@ Each offered against alternatives, Claude's suggestion first:
   the mock's "max 100 → 98" had shown). A full repair from 0 takes 18; one death's top-up about 2. A config value.
 - **Worn out is gone**: when its maximum is used up the item is destroyed, and the repair that will do it says so on
   its button first. Offered against kept but never repairable, and scrapped for some of its materials.
-- **Not asked, Claude's default, for Joe to overrule**: a full repair (0 to the maximum) costs a quarter of the item's
-  recipe inputs and credits by tier, scaled down with the damage and rounded up, as one rule in `data/` with per-item
-  overrides; an item with no recipe needs an authored cost.
+- **What a repair costs** (Joe, 25 October, asked once the rounding problem was seen): **materials**, a quarter of
+  the item's recipe inputs for a full repair (0 to the maximum), in proportion for less; **the fractions are carried**
+  -- each item keeps a tab of what it owes, and a whole unit is charged whenever its tab reaches one, so every repair
+  costs exactly its share. Offered against rounding to the nearest (top-ups free of materials) and rounding up (ten
+  top-ups about five times one full repair, which brings back the incentive to wait until broken). **Credits: the
+  industry bay's crafting fee for one run** (`IndustryFees.ForJob(1)`, 15 cr at the draft rates) for a full repair, its
+  share for less, rounded to the credit. Offered against a price authored per item, and materials only. An item with
+  no recipe needs an authored cost; none exists yet.
 
 ## 197 — Docking never counted toward quests, so nobody could finish the main story
 

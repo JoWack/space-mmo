@@ -357,6 +357,22 @@ public:
 	double GetStamina() const { return FMath::Min(WalkState.Stamina, WalkConfig.StaminaMax); }
 	double GetStaminaMax() const { return WalkConfig.StaminaMax; }
 
+	/**
+	 * The pool this character's stamina level gives them (task 101), from the API. Server only: it travels to every
+	 * client in the net state, and the owner predicts with the size the server sends. A size below one is ignored,
+	 * which is what an API that did not say sends.
+	 */
+	void SetStaminaMax(const double Max)
+	{
+		if (HasAuthority() && Max >= 1.0)
+		{
+			WalkConfig.StaminaMax = Max;
+		}
+	}
+
+	/** Every point of stamina spent since this pawn began stepping (task 101): what the server reports for XP. */
+	double GetStaminaSpent() const { return WalkState.StaminaSpent; }
+
 	/** How many dodges were refused for want of stamina, so the bar can flash once for each. */
 	uint8 GetDodgesRefused() const { return WalkState.DodgesRefused; }
 

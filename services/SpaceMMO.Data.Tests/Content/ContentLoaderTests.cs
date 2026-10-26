@@ -326,6 +326,25 @@ public sealed class ContentLoaderTests(DatabaseFixture fixture) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task StaminasRate_ReachesTheDatabase_AndNoOtherSkillHasOne()
+    {
+        // Read from the authored pack, not restated: the game server's reports earn nothing without it (task 101).
+        await using SpaceMmoDbContext context = _fixture.CreateContext();
+        await new ContentLoader(context).LoadAsync(ContentRoot());
+
+        ContentPack pack = await ContentLoader.ReadAsync(ContentRoot());
+        int authored = pack.Skills.Single(s => s.Key == Domain.Combat.StaminaPool.SkillKey).Pool!.XpPerHundredSpent;
+
+        await using SpaceMmoDbContext verify = _fixture.CreateContext();
+
+        Skill stamina = await verify.Skills.SingleAsync(s => s.Key == Domain.Combat.StaminaPool.SkillKey);
+
+        Assert.Equal(authored, stamina.XpPerHundredStaminaSpent);
+        Assert.Equal(Domain.Progression.SkillCategory.Combat, stamina.Category);
+        Assert.False(await verify.Skills.AnyAsync(s => s.Key != stamina.Key && s.XpPerHundredStaminaSpent != null));
+    }
+
+    [Fact]
     public async Task EveryHomeBodysStart_ReachesTheDatabase()
     {
         // Task 145: where a new character first stands travels data/ -> seed -> Postgres -> API ->

@@ -1552,6 +1552,45 @@ bool FSpaceMMOBackendProtocol::ParseCombatStatus(const FString& Json, FBackendCo
 		}
 	}
 
+	// Missing from an API older than task 101: 0, which the caller reads as "leave the pool as it is".
+	if (ReadInt64(Object, TEXT("maxStamina"), Number))
+	{
+		OutStatus.MaxStamina = static_cast<int32>(Number);
+	}
+
+	return true;
+}
+
+FString FSpaceMMOBackendProtocol::MakeStaminaSpentBody(const int32 CharacterId, const int32 Spent)
+{
+	return FString::Printf(TEXT("{\"characterId\":%d,\"spent\":%d}"), CharacterId, Spent);
+}
+
+bool FSpaceMMOBackendProtocol::ParseStaminaSpent(const FString& Json, FBackendStaminaSpent& OutSpent)
+{
+	const TSharedPtr<FJsonObject> Object = ParseObject(Json);
+
+	int64 Number = 0;
+
+	if (!Object.IsValid() || !ReadInt64(Object, TEXT("maxStamina"), Number))
+	{
+		return false;
+	}
+
+	OutSpent.MaxStamina = static_cast<int32>(Number);
+
+	if (ReadInt64(Object, TEXT("characterId"), Number))
+	{
+		OutSpent.CharacterId = static_cast<int32>(Number);
+	}
+
+	if (ReadInt64(Object, TEXT("level"), Number))
+	{
+		OutSpent.Level = static_cast<int32>(Number);
+	}
+
+	ReadInt64(Object, TEXT("xpAwarded"), OutSpent.XpAwarded);
+
 	return true;
 }
 

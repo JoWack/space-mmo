@@ -218,6 +218,9 @@ public class Skill
     /// <summary>For a weapon's skill, XP per hundred points of damage dealt with it (ADR-0017).</summary>
     public int? XpPerHundredDamage { get; set; }
 
+    /// <summary>For the stamina skill, XP per hundred points of stamina spent (ADR-0017, task 101); null for any other.</summary>
+    public int? XpPerHundredStaminaSpent { get; set; }
+
     /// <summary>Whether this is a weapon's skill, with everything ADR-0015 needs to share its XP.</summary>
     public Domain.Combat.WeaponSkill? AsWeapon() =>
         WeaponFamily is { } family && WeaponType is { } type && WeaponMount is { } mount

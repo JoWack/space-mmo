@@ -412,6 +412,44 @@ void USpaceMMOBackendClient::FetchCombatStatusAsServer(
 		MoveTemp(OnFailure));
 }
 
+bool USpaceMMOBackendClient::ReportStaminaSpentAsServer(
+	const int32 CharacterId,
+	const int32 Spent,
+	TFunction<void(const FBackendStaminaSpent&)> OnSpent,
+	TFunction<void(const FBackendFailure&)> OnFailure)
+{
+	if (ServiceSecret.IsEmpty() || CharacterId == 0 || Spent < 0)
+	{
+		return false;
+	}
+
+	Send(
+		TEXT("POST"),
+		TEXT("/combat/stamina"),
+		FSpaceMMOBackendProtocol::MakeStaminaSpentBody(CharacterId, Spent),
+		false,
+		[OnSpent = MoveTemp(OnSpent)](const FString& ResponseBody)
+		{
+			FBackendStaminaSpent Result;
+
+			if (!FSpaceMMOBackendProtocol::ParseStaminaSpent(ResponseBody, Result))
+			{
+				UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Stamina: the API's answer was not a stamina report: %s"),
+					*ResponseBody.Left(200));
+			}
+
+			// Either way, so a caller holding a report in flight is never left waiting for an answer that came.
+			if (OnSpent)
+			{
+				OnSpent(Result);
+			}
+		},
+		ServiceSecret,
+		MoveTemp(OnFailure));
+
+	return true;
+}
+
 void USpaceMMOBackendClient::RespawnAsServer(
 	const int32 CharacterId,
 	TFunction<void(const FBackendRespawn&)> OnRespawn,

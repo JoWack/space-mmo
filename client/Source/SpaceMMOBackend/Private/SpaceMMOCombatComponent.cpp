@@ -250,6 +250,105 @@ void USpaceMMOCombatComponent::TickComponent(
 			}
 		}
 	}
+
+	if (Pawn != nullptr && Pawn->HasAuthority())
+	{
+		ReportStamina(false);
+	}
+}
+
+void USpaceMMOCombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (GetOwner() != nullptr && GetOwner()->HasAuthority())
+	{
+		ReportStamina(true);
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+int32 USpaceMMOCombatComponent::WholeStaminaToReport(const double SpentTotal, const double Reported)
+{
+	const double Unreported = SpentTotal - Reported;
+
+	if (!FMath::IsFinite(Unreported) || Unreported < 1.0)
+	{
+		return 0;
+	}
+
+	return static_cast<int32>(FMath::Min(FMath::FloorToDouble(Unreported), static_cast<double>(MostStaminaInOneReport)));
+}
+
+void USpaceMMOCombatComponent::ReportStamina(const bool bNow)
+{
+	const ASpaceMMOCharacterPawn* Pawn = Cast<ASpaceMMOCharacterPawn>(GetOwner());
+	const UWorld* World = GetWorld();
+
+	// At the end, a report still out does not hold back the last one: nothing is taken back after that anyway.
+	if (Pawn == nullptr || World == nullptr || CharacterId == 0 || (bStaminaReportInFlight && !bNow))
+	{
+		return;
+	}
+
+	const double Now = World->GetTimeSeconds();
+
+	if (!bNow && LastStaminaReportSeconds >= 0.0 && Now - LastStaminaReportSeconds < StaminaReportSeconds)
+	{
+		return;
+	}
+
+	LastStaminaReportSeconds = Now;
+
+	const int32 Whole = WholeStaminaToReport(Pawn->GetStaminaSpent(), StaminaReported);
+	USpaceMMOBackendClient* Client = Backend();
+
+	if (Whole <= 0 || Client == nullptr)
+	{
+		return;
+	}
+
+	// Counted as reported once sent, so the next report cannot claim it too; taken back if this one fails.
+	StaminaReported += Whole;
+	bStaminaReportInFlight = true;
+
+	TWeakObjectPtr<USpaceMMOCombatComponent> WeakThis(this);
+	const int32 Character = CharacterId;
+
+	const bool bSent = Client->ReportStaminaSpentAsServer(
+		Character,
+		Whole,
+		[WeakThis, Character, Whole](const FBackendStaminaSpent& Spent)
+		{
+			UE_LOG(LogSpaceMMOBackend, Log, TEXT("Stamina: character %d spent %d, earning %lld XP: level %d, a pool of %d."),
+				Character, Whole, Spent.XpAwarded, Spent.Level, Spent.MaxStamina);
+
+			if (USpaceMMOCombatComponent* Self = WeakThis.Get())
+			{
+				Self->bStaminaReportInFlight = false;
+
+				if (ASpaceMMOCharacterPawn* Owner = Cast<ASpaceMMOCharacterPawn>(Self->GetOwner()))
+				{
+					Owner->SetStaminaMax(Spent.MaxStamina);
+				}
+			}
+		},
+		[WeakThis, Character, Whole](const FBackendFailure& Failure)
+		{
+			UE_LOG(LogSpaceMMOBackend, Warning, TEXT("Stamina: reporting %d spent by character %d failed (%d %s); kept for the next."),
+				Whole, Character, Failure.HttpStatus, *Failure.Message);
+
+			if (USpaceMMOCombatComponent* Self = WeakThis.Get())
+			{
+				Self->StaminaReported -= Whole;
+				Self->bStaminaReportInFlight = false;
+			}
+		});
+
+	if (!bSent)
+	{
+		StaminaReported -= Whole;
+		bStaminaReportInFlight = false;
+	}
 }
 
 void USpaceMMOCombatComponent::BindInput(UInputComponent* InputComponent)
@@ -328,14 +427,17 @@ void USpaceMMOCombatComponent::FetchStatus()
 		if (ASpaceMMOCharacterPawn* Pawn = Cast<ASpaceMMOCharacterPawn>(Self->GetOwner()))
 		{
 			Pawn->SetMovementLocked(Self->bDead);
+
+			// Their stamina level's pool (task 101). An API that did not say sends 0, which leaves it as it was.
+			Pawn->SetStaminaMax(Status.MaxStamina);
 		}
 
 		// Found dead at sign-in, on a machine that draws: lying down already (task 201).
 		Self->ShowDeathOnBody();
 
-		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d has %d/%d health%s, holding %s."),
+		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d has %d/%d health%s, a stamina pool of %d, holding %s."),
 			Self->CharacterId, Status.Health, Status.MaxHealth, Self->bDead ? TEXT(" (dead)") : TEXT(""),
-			Status.bHasWeapon ? *Status.Weapon.Name : TEXT("nothing that fires"));
+			Status.MaxStamina, Status.bHasWeapon ? *Status.Weapon.Name : TEXT("nothing that fires"));
 	});
 }
 

@@ -55,6 +55,7 @@ public static class ContentValidator
 
         ValidateItems(pack, errors);
         ValidateWeaponSkills(pack, errors);
+        ValidatePoolSkill(pack, errors);
         ValidateRecipes(pack, skillKeys, itemKeys, toolKeys, errors);
         ValidateQuests(pack, skillKeys, questKeys, errors);
         ValidateUniverse(pack, systemKeys, bodyKeys, errors);
@@ -761,6 +762,46 @@ public static class ContentValidator
         {
             errors.Add(new ContentError(
                 "skill", CombatXp.ConstitutionSkillKey, "Weapons exist, so constitution must: it earns a third of their XP."));
+        }
+    }
+
+    /// <summary>
+    /// The stamina skill, and only it, says what spending the pool is worth, and it is worth something (ADR-0017).
+    /// </summary>
+    private static void ValidatePoolSkill(ContentPack pack, List<ContentError> errors)
+    {
+        foreach (SkillContent skill in pack.Skills)
+        {
+            bool isStamina = skill.Key == StaminaPool.SkillKey;
+
+            if (skill.Pool is not { } pool)
+            {
+                if (isStamina)
+                {
+                    errors.Add(new ContentError(
+                        "skill", skill.Key, "Stamina must say what spending it is worth (pool.xpPerHundredSpent)."));
+                }
+
+                continue;
+            }
+
+            if (!isStamina)
+            {
+                errors.Add(new ContentError(
+                    "skill", skill.Key, $"Only {StaminaPool.SkillKey} sizes the stamina pool; this has a pool block."));
+            }
+
+            if (skill.Category != SkillCategory.Combat)
+            {
+                errors.Add(new ContentError(
+                    "skill", skill.Key, $"The stamina pool's skill is Combat, not {skill.Category}."));
+            }
+
+            if (pool.XpPerHundredSpent <= 0)
+            {
+                errors.Add(new ContentError(
+                    "skill", skill.Key, "Spending stamina must earn something (pool.xpPerHundredSpent)."));
+            }
         }
     }
 

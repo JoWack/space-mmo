@@ -94,6 +94,12 @@ public:
 	/** Parses a character's health and weapon. */
 	static bool ParseCombatStatus(const FString& Json, FBackendCombatStatus& OutStatus);
 
+	/** The body of <c>POST /combat/stamina</c>: whole points a character spent since the last report (task 101). */
+	static FString MakeStaminaSpentBody(int32 CharacterId, int32 Spent);
+
+	/** Parses what stamina spent earned, and the pool it left. False for a body that is not one. */
+	static bool ParseStaminaSpent(const FString& Json, FBackendStaminaSpent& OutSpent);
+
 	/** Parses where a respawned character came back. */
 	static bool ParseRespawn(const FString& Json, FBackendRespawn& OutRespawn);
 

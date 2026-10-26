@@ -37,7 +37,14 @@ public sealed record RespawnResponse(int StationId, string StationKey, int Healt
 /// stands in its regeneration, not only what it is this instant.
 /// </param>
 public sealed record CombatStatusResponse(
-    int CharacterId, int Health, int MaxHealth, WeaponResponse? Weapon, double? SecondsSinceCombat = null);
+    int CharacterId, int Health, int MaxHealth, WeaponResponse? Weapon, double? SecondsSinceCombat = null,
+    int MaxStamina = StaminaPool.AtLevelOne);
+
+/// <summary>Stamina a character spent since the game server's last report, in whole points (task 101).</summary>
+public sealed record StaminaSpentRequest(int CharacterId, int Spent);
+
+/// <summary>What it earned, and the stamina level and pool it left, which the game server sizes the pool by.</summary>
+public sealed record StaminaSpentResponse(int CharacterId, long XpAwarded, int Level, int MaxStamina);
 
 public sealed record WeaponResponse(
     long ItemInstanceId, string ItemKey, string Name, string SkillKey, int Damage, int CooldownMs, int RangeMetres);
@@ -59,8 +66,15 @@ public static class CombatEndpoints
 
         group.MapPost("/hits", HitAsync);
         group.MapPost("/respawn", RespawnAsync);
+        group.MapPost("/stamina", StaminaSpentAsync);
         group.MapGet("/{characterId:int}", StatusAsync);
     }
+
+    /// <summary>
+    /// The most one report may claim. The pool refills at 20 a second, so a minute of spending is about 1,200 points
+    /// with a full pool on top; this is far past that, to catch a counting bug rather than to police the server.
+    /// </summary>
+    private const int MostStaminaInOneReport = 10_000;
 
     private static IResult NotTheServer() =>
         Results.Problem(
@@ -212,6 +226,40 @@ public static class CombatEndpoints
 
         double? since = status.LastCombatAt is { } at ? Math.Max(0.0, (now - at).TotalSeconds) : null;
 
-        return Results.Ok(new CombatStatusResponse(characterId, status.Health, status.MaxHealth, weapon, since));
+        return Results.Ok(new CombatStatusResponse(
+            characterId, status.Health, status.MaxHealth, weapon, since, status.MaxStamina));
+    }
+
+    /// <summary>
+    /// Stamina XP for what a character spent sprinting and dodging (ADR-0017, task 101). Service only: the game
+    /// server's walk model is what spends the pool, so it is the one that knows.
+    /// </summary>
+    private static async Task<IResult> StaminaSpentAsync(
+        StaminaSpentRequest request,
+        HttpContext context,
+        ServiceCredential service,
+        CombatService combat,
+        CancellationToken cancellation)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!service.IsServiceCaller(context))
+        {
+            return Results.Problem(
+                title: "Stamina is counted by the game server.",
+                detail: "Only the simulation knows what a character spent.",
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        if (request.Spent is < 0 or > MostStaminaInOneReport)
+        {
+            return Results.BadRequest(new { error = $"A report spends 0 to {MostStaminaInOneReport} stamina." });
+        }
+
+        StaminaSpentResult? result = await combat.SpendStaminaAsync(request.CharacterId, request.Spent, cancellation);
+
+        return result is null
+            ? Results.Problem(title: "No such character.", statusCode: StatusCodes.Status404NotFound)
+            : Results.Ok(new StaminaSpentResponse(request.CharacterId, result.XpAwarded, result.Level, result.MaxStamina));
     }
 }

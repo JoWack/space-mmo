@@ -83,8 +83,12 @@ public sealed record HitTiming(
 public sealed record WeaponLoadout(
     long ItemInstanceId, string ItemKey, string Name, string SkillKey, int Damage, int CooldownMs, int RangeMetres);
 
-/// <summary>A character's health now, and what they would fire.</summary>
-public sealed record CombatStatus(int Health, int MaxHealth, DateTimeOffset? LastCombatAt, WeaponLoadout? Weapon);
+/// <summary>A character's health now, what they would fire, and how big their stamina pool is.</summary>
+public sealed record CombatStatus(
+    int Health, int MaxHealth, DateTimeOffset? LastCombatAt, WeaponLoadout? Weapon, int MaxStamina = StaminaPool.AtLevelOne);
+
+/// <summary>What spending stamina earned (task 101): the XP, and the stamina level and pool it left.</summary>
+public sealed record StaminaSpentResult(long XpAwarded, int Level, int MaxStamina);
 
 /// <summary>Where a character came back after dying.</summary>
 public sealed record RespawnResult(int StationId, string StationKey, int Health, int MaxHealth);
@@ -132,7 +136,79 @@ public sealed class CombatService(SpaceMmoDbContext database)
         int max = await MaxHealthAsync(characterId, cancellationToken);
         int health = CombatHealth.Current(character.Health, max, character.LastCombatAt, now);
 
-        return new CombatStatus(health, max, character.LastCombatAt, await LoadoutAsync(characterId, cancellationToken));
+        return new CombatStatus(
+            health,
+            max,
+            character.LastCombatAt,
+            await LoadoutAsync(characterId, cancellationToken),
+            StaminaPool.Max(await StaminaLevelAsync(characterId, cancellationToken)));
+    }
+
+    /// <summary>
+    /// Awards stamina XP for what the game server says a character spent, sprinting and dodging (ADR-0017, task 101).
+    /// </summary>
+    /// <returns>What it earned and the pool it leaves, or null if there is no such character.</returns>
+    /// <remarks>
+    /// <para>
+    /// <strong>The game server counts, this awards</strong>, as with hits: the walk model it steps is what spends the
+    /// pool, and it reports whole points in batches rather than every frame.
+    /// </para>
+    /// <para>
+    /// <strong>Under the character's lock</strong>, as gathering awards its XP: an award writes the skill's new
+    /// total, so two awards to one row at once would lose one. The game server sends one report at a time for a
+    /// character; the lock is what makes that not matter.
+    /// </para>
+    /// <para>
+    /// Without a stamina skill in content, or with no rate on it, nothing is earned, and the pool stays level 1's.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">If <paramref name="spent"/> is negative.</exception>
+    public async Task<StaminaSpentResult?> SpendStaminaAsync(
+        int characterId, int spent, CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(spent);
+
+        Skill? stamina = await _database.Skills
+            .SingleOrDefaultAsync(s => s.Key == StaminaPool.SkillKey, cancellationToken);
+
+        await using var transaction = await _database.Database.BeginTransactionAsync(cancellationToken);
+
+        List<Character> locked = await _database.Characters
+            .FromSqlInterpolated($"SELECT * FROM characters WHERE id = {characterId} FOR UPDATE")
+            .ToListAsync(cancellationToken);
+
+        if (locked.Count != 1)
+        {
+            return null;
+        }
+
+        long xp = stamina?.XpPerHundredStaminaSpent is int rate ? StaminaPool.XpForSpent(spent, rate) : 0;
+        long total = 0;
+
+        if (stamina is not null)
+        {
+            await SkillAwards.AwardAsync(_database, characterId, stamina.Id, xp, cancellationToken);
+
+            total = (await _database.CharacterSkills.FindAsync([characterId, stamina.Id], cancellationToken))?.Xp ?? 0;
+        }
+
+        await _database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        int level = SkillCurve.LevelForXp(total);
+
+        return new StaminaSpentResult(xp, level, StaminaPool.Max(level));
+    }
+
+    /// <summary>A character's stamina level, which sizes their pool (ADR-0017).</summary>
+    private async Task<int> StaminaLevelAsync(int characterId, CancellationToken cancellationToken)
+    {
+        long xp = await _database.CharacterSkills
+            .Where(s => s.CharacterId == characterId && s.Skill!.Key == StaminaPool.SkillKey)
+            .Select(s => s.Xp)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return SkillCurve.LevelForXp(xp);
     }
 
     /// <summary>Applies one hit, if the rules allow it.</summary>

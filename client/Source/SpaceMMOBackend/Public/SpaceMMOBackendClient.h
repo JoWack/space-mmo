@@ -216,6 +216,19 @@ public:
 		TFunction<void(const FBackendCombatStatus&)> OnStatus,
 		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
 
+	/**
+	 * Tells the API how much stamina a character spent since the last report, in whole points, for stamina XP; the
+	 * answer carries the pool their level now gives them (task 101). Service only, as hits are.
+	 *
+	 * @return False when nothing was sent (no service secret, no character, a negative count), so a caller holding
+	 *         a report in flight knows no answer is coming.
+	 */
+	bool ReportStaminaSpentAsServer(
+		int32 CharacterId,
+		int32 Spent,
+		TFunction<void(const FBackendStaminaSpent&)> OnSpent,
+		TFunction<void(const FBackendFailure&)> OnFailure = nullptr);
+
 	/** Brings a dead character back at the station they last docked at (ADR-0016). */
 	void RespawnAsServer(
 		int32 CharacterId,

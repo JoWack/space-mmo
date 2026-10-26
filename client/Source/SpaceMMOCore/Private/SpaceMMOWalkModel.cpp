@@ -193,6 +193,7 @@ FWalkState FCharacterWalkModel::Step(
 				Result.DodgeDirection = Moving.IsNearlyZero() ? -Forward : Moving.GetSafeNormal();
 				Result.DodgeSeconds = 0.0;
 				Result.Stamina -= Config.DodgeStaminaCost;
+				Result.StaminaSpent += Config.DodgeStaminaCost;
 				++Result.DodgesStarted;
 				bSpent = true;
 			}
@@ -213,7 +214,10 @@ FWalkState FCharacterWalkModel::Step(
 
 	if (bSprinting)
 	{
+		const double Before = Result.Stamina;
+
 		Result.Stamina = FMath::Max(Result.Stamina - Config.SprintStaminaPerSecond * DeltaSeconds, 0.0);
+		Result.StaminaSpent += Before - Result.Stamina;
 		Result.bSprintSpent = Result.Stamina <= 0.0;
 		bSpent = true;
 	}

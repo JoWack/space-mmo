@@ -224,6 +224,12 @@ struct SPACEMMOCORE_API FWalkState
 	/** Seconds since stamina was last spent; it refills once StaminaRegenDelaySeconds have passed. */
 	double SinceSpentSeconds = 0.0;
 
+	/**
+	 * Every point of stamina spent since this state began, sprinting and dodging: only what actually left the pool, so
+	 * sprint at empty adds nothing. The server reports it for stamina XP (task 101); it never goes down.
+	 */
+	double StaminaSpent = 0.0;
+
 	/** Sprint ran the pool dry, and stays a run until the key is let go. */
 	bool bSprintSpent = false;
 

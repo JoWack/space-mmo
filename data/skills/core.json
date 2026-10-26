@@ -10,6 +10,13 @@
     { "$comment": "Task 194: makes the Laser Rifle. A weapon's damage comes from its crafted tier (ADR-0017), so this is the skill better weapons will need.", "key": "weaponcrafting", "name": "Weaponcrafting", "category": "Life" },
     { "$comment": "Maximum health (ADR-0017): 1,000 at level 1 to 2,000 at 99. Earns a third of every combat XP award, on top of the weapon's, so it is even across weapons and cannot be trained apart from fighting.", "key": "constitution", "name": "Constitution", "category": "Combat" },
     {
+      "$comment": "The stamina pool (ADR-0017, tasks 101 and 195): 100 at level 1 to 150 at 99, earning XP for stamina spent sprinting or dodging, in a fight or out of one. 100 per hundred is one XP a point, chosen by Claude as ADR-0017 gives no rate: sprinting without a break earns 36,000 an hour, so ordinary play, which sprints a fraction of the time, should reach 70 in something like 70-100 hours, beside a weapon's 50 hours of fighting. Unmeasured; set it against real play.",
+      "key": "stamina",
+      "name": "Stamina",
+      "category": "Combat",
+      "pool": { "xpPerHundredSpent": 100 }
+    },
+    {
       "$comment": "The first weapon (task 194, ADR-0015). Laser, ranged, on foot: the Laser Pistol is its sibling when it exists, and takes a fifth of its XP. 12 XP per hundred points of damage is ADR-0017's estimate for level 70 in about 50 hours of fighting, to be measured against real fights.",
       "key": "laser_rifle",
       "name": "Laser Rifle",

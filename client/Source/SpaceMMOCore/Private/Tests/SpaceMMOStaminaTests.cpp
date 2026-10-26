@@ -350,6 +350,112 @@ bool FSpaceMMODeadDoNotDodgeTest::RunTest(const FString& Parameters)
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOStaminaSpentCountsTest,
+	"SpaceMMO.Stamina.SpentCountsOnlyWhatLeftThePool",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOStaminaSpentCountsTest::RunTest(const FString& Parameters)
+{
+	// Task 101: what the server reports for stamina XP. Sprint held for fifteen seconds spends the hundred and then
+	// nothing, though the key is still down and the pool refilling; a dodge adds its 25, a refused one nothing.
+	using namespace SpaceMMOStaminaTests;
+
+	FWalker Walker;
+
+	Walker.Run(Moving(true), 15.0);
+	TestEqual(TEXT("Fifteen seconds of sprint held spent the pool once"), Walker.State.StaminaSpent, 100.0, 0.01);
+
+	// From a pool a frame's drain does not divide, the last frame takes less than a frame's worth, and only that is
+	// spent. A full hundred empties in a whole number of frames, so the case above cannot tell the two apart: counting
+	// the drain asked for rather than what left passed it, and fails this.
+	FWalker Odd;
+	Odd.State.Stamina = 50.05;
+	Odd.Run(Moving(true), 8.0);
+	TestEqual(TEXT("From 50.05, exactly 50.05"), Odd.State.StaminaSpent, 50.05, 0.001);
+
+	FWalkInput Press;
+	Press.DodgePresses = 1;
+	Walker.Run(Moving(false), 5.0);
+	Walker.Run(Press, Frame);
+	TestEqual(TEXT("A dodge adds its cost"), Walker.State.StaminaSpent, 125.0, 0.01);
+
+	FWalker Short;
+	Short.State.Stamina = 24.0;
+	Short.Run(Press, Frame);
+	TestEqual(TEXT("A refused dodge adds nothing"), Short.State.StaminaSpent, 0.0, 0.0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOServerSizesThePoolTest,
+	"SpaceMMO.Stamina.TheServerSizesThePoolFromTheLevel",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOServerSizesThePoolTest::RunTest(const FString& Parameters)
+{
+	// Task 101: the pawn takes the size the API's answer gives and steps with it -- a hop from a pool of 125 leaves
+	// 100, not the 75 a pool of the default 100 would -- and an answer that said nothing (0) leaves it alone.
+	UWorld* const World = UWorld::CreateWorld(EWorldType::Game, false, TEXT("SpaceMMOStaminaPoolTest"));
+	FWorldContext& Context = GEngine->CreateNewWorldContext(EWorldType::Game);
+	Context.SetCurrentWorld(World);
+	World->InitializeActorsForPlay(FURL());
+	World->BeginPlay();
+
+	const ASpaceMMOPlanetActor* Planet = nullptr;
+
+	for (TActorIterator<ASpaceMMOPlanetActor> It(World); It; ++It)
+	{
+		Planet = *It;
+	}
+
+	if (TestNotNull(TEXT("The world has its planet"), Planet))
+	{
+		ASpaceMMOCharacterPawn* const Walker = World->SpawnActorDeferred<ASpaceMMOCharacterPawn>(
+			ASpaceMMOCharacterPawn::StaticClass(), FTransform::Identity, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+		Walker->FinishSpawning(FTransform::Identity);
+		Walker->DispatchBeginPlay();
+		Walker->ResumeAt(FPlanetTerrain::SurfacePosition(
+			Planet->GetPlanetConfig(), Planet->GetTerrainConfig(), FVector(0.3, 1.0, 0.2).GetSafeNormal()));
+
+		const auto Run = [World, Walker](const FWalkInput& Input, const int32 Ticks)
+		{
+			for (int32 Tick = 0; Tick < Ticks; ++Tick)
+			{
+				FWalkInput Parameters = Input;
+				Walker->ProcessEvent(Walker->FindFunctionChecked(TEXT("ServerSendWalkInput")), &Parameters);
+				World->TimeSeconds += 1.0f / 60.0f;
+				Walker->Tick(1.0f / 60.0f);
+			}
+		};
+
+		TestEqual(TEXT("Level 1's pool before the API says otherwise"), Walker->GetStaminaMax(), 100.0, 0.01);
+
+		Walker->SetStaminaMax(125.0);
+		Walker->SetStaminaMax(0.0);
+
+		// Long enough to refill to the new size: from 100 to 125 at 20 a second.
+		Run(FWalkInput(), 120);
+		TestEqual(TEXT("The level's pool, and nothing from the empty answer"), Walker->GetStaminaMax(), 125.0, 0.01);
+		TestEqual(TEXT("Filled to it"), Walker->GetStamina(), 125.0, 0.5);
+
+		FWalkInput Pressed;
+		Pressed.DodgePresses = 1;
+		Run(Pressed, 5);
+
+		TestEqual(TEXT("A hop from 125 leaves 100"), Walker->GetStamina(), 100.0, 0.5);
+		TestEqual(TEXT("And is counted as spent"), Walker->GetStaminaSpent(), 25.0, 0.01);
+	}
+
+	GEngine->DestroyWorldContext(World);
+	World->DestroyWorld(false);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMODodgeClipsTest,
 	"SpaceMMO.Stamina.TheDodgeClipsLoadAndTheRollMovesAsItsCapture",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

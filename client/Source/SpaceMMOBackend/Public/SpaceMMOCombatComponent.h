@@ -133,6 +133,18 @@ public:
 	 */
 	static ESpaceMMOFall FallFrom(EBackendHitFacing Facing, const FVector& ShotDirection, const FVector& TargetRight);
 
+	/** How often the server reports the stamina a character spent, for stamina XP (task 101). */
+	static constexpr double StaminaReportSeconds = 30.0;
+
+	/** The most one report claims: the API's own limit (<c>MostStaminaInOneReport</c>); the rest waits for the next. */
+	static constexpr int32 MostStaminaInOneReport = 10000;
+
+	/**
+	 * The whole points of stamina to report, from everything spent and what has been reported: the fraction waits
+	 * for the next report, so nothing is lost to rounding and nothing is counted twice. Pure, for the tests.
+	 */
+	static int32 WholeStaminaToReport(double SpentTotal, double Reported);
+
 #if !UE_BUILD_SHIPPING
 	/**
 	 * SpaceMMOLookPanels Combat and Dead: sample numbers to look at the HUD with, no server needed -- health at a
@@ -144,6 +156,9 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	/** Server: reports the stamina spent since the last report, so leaving does not lose it (task 101). */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	virtual void TickComponent(
 		float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
@@ -315,4 +330,18 @@ private:
 
 	/** Whether the look sample is being held, see ShowSampleForLook. */
 	bool bLookSample = false;
+
+	/**
+	 * Server: reports the whole points of stamina spent since the last report, every StaminaReportSeconds, or now
+	 * when bNow. One report at a time; what it claims counts as reported once sent, and is taken back if it fails.
+	 */
+	void ReportStamina(bool bNow);
+
+	/** Server: the pawn's spent total that has been reported, or is being. */
+	double StaminaReported = 0.0;
+
+	/** Server: when the last report was sent; negative before the first. */
+	double LastStaminaReportSeconds = -1.0;
+
+	bool bStaminaReportInFlight = false;
 };

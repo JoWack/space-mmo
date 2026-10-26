@@ -286,6 +286,48 @@ public sealed class ContentValidatorTests
             "constitution must"));
     }
 
+    // ── Stamina (task 101) ───────────────────────────────────────────────────
+
+    private static readonly SkillContent Stamina = new(
+        "stamina", "Stamina", SkillCategory.Combat, Pool: new PoolSkillContent(100));
+
+    [Fact]
+    public void StaminaThatSaysWhatSpendingIsWorth_IsAccepted() =>
+        Assert.Empty(ContentValidator.Validate(Pack(skills: [Skill(), Stamina])));
+
+    [Fact]
+    public void StaminaWithoutARate_IsRejected()
+    {
+        // The game server would report every sprint, and the skill would never move.
+        Assert.True(HasError(
+            ContentValidator.Validate(Pack(skills: [Skill(), Stamina with { Pool = null }])),
+            "what spending it is worth"));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-10)]
+    public void StaminaEarningNothing_IsRejected(int rate) =>
+        Assert.True(HasError(
+            ContentValidator.Validate(Pack(skills: [Skill(), Stamina with { Pool = new PoolSkillContent(rate) }])),
+            "must earn something"));
+
+    [Fact]
+    public void APoolOnAnyOtherSkill_IsRejected()
+    {
+        // Spending stamina pays only the stamina skill; a second pool block would be read by nothing.
+        SkillContent elsewhere = new("athletics", "Athletics", SkillCategory.Combat, Pool: new PoolSkillContent(100));
+
+        Assert.True(HasError(
+            ContentValidator.Validate(Pack(skills: [Skill(), Stamina, elsewhere])), "Only stamina sizes"));
+    }
+
+    [Fact]
+    public void StaminaOutsideCombat_IsRejected() =>
+        Assert.True(HasError(
+            ContentValidator.Validate(Pack(skills: [Skill(), Stamina with { Category = SkillCategory.Life }])),
+            "pool's skill is Combat"));
+
     // ── Ranges ───────────────────────────────────────────────────────────────
 
     [Theory]
