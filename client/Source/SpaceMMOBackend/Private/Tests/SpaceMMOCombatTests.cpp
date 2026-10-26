@@ -201,6 +201,44 @@ bool FSpaceMMOCombatAShotMeetsWhoItShouldTest::RunTest(const FString& Parameters
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOCombatAShotNamesOnlyTheDodgerItWentThroughTest,
+	"SpaceMMO.Combat.AShotNamesOnlyTheDodgerItWentThrough",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOCombatAShotNamesOnlyTheDodgerItWentThroughTest::RunTest(const FString& Parameters)
+{
+	using namespace SpaceMMOCombatTests;
+
+	// Task 195: the server's log names a dodger, and a playtest reads that line as a shot the dodge saved. Two are
+	// rolling: one 20 m down the line of fire, one 10 m off to its side.
+	const FVector Muzzle = FVector(0.0, 0.0, 1.35) / 1000.0;
+	const TArray<FSpaceMMOShotTarget> Dodgers = {
+		Standing(7, FVector(20.0, 10.0, 0.0)), Standing(4, FVector(20.0, 0.0, 0.0))};
+
+	TestEqual(TEXT("Through the one in its path, by their index"),
+		SpaceMMO::Shot::DodgedBy(Muzzle, FVector::ForwardVector, 150.0, Dodgers), 4);
+
+	// Aimed between them: a miss while two people rolled, which the old line reported as a dodge.
+	TestEqual(TEXT("Not a miss that went near nobody"),
+		SpaceMMO::Shot::DodgedBy(Muzzle, FVector(20.0, 5.0, 0.0), 150.0, Dodgers), INDEX_NONE);
+
+	TestEqual(TEXT("Through the one off to the side, aimed at them"),
+		SpaceMMO::Shot::DodgedBy(Muzzle, FVector(20.0, 10.0, 0.0), 150.0, Dodgers), 7);
+
+	// Stopped before reaching them, by cover at 15 m or by somebody it hit at 12: it never went through.
+	TestEqual(TEXT("Not behind cover"),
+		SpaceMMO::Shot::DodgedBy(Muzzle, FVector::ForwardVector, 15.0, Dodgers), INDEX_NONE);
+	TestEqual(TEXT("Not behind the one it hit"),
+		SpaceMMO::Shot::DodgedBy(Muzzle, FVector::ForwardVector, 12.0 - 0.34, Dodgers), INDEX_NONE);
+
+	// Nobody rolling, nobody named.
+	TestEqual(TEXT("Nobody dodging"),
+		SpaceMMO::Shot::DodgedBy(Muzzle, FVector::ForwardVector, 150.0, TArray<FSpaceMMOShotTarget>()), INDEX_NONE);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
 	FSpaceMMOCombatHealthBarsGlowAsHealthFallsTest,
 	"SpaceMMO.Combat.HealthBarsGlowAsHealthFalls",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

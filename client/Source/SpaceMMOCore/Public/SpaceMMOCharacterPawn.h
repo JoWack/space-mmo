@@ -912,6 +912,10 @@ protected:
 	/** SpaceMMO.ForceBodyRace as last seen, so a character with no player takes a change the frame it happens. */
 	int32 AppliedForceBodyRace = INDEX_NONE;
 
+	/** SpaceMMO.AutoDodge's rolls, and its value as last seen, so turning it on or off is logged once (task 195). */
+	FAutoDodge AutoDodge;
+	float AppliedAutoDodge = 0.0f;
+
 	/** How this client draws the pawn when it is another player's (SpaceMMO.RemoteSmoothing 1). */
 	FRemoteFollower RemoteFollower;
 

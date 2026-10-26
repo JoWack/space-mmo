@@ -16,6 +16,37 @@ namespace
 	}
 }
 
+bool FAutoDodge::Apply(const double NowSeconds, const double IntervalSeconds, FWalkInput& Input)
+{
+	if (IntervalSeconds <= 0.0)
+	{
+		NextAt = -1.0;
+		HoldUntil = -1.0;
+
+		return false;
+	}
+
+	bool bPressed = false;
+
+	if (NextAt < 0.0 || NowSeconds >= NextAt)
+	{
+		++Presses;
+		++Input.DodgePresses;
+		HoldUntil = NowSeconds + HoldSeconds;
+
+		// From now, not from when it was due: a hitch must not fire the ones it skipped all at once.
+		NextAt = NowSeconds + IntervalSeconds;
+		bPressed = true;
+	}
+
+	if (NowSeconds < HoldUntil)
+	{
+		Input.Move = FVector2D(0.0, Side());
+	}
+
+	return bPressed;
+}
+
 FQuat FCharacterWalkModel::AlignToSurface(const FQuat& Current, const FVector& SurfaceNormal)
 {
 	const FVector Up = SurfaceNormal.GetSafeNormal();

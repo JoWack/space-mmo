@@ -10512,9 +10512,10 @@ seven), with no rifles yet. A rifle is a weaponcrafting job: 6 Structural Plate 
 **Stage 1 built 19 October and passed Joe's playtest 20 October** (below). **Stage 2, the pool's size and XP from
 the `stamina` skill, built with 101 and passed Joe's playtest 25 October** (see 101). **One thing is still unseen: a
 shot through the first quarter-second of a roll.** Joe, 25 October: not something one person can do while managing two
-windows, so it waits for "a playtest from you, or a manual test later with 2 real players". A switch that makes one
-client roll on a timer would let one person shoot a rolling target, and the server's log already says "was dodging,
-and untouchable" when it refuses such a hit; not built.
+windows, so it waits for "a playtest from you, or a manual test later with 2 real players". **A switch that makes one
+client roll on a timer, `SpaceMMO.AutoDodge`, built 26 October at Joe's word (below)**, so one person can shoot a
+rolling target; building it found that the server's "was dodging, and untouchable" line could not tell a dodged shot
+from a miss, and it now can.
 Belongs to **M6** for the
 pool, and to **M5** for the key, as sprint (136) did. Decided in
 [ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md):
@@ -10601,6 +10602,53 @@ roll in 0.5 s can look natural, which led to:
 pool. Not reported either way, so still only as verified as the list above says: a shot passing through the roll's
 first quarter-second (the server log's "was dodging, and untouchable" line is how to tell it from a miss), and the
 bar's flash on a refused dodge.
+
+### `SpaceMMO.AutoDodge`, built 26 October
+Joe: "build the auto-roll switch."
+- **The switch:** `SpaceMMO.AutoDodge 2.5` in a client's console rolls that client's character every 2.5 s, left
+  then right, so it stays where it was aimed at; `0` stops it. It presses dodge the way Left Ctrl does, one more on
+  the press count, and holds a sideways step for 0.4 s from the press so the server's step sees the two together and
+  rolls them as the client did (`FAutoDodge`, beside the walk model). Its input goes to the server like a player's, and
+  the window need not have focus. Applied after `SpaceMMO.AutoWalk`, so the two can run together.
+- **It says it ran:** turning it on or off is logged once, and every press is logged with the side and the stamina it
+  found ("auto-dodge 3 pressed, rolling left, 85 stamina"), adding "refused" when there is too little or the last
+  dodge has not finished. **The server now logs every dodge it begins** ("dodges (roll) on the server, untouchable for
+  0.25 s"), which is what decides a shot.
+- **The server's dodge line could not tell a dodged shot from a miss**, found reading it for this. It named anybody
+  in the untouchable start of a dodge anywhere in the world, out of range included, on every shot that did not land:
+  with a target rolling every 2.5 s, any miss in that quarter-second would have read as a dodge. Now the shot is
+  resolved against the dodgers too, and only one it would have reached before it stopped is named, on a hit as well as
+  a miss: "it went through character N, dodging and untouchable" (`SpaceMMO::Shot::DodgedBy`).
+
+**Verified:** client suite 353 (3 new), against a build that said `Result: Succeeded`.
+- `AutoDodgePressesOnATimerLeftThenRight`: off presses nothing; on presses at once, left, held through 0.3 s and let
+  go by 0.5 s to whatever the player's own axes wrote; the next at the interval, right; off lets go at once, and on
+  again presses at once.
+- `AutoDodgeRollsInPlaceAndKeepsUpWithStamina`, through the walk model a frame at a time with nobody at the keys: a
+  minute at 2.5 s is 24 presses, every one a roll, no hops, none refused; the first goes left by a roll and not forward
+  or back, and after an even number it is back where it began. At 1.5 s some are refused, which is what the help's
+  "2.5 keeps up" rests on.
+- `AShotNamesOnlyTheDodgerItWentThrough`: the one in the line of fire, by their index; nobody for a shot aimed between
+  two rollers (the old line's false dodge); the one off to the side when aimed at them; nobody behind cover or behind
+  the one it hit.
+- **Broken on purpose, each failing those tests:** no sideways step (every press a hop back, 1.5 m behind, 24 hops);
+  a dodger named however far past where the shot stopped; always left (7.4 m away after a minute).
+- **Found by the first run, and a fact about the roll rather than the switch:** the first roll settles 309.6 cm to
+  the left, not the capture's 286. The capture is still moving at about 1.9 m/s on its last frame, and with nothing
+  pressed ground damping bleeds that off over about 23 cm while the clip stands up. True of every roll since
+  19 October; the roll's own test stops measuring when the roll ends, and Joe's playtest passed it. Recorded, not
+  changed.
+- **Not verified by any test:** `TraceShot`'s use of the dodgers (no headless test drives the server's shot, as
+  before), the console variable reaching the pawn, and the server's new dodge line. The playtest below is their
+  check; the staged server was re-cooked with them.
+
+**For the playtest:** two clients, one character each. In the target's console, `SpaceMMO.AutoDodge 2.5`; from the
+other window, keep shooting at them. The rifle fires every 0.5 s and the window is 0.25 s in 2.5, so roughly one roll in
+two catches a shot. Look for a bolt passing through a rolling body with no damage number, then in the staged server's
+`SpaceMMO.log` for "went through character", each a little after a "dodges (roll) on the server" line. **How it
+fails:** "went through" never appearing while hits keep landing on the roll's first frames is the untouchable window
+not working; "auto-dodge ... pressed" lines in the target's log with no "dodges ... on the server" lines is the press
+not reaching the server; a hop where a roll was expected is the step arriving without the press.
 
 ## 196 — Repair at a station
 
@@ -11174,8 +11222,10 @@ free-fall time, the back or front landing, a settle, then held -- 1.3 s to lying
 ## 202 — Damage as instantaneous as possible
 
 **In progress. Option 2 done 25 October and fought on the same day: a hit's wait less than halved, not the
-single-digit round trips predicted (below). Whether to do 1, 3, both or neither is Joe's.** Belongs to **M6**, with 194
-and 198. Joe, after 198's fix: "it should be as instantaneous as possible for smooth gameplay."
+single-digit round trips predicted (below). Option 1 done 26 October at Joe's word, not yet fought. Option 3 set aside
+the same day for what the industry does, the game server owning the fight, which needs an ADR (below): Joe's to
+decide.** Belongs to **M6**, with 194 and 198. Joe, after 198's fix: "it should be as instantaneous as possible for
+smooth gameplay."
 
 **Where it stands** (198, Joe's fight of 19 October): the click reaches the server and its bolt comes back in
 about 50 ms (p50 48 and 55 ms on the two clients); the server then waits for the API **958 ms typically, 2.3 s at p90**. Inside the API a hit is eight
@@ -11201,8 +11251,9 @@ core. The pair's lock is no longer the problem (64 ms typically).
 4. **The server's 30 Hz tick** costs up to 33 ms twice per hit (`NetServerMaxTickRate`, settable in the staged
    server's `Saved/Config` without a re-cook). Small beside the rest.
 
-**Blocked on:** Joe's choice between 1 and 3, now that the fight on the moved setup is read (below). 3 needs an ADR
-first; 1 is small.
+**Blocked on:** Joe's acceptance of [ADR-0018](adr/0018-the-game-server-owns-the-fight.md), drafted 26 October at
+his word, and his answer to its open point 6 (who may attack whom: the rule ported to C++ with shared cases, asked
+of the API per pair, or 3 as it was). Option 1 is done and waits only for a fight to read.
 
 **Ruled out:** the lock queue (fixed in 198); `localhost` resolution (fixed in 198); the engine's HTTP queue (251
 concurrent, 16 to a host); Postgres's own execution time.
@@ -11337,6 +11388,66 @@ the same thing, smaller. Reproduced on the second try with the output kept, and 
 - **Verified in the same sequence that failed:** Data 343 and then API 131, all passing, with the API fixture's drop
   taking 34.1 s (53,930 files) in Postgres's log, past the old limit.
 
+### Option 1 done, 26 October: one read before the lock, where there were four
+Joe, 26 October: "do option 1". `CombatService.HitAsync` reads the weapon in Weapon 1, the faction space, whether the
+target is protected and the skill list in **one statement** (`ReadBeforeLockAsync`), so a hit is **five round trips
+where it was eight**: that read, the lock, the read under it, the save and the commit.
+- **Each part is the query its own method sends**, composed rather than rewritten: `LoadoutAsync`, `IsProtectedAsync`
+  and the faction space's read now build theirs from the same `IQueryable`, so a hit and the status endpoint cannot
+  come to judge a weapon or protection differently. The statement hangs off the attacker's row; each part is a
+  `LEFT JOIN LATERAL`, so a missing part leaves the others standing.
+- **Untracked, and it never reads a character**: a tracked entity is not refreshed by a later query, so a character
+  read before the lock would hide what the lock reads, and a hit that queued would be judged on health from before the
+  hit ahead of it.
+- What the three under the lock are, and why they cannot be fewer, is unchanged (198).
+
+**Verified:** Data 345 (2 new), API 131, Domain 609. `A_hit_reads_what_it_cannot_change_in_one_round_trip` counts a
+first hit, another and a kill from outside (an interceptor, not the tally): one read before the lock and five in all.
+`Without_faction_space_an_armed_shot_is_refused_for_the_rules` is the case composing could break: a system with no
+faction space must not take the weapon with it. The statement itself was captured once from that interceptor: one
+`SELECT`, the three parts as lateral joins and the skills joined beside them, about ten rows. **Broken on purpose,
+each failing its own test:** the four reads put back (the count); the rules joined so their absence drops the row
+(`no_weapon` for `no_rules`); protection read for the attacker rather than the target
+(`A_new_player_is_safe_until_they_shoot_back`).
+
+**Not verified:** a fight. After one, `Api.log`'s hit lines should read "reading first (1 round trips)" and five
+numbers after "Round trips, ms", where they read 4 and 8. Expected to save about 50 ms of the 334 ms p50 (three of the
+fight's 17 ms trips).
+
+### Option 3 set aside, 26 October: what the industry does is the game server owning the fight
+Joe, choosing 1: "For option 3, is that the industry standard for combat in MMO's? I would expect that we're following
+the industry standard and doing something tried and true."
+
+**Not as written.** Option 3 drew a hit at once and let the API confirm or correct it, a halfway house that exists only
+because every hit here is a database transaction. What online action games and MMOs generally do (Claude's account of
+common practice, not measured here):
+- **The game server owns the fight, in memory.** Health, cooldowns and the fight's state are held by the server
+  simulating the area, which decides a hit and replicates the result within its own tick: the shooter sees it one
+  network round trip after firing, whatever the database is doing. Clients predict only their own cosmetics, as 198's
+  bolt does.
+- **The database is written behind, not per hit.** Fight state is saved on a timer, at logout and on death; what is
+  wealth (items, currency, trades, what a death costs) is written in a transaction when it happens. A crash can cost
+  a few minutes of play (the "rollback" MMO players know) without duplicating anything.
+- **This project already does it once:** stamina is counted by the game server and reported in batches, and the API
+  awards the XP (101).
+
+**What it would mean here.** ADR-0003's reason for the backend is that a UE server crash must never destroy or
+duplicate a player's assets. Health mid-fight is not an asset; XP, death costs and items are. So: the game server
+decides each hit and applies the damage to health it holds; it reports hits to the API in batches, for XP and the
+attack record; and it reports a death at once, which the API costs as it does now (103). A hit would show about 50 ms
+after the click (the bolt's own round trip, 198) rather than 415 ms, and no backend cost would ever show in a fight
+again. **Open:** how the game server judges who may attack whom, which is C# today (`Pvp.CanAttack`: faction space,
+protection, retaliation): ported to C++ and checked against the C# with shared cases, or asked of the API once per pair
+and held. **Needs an ADR** narrowing ADR-0003's "every economy action costs a round trip" to wealth, and replaces
+option 3.
+
+**Drafted as [ADR-0018](adr/0018-the-game-server-owns-the-fight.md), 26 October**, Joe: "yes, draft the ADR for the
+server owning the fight". Proposed, not accepted. Beyond the above it settles, as Claude's proposal: reports every
+2 s and when a character leaves, a death reported at once and costed in one transaction, every report carrying an id
+the API applies once (writing behind without that is how MMOs duplicate things), and four stages, the per-hit
+endpoint kept until the switch so both can be fought. Open for Joe: point 6, who may attack whom. Once accepted:
+mark ADR-0003 amended by it, and give the stages task numbers.
+
 **What the move was** (the plan as written before it, 20 October):
 - **Install PostgreSQL 17 on Windows as a service:** `winget install PostgreSQL.PostgreSQL.17`, EnterpriseDB's
   installer, 374 MB. `docs/setup.md` already lists it as the alternative to Docker. Initialise the cluster with
@@ -11347,3 +11458,20 @@ the same thing, smaller. Reproduced on the second try with the output kept, and 
 - **Make the native install the primary path in `docs/setup.md`.** `infra/docker-compose.yml` stays for a machine
   that prefers Docker. Nothing in `scripts/` names Docker, and there is no CI.
 - **Then fight, and read `Api.log`:** `Round trips, ms` should read single digits where it read 61.
+
+## 203 — A stamina report whose answer is lost is awarded twice
+
+**Found 26 October, drafting ADR-0018; not fixed.** Belongs to **M6**, with 101. `USpaceMMOCombatComponent::
+ReportStamina` counts a report as sent, and takes it back when the request fails so the next report carries it again.
+A request the API applied and whose answer never arrived (a timeout, a dropped connection) fails on the game server
+all the same, so the same stamina is reported and awarded twice. Rare on one machine, where nothing has been seen to
+time out, and small: stamina XP. But it is the write-behind duplication ADR-0018 point 5 exists to rule out, in the
+one write-behind report the game server already sends.
+
+**The fix, as ADR-0018 has it for every report:** the game server gives each report an id and sends the same id
+again on a retry; the API records the ids it has applied in the report's own transaction and answers a repeat with
+the first answer, applying nothing. A table and a column, so a migration. Do it with ADR-0018's stage 2, which needs
+the same table, or alone first if that ADR is not accepted.
+
+**Not measured:** whether it has happened. It would show as a "Stamina: reporting N spent by character C failed ...
+kept for the next" warning in the server's log for a report that `Api.log` shows the API answering, at the same moment.

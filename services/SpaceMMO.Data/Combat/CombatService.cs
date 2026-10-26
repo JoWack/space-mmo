@@ -218,8 +218,8 @@ public sealed class CombatService(SpaceMmoDbContext database)
     /// other's lock, so whatever a hit does while holding it, every hit behind it waits out too. On a machine whose
     /// cores the game fills, a round trip through Docker into its virtual machine costs about 40 ms, and fifteen of
     /// them held the lock 0.6 s a hit: two players firing outran it, and the queue grew to ten seconds. So what a
-    /// hit on either character cannot change is read before the lock, and after it come one read of what another
-    /// hit could have changed, the save and the commit.
+    /// hit on either character cannot change is read before the lock, in one round trip (task 202), and after it come
+    /// one read of what another hit could have changed, the save and the commit: five in all.
     /// </para>
     /// <para>
     /// <strong>The read cannot share the lock's statement.</strong> A statement sees the database as it was when the
@@ -263,11 +263,8 @@ public sealed class CombatService(SpaceMmoDbContext database)
         // One connection for the whole hit, rather than one taken from the pool for each read.
         await _database.Database.OpenConnectionAsync(cancellationToken);
 
-        // What a hit on either character cannot change: the weapon, the rules, protection and the skills.
-        WeaponLoadout? weapon = await LoadoutAsync(request.AttackerCharacterId, cancellationToken);
-        Rules? rules = await RulesAsync(cancellationToken);
-        bool targetIsProtected = await IsProtectedAsync(request.TargetCharacterId, cancellationToken);
-        List<Skill> skills = await _database.Skills.ToListAsync(cancellationToken);
+        (WeaponLoadout? weapon, Rules? rules, bool targetIsProtected, IReadOnlyList<Skill> skills) =
+            await ReadBeforeLockAsync(request.AttackerCharacterId, request.TargetCharacterId, cancellationToken);
 
         readsBeforeLock = tally.RoundTrips.Count;
 
@@ -416,13 +413,75 @@ public sealed class CombatService(SpaceMmoDbContext database)
     /// and until it does the first slot is the one held.
     /// </remarks>
     public async Task<WeaponLoadout?> LoadoutAsync(int characterId, CancellationToken cancellationToken = default) =>
-        await _database.ItemInstances
+        await HeldWeapon(characterId).SingleOrDefaultAsync(cancellationToken);
+
+    /// <summary>
+    /// Whether a character is still under new-player protection: the main story not yet finished (ADR-0008).
+    /// </summary>
+    /// <remarks>One round trip: any live main-story quest they have not completed.</remarks>
+    public async Task<bool> IsProtectedAsync(int characterId, CancellationToken cancellationToken = default) =>
+        await UnfinishedMainStory(characterId).AnyAsync(cancellationToken);
+
+    /// <summary>The system's faction space, as seeded from content (task 104), or null if none is.</summary>
+    public async Task<FactionSpace?> FactionSpaceAsync(CancellationToken cancellationToken = default) =>
+        (await RulesAsync(cancellationToken))?.Space;
+
+    /// <summary>The faction space and the system it belongs to, in one round trip.</summary>
+    private async Task<Rules?> RulesAsync(CancellationToken cancellationToken) =>
+        ToRules(await RulesRows().FirstOrDefaultAsync(cancellationToken));
+
+    /// <summary>
+    /// What a hit on either character cannot change -- the weapon, the rules, protection and the skills -- in one
+    /// round trip, where it was four (task 202).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Each part is the query its own method sends (<see cref="LoadoutAsync"/>, <see cref="RulesAsync"/>,
+    /// <see cref="IsProtectedAsync"/>) composed into one statement, so a hit and a status cannot come to judge a weapon
+    /// or protection differently. It hangs off the attacker's row only to have a row to hang from.
+    /// </para>
+    /// <para>
+    /// <strong>Untracked, and never a character.</strong> A tracked entity is not refreshed by a later query that
+    /// returns it, so a character read here would hide what the lock reads, and a hit that queued would be judged on
+    /// health from before the hit ahead of it.
+    /// </para>
+    /// </remarks>
+    private async Task<BeforeLock> ReadBeforeLockAsync(
+        int attackerId, int targetId, CancellationToken cancellationToken)
+    {
+        IQueryable<WeaponLoadout> weapon = HeldWeapon(attackerId);
+        IQueryable<RulesRow> rules = RulesRows();
+        IQueryable<QuestDef> unfinished = UnfinishedMainStory(targetId);
+
+        var read = await _database.Characters
+            .AsNoTracking()
+            .AsSingleQuery()
+            .Where(c => c.Id == attackerId)
+            .Select(c => new
+            {
+                Weapon = weapon.FirstOrDefault(),
+                Rules = rules.FirstOrDefault(),
+                TargetIsProtected = unfinished.Any(),
+                Skills = _database.Skills.OrderBy(s => s.Id).ToList(),
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        // No attacker: the lock will say so.
+        return read is null
+            ? new BeforeLock(null, null, false, [])
+            : new BeforeLock(read.Weapon, ToRules(read.Rules), read.TargetIsProtected, read.Skills);
+    }
+
+    /// <summary>What is in a character's Weapon 1, if it is a weapon and not broken: at most one.</summary>
+    private IQueryable<WeaponLoadout> HeldWeapon(int characterId) =>
+        _database.ItemInstances
             .Where(i => i.Inventory!.CharacterId == characterId
                 && i.Inventory.Kind == InventoryKind.Equipped
                 && i.EquippedSlot == EquipmentSlot.Weapon1
                 && i.DestroyedAt == null
                 && i.Condition > 0
                 && i.ItemDef!.WeaponSkillId != null)
+            .OrderBy(i => i.Id)
             .Select(i => new WeaponLoadout(
                 i.Id,
                 i.ItemDef!.Key,
@@ -430,54 +489,48 @@ public sealed class CombatService(SpaceMmoDbContext database)
                 i.ItemDef.WeaponSkill!.Key,
                 i.ItemDef.WeaponDamage!.Value,
                 i.ItemDef.WeaponCooldownMs!.Value,
-                i.ItemDef.WeaponRangeMetres!.Value))
-            .SingleOrDefaultAsync(cancellationToken);
+                i.ItemDef.WeaponRangeMetres!.Value));
 
-    /// <summary>
-    /// Whether a character is still under new-player protection: the main story not yet finished (ADR-0008).
-    /// </summary>
-    /// <remarks>One round trip: any live main-story quest they have not completed.</remarks>
-    public async Task<bool> IsProtectedAsync(int characterId, CancellationToken cancellationToken = default) =>
-        await _database.QuestDefs
+    /// <summary>Every live main-story quest a character has not completed: protected while there is one.</summary>
+    private IQueryable<QuestDef> UnfinishedMainStory(int characterId) =>
+        _database.QuestDefs
             .Where(q => q.Kind == QuestKind.MainStory && q.RetiredAt == null)
-            .AnyAsync(
-                q => !_database.CharacterQuests.Any(c =>
-                    c.CharacterId == characterId && c.QuestDefId == q.Id && c.State == QuestState.Completed),
-                cancellationToken);
+            .Where(q => !_database.CharacterQuests.Any(c =>
+                c.CharacterId == characterId && c.QuestDefId == q.Id && c.State == QuestState.Completed));
 
-    /// <summary>The system's faction space, as seeded from content (task 104), or null if none is.</summary>
-    public async Task<FactionSpace?> FactionSpaceAsync(CancellationToken cancellationToken = default) =>
-        (await RulesAsync(cancellationToken))?.Space;
+    /// <summary>The first system with faction space, and its capital: what <see cref="ToRules"/> needs.</summary>
+    private IQueryable<RulesRow> RulesRows() =>
+        from system in _database.StarSystems
+        join capital in _database.Bodies on system.FactionCapitalBodyId equals (int?)capital.Id
+        orderby system.Id
+        select new RulesRow(
+            system.Id,
+            capital.Key,
+            capital.SystemX,
+            capital.SystemY,
+            capital.SystemZ,
+            system.FactionSafeRadiusKm,
+            system.FactionContestedRadiusKm,
+            system.FactionADirectionX,
+            system.FactionADirectionY,
+            system.FactionADirectionZ,
+            system.FactionRetaliationSeconds);
 
-    /// <summary>The faction space and the system it belongs to, in one round trip.</summary>
-    private async Task<Rules?> RulesAsync(CancellationToken cancellationToken)
+    private static Rules? ToRules(RulesRow? row)
     {
-        var found = await _database.StarSystems
-            .Where(s => s.FactionCapitalBodyId != null)
-            .OrderBy(s => s.Id)
-            .Select(s => new
-            {
-                System = s,
-                Capital = _database.Bodies.FirstOrDefault(b => b.Id == s.FactionCapitalBodyId),
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (found is null || found.Capital?.SystemX is not double x || found.Capital.SystemY is not double y
-            || found.Capital.SystemZ is not double z)
+        if (row?.CapitalX is not double x || row.CapitalY is not double y || row.CapitalZ is not double z)
         {
             return null;
         }
 
-        StarSystem system = found.System;
-
         var content = new Domain.Content.FactionSpaceContent(
-            found.Capital.Key,
-            system.FactionSafeRadiusKm!.Value,
-            system.FactionContestedRadiusKm!.Value,
-            [system.FactionADirectionX!.Value, system.FactionADirectionY!.Value, system.FactionADirectionZ!.Value],
-            system.FactionRetaliationSeconds!.Value);
+            row.CapitalKey,
+            row.SafeRadiusKm!.Value,
+            row.ContestedRadiusKm!.Value,
+            [row.DirectionX!.Value, row.DirectionY!.Value, row.DirectionZ!.Value],
+            row.RetaliationSeconds!.Value);
 
-        return new Rules(FactionSpace.FromContent(content, new SystemPosition(x, y, z)), system.Id);
+        return new Rules(FactionSpace.FromContent(content, new SystemPosition(x, y, z)), row.StarSystemId);
     }
 
     /// <summary>
@@ -581,6 +634,24 @@ public sealed class CombatService(SpaceMmoDbContext database)
 
     /// <summary>The faction space a hit is judged by, and the system it belongs to.</summary>
     private sealed record Rules(FactionSpace Space, int StarSystemId);
+
+    /// <summary>A system's faction space as stored, and where its capital is.</summary>
+    private sealed record RulesRow(
+        int StarSystemId,
+        string CapitalKey,
+        double? CapitalX,
+        double? CapitalY,
+        double? CapitalZ,
+        double? SafeRadiusKm,
+        double? ContestedRadiusKm,
+        double? DirectionX,
+        double? DirectionY,
+        double? DirectionZ,
+        double? RetaliationSeconds);
+
+    /// <summary>What a hit reads before the lock: nothing a hit on either character changes.</summary>
+    private sealed record BeforeLock(
+        WeaponLoadout? Weapon, Rules? Rules, bool TargetIsProtected, IReadOnlyList<Skill> Skills);
 
     /// <summary>The pair's skill rows and the attacks between them, as read under the lock.</summary>
     private sealed record PairState(IReadOnlyList<CharacterSkill> Skills, IReadOnlyList<AttackRecord> Attacks)

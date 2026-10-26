@@ -75,6 +75,19 @@ namespace SpaceMMO::Shot
 		TArrayView<const FSpaceMMOShotTarget> Targets,
 		FSpaceMMOShotHit& OutHit);
 
+	/**
+	 * Which of the dodgers a shot went through (task 195): the nearest it meets before it stopped, at whoever it hit
+	 * or at cover or the ground. INDEX_NONE if it went through nobody.
+	 *
+	 * Only someone it would have hit. "Somebody was dodging" alone was true of every shot fired while anyone in the
+	 * world was rolling, aimed at them or not, so it could not tell a dodged shot from a miss.
+	 */
+	SPACEMMOBACKEND_API int32 DodgedBy(
+		const FVector& FromKilometres,
+		const FVector& Direction,
+		double StoppedMetres,
+		TArrayView<const FSpaceMMOShotTarget> Dodgers);
+
 	/** Which zone a height on a body is, as a fraction of its height from the feet. */
 	SPACEMMOBACKEND_API EBackendHitZone ZoneAt(double HeightFraction);
 

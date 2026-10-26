@@ -253,6 +253,39 @@ struct SPACEMMOCORE_API FWalkState
 };
 
 /**
+ * Dodges by itself every so often, alternately left and right (task 195): a rolling target that one person can shoot
+ * from another window, to see a shot go through the untouchable start of a roll. Behind SpaceMMO.AutoDodge.
+ *
+ * It presses dodge the way the key does, one more on the press count, and holds a sideways step from the press for
+ * longer than a few of the server's ticks, so the server's step sees the press together with the step and rolls them
+ * as the client did, rather than hopping them back. Left then right, so they stay where they were.
+ */
+struct SPACEMMOCORE_API FAutoDodge
+{
+	/** How long the sideways step is held from a press: past several of the server's ticks, and inside the roll. */
+	static constexpr double HoldSeconds = 0.4;
+
+	/** Presses so far, which also decides the side. */
+	int32 Presses = 0;
+
+	/**
+	 * Adds a dodge to this frame's input if one is due, and holds the last one's sideways step.
+	 *
+	 * @param IntervalSeconds From one press to the next. 0 or less is off, and the next time it is on it presses at
+	 *   once, so a switch turned on is seen working straight away.
+	 * @return Whether it pressed this frame.
+	 */
+	bool Apply(double NowSeconds, double IntervalSeconds, FWalkInput& Input);
+
+	/** Which way the last press went: -1 left, +1 right. */
+	double Side() const { return Presses % 2 == 1 ? -1.0 : 1.0; }
+
+private:
+	double NextAt = -1.0;
+	double HoldUntil = -1.0;
+};
+
+/**
  * Walking on a sphere.
  *
  * <strong>Up is the surface normal, not the world Z axis.</strong> That single substitution is

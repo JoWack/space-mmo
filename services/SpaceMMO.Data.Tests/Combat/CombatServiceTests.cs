@@ -184,6 +184,20 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.Equal("no_weapon", (await HitAsync(_orc, _ayla, InBsHalf, T0)).Refusal);
     }
 
+    [Fact]
+    public async Task Without_faction_space_an_armed_shot_is_refused_for_the_rules()
+    {
+        await using (SpaceMmoDbContext context = _fixture.CreateContext())
+        {
+            await context.StarSystems.ExecuteUpdateAsync(
+                s => s.SetProperty(system => system.FactionCapitalBodyId, (int?)null));
+        }
+
+        // The rules are read with the weapon (task 202): a system without them must not take the weapon with it,
+        // which would refuse this as no_weapon.
+        Assert.Equal("no_rules", (await HitAsync(_orc, _ayla, InBsHalf, T0)).Refusal);
+    }
+
     // ── Killing ──────────────────────────────────────────────────────────────
 
     [Fact]
@@ -487,6 +501,25 @@ public sealed class CombatServiceTests(DatabaseFixture fixture) : IAsyncLifetime
         Assert.All(
             new[] { first, again, kill },
             timing => Assert.Equal(3, timing.HoldingRoundTrips));
+    }
+
+    [Fact]
+    public async Task A_hit_reads_what_it_cannot_change_in_one_round_trip()
+    {
+        HitTiming first = await CountedHitAsync(T0);
+        HitTiming again = await CountedHitAsync(T0.AddSeconds(1));
+
+        await SetHealthAsync(_ayla, 30, T0.AddSeconds(1));
+
+        HitTiming kill = await CountedHitAsync(T0.AddSeconds(2));
+
+        // One, where it was four: the weapon, the rules, protection and the skills (task 202). Then the lock and the
+        // three holding it, five in all.
+        Assert.All(new[] { first, again, kill }, timing =>
+        {
+            Assert.Equal(1, timing.ReadsBeforeLock);
+            Assert.Equal(5, timing.RoundTrips.Count);
+        });
     }
 
     [Fact]

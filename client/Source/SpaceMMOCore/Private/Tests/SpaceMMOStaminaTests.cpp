@@ -516,4 +516,129 @@ bool FSpaceMMODodgeClipsTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOAutoDodgePressesOnATimerTest,
+	"SpaceMMO.Stamina.AutoDodgePressesOnATimerLeftThenRight",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOAutoDodgePressesOnATimerTest::RunTest(const FString& Parameters)
+{
+	// SpaceMMO.AutoDodge (task 195): a press as the key makes one, and a sideways step held long enough for the server to
+	// see the two together, then the player's own input again.
+	FAutoDodge Auto;
+	FWalkInput Input;
+
+	TestFalse(TEXT("Off presses nothing"), Auto.Apply(0.0, 0.0, Input));
+	TestEqual(TEXT("Off leaves the count"), static_cast<int32>(Input.DodgePresses), 0);
+	TestTrue(TEXT("Off leaves the step"), Input.Move.IsZero());
+
+	// Turned on at 10 s.
+	TestTrue(TEXT("On presses at once"), Auto.Apply(10.0, 2.5, Input));
+	TestEqual(TEXT("One press"), static_cast<int32>(Input.DodgePresses), 1);
+	TestTrue(TEXT("Left first"), Input.Move.Equals(FVector2D(0.0, -1.0)));
+
+	// Every frame the player's own axes write the step first: nobody at the keys, then walking forward.
+	Input.Move = FVector2D::ZeroVector;
+	TestFalse(TEXT("Not again within the interval"), Auto.Apply(10.3, 2.5, Input));
+	TestTrue(TEXT("Still held at 0.3 s"), Input.Move.Equals(FVector2D(0.0, -1.0)));
+
+	Input.Move = FVector2D(1.0, 0.0);
+	Auto.Apply(10.5, 2.5, Input);
+	TestTrue(TEXT("Let go by 0.5 s"), Input.Move.Equals(FVector2D(1.0, 0.0)));
+	TestEqual(TEXT("Still one press"), static_cast<int32>(Input.DodgePresses), 1);
+
+	Input.Move = FVector2D::ZeroVector;
+	TestTrue(TEXT("The next at the interval"), Auto.Apply(12.5, 2.5, Input));
+	TestEqual(TEXT("Two presses"), static_cast<int32>(Input.DodgePresses), 2);
+	TestTrue(TEXT("Then right"), Input.Move.Equals(FVector2D(0.0, 1.0)));
+
+	// Off lets go at once; on again presses at once, not when the next would have been due.
+	Input.Move = FVector2D::ZeroVector;
+	TestFalse(TEXT("Off again"), Auto.Apply(12.6, 0.0, Input));
+	TestTrue(TEXT("Off lets go of the step"), Input.Move.IsZero());
+	TestTrue(TEXT("On again presses at once"), Auto.Apply(12.7, 2.5, Input));
+	TestEqual(TEXT("Three presses"), static_cast<int32>(Input.DodgePresses), 3);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(
+	FSpaceMMOAutoDodgeRollsInPlaceTest,
+	"SpaceMMO.Stamina.AutoDodgeRollsInPlaceAndKeepsUpWithStamina",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FSpaceMMOAutoDodgeRollsInPlaceTest::RunTest(const FString& Parameters)
+{
+	using namespace SpaceMMOStaminaTests;
+
+	// Through the walk model, frame by frame, with nobody at the keys: what the switch's help promises.
+	struct FCounted
+	{
+		int32 Presses = 0;
+		int32 Rolls = 0;
+		int32 Hops = 0;
+		FVector AfterFirst = FVector::ZeroVector;
+	};
+
+	const auto Run = [](const double Interval, const double Seconds, FWalker& Walker)
+	{
+		FAutoDodge Auto;
+		FWalkInput Input;
+		FCounted Counted;
+		const int32 Steps = FMath::RoundToInt32(Seconds / Frame);
+
+		for (int32 Step = 0; Step < Steps; ++Step)
+		{
+			Input.Move = FVector2D::ZeroVector;
+			Auto.Apply(Step * Frame, Interval, Input);
+
+			const uint8 Started = Walker.State.DodgesStarted;
+			Walker.Run(Input, Frame);
+
+			if (Walker.State.DodgesStarted != Started)
+			{
+				++(Walker.State.Dodge == EWalkDodge::Roll ? Counted.Rolls : Counted.Hops);
+			}
+
+			// Just before the second press: where the first left them.
+			if (Step + 1 == FMath::RoundToInt32((Interval - 0.1) / Frame))
+			{
+				Counted.AfterFirst = Walker.Travelled;
+			}
+		}
+
+		Counted.Presses = Auto.Presses;
+
+		return Counted;
+	};
+
+	// A minute at the help's 2.5 s: every press a roll, none refused for stamina.
+	FWalker Steady;
+	const FCounted AtTwoAndAHalf = Run(2.5, 60.0, Steady);
+
+	TestEqual(TEXT("A press every 2.5 s"), AtTwoAndAHalf.Presses, 24);
+	TestEqual(TEXT("Every press a roll"), AtTwoAndAHalf.Rolls, AtTwoAndAHalf.Presses);
+	TestEqual(TEXT("No hops: the server sees the step with the press"), AtTwoAndAHalf.Hops, 0);
+	TestEqual(TEXT("None refused"), static_cast<int32>(Steady.State.DodgesRefused), 0);
+
+	// Left by the roll's full reach, then back: a target that stays where it was aimed at. A little past the reach once
+	// it has settled: the capture is still moving at about 1.9 m/s on its last frame, and with nothing pressed ground
+	// damping bleeds that off over about 23 cm (309.6 cm in all, measured 26 October).
+	const double Reach = FCharacterWalkModel::RollProfile().Last();
+	const double Coast = 30.0;
+
+	TestTrue(FString::Printf(TEXT("The first went left by a roll (%.1f cm, reach %.1f)"), AtTwoAndAHalf.AfterFirst.Y, Reach),
+		AtTwoAndAHalf.AfterFirst.Y <= -Reach && AtTwoAndAHalf.AfterFirst.Y >= -(Reach + Coast));
+	TestEqual(TEXT("Not forward or back"), AtTwoAndAHalf.AfterFirst.X, 0.0, 5.0);
+	TestTrue(FString::Printf(TEXT("Back where it began after an even number (%.0f cm away)"), Steady.Travelled.Size()),
+		Steady.Travelled.Size() < 30.0);
+
+	// Faster than stamina comes back: the pool runs dry and presses are refused, which the client's log says.
+	FWalker Hurried;
+	Run(1.5, 60.0, Hurried);
+	TestTrue(TEXT("At 1.5 s some are refused"), Hurried.State.DodgesRefused > 0);
+
+	return true;
+}
+
 #endif

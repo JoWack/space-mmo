@@ -171,3 +171,15 @@ bool SpaceMMO::Shot::Resolve(
 
 	return bFound;
 }
+
+int32 SpaceMMO::Shot::DodgedBy(
+	const FVector& FromKilometres,
+	const FVector& Direction,
+	const double StoppedMetres,
+	const TArrayView<const FSpaceMMOShotTarget> Dodgers)
+{
+	FSpaceMMOShotHit Hit;
+
+	// A centimetre past where it stopped, so a dodger standing exactly there, at the one it hit, still counts.
+	return Resolve(FromKilometres, Direction, StoppedMetres + 0.01, Dodgers, Hit) ? Hit.Index : INDEX_NONE;
+}

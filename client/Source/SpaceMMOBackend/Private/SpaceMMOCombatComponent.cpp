@@ -736,9 +736,12 @@ bool USpaceMMOCombatComponent::TraceShot(
 
 	const double Range = WeaponRangeMetres;
 
-	// Everybody who could be hit: alive, someone, and within reach.
+	// Everybody who could be hit: alive, someone, and within reach. Those in the untouchable start of a dodge are
+	// kept apart, so the shot goes through them (ADR-0017) and the log can still say whom it went through.
 	TArray<FSpaceMMOShotTarget> Targets;
 	TArray<USpaceMMOCombatComponent*> Combatants;
+	TArray<FSpaceMMOShotTarget> Dodgers;
+	TArray<int32> DodgerIds;
 
 	for (TActorIterator<ASpaceMMOCharacterPawn> It(World); It; ++It)
 	{
@@ -752,26 +755,28 @@ bool USpaceMMOCombatComponent::TraceShot(
 			continue;
 		}
 
-		// The start of a dodge, which nothing can hit (ADR-0017): the shot goes through where they are.
-		if (Other->IsUntouchable())
-		{
-			Out.DodgingCharacterId = Combat->CharacterId != 0 ? Combat->CharacterId : -1;
-
-			continue;
-		}
-
 		if (FVector::Distance(Other->GetSystemPosition().Kilometres, Muzzle) * 1000.0 > Range + 5.0)
 		{
 			continue;
 		}
 
+		const bool bUntouchable = Other->IsUntouchable();
+
 		FSpaceMMOShotTarget Target;
-		Target.Index = Combatants.Num();
+		Target.Index = bUntouchable ? Dodgers.Num() : Combatants.Num();
 		Target.FeetKilometres = Other->GetSystemPosition().Kilometres;
 		Target.Up = Other->GetSurfaceNormal();
 		Target.Forward = Other->GetActorForwardVector();
 		Target.RadiusMetres = Other->GetCollisionRadiusCentimetres() / 100.0;
 		Target.HeightMetres = Other->GetBodyHeightCentimetres() / 100.0;
+
+		if (bUntouchable)
+		{
+			Dodgers.Add(Target);
+			DodgerIds.Add(Combat->CharacterId != 0 ? Combat->CharacterId : -1);
+
+			continue;
+		}
 
 		Targets.Add(Target);
 		Combatants.Add(Combat);
@@ -791,6 +796,9 @@ bool USpaceMMOCombatComponent::TraceShot(
 	Out.Hit = Hit;
 	Out.Target = bLanded ? Combatants[Hit.Index] : nullptr;
 
+	const int32 Dodged = SpaceMMO::Shot::DodgedBy(Muzzle, Direction, bLanded ? Hit.DistanceMetres : Clear, Dodgers);
+	Out.DodgedByCharacterId = Dodged != INDEX_NONE ? DodgerIds[Dodged] : 0;
+
 	return true;
 }
 
@@ -805,14 +813,17 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres, const int
 
 	MulticastBolt(Traced.MuzzleKilometres, Traced.EndKilometres, Traced.bLanded, Shot);
 
+	// Named only for a shot that went through them, so the line is a dodge that saved somebody (task 195).
+	const FString Dodged = Traced.DodgedByCharacterId != 0
+		? FString::Printf(TEXT("; it went through character %d, dodging and untouchable"), Traced.DodgedByCharacterId)
+		: FString();
+
 	if (!Traced.bLanded)
 	{
 		UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d fired shot %d; it stopped %.1f m out%s%s."),
 			CharacterId, Shot, Traced.ClearMetres,
 			Traced.bMetSomebody ? TEXT(", short of a target, against cover or ground") : TEXT(""),
-			Traced.DodgingCharacterId != 0
-				? *FString::Printf(TEXT("; character %d was dodging, and untouchable"), Traced.DodgingCharacterId)
-				: TEXT(""));
+			*Dodged);
 
 		return;
 	}
@@ -826,11 +837,12 @@ void USpaceMMOCombatComponent::Fire(const FVector& AimPointKilometres, const int
 		return;
 	}
 
-	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d hit character %d with shot %d, %s from the %s, %.1f m."),
+	UE_LOG(LogSpaceMMOBackend, Log, TEXT("Combat: character %d hit character %d with shot %d, %s from the %s, %.1f m%s."),
 		CharacterId, TargetCombat->CharacterId, Shot,
 		*StaticEnum<EBackendHitZone>()->GetNameStringByValue(static_cast<int64>(Hit.Zone)),
 		*StaticEnum<EBackendHitFacing>()->GetNameStringByValue(static_cast<int64>(Hit.Facing)),
-		Hit.DistanceMetres);
+		Hit.DistanceMetres,
+		*Dodged);
 
 	TWeakObjectPtr<USpaceMMOCombatComponent> WeakThis(this);
 	TWeakObjectPtr<USpaceMMOCombatComponent> WeakTarget(TargetCombat);

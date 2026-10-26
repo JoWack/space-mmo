@@ -28,6 +28,7 @@ pitch, not a decision record.
 | [0015](0015-every-weapon-is-a-skill.md) | Every weapon is a 0–99 skill with two trees; XP shared 80/20 within family and type | Accepted |
 | [0016](0016-death-costs-materials-and-gear-wears.md) | Death costs the materials you carry; gear and ships are kept, and wear | Accepted |
 | [0017](0017-the-scale-of-health-damage-and-stamina.md) | The scale of health, damage and stamina | Accepted |
+| [0018](0018-the-game-server-owns-the-fight.md) | The game server owns the fight; the backend owns what it costs | Proposed |
 
 ## When to write one
 

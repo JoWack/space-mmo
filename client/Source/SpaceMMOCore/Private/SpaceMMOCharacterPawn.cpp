@@ -83,6 +83,19 @@ namespace
 		TEXT("1: walk this client's character in a circle by itself, for measuring how others see it."),
 		ECVF_Default);
 
+	/**
+	 * Rolls your own character by itself every so many seconds, left then right (task 195), so one person can shoot it
+	 * from a second window and see a shot go through the untouchable start of a roll. Its press goes to the server like
+	 * the key's. Every press is logged here, and the server logs each dodge it begins and each shot that went through
+	 * one. 2.5 s or more keeps up with the stamina it costs; less runs the pool dry and the log says so.
+	 */
+	static TAutoConsoleVariable<float> CVarAutoDodge(
+		TEXT("SpaceMMO.AutoDodge"),
+		0.0f,
+		TEXT("Seconds between rolls this client's character makes by itself, left then right; 0 is off. ")
+		TEXT("2.5 keeps up with stamina. For shooting a rolling target from another window."),
+		ECVF_Default);
+
 	/** How fast each update's jump eases out when drawing another player, and the jump taken at once. */
 	constexpr double RemoteEasePerSecond = 10.0;
 	constexpr double RemoteSnapKilometres = 0.002;
@@ -1270,6 +1283,43 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 		PendingInput.bSprint = FMath::Fmod(Clock, 16.0) >= 8.0;
 	}
 
+	// The same way, and after the walk, so a roll's sideways step wins over its circle while it is held (task 195).
+	if (IsLocallyControlled())
+	{
+		const float Interval = CVarAutoDodge.GetValueOnGameThread();
+
+		if (Interval != AppliedAutoDodge)
+		{
+			AppliedAutoDodge = Interval;
+
+			if (Interval > 0.0f)
+			{
+				UE_LOG(LogSpaceMMO, Log, TEXT("%s: SpaceMMO.AutoDodge on, a roll every %.1f s, left then right."),
+					*GetName(), Interval);
+			}
+			else
+			{
+				UE_LOG(LogSpaceMMO, Log, TEXT("%s: SpaceMMO.AutoDodge off."), *GetName());
+			}
+		}
+
+		const double Clock = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
+
+		if (AutoDodge.Apply(Clock, Interval, PendingInput))
+		{
+			// What the step is about to judge it by, so a press that does nothing never reads as one lost on the way
+			// to the server: not dead or held, on the ground, its cost there, and the last dodge finished.
+			const TCHAR* Refused = bMovementLocked ? TEXT("; locked (dead, or held), refused")
+				: !bOnGround ? TEXT("; in the air, refused")
+				: WalkState.Stamina < WalkConfig.DodgeStaminaCost ? TEXT("; too little stamina, refused")
+				: WalkState.Dodge != EWalkDodge::None ? TEXT("; still in the last dodge, refused") : TEXT("");
+
+			UE_LOG(LogSpaceMMO, Log, TEXT("%s: auto-dodge %d pressed, rolling %s, %.0f stamina%s."),
+				*GetName(), AutoDodge.Presses, AutoDodge.Side() < 0.0 ? TEXT("left") : TEXT("right"),
+				WalkState.Stamina, Refused);
+		}
+	}
+
 	if (HasAuthority())
 	{
 		// A remote player's facing is theirs (task 165): their client turned with every frame of
@@ -1305,6 +1355,14 @@ void ASpaceMMOCharacterPawn::Tick(const float DeltaSeconds)
 		if (WalkState.Dodge != EWalkDodge::None && GetNetMode() != NM_DedicatedServer)
 		{
 			PlayDodge(WalkState.Dodge);
+		}
+		else if (WalkState.Dodge != EWalkDodge::None)
+		{
+			// The server's own record of when a dodge began, which is what decides a shot, to set against the shots
+			// its log says went through somebody dodging (task 195).
+			UE_LOG(LogSpaceMMO, Log, TEXT("%s: dodges (%s) on the server, untouchable for %.2f s."),
+				*GetName(), WalkState.Dodge == EWalkDodge::Roll ? TEXT("roll") : TEXT("hop"),
+				WalkConfig.DodgeUntouchableSeconds);
 		}
 	}
 
