@@ -1,12 +1,18 @@
 # ADR-0003 — Server-per-system topology, with an authoritative backend monolith
 
 **Status:** Accepted · 2026-07-29 · **amended by
-[ADR-0007](0007-one-handcrafted-system.md)**
+[ADR-0007](0007-one-handcrafted-system.md) and [ADR-0018](0018-the-game-server-owns-the-fight.md)**
 
 > ADR-0007 makes one system the whole game, so there is one UE dedicated server and
 > the warp handoff in point 1 is out of scope rather than deferred. Points 2 and 3 —
 > `system_id` plumbed everywhere, persistence in the backend monolith and never in UE
 > — stand unchanged and are why this remains worth reading.
+
+> ADR-0018 narrows point 3 to wealth. A live fight (health, who attacked whom, whether a
+> hit is allowed) belongs to the game server and is written behind; items, credits, XP
+> and what a death costs stay here, in transactions. The reason below, that a UE crash
+> must never destroy or duplicate a player's assets, is unchanged and is why the line
+> falls there.
 
 ## Context
 

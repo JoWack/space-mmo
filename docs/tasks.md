@@ -10510,12 +10510,12 @@ seven), with no rifles yet. A rifle is a weaponcrafting job: 6 Structural Plate 
 ## 195 — Stamina, and a dodge roll
 
 **Stage 1 built 19 October and passed Joe's playtest 20 October** (below). **Stage 2, the pool's size and XP from
-the `stamina` skill, built with 101 and passed Joe's playtest 25 October** (see 101). **One thing is still unseen: a
-shot through the first quarter-second of a roll.** Joe, 25 October: not something one person can do while managing two
-windows, so it waits for "a playtest from you, or a manual test later with 2 real players". **A switch that makes one
-client roll on a timer, `SpaceMMO.AutoDodge`, built 26 October at Joe's word (below)**, so one person can shoot a
-rolling target; building it found that the server's "was dodging, and untouchable" line could not tell a dodged shot
-from a miss, and it now can.
+the `stamina` skill, built with 101 and passed Joe's playtest 25 October** (see 101). **A shot through the first
+quarter-second of a roll passed 6 November**, on screen and in the logs, using `SpaceMMO.AutoDodge`, a switch that rolls
+one client on a timer so one person can shoot it (below; Joe had said it could not be done managing two windows).
+Building that switch found that the server's "was dodging, and untouchable" line could not tell a dodged shot from a
+miss, and it now can. Reading the playtest found 208 and 209. **Still not reported either way:** the bar's flash on
+a refused dodge.
 Belongs to **M6** for the
 pool, and to **M5** for the key, as sprint (136) did. Decided in
 [ADR-0017](adr/0017-the-scale-of-health-damage-and-stamina.md):
@@ -10649,6 +10649,27 @@ two catches a shot. Look for a bolt passing through a rolling body with no damag
 fails:** "went through" never appearing while hits keep landing on the roll's first frames is the untouchable window
 not working; "auto-dodge ... pressed" lines in the target's log with no "dodges ... on the server" lines is the press
 not reaching the server; a hop where a roll was expected is the step arriving without the press.
+
+### Joe's playtest of the roll's quarter-second, 6 November
+*"I ran the test and everything looked good visually!"* **Passed**, and the logs agree (`ClientA.log`, the target;
+`ClientB.log`, the shooter; the staged server's `SpaceMMO.log`; 14:46:09 to 14:47:13 UTC):
+- **The switch ran:** on and off logged once each; 26 presses, 13 each way, none refused; stamina never under 95.
+- **The server began 26 dodges**, one for each press.
+- **Nine shots went through**, of 26 fired: "it went through character 11, dodging and untouchable", no answer asked of
+  the API and no damage. Ten landed, seven plainly missed. Under the old line a miss in the window would have read as
+  a dodge; the seven are named as nothing.
+- **No hit landed inside a window.** Shots 4, 14 and 19 share a server frame with a dodge beginning, but are logged
+  before it: the shot's RPC comes first and the step that begins the dodge after. Shot 21, five frames into a roll,
+  landed after the window.
+- **Four of the nine are logged 0.39–0.58 s after their roll began, by the clock.** Only one to four frames, by the
+  server's count: the window is judged on simulated time, a shot is judged at the start of a frame before that frame's
+  step, and those frames stalled (208). Not the rule failing; on a stalling server it stretches, by the clock.
+- **Two of the 26 were hops on the server**, where the target's screen rolled: presses 8 and 15. They reached the
+  server 500 and 494 ms after being pressed, after the switch's 0.4 s sideways step had ended. Every other press
+  arrived within 301 ms and was a roll, so the hold explains all 26. A hop is untouchable the same way, so the test
+  stands. What it shows about real presses is 209.
+- **How long a press took to reach the server:** 3–500 ms up to the last shot, 6–36 ms for the five after it. So in
+  a fight, a roll's quarter-second on the server began up to half a second after it did on the target's screen.
 
 ## 196 — Repair at a station
 
@@ -11221,11 +11242,11 @@ free-fall time, the back or front landing, a settle, then held -- 1.3 s to lying
 
 ## 202 — Damage as instantaneous as possible
 
-**In progress. Option 2 done 25 October and fought on the same day: a hit's wait less than halved, not the
-single-digit round trips predicted (below). Option 1 done 26 October at Joe's word, not yet fought. Option 3 set aside
-the same day for what the industry does, the game server owning the fight, which needs an ADR (below): Joe's to
-decide.** Belongs to **M6**, with 194 and 198. Joe, after 198's fix: "it should be as instantaneous as possible for
-smooth gameplay."
+**In progress. Options 2 and 1 done and fought (25 October, 6 November): a warm hit is 155 ms in the API, but more
+than half of what the server waits is now outside it (below). Option 3 set aside for what the industry does, the game
+server owning the fight: [ADR-0018](adr/0018-the-game-server-owns-the-fight.md), accepted 6 November, to be built as
+204 to 207, with the server's stalling frames, 208, beside them.** Belongs to **M6**, with 194 and 198. Joe, after
+198's fix: "it should be as instantaneous as possible for smooth gameplay."
 
 **Where it stands** (198, Joe's fight of 19 October): the click reaches the server and its bolt comes back in
 about 50 ms (p50 48 and 55 ms on the two clients); the server then waits for the API **958 ms typically, 2.3 s at p90**. Inside the API a hit is eight
@@ -11251,9 +11272,7 @@ core. The pair's lock is no longer the problem (64 ms typically).
 4. **The server's 30 Hz tick** costs up to 33 ms twice per hit (`NetServerMaxTickRate`, settable in the staged
    server's `Saved/Config` without a re-cook). Small beside the rest.
 
-**Blocked on:** Joe's acceptance of [ADR-0018](adr/0018-the-game-server-owns-the-fight.md), drafted 26 October at
-his word, and his answer to its open point 6 (who may attack whom: the rule ported to C++ with shared cases, asked
-of the API per pair, or 3 as it was). Option 1 is done and waits only for a fight to read.
+**Blocked on:** 204 to 207, in order. 208 stands apart and can go first.
 
 **Ruled out:** the lock queue (fixed in 198); `localhost` resolution (fixed in 198); the engine's HTTP queue (251
 concurrent, 16 to a host); Postgres's own execution time.
@@ -11410,9 +11429,32 @@ each failing its own test:** the four reads put back (the count); the rules join
 (`no_weapon` for `no_rules`); protection read for the attacker rather than the target
 (`A_new_player_is_safe_until_they_shoot_back`).
 
-**Not verified:** a fight. After one, `Api.log`'s hit lines should read "reading first (1 round trips)" and five
-numbers after "Round trips, ms", where they read 4 and 8. Expected to save about 50 ms of the 334 ms p50 (three of the
-fight's 17 ms trips).
+**Not verified at the time:** a fight. **Fought 6 November, next section.**
+
+### Option 1 fought, 6 November: the API is no longer most of the wait
+Ten hits in Joe's playtest of 195 (`Api.log`, the staged server's `SpaceMMO.log`, `ClientB.log`, all on one clock).
+**All ten read "reading first (1 round trips)", "holding it (3 round trips)" and five numbers**, as predicted. "Warm"
+is the seven after the first three, which queued together behind the first.
+
+| | 25 October | 6 November, all ten | 6 November, the warm seven |
+|---|---|---|---|
+| a hit in the API, p50 | 334 ms | 239 ms | **155 ms** |
+| the server's wait, p50 | 415 ms | 559 ms | **356 ms** |
+| damage on screen after the click, p50 | not read | 918 ms | **517 ms** |
+| the bolt back after the click, 26 shots | | **136 ms** p50, 297 ms p90, 19 to 328 | |
+
+Ten hits is few, and 25 October's 17 include whatever cold ones it had, so this says which way things moved and not by
+exactly how much.
+- **Most of the server's wait is now outside the API.** Over the warm seven the API took 1,383 ms of the 3,323 ms the
+  server waited. Shot 24's answer was logged by the API at 14:46:56.393 and read by the server at 57.105: 712 ms sitting
+  there. Shots 8 and 18 did the same for 271 and 388 ms. That is the server's frames (208), not the database.
+- **The bolt's 136 ms is not 198's 50.** ADR-0018 was accepted on "about 50 ms"; the honest figure on this machine, in
+  a fight, is the table's, and it is written into the ADR. Still about a quarter of a warm hit's 517 ms.
+- **The first hit took 3,008 ms in the API**, 3,696 ms to the screen, worse than anything on 25 October (1,044 ms).
+  Option 1's composed query was the suspect, its compile being bigger, and is **ruled out**: the same first hit in a
+  fresh process from exported copies of `e5e26dd` and `b4515be`, on the idle machine, four runs each, took 220–231 ms
+  before and 223–224 ms after. The second hit halves, 21–22 ms to 9–12; the third is the same, 7 and 6–7. So the fight's
+  3 s is load, not the query. What in the API waited 2.6 s of it ("between 2636.1") is not known.
 
 ### Option 3 set aside, 26 October: what the industry does is the game server owning the fight
 Joe, choosing 1: "For option 3, is that the industry standard for combat in MMO's? I would expect that we're following
@@ -11442,11 +11484,13 @@ and held. **Needs an ADR** narrowing ADR-0003's "every economy action costs a ro
 option 3.
 
 **Drafted as [ADR-0018](adr/0018-the-game-server-owns-the-fight.md), 26 October**, Joe: "yes, draft the ADR for the
-server owning the fight". Proposed, not accepted. Beyond the above it settles, as Claude's proposal: reports every
-2 s and when a character leaves, a death reported at once and costed in one transaction, every report carrying an id
-the API applies once (writing behind without that is how MMOs duplicate things), and four stages, the per-hit
-endpoint kept until the switch so both can be fought. Open for Joe: point 6, who may attack whom. Once accepted:
-mark ADR-0003 amended by it, and give the stages task numbers.
+server owning the fight". Beyond the above it settles: reports every 2 s and when a character leaves, a death reported
+at once and costed in one transaction, every report carrying an id the API applies once (writing behind without that
+is how MMOs duplicate things), and four stages, the per-hit endpoint kept until the switch so both can be fought.
+
+**Accepted 6 November**, Joe: "yes, I accept ADR-0018", answering "Do you accept ADR-0018, and is (a) your answer to
+point 6?". He named only the first half, so (a), the rule ported to C++ with shared cases, is Claude's reading of
+that yes: confirm it before 204 is built on it. ADR-0003 is marked amended and M6 names it. The stages are 204 to 207.
 
 **What the move was** (the plan as written before it, 20 October):
 - **Install PostgreSQL 17 on Windows as a service:** `winget install PostgreSQL.PostgreSQL.17`, EnterpriseDB's
@@ -11470,8 +11514,86 @@ one write-behind report the game server already sends.
 
 **The fix, as ADR-0018 has it for every report:** the game server gives each report an id and sends the same id
 again on a retry; the API records the ids it has applied in the report's own transaction and answers a repeat with
-the first answer, applying nothing. A table and a column, so a migration. Do it with ADR-0018's stage 2, which needs
-the same table, or alone first if that ADR is not accepted.
+the first answer, applying nothing. A table and a column, so a migration. Do it with 205, which needs the same table.
 
 **Not measured:** whether it has happened. It would show as a "Stamina: reporting N spent by character C failed ...
 kept for the next" warning in the server's log for a report that `Api.log` shows the API answering, at the same moment.
+
+## 204 — ADR-0018 stage 1: combat's rules in C++, kept equal by shared cases
+
+**Pending. Blocked on Joe confirming point 6's (a)** (202 says why it needs confirming). Belongs to **M6**.
+[ADR-0018](adr/0018-the-game-server-owns-the-fight.md) point 6. `Pvp.CanAttack`, `FactionSpace`'s zones and territory, and
+`Hits.Damage` ported to C++, about 360 lines of C# with comments, all pure. The C# suite writes a file of cases from the
+real faction space (positions, factions, protection, attack times, and the answer), and the client suite reads it and
+must agree, so neither copy drifts without a test going red. The C# stays the reference. Nothing calls the port yet.
+
+## 205 — ADR-0018 stage 2: the game server decides and applies hits, and reports them in batches
+
+**Pending. Blocked on 204.** Belongs to **M6**. ADR-0018 points 1, 2, 3 and 5. The server judges a hit, works out the
+damage and takes it off health it holds. Every 2 s while anyone fights, and when a character leaves, one report: each
+hit's attacker, target, weapon skill, damage and time, and each fighter's health and last moment of combat. The API
+awards the XP, writes the attack records and stores health, in one transaction. **Every report carries an id the API
+applies once**, which is also 203's fix. The server loads a character's recent attack records and their protection on
+joining, and protection again on leaving a station. `POST /combat/hits` keeps working until the switch, so either path
+can be fought.
+
+## 206 — ADR-0018 stage 3: a death is reported at once
+
+**Pending. Blocked on 205.** Belongs to **M6**. ADR-0018 point 4. On taking someone to 0, the game server reports the
+death, the killer and where, with an id, on its own and at once; the API records it and takes what it costs (103's
+`DeathCostService`) in one transaction, and respawning works as now.
+
+## 207 — ADR-0018 stage 4: retire `POST /combat/hits`
+
+**Pending. Blocked on 205, 206 and a fight on the new path.** Belongs to **M6**. `POST /combat/hits` and
+`CombatService.HitAsync` go, and with them the hit's timing log. The C# rules stay, as the reference 204's cases come from
+and for the API's own uses.
+
+## 208 — The game server's frames stall in a fight
+
+**Pending. Found 6 November reading 195's playtest; cause not known.** Belongs to **M6**, with 202. Nothing is blocking it.
+This is what ADR-0018's gain is capped by: a hit can show no sooner than the server's next update.
+
+**What the staged server's log shows** (every line carries the frame counter; a 30 Hz server is 33 ms a frame):
+
+| 6 November | ms a frame | gaps of 100 ms or more inside one frame step | worst |
+|---|---|---|---|
+| auto-dodge only, before the first shot, 5.5 s | 43 | 2 | 421 ms |
+| shooting, 44.6 s | 50 | **27** | 525 ms |
+| auto-dodge only, after the last shot, 12.2 s | 41 | **0** | |
+
+**What it costs:** an answer from the API sat 271–712 ms before the server read it (202); a press took up to 500 ms to
+reach the server (195, 209); the bolt came back in 136 ms where 198 had about 50; and a dodge's untouchable window
+stretches by the clock, because it is judged on simulated time (195).
+
+**What the log rules in and out, without proving a cause:**
+- **It follows the shooting, not merely two clients being open.** Both were running and the target still rolling in
+  the 12 s with none.
+- **Not only the API's work on the same cores.** The stall around shot 5, 390 ms across one frame step, came with no API
+  call in flight: the last was answered 2.6 s earlier, and shot 5 missed.
+- **Probably not the shot's own code.** From arrival to asking the API took 2 and 7 ms on shots 21 and 24, and up to 227
+  ms on others, for shots of the same length. Work that varies a hundredfold looks like waiting for a core, not like
+  work. Not proven: `ClearDistanceMetres` walks the terrain in 2 m steps on the game thread, and has never been timed.
+
+**Next, measure:** log any server frame over 100 ms with how long its network, actor tick and HTTP completions each
+took. Then one fight with both clients capped (`t.MaxFPS 60` in each console, no code), which separates a machine with
+no core to spare from the server's own work. Two clients, a server, the API and Postgres on eight cores is also not what
+players will have.
+
+## 209 — A dodge's direction should travel with its press
+
+**Pending. Found 6 November reading 195's playtest; not built.** Belongs to **M6**, with 195. The walk model takes a
+dodge's direction from `Move` in whatever input the server steps when it first sees the new press count. `ServerSendWalkInput`
+is unreliable and each input replaces the last, so the count always gets there but the `Move` of that moment need not.
+A press arriving after the direction key is let go is a **hop on the server and a roll on the player's screen**, and
+reconciliation drags them back. `SpaceMMO.AutoDodge` did it on 2 of 26 presses: it lets go after 0.4 s, and those two took
+500 and 494 ms to arrive. A player holding a direction will not meet it; one tapping a direction with the roll, in a fight,
+can.
+
+**The fix:** `FWalkInput` carries the direction as it stood at the press, beside the count, and the step uses that, so a
+late press still goes the way it was pressed. A walk-model test: the press seen with `Move` already zero rolls the
+way it was pressed. Changes the input's layout, so a client build and a re-cook. `FAutoDodge`'s hold then only has to
+outlast nothing, and its comment says otherwise until then.
+
+**Ruled out:** a hop reaching the server for any other reason. The 24 presses that arrived within 301 ms were all
+rolls, and the 2 that took longer than the hold were both hops.

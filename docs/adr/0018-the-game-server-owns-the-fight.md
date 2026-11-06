@@ -1,6 +1,6 @@
 # ADR-0018 — The game server owns the fight; the backend owns what it costs
 
-**Status:** Proposed · 2026-10-26 · drafted by Claude at Joe's request (task 202) · would amend
+**Status:** Accepted · 2026-11-06 · drafted by Claude on 26 October at Joe's request (task 202) · amends
 [ADR-0003](0003-topology.md)'s third point, narrowing "persistence and authority in the backend" from every
 combat action to wealth
 
@@ -17,12 +17,15 @@ That is stricter than the industry, and the cost has been measured three times:
 - **19 October, Postgres in Docker:** the server waited **958 ms** for a hit, typically, and 2.3 s at p90 (198).
 - **25 October, Postgres on Windows:** **415 ms** typically, 857 ms at p90. Each of a hit's eight round trips cost
   17 ms under the load of two clients and a server on one machine (202).
-- **26 October:** eight round trips made five (202's option 1). About 50 ms more, not yet fought.
+- **6 November:** eight round trips made five (202's option 1), and fought once: the API's part of a warm hit
+  155 ms typically, the server's wait 356 ms. More than half of that wait is now outside the API.
 
-Meanwhile the click reaches the server and its bolt comes back in **about 50 ms** (198). Everything between the bolt
-and the damage is the database. Joe, after 198: "it should be as instantaneous as possible for smooth gameplay"; and on
-26 October, asked whether drawing the hit at once and letting the API correct it was the industry standard: "I would
-expect that we're following the industry standard and doing something tried and true."
+Meanwhile the bolt comes back from the server **136 ms** after the click typically, and 297 ms at p90 (26 shots, 6
+November; 198 had about 50 ms, on a machine doing less). The damage follows **517 ms** after the click for a warm hit,
+and 3.7 s for the first. Everything between the bolt and the damage is the backend, and waiting to read its answer.
+Joe, after 198: "it should be as instantaneous as possible for smooth gameplay"; and on 26 October, asked whether
+drawing the hit at once and letting the API correct it was the industry standard: "I would expect that we're following
+the industry standard and doing something tried and true."
 
 **What is tried and true** (Claude's account of common practice in online action games and MMOs, not something
 measured here). The server simulating the area owns the fight in memory, meaning health, cooldowns and who is fighting
@@ -41,7 +44,9 @@ every 30 s, and the API awards the XP (task 101).
 
 ## Decision
 
-Proposed by Claude. Point 6 is open, for Joe.
+Proposed by Claude and accepted by Joe on 6 November: "yes, I accept ADR-0018", answering a question that also asked
+whether (a) was his answer to point 6. So (a) stands below, and is the line to change if that reads too much into it;
+nothing is built on it yet.
 
 ### 1. The game server decides every hit and applies it at once
 
@@ -98,10 +103,10 @@ without applying it again. The stamina report does not do this today: it takes b
 sends it again, so a lost answer is awarded twice (task 203, a small instance of the same thing, to be fixed the same
 way).
 
-### 6. Who may attack whom: open, for Joe
+### 6. Who may attack whom: the rule ported to C++
 
 Today the C# `Pvp.CanAttack` decides, from the faction space, protection and the pair's attack record. The game
-server needs the answer within its tick. Claude's suggestion first:
+server needs the answer within its tick. **(a) is decided**, against (b) and (c):
 
 - **(a) The rule ported to C++, kept identical by shared cases.** `Pvp.CanAttack`, `FactionSpace`'s zones and
   territory, and `Hits.Damage` are about 360 lines of pure C#, comments included. Ported, they run in the server's tick. The C# suite
@@ -119,12 +124,13 @@ server needs the answer within its tick. Claude's suggestion first:
 
 ### 7. Built in stages, each playable
 
-1. The C++ rules and their shared cases (with point 6's answer).
+1. The C++ rules and their shared cases (task 204).
 2. The game server decides and applies hits, and sends batched reports with ids; the API gains the report endpoint
-   and the table of applied ids. `POST /combat/hits` keeps working until the switch, so either path can be fought.
-3. Deaths reported at once.
+   and the table of applied ids. `POST /combat/hits` keeps working until the switch, so either path can be fought
+   (task 205).
+3. Deaths reported at once (task 206).
 4. `POST /combat/hits` and `CombatService.HitAsync` retired. The C# rules stay, as the reference and for the API's own
-   uses.
+   uses (task 207).
 
 Each lands in M6, where combat already is.
 
@@ -132,8 +138,9 @@ Each lands in M6, where combat already is.
 
 Positive:
 
-- **A hit shows about one network round trip after the click**, about 50 ms on Joe's machine, against 415 ms
-  measured. The database's cost leaves the fight entirely, however loaded the machine or however many fight at once.
+- **The damage shows when the bolt does**: 136 ms after the click typically, and 297 ms at p90, in the fight of 6
+  November, against 517 ms for a warm hit and 3.7 s for the first. The backend's cost leaves the fight entirely,
+  however many fight at once.
 - **The API's load stops scaling with the rate of fire.** A hit was a five-round-trip transaction; a fight becomes one
   small transaction every 2 s, and one per death.
 - **ADR-0003's guarantee still holds where it matters.** UE never owns an item or a credit, a death's costs are one
@@ -143,6 +150,10 @@ Positive:
 
 Negative, and accepted:
 
+- **It does not steady the game server's own frames.** A hit can show no sooner than the server's next update to the
+  shooter, and in the fight of 6 November those frames stalled 100–525 ms, 27 times in 45 s of shooting (task 208).
+  Some of that may be the backend competing for the same cores, which this removes; the rest is separate work, and
+  the bolt's 136 ms is a floor only until that is done.
 - **Combat rules in two languages.** With (a), every change to who may shoot whom, or to damage, is made twice, and
   the shared cases are what keep the copies equal. A rule changed in C# without its cases being regenerated is the
   failure to watch for.

@@ -206,7 +206,8 @@ dotnet run --project services/SpaceMMO.Api -- --seed
   a dodge roll ([ADR-0017](docs/adr/0017-the-scale-of-health-damage-and-stamina.md)), and death made
   real: materials lost, gear and ships kept and worn, repaired at stations, a respawn at the last
   docked station ([ADR-0016](docs/adr/0016-death-costs-materials-and-gear-wears.md), superseding
-  ADR-0006's insurance)
+  ADR-0006's insurance), with the game server owning the fight and the backend what it costs
+  ([ADR-0018](docs/adr/0018-the-game-server-owns-the-fight.md))
 - **M7** — a world worth being in: terrain that is textured rather than grey, cube-sphere LOD so a
   planet is not one patch on a smooth ball, caves
   ([ADR-0011](docs/adr/0011-caves-are-authored-volumes.md)), settlements, buildings you can walk

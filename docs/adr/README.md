@@ -13,7 +13,7 @@ pitch, not a decision record.
 |---|---|---|
 | [0001](0001-coordinates.md) | Three-tier coordinate system with local physics grids | Accepted |
 | [0002](0002-generation.md) | Procedural generation as a pure function; DB stores only deltas | Accepted · narrowed to terrain by [0007](0007-one-handcrafted-system.md) |
-| [0003](0003-topology.md) | Server-per-system topology with an authoritative backend monolith | Accepted · shard boundary amended by [0007](0007-one-handcrafted-system.md) |
+| [0003](0003-topology.md) | Server-per-system topology with an authoritative backend monolith | Accepted · shard boundary amended by [0007](0007-one-handcrafted-system.md) · narrowed to wealth by [0018](0018-the-game-server-owns-the-fight.md) |
 | [0004](0004-progression-curve.md) | Adopt the RuneScape XP curve unmodified | Accepted |
 | [0005](0005-money-representation.md) | Credits as int64 minor units on an append-only ledger | Accepted |
 | [0006](0006-death-and-insurance.md) | Cause-based loot destruction; insurance pegged to acquisition value | Superseded by [0016](0016-death-costs-materials-and-gear-wears.md) |
@@ -28,7 +28,7 @@ pitch, not a decision record.
 | [0015](0015-every-weapon-is-a-skill.md) | Every weapon is a 0–99 skill with two trees; XP shared 80/20 within family and type | Accepted |
 | [0016](0016-death-costs-materials-and-gear-wears.md) | Death costs the materials you carry; gear and ships are kept, and wear | Accepted |
 | [0017](0017-the-scale-of-health-damage-and-stamina.md) | The scale of health, damage and stamina | Accepted |
-| [0018](0018-the-game-server-owns-the-fight.md) | The game server owns the fight; the backend owns what it costs | Proposed |
+| [0018](0018-the-game-server-owns-the-fight.md) | The game server owns the fight; the backend owns what it costs | Accepted |
 
 ## When to write one
 
